@@ -1,33 +1,80 @@
+import { Plus } from 'lucide-react';
 import type { Note } from './notes-model';
 
 const noteColorClass: Record<Note['color'], string> = {
-  yellow: 'border-amber-400 bg-amber-50',
-  blue: 'border-sky-400 bg-sky-50',
-  green: 'border-emerald-400 bg-emerald-50',
-  purple: 'border-violet-400 bg-violet-50'
+  yellow: 'note--yellow',
+  blue: 'note--blue',
+  green: 'note--green',
+  purple: 'note--purple'
 };
+
+type LoadStatus = 'loading' | 'ready' | 'error';
 
 type NotesWidgetProps = {
   notes: Note[];
+  status: LoadStatus;
+  errorMessage?: string;
+  onRetry: () => void;
+  onCreateNote: () => void;
   onOpenNote: (note: Note) => void;
 };
 
-export function NotesWidget({ notes, onOpenNote }: NotesWidgetProps) {
+export function NotesWidget({
+  notes,
+  status,
+  errorMessage,
+  onRetry,
+  onCreateNote,
+  onOpenNote
+}: NotesWidgetProps) {
   const sortedNotes = [...notes].sort((left, right) => Number(right.pinned) - Number(left.pinned));
 
   return (
-    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] p-3 xl:p-4">
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-base font-black text-ink">便签</h2>
-        <span className="rounded-full bg-sky-50 px-2.5 py-1 text-xs font-black text-brand">编辑</span>
+    <div className="widget-content">
+      <div className="card-header">
+        <div className="heading-group">
+          <h2>便签</h2>
+        </div>
+        <button type="button" className="btn btn-icon" aria-label="新增便签" onClick={onCreateNote}>
+          <Plus aria-hidden="true" />
+        </button>
       </div>
-      <div data-testid="notes-scroll" className="grid min-h-0 content-start gap-2 overflow-auto pr-1">
-        {sortedNotes.map((note) => (
-          <button key={note.id} type="button" onClick={() => onOpenNote(note)} className={`border-l-4 ${noteColorClass[note.color]} rounded-2xl p-2.5 text-left`}>
-            <div className="truncate text-xs font-black text-slate-700">{note.title}</div>
-            <div className="mt-1 line-clamp-3 text-[11px] font-semibold leading-snug text-slate-600">{note.content}</div>
-          </button>
-        ))}
+      <div data-testid="notes-scroll" className="panel-body">
+        {status === 'error' ? (
+          <div className="module-message" role="alert">
+            <span>{errorMessage ?? '无法读取便签。'}</span>
+            <button type="button" className="link-btn" aria-label="重试读取便签" onClick={onRetry}>
+              重试
+            </button>
+          </div>
+        ) : null}
+        {status === 'loading' ? <p className="empty-copy">正在读取本地便签</p> : null}
+        {status === 'ready' && sortedNotes.length === 0 ? (
+          <div className="empty-state">
+            <p>还没有便签</p>
+            <button
+              type="button"
+              className="link-btn"
+              aria-label="新建便签"
+              onClick={onCreateNote}
+            >
+              新建便签
+            </button>
+          </div>
+        ) : null}
+        <div className="notes-list">
+          {sortedNotes.map((note) => (
+            <button
+              key={note.id}
+              type="button"
+              onClick={() => onOpenNote(note)}
+              className={`note ${noteColorClass[note.color]}`}
+            >
+              <div className="note-title">{note.title}</div>
+              <div className="note-content">{note.content}</div>
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
