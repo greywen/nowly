@@ -195,6 +195,58 @@ test('moves from date details to event editor and restores trigger focus', async
   await expect(date).toBeFocused();
 });
 
+test('uses Good Custom Solid structure for every checkbox and radio', async ({ page }) => {
+  await loadPrototype(page);
+  const inputs = page.locator('input[type="checkbox"], input[type="radio"]');
+  expect(await inputs.count()).toBeGreaterThan(0);
+  const invalid = await inputs.evaluateAll((elements) => elements.filter((element) => {
+    const wrapper = element.closest('.form-check');
+    return !element.classList.contains('form-check-input') ||
+      !wrapper?.classList.contains('form-check-custom') ||
+      !wrapper.classList.contains('form-check-solid');
+  }).length);
+  expect(invalid).toBe(0);
+});
+
+test('renders Good solid checkbox states', async ({ page }) => {
+  await loadPrototype(page);
+  const checkbox = page.getByLabel('完成任务：发布 Nowly v0.1');
+  const unchecked = await checkbox.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { width: style.width, height: style.height, background: style.backgroundColor, border: style.borderWidth, radius: style.borderRadius };
+  });
+  expect(unchecked).toEqual({ width: '28px', height: '28px', background: 'rgb(246, 241, 233)', border: '0px', radius: '7.2px' });
+  await checkbox.check();
+  const checked = await checkbox.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { background: style.backgroundColor, image: style.backgroundImage };
+  });
+  expect(checked.background).toBe('rgb(79, 201, 218)');
+  expect(checked.image).toContain('data:image/svg+xml');
+});
+
+test('removes the browser fieldset border around Good radio groups', async ({ page }) => {
+  await loadPrototype(page);
+  await page.getByRole('button', { name: '编辑任务：发布 Nowly v0.1' }).click();
+  const border = await page.getByRole('group', { name: '所属象限' }).evaluate((element) => getComputedStyle(element).borderTopWidth);
+  expect(border).toBe('0px');
+});
+
+test('renders Good solid radio states', async ({ page }) => {
+  await loadPrototype(page);
+  await page.getByRole('button', { name: '编辑任务：发布 Nowly v0.1' }).click();
+  const radio = page.getByRole('radio', { name: '重要且紧急' });
+  const style = await radio.evaluate((element) => {
+    const computed = getComputedStyle(element);
+    return { width: computed.width, height: computed.height, background: computed.backgroundColor, radius: computed.borderRadius, image: computed.backgroundImage };
+  });
+  expect(style.width).toBe('28px');
+  expect(style.height).toBe('28px');
+  expect(style.background).toBe('rgb(79, 201, 218)');
+  expect(style.radius).toBe('50%');
+  expect(style.image).toContain('data:image/svg+xml');
+});
+
 test('dialog forms expose approved fields and actions', async ({ page }) => {
   await loadPrototype(page);
   await page.getByRole('button', { name: '14:00 设计评审' }).click();

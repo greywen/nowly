@@ -386,7 +386,34 @@ Good 当前页面普通卡片默认不使用阴影，主要依靠 `1px` 边框�
 - error：边框 `#F06445`，错误说明使用 `#F06445` 与 `13.6px`。
 - disabled：背景 `#F8F6F2`，文字 `#B5B0A1`，透明度 `0.65`。
 
-### 8.6 标签与状态徽标
+### 8.6 Checkbox 与 Radio
+
+所有 Checkbox 和 Radio 必须采用 Good Custom Solid 样式，禁止使用浏览器默认外观或其他组件库视觉。
+
+标准结构：
+
+```html
+<label class="form-check form-check-custom form-check-solid">
+  <input class="form-check-input" type="checkbox">
+  <span class="form-check-label">选项文字</span>
+</label>
+```
+
+- 默认尺寸：`28×28px`（`1.75rem`），且 `flex-shrink: 0`。
+- 使用 `appearance: none` 清除浏览器默认外观。
+- 控件与标签间距：`12px`。
+- 标签：`15.2px / 500 / 1.5`，颜色 `#716D66`。
+- 未选中背景：`#F6F1E9`，无边框、无阴影。
+- 选中背景：`#4FC9DA`。
+- Checkbox 圆角：`0.45em`，28px 下约为 `7.2px`；选中时显示 Good 白色对勾。
+- Radio 圆角：`50%`；选中时显示 Good 白色实心圆点。
+- `focus-visible`：`0 0 0 4px rgba(79, 201, 218, 0.25)`；普通鼠标 focus 不显示额外阴影。
+- disabled：`pointer-events: none`、透明度 `0.5`，标签同步使用禁用文字色。
+- Fieldset 选项组必须保留 `<fieldset>` 与 `<legend>`；Radio 组必须共享唯一 `name`。
+- 必须保留原生 `<input>`，不得使用 `div`、图标或 JavaScript 模拟控件。
+- checked、focus、disabled 等状态即时切换，不得添加 transition 或 animation。
+
+### 8.7 标签与状态徽标
 
 - 字号：`13.6–15.2px`。
 - 字重：`500–600`。
@@ -399,7 +426,7 @@ Good 当前页面普通卡片默认不使用阴影，主要依靠 `1px` 边框�
 - 警告标签：背景 `#FDF4D6`，文字使用足够对比度的深暖色。
 - 危险标签：背景 `#FFF0ED`，文字 `#DB5437`。
 
-### 8.7 下拉菜单与浮层
+### 8.8 下拉菜单与浮层
 
 - 背景：`#FFFFFF`。
 - 边框：`1px solid #EAEAEA`，可在阴影足够清晰时省略。
@@ -410,7 +437,7 @@ Good 当前页面普通卡片默认不使用阴影，主要依靠 `1px` 边框�
 - 菜单项 hover：背景 `#F8F6F2`，文字 `#4FC9DA`。
 - 不使用展开、缩放或淡入动效，显示与隐藏必须即时完成。
 
-### 8.8 模态框
+### 8.9 模态框
 
 - 表面：`#FFFFFF`。
 - 圆角：`15.2px`。
@@ -575,6 +602,7 @@ Good 当前页面普通卡片默认不使用阴影，主要依靠 `1px` 边框�
 - [ ] 标准圆角为 `15.2px`。
 - [ ] 普通卡片为白底、1px 边框、默认无阴影。
 - [ ] 按钮、卡片、Header、Sidebar 状态符合本文件。
+- [ ] 所有 Checkbox 和 Radio 使用 Good Custom Solid 结构、28px 尺寸及规定状态样式。
 - [ ] focus-visible 清晰可见。
 - [ ] 图标风格和尺寸统一。
 
