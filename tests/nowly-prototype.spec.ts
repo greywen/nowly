@@ -148,3 +148,23 @@ test('calendar controls provide presentation month feedback', async ({ page }) =
   await page.getByRole('button', { name: '今天' }).click();
   await expect(page.getByRole('heading', { name: '2026 年 7 月' })).toBeVisible();
 });
+
+test('settings categories switch accessible tab panels', async ({ page }) => {
+  await loadPrototype(page);
+  await page.getByRole('button', { name: '打开设置' }).click();
+  const modulesTab = page.getByRole('tab', { name: '模块显示' });
+  await modulesTab.click();
+  await expect(modulesTab).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('tabpanel', { name: '模块显示' })).toBeVisible();
+  await expect(page.getByText('日历模块')).toBeVisible();
+});
+
+test('traps keyboard focus inside an open dialog', async ({ page }) => {
+  await loadPrototype(page);
+  await page.getByRole('button', { name: '打开设置' }).click();
+  const dialog = page.getByRole('dialog', { name: '设置' });
+  const last = dialog.getByRole('button', { name: '保存设置' });
+  await last.focus();
+  await page.keyboard.press('Tab');
+  await expect(dialog.locator('button, input, textarea, select').first()).toBeFocused();
+});
