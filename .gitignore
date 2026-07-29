@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+
+# Frontend build output
+/dist/
+*.tsbuildinfo
+
+# Rust / Tauri build output
+/src-tauri/target/
+
+# Tests and coverage
+/test-results/
+/playwright-report/
+/blob-report/
+/coverage/
+
+# Local environment files
+.env
+.env.*
+!.env.example
+*.local
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local agent artifacts
+.superpowers/
+docs/
