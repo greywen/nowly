@@ -26,7 +26,7 @@ test('shows balanced-density calendar, quadrant, and note content', async ({ pag
   await expect(page.locator('[data-calendar-day][aria-current="date"]')).toHaveCount(1);
   await expect(page.getByRole('button', { name: /14:00 设计评审/ })).toBeVisible();
   await expect(page.locator('[data-quadrant]')).toHaveCount(4);
-  await expect(page.getByText('发布 Nowly v0.1')).toBeVisible();
+  await expect(page.getByRole('button', { name: '编辑任务：发布 Nowly v0.1' })).toBeVisible();
   await expect(page.locator('[data-note-card]')).toHaveCount(2);
   await expect(page.getByText('产品原则')).toBeVisible();
 });
@@ -67,3 +67,84 @@ for (const viewport of [
     await expect(page.getByRole('heading', { name: '便签' })).toBeVisible();
   });
 }
+
+test('opens all five dialogs from primary interface entry points', async ({ page }) => {
+  await loadPrototype(page);
+  const cases = [
+    { trigger: '2026年7月23日，星期四', dialog: '7 月 23 日 · 星期四' },
+    { trigger: '14:00 设计评审', dialog: '编辑日程' },
+    { trigger: '编辑任务：发布 Nowly v0.1', dialog: '编辑任务' },
+    { trigger: '编辑便签：产品原则', dialog: '编辑便签' },
+    { trigger: '打开设置', dialog: '设置' }
+  ];
+  for (const item of cases) {
+    await page.getByRole('button', { name: item.trigger }).first().click();
+    const dialog = page.getByRole('dialog', { name: item.dialog });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator('button, input, textarea, select').first()).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+  }
+});
+
+test('moves from date details to event editor and restores trigger focus', async ({ page }) => {
+  await loadPrototype(page);
+  const date = page.getByRole('button', { name: '2026年7月23日，星期四' });
+  await date.click();
+  const detail = page.getByRole('dialog', { name: '7 月 23 日 · 星期四' });
+  await detail.getByRole('button', { name: '14:00 设计评审' }).click();
+  await expect(page.getByRole('dialog', { name: '编辑日程' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(date).toBeFocused();
+});
+
+test('dialog forms expose approved fields and actions', async ({ page }) => {
+  await loadPrototype(page);
+  await page.getByRole('button', { name: '14:00 设计评审' }).click();
+  const eventDialog = page.getByRole('dialog', { name: '编辑日程' });
+  await expect(eventDialog.getByLabel('日程标题')).toHaveValue('设计评审');
+  await expect(eventDialog.getByLabel('开始时间')).toHaveValue('14:00');
+  await expect(eventDialog.getByRole('button', { name: '保存日程' })).toBeVisible();
+  await page.keyboard.press('Escape');
+
+  await page.getByRole('button', { name: '编辑任务：发布 Nowly v0.1' }).click();
+  const taskDialog = page.getByRole('dialog', { name: '编辑任务' });
+  await expect(taskDialog.getByRole('radio', { name: '重要且紧急' })).toBeChecked();
+  await expect(taskDialog.getByRole('button', { name: '保存任务' })).toBeVisible();
+});
+
+test('toggles task completion and resets presentation state', async ({ page }) => {
+  await loadPrototype(page);
+  const task = page.getByLabel('完成任务：发布 Nowly v0.1');
+  await task.check();
+  await expect(task.locator('xpath=ancestor::*[@data-task-row]')).toHaveClass(/is-complete/);
+  await page.getByRole('button', { name: '切换到桌面融合模式' }).click();
+  await page.getByRole('button', { name: '展开原型控制器' }).click();
+  await page.getByRole('button', { name: '重置演示状态' }).click();
+  await expect(task).not.toBeChecked();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-theme', 'light');
+});
+
+test('prototype controller opens every dialog directly', async ({ page }) => {
+  await loadPrototype(page);
+  await page.getByRole('button', { name: '展开原型控制器' }).click();
+  for (const item of [
+    ['预览日期详情', '7 月 23 日 · 星期四'],
+    ['预览日程编辑', '编辑日程'],
+    ['预览任务编辑', '编辑任务'],
+    ['预览便签编辑', '编辑便签'],
+    ['预览设置', '设置']
+  ]) {
+    await page.getByRole('button', { name: item[0] }).click();
+    await expect(page.getByRole('dialog', { name: item[1] })).toBeVisible();
+    await page.keyboard.press('Escape');
+  }
+});
+
+test('calendar controls provide presentation month feedback', async ({ page }) => {
+  await loadPrototype(page);
+  await page.getByRole('button', { name: '下一个月' }).click();
+  await expect(page.getByRole('heading', { name: '2026 年 8 月' })).toBeVisible();
+  await page.getByRole('button', { name: '今天' }).click();
+  await expect(page.getByRole('heading', { name: '2026 年 7 月' })).toBeVisible();
+});
