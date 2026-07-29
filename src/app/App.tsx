@@ -2,20 +2,46 @@ import { listen } from '@tauri-apps/api/event';
 import { useEffect, useRef, useState } from 'react';
 import { CalendarWidget } from '../calendar/CalendarWidget';
 import type { ModalState } from '../lib/modal-store';
-import { sampleEvents, sampleNotes, sampleTasks } from '../lib/sample-data';
 import { enterForegroundMode, enterWallpaperMode } from '../lib/window-mode';
 import { MatrixWidget } from '../matrix/MatrixWidget';
 import { ModalRoot } from '../modals/ModalRoot';
 import { NotesWidget } from '../notes/NotesWidget';
 import { DesktopShell } from './layout/DesktopShell';
+import { useAppBootstrap } from './useAppBootstrap';
 
 type WindowMode = 'wallpaper' | 'foreground';
 
+const dateFormatter = new Intl.DateTimeFormat('zh-CN', { dateStyle: 'full' });
+const timeFormatter = new Intl.DateTimeFormat('zh-CN', {
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false
+});
+
+function localIsoDate(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 export function App() {
+  const bootstrap = useAppBootstrap();
+  const events = bootstrap.events.data;
+  const tasks = bootstrap.tasks.data;
+  const notes = bootstrap.notes.data;
   const [modal, setModal] = useState<ModalState>(null);
   const [windowMode, setWindowMode] = useState<WindowMode>('foreground');
   const [isSwitchingWindowMode, setIsSwitchingWindowMode] = useState(false);
   const isSwitchingWindowModeRef = useRef(false);
+
+  const now = new Date();
+  const todayIso = localIsoDate(now);
+  const todayEventCount = events.filter((event) => event.startAt.startsWith(todayIso)).length;
+  const importantTaskCount = tasks.filter(
+    (task) => !task.completed && task.quadrant.startsWith('important')
+  ).length;
+  const summary = `今天 ${todayEventCount} 个日程 · ${importantTaskCount} 个重要任务 · ${notes.length} 条便签`;
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -63,17 +89,48 @@ export function App() {
     <>
       <DesktopShell
         mode={windowMode}
-        time="09:41"
-        dateText="2026年7月23日 星期四"
-        summary="今天 3 个日程 · 2 个重要任务 · 2 条便签"
-        calendar={<CalendarWidget year={2026} monthIndex={6} todayIso="2026-07-23" events={sampleEvents} onOpenDate={(isoDate) => openModalInForeground({ type: 'date', isoDate })} onOpenEvent={(event) => openModalInForeground({ type: 'event', event })} />}
-        matrix={<MatrixWidget tasks={sampleTasks} onOpenTask={(task) => openModalInForeground({ type: 'task', task })} />}
-        notes={<NotesWidget notes={sampleNotes} onOpenNote={(note) => openModalInForeground({ type: 'note', note })} />}
+        time={timeFormatter.format(now)}
+        dateText={dateFormatter.format(now)}
+        summary={summary}
+        calendar={
+          <CalendarWidget
+            year={now.getFullYear()}
+            monthIndex={now.getMonth()}
+            todayIso={todayIso}
+            events={events}
+            status={bootstrap.events.status}
+            errorMessage={bootstrap.events.status === 'error' ? bootstrap.events.message : undefined}
+            onRetry={() => void bootstrap.retryEvents()}
+            onCreateEvent={() => undefined}
+            onOpenDate={(isoDate) => openModalInForeground({ type: 'date', isoDate })}
+            onOpenEvent={(event) => openModalInForeground({ type: 'event', event })}
+          />
+        }
+        matrix={
+          <MatrixWidget
+            tasks={tasks}
+            status={bootstrap.tasks.status}
+            errorMessage={bootstrap.tasks.status === 'error' ? bootstrap.tasks.message : undefined}
+            onRetry={() => void bootstrap.retryTasks()}
+            onCreateTask={() => undefined}
+            onOpenTask={(task) => openModalInForeground({ type: 'task', task })}
+          />
+        }
+        notes={
+          <NotesWidget
+            notes={notes}
+            status={bootstrap.notes.status}
+            errorMessage={bootstrap.notes.status === 'error' ? bootstrap.notes.message : undefined}
+            onRetry={() => void bootstrap.retryNotes()}
+            onCreateNote={() => undefined}
+            onOpenNote={(note) => openModalInForeground({ type: 'note', note })}
+          />
+        }
         isModeSwitching={isSwitchingWindowMode}
         onSetWallpaper={() => void runWindowModeSwitch(switchToWallpaper)}
         onWallpaperDoubleClick={() => void runWindowModeSwitch(switchToForeground)}
       />
-      <ModalRoot modal={modal} onClose={() => setModal(null)} />
+      <ModalRoot modal={modal} events={events} tasks={tasks} onClose={() => setModal(null)} />
     </>
   );
 }
