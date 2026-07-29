@@ -215,7 +215,7 @@ test('renders Good solid checkbox states', async ({ page }) => {
     const style = getComputedStyle(element);
     return { width: style.width, height: style.height, background: style.backgroundColor, border: style.borderWidth, radius: style.borderRadius };
   });
-  expect(unchecked).toEqual({ width: '28px', height: '28px', background: 'rgb(246, 241, 233)', border: '0px', radius: '7.2px' });
+  expect(unchecked).toEqual({ width: '28px', height: '28px', background: 'rgb(218, 211, 195)', border: '0px', radius: '7.2px' });
   await checkbox.check();
   const checked = await checkbox.evaluate((element) => {
     const style = getComputedStyle(element);
@@ -247,11 +247,82 @@ test('renders Good solid radio states', async ({ page }) => {
   expect(style.image).toContain('data:image/svg+xml');
 });
 
+test('replaces native date inputs with two Good date picker triggers', async ({ page }) => {
+  await loadPrototype(page);
+  await expect(page.locator('input[type="date"]')).toHaveCount(0);
+  await page.getByRole('button', { name: '14:00 设计评审' }).click();
+  const eventDate = page.getByRole('button', { name: '日期' });
+  await expect(eventDate).toContainText('2026 年 7 月 23 日');
+  await expect(eventDate).toHaveAttribute('data-date-picker', '');
+  await expect(eventDate).toHaveAttribute('aria-haspopup', 'dialog');
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: '编辑任务：发布 Nowly v0.1' }).click();
+  await expect(page.getByRole('button', { name: '截止日期' })).toContainText('2026 年 7 月 23 日');
+});
+
+test('opens one shared Good single-date popup with a 42-day grid', async ({ page }) => {
+  await loadPrototype(page);
+  await page.getByRole('button', { name: '14:00 设计评审' }).click();
+  await page.getByRole('button', { name: '日期' }).click();
+  const picker = page.getByRole('dialog', { name: '选择日期' });
+  await expect(picker).toBeVisible();
+  await expect(picker.getByRole('columnheader')).toHaveCount(7);
+  await expect(picker.locator('[data-date-cell]')).toHaveCount(42);
+  await expect(picker.getByRole('gridcell', { name: '2026年7月23日' })).toHaveAttribute('aria-selected', 'true');
+});
+
+test('selects a date, closes the picker, and restores trigger focus', async ({ page }) => {
+  await loadPrototype(page);
+  await page.getByRole('button', { name: '14:00 设计评审' }).click();
+  const trigger = page.getByRole('button', { name: '日期' });
+  await trigger.click();
+  await page.getByRole('dialog', { name: '选择日期' }).getByRole('gridcell', { name: '2026年7月24日' }).click();
+  await expect(trigger).toContainText('2026 年 7 月 24 日');
+  await expect(trigger).toHaveAttribute('data-value', '2026-07-24');
+  await expect(page.getByRole('dialog', { name: '选择日期' })).toBeHidden();
+  await expect(trigger).toBeFocused();
+});
+
+test('keeps the date picker below the business dialog header', async ({ page }) => {
+  await loadPrototype(page);
+  await page.getByRole('button', { name: '编辑任务：发布 Nowly v0.1' }).click();
+  await page.getByRole('button', { name: '截止日期' }).click();
+  const positions = await page.evaluate(() => {
+    const picker = document.querySelector('.date-picker-popup')!.getBoundingClientRect();
+    const header = document.querySelector('[data-dialog="task"] .dialog-header')!.getBoundingClientRect();
+    return { pickerTop: picker.top, headerBottom: header.bottom };
+  });
+  expect(positions.pickerTop).toBeGreaterThanOrEqual(positions.headerBottom);
+});
+
+test('supports date picker month, today, clear, escape, and keyboard selection', async ({ page }) => {
+  await loadPrototype(page);
+  await page.getByRole('button', { name: '14:00 设计评审' }).click();
+  const trigger = page.getByRole('button', { name: '日期' });
+  await trigger.click();
+  const picker = page.getByRole('dialog', { name: '选择日期' });
+  await picker.getByRole('button', { name: '下一个月' }).click();
+  await expect(picker).toContainText('2026 年 8 月');
+  await picker.getByRole('button', { name: '今天' }).click();
+  await expect(trigger).toHaveAttribute('data-value', '2026-07-23');
+  await trigger.click();
+  await picker.getByRole('button', { name: '清除' }).click();
+  await expect(trigger).toContainText('选择日期');
+  await trigger.click();
+  await page.keyboard.press('Escape');
+  await expect(picker).toBeHidden();
+  await trigger.click();
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('Enter');
+  await expect(trigger).toHaveAttribute('data-value', '2026-07-24');
+});
+
 test('dialog forms expose approved fields and actions', async ({ page }) => {
   await loadPrototype(page);
   await page.getByRole('button', { name: '14:00 设计评审' }).click();
   const eventDialog = page.getByRole('dialog', { name: '编辑日程' });
   await expect(eventDialog.getByLabel('日程标题')).toHaveValue('设计评审');
+  await expect(eventDialog.getByRole('button', { name: '日期' })).toHaveAttribute('data-value', '2026-07-23');
   await expect(eventDialog.getByLabel('开始时间')).toHaveValue('14:00');
   await expect(eventDialog.getByRole('button', { name: '保存日程' })).toBeVisible();
   await page.keyboard.press('Escape');
