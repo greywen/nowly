@@ -22,3 +22,4 @@
 - [Good Custom Solid Checkbox 与 Radio 实施计划](./superpowers/plans/2026-07-29-good-custom-solid-checks-radios.md)
 - [Good 离线单日期选择器实施计划](./superpowers/plans/2026-07-29-good-single-date-picker.md)
 - [Good 离线时间选择器实施计划](./superpowers/plans/2026-07-29-good-offline-time-picker.md)
+- [Good 离线 Select 实施计划](./superpowers/plans/2026-07-29-good-offline-select.md)
