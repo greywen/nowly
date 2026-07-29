@@ -19,7 +19,26 @@ describe('DesktopShell', () => {
     expect(screen.getByText('calendar region')).toBeInTheDocument();
     expect(screen.getByText('matrix region')).toBeInTheDocument();
     expect(screen.getByText('notes region')).toBeInTheDocument();
-    expect(screen.getByTestId('desktop-root')).toHaveClass('h-screen', 'w-screen', 'overflow-hidden');
+    expect(screen.getByTestId('desktop-root')).toHaveClass('app-shell');
+  });
+
+  it('uses the approved single-screen Good shell without legacy visual effects', () => {
+    render(
+      <DesktopShell
+        time="09:41"
+        dateText="2026 年 7 月 23 日，星期四"
+        summary="今天暂无日程 · 暂无重要任务 · 暂无便签"
+        calendar={<div>calendar</div>}
+        matrix={<div>matrix</div>}
+        notes={<div>notes</div>}
+      />
+    );
+
+    const root = screen.getByTestId('desktop-root');
+    expect(root).toHaveClass('app-shell');
+    expect(root.className).not.toMatch(/gradient|backdrop|shadow-soft/);
+    expect(screen.getByRole('banner')).toHaveClass('topbar');
+    expect(screen.getByRole('main')).toHaveClass('workspace');
   });
 
   it('shows only the wallpaper action in the content header while foreground', () => {
