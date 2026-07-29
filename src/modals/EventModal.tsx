@@ -1,31 +1,42 @@
+import { useState } from 'react';
 import { X } from 'lucide-react';
+import { Select } from '../components/Select';
 import type { CalendarEvent } from '../calendar/calendar-model';
+import type { MatrixTask } from '../matrix/matrix-model';
 
 type EventModalProps = {
   event: CalendarEvent;
+  tasks: MatrixTask[];
   onClose: () => void;
 };
 
-export function EventModal({ event, onClose }: EventModalProps) {
+const categoryOptions = [
+  { value: 'work', label: '工作' },
+  { value: 'personal', label: '个人' },
+  { value: 'life', label: '生活' }
+];
+
+export function EventModal({ event, tasks, onClose }: EventModalProps) {
+  const [categoryId, setCategoryId] = useState(event.categoryId ?? 'work');
+  const [linkedTaskId, setLinkedTaskId] = useState(event.linkedTaskId ?? '');
+  const taskOptions = [{ value: '', label: '无关联' }, ...tasks.map((task) => ({ value: task.id, label: task.title }))];
+
   return (
-    <section className="pointer-events-auto fixed right-6 top-24 z-20 grid max-h-[calc(100vh-7rem)] w-[min(420px,calc(100vw-3rem))] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-modal">
-      <header className="flex h-14 items-center justify-between border-b border-slate-100 px-4">
-        <h2 className="font-black">日程编辑</h2>
-        <button aria-label="关闭" onClick={onClose} className="grid h-8 w-8 place-items-center rounded-xl bg-slate-100">
-          <X className="h-4 w-4" />
-        </button>
+    <section className="good-modal pointer-events-auto fixed right-6 top-24 z-20 grid max-h-[calc(100vh-7rem)] w-[min(420px,calc(100vw-3rem))] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
+      <header className="good-modal-header">
+        <h2>日程编辑</h2>
+        <button aria-label="关闭" onClick={onClose} className="good-icon-button"><X /></button>
       </header>
-      <div className="min-h-0 overflow-auto p-4">
-        <label className="mb-1 block text-xs font-black text-muted">标题</label>
-        <input className="mb-3 h-10 w-full rounded-xl border border-slate-200 px-3 font-bold" defaultValue={event.title} />
-        <label className="mb-1 block text-xs font-black text-muted">开始</label>
-        <input className="mb-3 h-10 w-full rounded-xl border border-slate-200 px-3 font-bold" defaultValue={event.startAt} />
-        <label className="mb-1 block text-xs font-black text-muted">备注</label>
-        <textarea className="h-24 w-full resize-none rounded-xl border border-slate-200 p-3 font-bold" defaultValue={event.note} />
+      <div className="good-modal-body">
+        <div className="good-field"><label htmlFor="event-title">标题</label><input id="event-title" className="good-input" defaultValue={event.title} /></div>
+        <div className="good-field"><label htmlFor="event-start">开始</label><input id="event-start" className="good-input" defaultValue={event.startAt} /></div>
+        <Select id="event-category" name="categoryId" label="分类" options={categoryOptions} value={categoryId} onChange={setCategoryId} />
+        <Select id="event-linked-task" name="linkedTaskId" label="关联任务" options={taskOptions} value={linkedTaskId} onChange={setLinkedTaskId} searchable />
+        <div className="good-field"><label htmlFor="event-note">备注</label><textarea id="event-note" className="good-input good-textarea" defaultValue={event.note} /></div>
       </div>
-      <footer className="flex h-14 justify-end gap-2 border-t border-slate-100 px-4 py-2">
-        <button onClick={onClose} className="rounded-xl bg-slate-100 px-4 font-black">取消</button>
-        <button className="rounded-xl bg-brand px-4 font-black text-white">保存</button>
+      <footer className="good-modal-footer">
+        <button onClick={onClose} className="good-button">取消</button>
+        <button className="good-button good-button--primary">保存</button>
       </footer>
     </section>
   );

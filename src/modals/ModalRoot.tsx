@@ -1,4 +1,5 @@
 import type { ModalState } from '../lib/modal-store';
+import { sampleEvents, sampleTasks } from '../lib/sample-data';
 import { EventModal } from './EventModal';
 import { NoteModal } from './NoteModal';
 import { TaskModal } from './TaskModal';
@@ -13,8 +14,8 @@ export function ModalRoot({ modal, onClose }: ModalRootProps) {
 
   return (
     <div className="pointer-events-none fixed inset-0 z-10 bg-slate-950/10">
-      {modal.type === 'event' ? <EventModal event={modal.event} onClose={onClose} /> : null}
-      {modal.type === 'task' ? <TaskModal task={modal.task} onClose={onClose} /> : null}
+      {modal.type === 'event' ? <EventModal event={modal.event} tasks={sampleTasks} onClose={onClose} /> : null}
+      {modal.type === 'task' ? <TaskModal task={modal.task} events={sampleEvents} onClose={onClose} /> : null}
       {modal.type === 'note' ? <NoteModal note={modal.note} onClose={onClose} /> : null}
     </div>
   );

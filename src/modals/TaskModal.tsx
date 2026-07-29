@@ -1,31 +1,44 @@
+import { useState } from 'react';
 import { X } from 'lucide-react';
-import type { MatrixTask } from '../matrix/matrix-model';
+import type { CalendarEvent } from '../calendar/calendar-model';
+import { Select } from '../components/Select';
+import { quadrantLabels, type MatrixTask } from '../matrix/matrix-model';
 
 type TaskModalProps = {
   task: MatrixTask;
+  events: CalendarEvent[];
   onClose: () => void;
 };
 
-export function TaskModal({ task, onClose }: TaskModalProps) {
+const quadrantOptions = Object.entries(quadrantLabels).map(([value, label]) => ({ value, label }));
+const priorityOptions = [
+  { value: '1', label: '高' },
+  { value: '2', label: '中' },
+  { value: '3', label: '低' }
+];
+
+export function TaskModal({ task, events, onClose }: TaskModalProps) {
+  const [quadrant, setQuadrant] = useState(task.quadrant);
+  const [priority, setPriority] = useState(String(task.priority));
+  const [linkedEventId, setLinkedEventId] = useState(task.linkedEventId ?? '');
+  const eventOptions = [{ value: '', label: '无关联' }, ...events.map((event) => ({ value: event.id, label: event.title }))];
+
   return (
-    <section className="pointer-events-auto fixed right-6 top-24 z-20 grid max-h-[calc(100vh-7rem)] w-[min(420px,calc(100vw-3rem))] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-modal">
-      <header className="flex h-14 items-center justify-between border-b border-slate-100 px-4">
-        <h2 className="font-black">任务编辑</h2>
-        <button aria-label="关闭" onClick={onClose} className="grid h-8 w-8 place-items-center rounded-xl bg-slate-100">
-          <X className="h-4 w-4" />
-        </button>
+    <section className="good-modal pointer-events-auto fixed right-6 top-24 z-20 grid max-h-[calc(100vh-7rem)] w-[min(420px,calc(100vw-3rem))] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
+      <header className="good-modal-header">
+        <h2>任务编辑</h2>
+        <button aria-label="关闭" onClick={onClose} className="good-icon-button"><X /></button>
       </header>
-      <div className="min-h-0 overflow-auto p-4">
-        <label className="mb-1 block text-xs font-black text-muted">标题</label>
-        <input className="mb-3 h-10 w-full rounded-xl border border-slate-200 px-3 font-bold" defaultValue={task.title} />
-        <label className="mb-1 block text-xs font-black text-muted">象限</label>
-        <input className="mb-3 h-10 w-full rounded-xl border border-slate-200 px-3 font-bold" defaultValue={task.quadrant} />
-        <label className="mb-1 block text-xs font-black text-muted">备注</label>
-        <textarea className="h-24 w-full resize-none rounded-xl border border-slate-200 p-3 font-bold" defaultValue={task.note} />
+      <div className="good-modal-body">
+        <div className="good-field"><label htmlFor="task-title">标题</label><input id="task-title" className="good-input" defaultValue={task.title} /></div>
+        <Select id="task-quadrant" name="quadrant" label="所属象限" options={quadrantOptions} value={quadrant} onChange={(value) => setQuadrant(value as MatrixTask['quadrant'])} />
+        <Select id="task-priority" name="priority" label="优先级" options={priorityOptions} value={priority} onChange={setPriority} />
+        <Select id="task-linked-event" name="linkedEventId" label="关联日程" options={eventOptions} value={linkedEventId} onChange={setLinkedEventId} searchable />
+        <div className="good-field"><label htmlFor="task-note">备注</label><textarea id="task-note" className="good-input good-textarea" defaultValue={task.note} /></div>
       </div>
-      <footer className="flex h-14 justify-end gap-2 border-t border-slate-100 px-4 py-2">
-        <button onClick={onClose} className="rounded-xl bg-slate-100 px-4 font-black">取消</button>
-        <button className="rounded-xl bg-brand px-4 font-black text-white">保存</button>
+      <footer className="good-modal-footer">
+        <button onClick={onClose} className="good-button">取消</button>
+        <button className="good-button good-button--primary">保存</button>
       </footer>
     </section>
   );
