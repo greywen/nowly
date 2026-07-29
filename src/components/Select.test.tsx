@@ -51,6 +51,8 @@ describe('Select', () => {
     render(<Harness searchable />);
     await user.click(screen.getByRole('combobox', { name: '优先级' }));
     const search = screen.getByRole('searchbox', { name: '搜索优先级' });
+    expect(search).toHaveAttribute('aria-controls');
+    expect(search).toHaveAttribute('aria-activedescendant');
     await user.type(search, '中');
     expect(screen.queryByRole('option', { name: '高' })).not.toBeInTheDocument();
     expect(screen.getByRole('option', { name: '中' })).toBeInTheDocument();

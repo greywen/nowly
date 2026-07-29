@@ -146,6 +146,8 @@ export function Select({ id, name, label, options, value, onChange, placeholder 
               ref={searchRef}
               type="search"
               aria-label={`搜索${label}`}
+              aria-controls={listboxId}
+              aria-activedescendant={activeOption ? `${listboxId}-${activeOption.value || 'empty'}` : undefined}
               value={query}
               onChange={(event) => { setQuery(event.target.value); setActiveIndex(0); }}
               onKeyDown={handleKeyDown}
