@@ -17,6 +17,8 @@
 
 ## Implementation Plans
 
+- [Nowly Windows 完整产品实施路线图](./superpowers/plans/2026-07-29-nowly-windows-product-roadmap.md)
+- [Nowly 数据基础与空状态启动实施计划](./superpowers/plans/2026-07-29-nowly-data-foundation.md)
 - [Nowly MVP Implementation Plan](./superpowers/plans/2026-07-23-nowly-mvp.md)
 - [Nowly Final UI/UX HTML Implementation Plan](./superpowers/plans/2026-07-29-nowly-final-uiux-html.md)
 - [Nowly Good 设计系统原型重设计实施计划](./superpowers/plans/2026-07-29-nowly-good-design-system-prototype-redesign.md)
