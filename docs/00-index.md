@@ -7,6 +7,7 @@
 - [Nowly Good 设计系统原型重设计规格](./superpowers/specs/2026-07-29-nowly-good-design-system-prototype-redesign.md)
 - [Good Custom Solid Checkbox 与 Radio 设计规格](./superpowers/specs/2026-07-29-good-custom-solid-checks-radios-design.md)
 - [Good 离线单日期选择器设计规格](./superpowers/specs/2026-07-29-good-single-date-picker-design.md)
+- [Good 离线时间选择器设计规格](./superpowers/specs/2026-07-29-good-offline-time-picker-design.md)
 
 ## Prototypes
 
@@ -19,3 +20,4 @@
 - [Nowly Good 设计系统原型重设计实施计划](./superpowers/plans/2026-07-29-nowly-good-design-system-prototype-redesign.md)
 - [Good Custom Solid Checkbox 与 Radio 实施计划](./superpowers/plans/2026-07-29-good-custom-solid-checks-radios.md)
 - [Good 离线单日期选择器实施计划](./superpowers/plans/2026-07-29-good-single-date-picker.md)
+- [Good 离线时间选择器实施计划](./superpowers/plans/2026-07-29-good-offline-time-picker.md)

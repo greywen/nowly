@@ -317,13 +317,98 @@ test('supports date picker month, today, clear, escape, and keyboard selection',
   await expect(trigger).toHaveAttribute('data-value', '2026-07-24');
 });
 
+test('replaces native time inputs with two Good time picker triggers', async ({ page }) => {
+  await loadPrototype(page);
+  await expect(page.locator('input[type="time"]')).toHaveCount(0);
+  await page.getByRole('button', { name: '14:00 设计评审' }).click();
+  const start = page.getByRole('button', { name: '开始时间' });
+  const end = page.getByRole('button', { name: '结束时间' });
+  await expect(start).toHaveAttribute('data-value', '14:00');
+  await expect(end).toHaveAttribute('data-value', '15:00');
+  await expect(start).toHaveAttribute('aria-haspopup', 'dialog');
+});
+
+test('opens one shared Good time popup with spinbuttons and quick values', async ({ page }) => {
+  await loadPrototype(page);
+  await page.getByRole('button', { name: '14:00 设计评审' }).click();
+  await page.getByRole('button', { name: '开始时间' }).click();
+  const picker = page.getByRole('dialog', { name: '选择时间' });
+  await expect(picker).toBeVisible();
+  await expect(picker.getByRole('spinbutton', { name: '小时' })).toHaveAttribute('aria-valuenow', '14');
+  await expect(picker.getByRole('spinbutton', { name: '分钟' })).toHaveAttribute('aria-valuenow', '0');
+  for (const value of ['09:00','09:30','12:00','14:00','15:00','18:00']) await expect(picker.getByRole('button', { name: value })).toBeVisible();
+});
+
+test('adjusts and selects Good time picker values', async ({ page }) => {
+  await loadPrototype(page);
+  await page.getByRole('button', { name: '14:00 设计评审' }).click();
+  const start = page.getByRole('button', { name: '开始时间' });
+  await start.click();
+  const picker = page.getByRole('dialog', { name: '选择时间' });
+  await picker.getByRole('button', { name: '增加小时' }).click();
+  await picker.getByRole('button', { name: '增加分钟' }).click();
+  await expect(picker.getByRole('spinbutton', { name: '小时' })).toHaveText('15');
+  await expect(picker.getByRole('spinbutton', { name: '分钟' })).toHaveText('05');
+  await picker.getByRole('button', { name: '18:00' }).click();
+  await expect(start).toHaveAttribute('data-value', '18:00');
+  await start.click();
+  await picker.getByRole('button', { name: '清除' }).click();
+  await expect(start).toContainText('选择时间');
+  await start.click();
+  await picker.getByRole('button', { name: '现在' }).click();
+  await expect(start).toHaveAttribute('data-value', '09:40');
+});
+
+test('keeps the time picker inside the business dialog safe area', async ({ page }) => {
+  await loadPrototype(page);
+  await page.getByRole('button', { name: '14:00 设计评审' }).click();
+  await page.getByRole('button', { name: '开始时间' }).click();
+  const positions = await page.evaluate(() => {
+    const popup = document.querySelector('.time-picker-popup')!.getBoundingClientRect();
+    const dialog = document.querySelector('[data-dialog="event"]')!.getBoundingClientRect();
+    const header = document.querySelector('[data-dialog="event"] .dialog-header')!.getBoundingClientRect();
+    return { popupTop: popup.top, popupBottom: popup.bottom, dialogBottom: dialog.bottom, headerBottom: header.bottom };
+  });
+  expect(positions.popupTop).toBeGreaterThanOrEqual(positions.headerBottom);
+  expect(positions.popupBottom).toBeLessThanOrEqual(positions.dialogBottom - 12);
+});
+
+test('supports time picker keyboard controls and popup mutual exclusion', async ({ page }) => {
+  await loadPrototype(page);
+  await page.getByRole('button', { name: '14:00 设计评审' }).click();
+  const start = page.getByRole('button', { name: '开始时间' });
+  await start.click();
+  const picker = page.getByRole('dialog', { name: '选择时间' });
+  const hour = picker.getByRole('spinbutton', { name: '小时' });
+  await hour.press('ArrowUp');
+  await expect(hour).toHaveText('15');
+  await hour.press('PageDown');
+  await expect(hour).toHaveText('09');
+  await hour.press('Home');
+  await expect(hour).toHaveText('00');
+  await hour.press('End');
+  await expect(hour).toHaveText('23');
+  await hour.press('Enter');
+  await expect(start).toHaveAttribute('data-value', '23:00');
+  await start.click();
+  await page.keyboard.press('Escape');
+  await expect(picker).toBeHidden();
+  await expect(start).toBeFocused();
+  await page.getByRole('button', { name: '日期' }).click();
+  await expect(page.getByRole('dialog', { name: '选择日期' })).toBeVisible();
+  await start.focus();
+  await start.press('Enter');
+  await expect(page.getByRole('dialog', { name: '选择日期' })).toBeHidden();
+  await expect(picker).toBeVisible();
+});
+
 test('dialog forms expose approved fields and actions', async ({ page }) => {
   await loadPrototype(page);
   await page.getByRole('button', { name: '14:00 设计评审' }).click();
   const eventDialog = page.getByRole('dialog', { name: '编辑日程' });
   await expect(eventDialog.getByLabel('日程标题')).toHaveValue('设计评审');
   await expect(eventDialog.getByRole('button', { name: '日期' })).toHaveAttribute('data-value', '2026-07-23');
-  await expect(eventDialog.getByLabel('开始时间')).toHaveValue('14:00');
+  await expect(eventDialog.getByRole('button', { name: '开始时间' })).toHaveAttribute('data-value', '14:00');
   await expect(eventDialog.getByRole('button', { name: '保存日程' })).toBeVisible();
   await page.keyboard.press('Escape');
 
