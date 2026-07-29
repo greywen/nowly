@@ -37,36 +37,133 @@ test('uses inline icon symbols instead of emoji function icons', async ({ page }
   await expect(page.locator('body')).not.toContainText(/📅|✅|📝|⚙️|📌/);
 });
 
-test('switches between light and desktop blend modes', async ({ page }) => {
+test('uses the authoritative Good design tokens without legacy effects', async () => {
+  const html = await readFile(prototypePath, 'utf8');
+  const normalized = html.toLowerCase();
+
+  for (const token of ['#4fc9da', '#30a6b6', '#f8f6f2', '#f6f1e9', '#211f1c', '#716d66', '#968e7e', '#eaeaea']) {
+    expect(normalized).toContain(token);
+  }
+  for (const legacy of ['#009ef7', '#181c32', '#7e8299', 'backdrop-filter', 'radial-gradient', 'linear-gradient']) {
+    expect(normalized).not.toContain(legacy);
+  }
+  expect(normalized).not.toContain('data-action="toggle-theme"');
+  expect(normalized).not.toContain('桌面融合');
+});
+
+test('applies Good card, button, and typography rules', async ({ page }) => {
   await loadPrototype(page);
-  const shell = page.locator('.app-shell');
-  await expect(shell).toHaveAttribute('data-theme', 'light');
-  await page.getByRole('button', { name: '切换到桌面融合模式' }).click();
-  await expect(shell).toHaveAttribute('data-theme', 'desktop');
-  await expect(page.getByRole('button', { name: '切换到浅色渐变模式' })).toBeVisible();
+  const styles = await page.evaluate(() => {
+    const card = getComputedStyle(document.querySelector('.card')!);
+    const primary = getComputedStyle(document.querySelector('.btn-primary')!);
+    const body = getComputedStyle(document.body);
+    return {
+      cardBackground: card.backgroundColor,
+      cardBorder: card.borderColor,
+      cardRadius: card.borderRadius,
+      cardShadow: card.boxShadow,
+      buttonBackground: primary.backgroundColor,
+      buttonRadius: primary.borderRadius,
+      bodyBackground: body.backgroundColor,
+      bodyFontSize: body.fontSize,
+      bodyLineHeight: body.lineHeight
+    };
+  });
+  expect(styles).toEqual({
+    cardBackground: 'rgb(255, 255, 255)',
+    cardBorder: 'rgb(234, 234, 234)',
+    cardRadius: '15.2px',
+    cardShadow: 'none',
+    buttonBackground: 'rgb(79, 201, 218)',
+    buttonRadius: '15.2px',
+    bodyBackground: 'rgb(248, 246, 242)',
+    bodyFontSize: '16px',
+    bodyLineHeight: '24px'
+  });
+});
+
+test('stacks events vertically inside the current-day cell', async ({ page }) => {
+  await loadPrototype(page);
+  const layout = await page.locator('[data-calendar-day][aria-current="date"]').evaluate((element) => {
+    const events = [...element.querySelectorAll('.event')].map((event) => event.getBoundingClientRect());
+    return {
+      display: getComputedStyle(element).display,
+      eventTops: events.map((event) => event.top),
+      eventWidths: events.map((event) => event.width),
+      cellWidth: element.getBoundingClientRect().width
+    };
+  });
+  expect(layout.display).toBe('block');
+  expect(new Set(layout.eventTops).size).toBe(layout.eventTops.length);
+  expect(layout.eventWidths.every((width) => width > layout.cellWidth * 0.8)).toBe(true);
+});
+
+test('keeps visible interface text at or above 13.6px', async ({ page }) => {
+  await loadPrototype(page);
+  const undersized = await page.evaluate(() => [...document.querySelectorAll('body *')]
+    .filter((element) => {
+      const node = element as HTMLElement;
+      const style = getComputedStyle(node);
+      const hasDirectText = [...node.childNodes].some((child) => child.nodeType === Node.TEXT_NODE && child.textContent?.trim());
+      return hasDirectText && node.offsetParent !== null && parseFloat(style.fontSize) < 13.6 && !node.classList.contains('sr-only');
+    })
+    .map((element) => ({ tag: element.tagName, className: element.className, text: element.textContent?.trim() })));
+  expect(undersized).toEqual([]);
+});
+
+test('globally disables motion and smooth scrolling', async ({ page }) => {
+  await loadPrototype(page);
+  const values = await page.evaluate(() => {
+    const style = getComputedStyle(document.querySelector('.btn')!);
+    return {
+      animationName: style.animationName,
+      transitionDuration: style.transitionDuration,
+      scrollBehavior: getComputedStyle(document.documentElement).scrollBehavior
+    };
+  });
+  expect(values).toEqual({ animationName: 'none', transitionDuration: '0s', scrollBehavior: 'auto' });
 });
 
 for (const viewport of [
-  { name: 'compact', width: 1366, height: 768 },
+  { name: 'minimum', width: 1366, height: 768 },
   { name: 'standard', width: 1920, height: 1080 },
-  { name: 'large', width: 2560, height: 1440 }
+  { name: 'large', width: 2560, height: 1440 },
+  { name: 'ultra-wide', width: 5120, height: 1440 },
+  { name: 'ultra-tall', width: 2560, height: 2880 }
 ]) {
-  test(`has no page overflow at ${viewport.name} size`, async ({ page }) => {
+  test(`fills the viewport without page overflow at ${viewport.name}`, async ({ page }) => {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await loadPrototype(page);
-    const metrics = await page.evaluate(() => ({
-      bodyWidth: document.body.scrollWidth,
-      bodyHeight: document.body.scrollHeight,
-      viewportWidth: window.innerWidth,
-      viewportHeight: window.innerHeight
-    }));
+    const metrics = await page.evaluate(() => {
+      const shell = document.querySelector('.app-shell')!.getBoundingClientRect();
+      const workspace = document.querySelector('.workspace')!.getBoundingClientRect();
+      return {
+        bodyWidth: document.body.scrollWidth,
+        bodyHeight: document.body.scrollHeight,
+        viewportWidth: innerWidth,
+        viewportHeight: innerHeight,
+        shellWidth: shell.width,
+        shellHeight: shell.height,
+        workspaceRightGap: innerWidth - workspace.right
+      };
+    });
     expect(metrics.bodyWidth).toBeLessThanOrEqual(metrics.viewportWidth);
     expect(metrics.bodyHeight).toBeLessThanOrEqual(metrics.viewportHeight);
-    await expect(page.getByRole('heading', { name: '2026 年 7 月' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: '优先事项' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: '便签' })).toBeVisible();
+    expect(metrics.shellWidth).toBe(metrics.viewportWidth);
+    expect(metrics.shellHeight).toBe(metrics.viewportHeight);
+    expect(metrics.workspaceRightGap).toBeLessThanOrEqual(36);
   });
 }
+
+test('does not cap the content width or height', async ({ page }) => {
+  await page.setViewportSize({ width: 5120, height: 2880 });
+  await loadPrototype(page);
+  const values = await page.evaluate(() => {
+    const inner = getComputedStyle(document.querySelector('.app-shell__inner')!);
+    return { maxWidth: inner.maxWidth, maxHeight: inner.maxHeight };
+  });
+  expect(values).toEqual({ maxWidth: 'none', maxHeight: 'none' });
+});
 
 test('opens all five dialogs from primary interface entry points', async ({ page }) => {
   await loadPrototype(page);
@@ -118,11 +215,12 @@ test('toggles task completion and resets presentation state', async ({ page }) =
   const task = page.getByLabel('完成任务：发布 Nowly v0.1');
   await task.check();
   await expect(task.locator('xpath=ancestor::*[@data-task-row]')).toHaveClass(/is-complete/);
-  await page.getByRole('button', { name: '切换到桌面融合模式' }).click();
   await page.getByRole('button', { name: '展开原型控制器' }).click();
   await page.getByRole('button', { name: '重置演示状态' }).click();
   await expect(task).not.toBeChecked();
-  await expect(page.locator('.app-shell')).toHaveAttribute('data-theme', 'light');
+  await expect(page.getByRole('heading', { name: '2026 年 7 月' })).toBeVisible();
+  await expect(page.getByText('演示状态已重置')).toHaveText('演示状态已重置');
+  await expect(page.getByRole('button', { name: '展开原型控制器' })).toBeVisible();
 });
 
 test('prototype controller opens every dialog directly', async ({ page }) => {
@@ -157,6 +255,31 @@ test('settings categories switch accessible tab panels', async ({ page }) => {
   await expect(modulesTab).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('tabpanel', { name: '模块显示' })).toBeVisible();
   await expect(page.getByText('日历模块')).toBeVisible();
+});
+
+test('settings uses static Good appearance options', async ({ page }) => {
+  await loadPrototype(page);
+  await page.getByRole('button', { name: '打开设置' }).click();
+  const dialog = page.getByRole('dialog', { name: '设置' });
+  await expect(dialog.getByLabel('信息密度')).toBeVisible();
+  await expect(dialog.getByLabel('周起始日')).toBeVisible();
+  await expect(dialog.getByLabel('日期格式')).toBeVisible();
+  await expect(dialog.getByLabel('显示周末')).toBeVisible();
+  await expect(dialog.getByText('背景模式')).toHaveCount(0);
+  await expect(dialog.getByText('卡片透明度')).toHaveCount(0);
+});
+
+test('dialogs use the Good modal surface', async ({ page }) => {
+  await loadPrototype(page);
+  await page.getByRole('button', { name: '打开设置' }).click();
+  const values = await page.getByRole('dialog', { name: '设置' }).evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { background: style.backgroundColor, border: style.borderColor, radius: style.borderRadius, shadow: style.boxShadow };
+  });
+  expect(values.background).toBe('rgb(255, 255, 255)');
+  expect(values.border).toBe('rgb(234, 234, 234)');
+  expect(values.radius).toBe('15.2px');
+  expect(values.shadow).not.toBe('none');
 });
 
 test('traps keyboard focus inside an open dialog', async ({ page }) => {
