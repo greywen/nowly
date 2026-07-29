@@ -4,7 +4,7 @@ const noteColorClass: Record<Note['color'], string> = {
   yellow: 'border-amber-400 bg-amber-50',
   blue: 'border-sky-400 bg-sky-50',
   green: 'border-emerald-400 bg-emerald-50',
-  red: 'border-rose-400 bg-rose-50'
+  purple: 'border-violet-400 bg-violet-50'
 };
 
 type NotesWidgetProps = {

@@ -9,6 +9,8 @@ export type MatrixTask = {
   completed: boolean;
   linkedEventId: string | null;
   note: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export const quadrantLabels: Record<Quadrant, string> = {

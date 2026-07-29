@@ -1,13 +1,17 @@
+export type EventColor = 'blue' | 'red' | 'green' | 'yellow';
+
 export type CalendarEvent = {
   id: string;
   title: string;
   startAt: string;
   endAt: string;
   allDay: boolean;
-  categoryId: string | null;
-  color: 'blue' | 'red' | 'green' | 'yellow';
+  category: string;
+  color: EventColor;
   linkedTaskId: string | null;
   note: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type CalendarDay = {

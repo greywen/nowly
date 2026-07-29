@@ -17,7 +17,7 @@ const categoryOptions = [
 ];
 
 export function EventModal({ event, tasks, onClose }: EventModalProps) {
-  const [categoryId, setCategoryId] = useState(event.categoryId ?? 'work');
+  const [categoryId, setCategoryId] = useState(event.category || 'work');
   const [linkedTaskId, setLinkedTaskId] = useState(event.linkedTaskId ?? '');
   const taskOptions = [{ value: '', label: '无关联' }, ...tasks.map((task) => ({ value: task.id, label: task.title }))];
 

@@ -9,10 +9,12 @@ export const sampleEvents: CalendarEvent[] = [
     startAt: '2026-07-23T09:30:00',
     endAt: '2026-07-23T10:00:00',
     allDay: false,
-    categoryId: 'work',
+    category: 'work',
     color: 'blue',
     linkedTaskId: null,
-    note: ''
+    note: '',
+    createdAt: '2026-07-23T09:00:00Z',
+    updatedAt: '2026-07-23T09:00:00Z'
   },
   {
     id: 'event-2',
@@ -20,10 +22,12 @@ export const sampleEvents: CalendarEvent[] = [
     startAt: '2026-07-23T14:00:00',
     endAt: '2026-07-23T15:00:00',
     allDay: false,
-    categoryId: 'work',
+    category: 'work',
     color: 'red',
     linkedTaskId: 'task-1',
-    note: '确认单主界面 UI'
+    note: '确认单主界面 UI',
+    createdAt: '2026-07-23T09:00:00Z',
+    updatedAt: '2026-07-23T09:00:00Z'
   },
   {
     id: 'event-3',
@@ -31,10 +35,12 @@ export const sampleEvents: CalendarEvent[] = [
     startAt: '2026-07-23T18:30:00',
     endAt: '2026-07-23T19:30:00',
     allDay: false,
-    categoryId: 'personal',
+    category: 'personal',
     color: 'green',
     linkedTaskId: null,
-    note: ''
+    note: '',
+    createdAt: '2026-07-23T09:00:00Z',
+    updatedAt: '2026-07-23T09:00:00Z'
   }
 ];
 
@@ -47,7 +53,9 @@ export const sampleTasks: MatrixTask[] = [
     priority: 1,
     completed: false,
     linkedEventId: 'event-2',
-    note: ''
+    note: '',
+    createdAt: '2026-07-23T09:00:00Z',
+    updatedAt: '2026-07-23T09:00:00Z'
   },
   {
     id: 'task-2',
@@ -57,7 +65,9 @@ export const sampleTasks: MatrixTask[] = [
     priority: 2,
     completed: false,
     linkedEventId: null,
-    note: ''
+    note: '',
+    createdAt: '2026-07-23T09:00:00Z',
+    updatedAt: '2026-07-23T09:00:00Z'
   },
   {
     id: 'task-3',
@@ -67,7 +77,9 @@ export const sampleTasks: MatrixTask[] = [
     priority: 3,
     completed: false,
     linkedEventId: null,
-    note: ''
+    note: '',
+    createdAt: '2026-07-23T09:00:00Z',
+    updatedAt: '2026-07-23T09:00:00Z'
   },
   {
     id: 'task-4',
@@ -77,7 +89,9 @@ export const sampleTasks: MatrixTask[] = [
     priority: 3,
     completed: false,
     linkedEventId: null,
-    note: ''
+    note: '',
+    createdAt: '2026-07-23T09:00:00Z',
+    updatedAt: '2026-07-23T09:00:00Z'
   }
 ];
 
