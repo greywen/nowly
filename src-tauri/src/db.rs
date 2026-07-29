@@ -10,6 +10,7 @@ const MIGRATIONS: &[(i64, Migration)] = &[
     (1, migration_1_core_tables),
     (2, migration_2_current_columns),
     (3, migration_3_indexes),
+    (4, migration_4_default_settings),
 ];
 
 pub fn open_database(path: PathBuf) -> Result<Connection> {
@@ -136,6 +137,29 @@ fn migration_3_indexes(transaction: &Transaction<'_>) -> Result<()> {
     )
 }
 
+fn migration_4_default_settings(transaction: &Transaction<'_>) -> Result<()> {
+    const DEFAULTS: &[(&str, &str)] = &[
+        ("wallpaper_enabled", "false"),
+        ("launch_at_login", "false"),
+        ("target_monitor_id", "null"),
+        ("density", "\"balanced\""),
+        ("week_start", "\"monday\""),
+        ("date_format", "\"localized\""),
+        ("show_weekends", "true"),
+        ("calendar_enabled", "true"),
+        ("matrix_enabled", "true"),
+        ("notes_enabled", "true"),
+    ];
+    for (key, value) in DEFAULTS {
+        transaction.execute(
+            "INSERT OR IGNORE INTO settings(key, value, updated_at)
+             VALUES (?1, ?2, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+            [key, value],
+        )?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{migrate, open_database};
@@ -166,7 +190,7 @@ mod tests {
             .collect::<Result<_, _>>()
             .expect("versions collect");
 
-        assert_eq!(versions, vec![1, 2, 3]);
+        assert_eq!(versions, vec![1, 2, 3, 4]);
         for table in ["events", "tasks", "notes", "settings", "widgets"] {
             assert!(table_exists(&connection, table), "missing table {table}");
         }

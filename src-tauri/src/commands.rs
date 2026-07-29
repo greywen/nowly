@@ -7,7 +7,7 @@ use tauri::State;
 pub fn list_events(db: State<AppDb>) -> Result<Vec<Event>, String> {
     let connection = db.0.lock().map_err(|error| error.to_string())?;
     let mut statement = connection
-        .prepare("SELECT id, title, start_at, end_at, all_day, category_id, color, linked_task_id, note, created_at, updated_at FROM events ORDER BY start_at ASC")
+        .prepare("SELECT id, title, start_at, end_at, all_day, category, color, linked_task_id, note, created_at, updated_at FROM events ORDER BY start_at ASC")
         .map_err(|error| error.to_string())?;
     let rows = statement
         .query_map(params![], |row| {
@@ -17,7 +17,7 @@ pub fn list_events(db: State<AppDb>) -> Result<Vec<Event>, String> {
                 start_at: row.get(2)?,
                 end_at: row.get(3)?,
                 all_day: row.get::<_, i64>(4)? == 1,
-                category_id: row.get(5)?,
+                category: row.get(5)?,
                 color: row.get(6)?,
                 linked_task_id: row.get(7)?,
                 note: row.get(8)?,

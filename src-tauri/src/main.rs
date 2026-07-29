@@ -1,6 +1,7 @@
 mod commands;
 mod db;
 mod models;
+mod settings;
 mod wallpaper;
 
 use db::{open_database, AppDb};
