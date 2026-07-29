@@ -1,5 +1,36 @@
 # Nowly Docs
 
+## Current Status
+
+- 阶段 1「数据基础与空状态启动」已完成（2026-07-29）；下一阶段为「日程纵切」，需先编写详细计划。
+- 总进度见 [Nowly Windows 完整产品实施路线图](./superpowers/plans/2026-07-29-nowly-windows-product-roadmap.md) 的 Overall status 表。
+
+## Module Index
+
+| 模块 | 路径 | 职责 |
+|---|---|---|
+| 数据迁移 | `src-tauri/src/db.rs` | 编号化事务迁移、连接打开、外键开关 |
+| IPC 模型 | `src-tauri/src/models.rs` | camelCase 序列化的 Event/Task/Note/AppSettings |
+| 设置读取 | `src-tauri/src/settings.rs` | 从 settings 表读取 JSON 值为强类型 |
+| 错误契约 | `src-tauri/src/error.rs` | `CommandError`，屏蔽内部细节 |
+| 命令层 | `src-tauri/src/commands.rs` | 查询助手 + Tauri 只读命令 |
+| 壁纸/托盘 | `src-tauri/src/wallpaper.rs`、`src-tauri/src/main.rs` | WorkerW、任务栏感知、托盘交互 |
+| 仓储边界 | `src/data/` | `NowlyRepository` 接口、Tauri 实现、注入 Context |
+| 启动装配 | `src/app/useAppBootstrap.ts` | 各模块独立加载/重试 |
+| 应用外壳 | `src/app/layout/DesktopShell.tsx`、`src/app/styles.css` | 单屏栅格与全部设计令牌 |
+| 业务组件 | `src/calendar/`、`src/matrix/`、`src/notes/` | 日历、四象限、便签 |
+| 弹窗 | `src/modals/` | 日程/任务/便签编辑弹窗 |
+
+## Common Commands
+
+```bash
+npm test          # Vitest 单元/组件测试
+npm run build     # tsc + vite build
+npm run dev       # Vite 开发服务器（127.0.0.1:1420）
+npx playwright test                                # 端到端（四组视口）
+cargo test --manifest-path src-tauri/Cargo.toml    # Rust 测试
+```
+
 ## Product Specs
 
 - [Nowly 设计规格](./superpowers/specs/2026-07-23-nowly-design.md)

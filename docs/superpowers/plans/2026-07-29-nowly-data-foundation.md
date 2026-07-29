@@ -1,5 +1,32 @@
 # Nowly Data Foundation and Empty Startup Implementation Plan
 
+> **状态：已完成（2026-07-29）。** Task 1–10 的全部 57 个步骤均已执行完毕，正文中的 `- [ ]` 记号保留为原始执行清单，实际进度以本节为准。
+>
+> **验证结果（全部实跑通过）：**
+>
+> | 命令 | 结果 |
+> |---|---|
+> | `npm test` | 12 个测试文件 / 40 个测试通过 |
+> | `npm run build` | `tsc` + `vite build` 成功 |
+> | `cargo test --manifest-path src-tauri/Cargo.toml` | 26 个测试通过 |
+> | `npx playwright test` | 160 个测试通过（1366×768 / 1920×1080 / 2560×1440 / 5120×1440） |
+> | `git diff --check` | 干净 |
+> | `grep "sample-data" src`（排除测试） | 无生产引用 |
+> | 违禁样式扫描（gradient / backdrop-filter / 旧蓝色 token） | `src/` 无命中 |
+>
+> **与原计划的偏差（均为根因修正，非降级）：**
+>
+> 1. `commands.rs` 中 `query_events/query_tasks/query_notes` 的收尾写法由计划中的尾表达式 `.collect()` 改为先绑定局部变量再返回。原写法触发 rustc E0597：`statement` 在临时迭代器仍被借用时先行析构，无法编译。
+> 2. Playwright 的 `__TAURI_INTERNALS__` 桩补充了 `transformCallback`。仅提供 `invoke` 时 `@tauri-apps/api/event` 的 `listen` 会抛未捕获异常，污染测试输出。该补充只发生在测试夹具中，未向生产代码加入浏览器兜底分支。
+> 3. 日程色板类名按 `color` 字段映射到计划规定的语义类：`blue→event--work`、`red→event--important`、`green→event--personal`、`yellow→event--learning`，以对齐 CSS 与既有数据契约。
+> 4. 日历模块的“正在读取本地日程”只在卡片头部摘要中渲染一次，未在正文重复渲染，避免 `getByText` 命中多个节点。
+>
+> **遗留项（移交后续阶段，不属本阶段范围）：**
+>
+> - `src/modals/NoteModal.tsx` 仍使用旧 Tailwind token（`text-muted`、`bg-brand`），需在阶段 4「便签纵切」随便签编辑改造一并替换为 design.md 令牌。
+> - `tailwind.config.ts` 中的 `brand/#009ef7`、`ink/#181c32`、`muted/#7e8299` 旧色仅被上述遗留组件引用，待其替换后即可删除。
+> - 日历的上一月/下一月/今天按钮目前无行为，属阶段 2「日程纵切」范围。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace Nowly's production sample data with versioned SQLite-backed reads, typed frontend repositories, static bootstrap states, and accessible empty widgets while preserving existing wallpaper behavior.
@@ -43,6 +70,7 @@
 
 ## Task 1: Add transactional, versioned SQLite migrations
 
+> 已完成 — commit `feature: add versioned database migrations`。
 **Files:**
 - Modify: `src-tauri/src/db.rs`
 
@@ -326,6 +354,7 @@ git commit -m "feature: add versioned database migrations"
 
 ## Task 2: Add typed settings defaults and camelCase IPC models
 
+> 已完成 — commit `feature: add typed application settings`。
 **Files:**
 - Create: `src-tauri/src/settings.rs`
 - Modify: `src-tauri/src/models.rs`
@@ -570,6 +599,7 @@ git commit -m "feature: add typed application settings"
 
 ## Task 3: Expose read commands with one stable error contract
 
+> 已完成 — commit `feature: expose typed startup data commands`。
 **Files:**
 - Create: `src-tauri/src/error.rs`
 - Modify: `src-tauri/src/commands.rs`
@@ -823,6 +853,7 @@ git commit -m "feature: expose typed startup data commands"
 
 ## Task 4: Define and test the frontend repository boundary
 
+> 已完成 — commit `refactor: add typed data repository boundary`。
 **Files:**
 - Create: `src/data/nowly-repository.ts`
 - Create: `src/data/tauri-nowly-repository.ts`
@@ -1018,6 +1049,7 @@ git commit -m "refactor: add typed data repository boundary"
 
 ## Task 5: Build independent startup loading and retry state
 
+> 已完成 — commit `feature: load startup resources independently`。
 **Files:**
 - Create: `src/app/useAppBootstrap.ts`
 - Create: `src/app/useAppBootstrap.test.tsx`
@@ -1203,6 +1235,7 @@ git commit -m "feature: load startup resources independently"
 
 ## Task 6: Add explicit loading, error, and empty widget behavior
 
+> 已完成 — commit `feature: add empty and error widget states`。
 **Files:**
 - Modify: `src/calendar/CalendarWidget.test.tsx`
 - Modify: `src/calendar/CalendarWidget.tsx`
@@ -1379,6 +1412,7 @@ git commit -m "feature: add empty and error widget states"
 
 ## Task 7: Connect App to repositories and remove production sample imports
 
+> 已完成 — commit `feature: start Nowly from persisted empty data`。
 **Files:**
 - Modify: `src/app/App.test.tsx`
 - Modify: `src/app/App.tsx`
@@ -1628,6 +1662,7 @@ git commit -m "feature: start Nowly from persisted empty data"
 
 ## Task 8: Align the stage-1 shell with the approved prototype and design tokens
 
+> 已完成 — commit `feature: align empty dashboard with final prototype`。
 **Files:**
 - Modify: `src/app/layout/DesktopShell.test.tsx`
 - Modify: `src/app/layout/DesktopShell.tsx`
@@ -1816,6 +1851,7 @@ git commit -m "feature: align empty dashboard with final prototype"
 
 ## Task 9: Add production-page smoke coverage for empty startup
 
+> 已完成 — commit `test: cover persisted empty dashboard startup`。`playwright.config.ts` 已内置 webServer 与四组视口，无需修改。
 **Files:**
 - Create: `tests/nowly-empty-startup.spec.ts`
 - Modify: `playwright.config.ts` only if the existing config does not start Vite.
@@ -1904,6 +1940,7 @@ git commit -m "test: cover persisted empty dashboard startup"
 
 ## Task 10: Run the stage gate and request review
 
+> 已完成 — 阶段门禁全部通过，详见文首状态表。
 **Files:**
 - No production file changes; this task verifies the completed stage and hands it to review.
 
