@@ -58,7 +58,6 @@ button:disabled { cursor: default; opacity: .65; }
 .app-shell__inner { width: 100%; height: 100%; max-width: none; max-height: none; display: grid; grid-template-rows: 70px minmax(0, 1fr); }
 .topbar { min-width: 0; padding: 0 36px; display: flex; align-items: center; justify-content: space-between; gap: 24px; background: var(--bg-surface); border-bottom: 1px solid var(--border-default); }
 .topbar .today { min-width: 0; display: flex; align-items: center; gap: 16px; }
-.brand { width: 40px; height: 40px; flex: none; display: grid; place-items: center; border-radius: var(--radius-default); color: #fff; background: var(--color-primary); font-size: 20px; font-weight: 700; }
 .date-copy { min-width: 0; }
 .date-copy strong { display: block; color: var(--text-primary); font-size: 17.2px; font-weight: 600; line-height: 1.5; }
 .date-copy p { margin: 0; color: var(--text-muted); font-size: 13.6px; font-weight: 500; }
@@ -251,7 +250,7 @@ textarea.input { min-height: 104px; resize: vertical; }
 <div class="app-shell">
 <div class="app-shell__inner">
 <header class="topbar">
-  <div class="today"><div class="brand" aria-hidden="true">N</div><div class="date-copy"><strong>2026 年 7 月 23 日，星期四</strong><p class="today-summary">今天有 3 个日程 · 2 个重要任务 · 2 条便签</p></div></div>
+  <div class="today"><div class="date-copy"><strong>2026 年 7 月 23 日，星期四</strong><p class="today-summary">今天有 3 个日程 · 2 个重要任务 · 2 条便签</p></div></div>
   <nav class="top-actions" aria-label="界面操作"><button class="btn btn-icon" type="button" aria-label="打开设置"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg></button><button class="btn btn-primary" type="button"><svg class="icon" aria-hidden="true"><use href="#i-monitor"/></svg>设为壁纸</button></nav>
 </header>
 <main class="workspace">
