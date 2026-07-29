@@ -1,15 +1,17 @@
 use crate::db::AppDb;
-use crate::models::{Event, Note, Task};
-use rusqlite::params;
+use crate::error::CommandError;
+use crate::models::{AppSettings, Event, Note, Task};
+use crate::settings::read_app_settings;
+use rusqlite::{params, Connection};
 use tauri::State;
 
-#[tauri::command]
-pub fn list_events(db: State<AppDb>) -> Result<Vec<Event>, String> {
-    let connection = db.0.lock().map_err(|error| error.to_string())?;
-    let mut statement = connection
-        .prepare("SELECT id, title, start_at, end_at, all_day, category, color, linked_task_id, note, created_at, updated_at FROM events ORDER BY start_at ASC")
-        .map_err(|error| error.to_string())?;
-    let rows = statement
+pub fn query_events(connection: &Connection) -> rusqlite::Result<Vec<Event>> {
+    let mut statement = connection.prepare(
+        "SELECT id, title, start_at, end_at, all_day, category, color,
+                linked_task_id, note, created_at, updated_at
+         FROM events ORDER BY start_at ASC",
+    )?;
+    let events = statement
         .query_map(params![], |row| {
             Ok(Event {
                 id: row.get(0)?,
@@ -24,19 +26,19 @@ pub fn list_events(db: State<AppDb>) -> Result<Vec<Event>, String> {
                 created_at: row.get(9)?,
                 updated_at: row.get(10)?,
             })
-        })
-        .map_err(|error| error.to_string())?;
-    rows.collect::<Result<Vec<_>, _>>()
-        .map_err(|error| error.to_string())
+        })?
+        .collect();
+    events
 }
 
-#[tauri::command]
-pub fn list_tasks(db: State<AppDb>) -> Result<Vec<Task>, String> {
-    let connection = db.0.lock().map_err(|error| error.to_string())?;
-    let mut statement = connection
-        .prepare("SELECT id, title, quadrant, due_at, priority, completed, linked_event_id, note, created_at, updated_at FROM tasks ORDER BY priority ASC, due_at ASC")
-        .map_err(|error| error.to_string())?;
-    let rows = statement
+pub fn query_tasks(connection: &Connection) -> rusqlite::Result<Vec<Task>> {
+    let mut statement = connection.prepare(
+        "SELECT id, title, quadrant, due_at, priority, completed,
+                linked_event_id, note, created_at, updated_at
+         FROM tasks
+         ORDER BY completed ASC, due_at IS NULL ASC, due_at ASC, priority ASC",
+    )?;
+    let tasks = statement
         .query_map(params![], |row| {
             Ok(Task {
                 id: row.get(0)?,
@@ -50,19 +52,17 @@ pub fn list_tasks(db: State<AppDb>) -> Result<Vec<Task>, String> {
                 created_at: row.get(8)?,
                 updated_at: row.get(9)?,
             })
-        })
-        .map_err(|error| error.to_string())?;
-    rows.collect::<Result<Vec<_>, _>>()
-        .map_err(|error| error.to_string())
+        })?
+        .collect();
+    tasks
 }
 
-#[tauri::command]
-pub fn list_notes(db: State<AppDb>) -> Result<Vec<Note>, String> {
-    let connection = db.0.lock().map_err(|error| error.to_string())?;
-    let mut statement = connection
-        .prepare("SELECT id, title, content, color, pinned, created_at, updated_at FROM notes ORDER BY pinned DESC, updated_at DESC")
-        .map_err(|error| error.to_string())?;
-    let rows = statement
+pub fn query_notes(connection: &Connection) -> rusqlite::Result<Vec<Note>> {
+    let mut statement = connection.prepare(
+        "SELECT id, title, content, color, pinned, created_at, updated_at
+         FROM notes ORDER BY pinned DESC, updated_at DESC",
+    )?;
+    let notes = statement
         .query_map(params![], |row| {
             Ok(Note {
                 id: row.get(0)?,
@@ -73,8 +73,67 @@ pub fn list_notes(db: State<AppDb>) -> Result<Vec<Note>, String> {
                 created_at: row.get(5)?,
                 updated_at: row.get(6)?,
             })
-        })
-        .map_err(|error| error.to_string())?;
-    rows.collect::<Result<Vec<_>, _>>()
-        .map_err(|error| error.to_string())
+        })?
+        .collect();
+    notes
+}
+
+fn with_connection<T>(
+    db: State<'_, AppDb>,
+    operation: impl FnOnce(&Connection) -> rusqlite::Result<T>,
+) -> Result<T, CommandError> {
+    let connection = db.0.lock().map_err(CommandError::database)?;
+    operation(&connection).map_err(CommandError::database)
+}
+
+#[tauri::command]
+pub fn list_events(db: State<'_, AppDb>) -> Result<Vec<Event>, CommandError> {
+    with_connection(db, query_events)
+}
+
+#[tauri::command]
+pub fn list_tasks(db: State<'_, AppDb>) -> Result<Vec<Task>, CommandError> {
+    with_connection(db, query_tasks)
+}
+
+#[tauri::command]
+pub fn list_notes(db: State<'_, AppDb>) -> Result<Vec<Note>, CommandError> {
+    with_connection(db, query_notes)
+}
+
+#[tauri::command]
+pub fn get_app_settings(db: State<'_, AppDb>) -> Result<AppSettings, CommandError> {
+    with_connection(db, read_app_settings)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{query_events, query_notes, query_tasks};
+    use crate::db::migrate;
+    use rusqlite::Connection;
+
+    #[test]
+    fn fresh_database_returns_empty_business_lists() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        migrate(&mut connection).unwrap();
+
+        assert!(query_events(&connection).unwrap().is_empty());
+        assert!(query_tasks(&connection).unwrap().is_empty());
+        assert!(query_notes(&connection).unwrap().is_empty());
+    }
+
+    #[test]
+    fn event_query_reads_the_current_category_column() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        migrate(&mut connection).unwrap();
+        connection.execute(
+            "INSERT INTO events(id,title,start_at,end_at,all_day,category,color,linked_task_id,note,created_at,updated_at)
+             VALUES ('e1','评审','2026-07-23T14:00','2026-07-23T15:00',0,'work','red',NULL,'','2026-07-23T09:00:00Z','2026-07-23T09:00:00Z')",
+            [],
+        ).unwrap();
+
+        let events = query_events(&connection).unwrap();
+
+        assert_eq!(events[0].category, "work");
+    }
 }
