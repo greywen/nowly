@@ -10,6 +10,18 @@
 
 ---
 
+## Completion status
+
+| 项目 | 结果 |
+|---|---|
+| 状态 | **已完成**（2026-07-29） |
+| React/Vitest | 20 个测试文件，94 个测试通过 |
+| Rust | 34 个测试通过 |
+| Playwright | 172 个测试通过（4 组视口） |
+| 构建与静态检查 | `npm run build`、`git diff --check` 及禁止项扫描通过 |
+| 审查 | 已按阶段 2 规格和本计划完成内联差异审查，无阻塞项 |
+| 计划偏差 | 执行环境无 subagent/Task 工具，代码审查改为内联；移除废弃 `query_events` 及其专属测试后 Rust 测试数由 35 变为 34 |
+
 **Specification:** `docs/superpowers/specs/2026-07-29-nowly-events-design.md`
 
 **Prerequisites and constraints:**
