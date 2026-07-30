@@ -20,7 +20,7 @@ export function buildMonthGrid(year: number, monthIndex: number, today = new Dat
   const result: CalendarDay[] = [];
   const todayIso = toIsoDate(today);
 
-  for (let index = 0; index < 35; index += 1) {
+  for (let index = 0; index < 42; index += 1) {
     const date = new Date(start);
     date.setDate(start.getDate() + index);
     result.push({

@@ -1,8 +1,14 @@
+import { useEffect, useRef } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import type { CalendarEvent, EventColor } from './calendar-model';
 import { buildMonthGrid } from '../lib/date';
+import {
+  eventCategoryLabels,
+  type CalendarEvent,
+  type EventColor
+} from './calendar-model';
 
 const weekdays = ['一', '二', '三', '四', '五', '六', '日'];
+const DAY_CLICK_DELAY_MS = 250;
 
 const eventToneClass: Record<EventColor, string> = {
   blue: 'event--work',
@@ -22,6 +28,10 @@ type CalendarWidgetProps = {
   errorMessage?: string;
   onRetry: () => void;
   onCreateEvent: () => void;
+  onPreviousMonth: () => void;
+  onNextMonth: () => void;
+  onToday: () => void;
+  onCreateEventForDate: (isoDate: string) => void;
   onOpenDate: (isoDate: string) => void;
   onOpenEvent: (event: CalendarEvent) => void;
 };
@@ -29,6 +39,16 @@ type CalendarWidgetProps = {
 function summaryFor(status: LoadStatus, count: number) {
   if (status === 'loading') return '正在读取本地日程';
   return count ? `本月 ${count} 个日程` : '本月暂无日程';
+}
+
+function dateLabel(isoDate: string) {
+  const [year, month, day] = isoDate.split('-').map(Number);
+  return `${year}年${month}月${day}日`;
+}
+
+function eventLabel(event: CalendarEvent) {
+  const time = event.allDay ? '全天' : event.startAt.slice(11, 16);
+  return `${time} ${event.title}，${eventCategoryLabels[event.category]}`;
 }
 
 export function CalendarWidget({
@@ -40,13 +60,40 @@ export function CalendarWidget({
   errorMessage,
   onRetry,
   onCreateEvent,
+  onPreviousMonth,
+  onNextMonth,
+  onToday,
+  onCreateEventForDate,
   onOpenDate,
   onOpenEvent
 }: CalendarWidgetProps) {
+  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const days = buildMonthGrid(year, monthIndex, new Date(`${todayIso}T00:00:00`)).map((day) => ({
     ...day,
     events: events.filter((event) => event.startAt.startsWith(day.isoDate))
   }));
+
+  function cancelDateClick() {
+    if (clickTimerRef.current !== null) {
+      clearTimeout(clickTimerRef.current);
+      clickTimerRef.current = null;
+    }
+  }
+
+  function scheduleDateOpen(isoDate: string) {
+    cancelDateClick();
+    clickTimerRef.current = setTimeout(() => {
+      clickTimerRef.current = null;
+      onOpenDate(isoDate);
+    }, DAY_CLICK_DELAY_MS);
+  }
+
+  function createForDate(isoDate: string) {
+    cancelDateClick();
+    onCreateEventForDate(isoDate);
+  }
+
+  useEffect(() => cancelDateClick, []);
 
   return (
     <div className="calendar-card-content">
@@ -58,11 +105,11 @@ export function CalendarWidget({
           <p>{summaryFor(status, events.length)}</p>
         </div>
         <div className="toolbar-actions">
-          <button type="button" className="btn btn-icon" aria-label="上一个月">
+          <button type="button" className="btn btn-icon" aria-label="上一个月" onClick={onPreviousMonth}>
             <ChevronLeft aria-hidden="true" />
           </button>
-          <button type="button" className="btn">今天</button>
-          <button type="button" className="btn btn-icon" aria-label="下一个月">
+          <button type="button" className="btn" onClick={onToday}>今天</button>
+          <button type="button" className="btn btn-icon" aria-label="下一个月" onClick={onNextMonth}>
             <ChevronRight aria-hidden="true" />
           </button>
           <button type="button" className="btn btn-primary" onClick={onCreateEvent}>
@@ -80,35 +127,55 @@ export function CalendarWidget({
           </div>
         ) : null}
         <div className="weekdays">
-          {weekdays.map((weekday) => (
-            <span key={weekday}>{weekday}</span>
-          ))}
+          {weekdays.map((weekday) => <span key={weekday}>{weekday}</span>)}
         </div>
         <div className="calendar-grid">
-          {days.map((day) => (
-            <button
-              type="button"
-              key={day.isoDate}
-              onClick={() => onOpenDate(day.isoDate)}
-              className={`day${day.isCurrentMonth ? '' : ' outside'}${day.isToday ? ' today' : ''}`}
-            >
-              <span className="day-number">{day.dayOfMonth}</span>
-              {day.events.slice(0, 3).map((event) => (
-                <span
-                  role="button"
-                  tabIndex={0}
-                  key={event.id}
-                  onClick={(clickEvent) => {
-                    clickEvent.stopPropagation();
-                    onOpenEvent(event);
-                  }}
-                  className={`event ${eventToneClass[event.color]}`}
+          {days.map((day) => {
+            const visibleEvents = day.events.slice(0, 3);
+            const overflowCount = day.events.length - visibleEvents.length;
+            return (
+              <div
+                key={day.isoDate}
+                data-calendar-day
+                className={`day${day.isCurrentMonth ? '' : ' outside'}${day.isToday ? ' today' : ''}`}
+              >
+                <button
+                  type="button"
+                  className="day-underlay"
+                  aria-label={dateLabel(day.isoDate)}
+                  onClick={() => scheduleDateOpen(day.isoDate)}
+                  onDoubleClick={() => createForDate(day.isoDate)}
                 >
-                  {event.title}
-                </span>
-              ))}
-            </button>
-          ))}
+                  <span className="day-number">{day.dayOfMonth}</span>
+                </button>
+                <div className="day-events">
+                  {visibleEvents.map((event) => (
+                    <button
+                      type="button"
+                      key={event.id}
+                      aria-label={eventLabel(event)}
+                      onClick={() => onOpenEvent(event)}
+                      className={`event ${eventToneClass[event.color]}`}
+                    >
+                      {event.title}
+                    </button>
+                  ))}
+                  {overflowCount > 0 ? (
+                    <button
+                      type="button"
+                      className="event event-overflow"
+                      onClick={() => {
+                        cancelDateClick();
+                        onOpenDate(day.isoDate);
+                      }}
+                    >
+                      另有 {overflowCount} 个
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

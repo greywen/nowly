@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { buildMonthGrid, formatChineseDate } from './date';
 
 describe('date helpers', () => {
-  it('builds a 5-week July 2026 grid starting on Monday June 29', () => {
-    const days = buildMonthGrid(2026, 6);
+  it('always builds a 6-week grid starting on Monday', () => {
+    const july = buildMonthGrid(2026, 6);
+    const august = buildMonthGrid(2026, 7);
 
-    expect(days).toHaveLength(35);
-    expect(days[0].isoDate).toBe('2026-06-29');
-    expect(days[34].isoDate).toBe('2026-08-02');
+    expect(july).toHaveLength(42);
+    expect(july[0].isoDate).toBe('2026-06-29');
+    expect(july[41].isoDate).toBe('2026-08-09');
+    expect(august).toHaveLength(42);
   });
 
   it('formats Chinese date text', () => {

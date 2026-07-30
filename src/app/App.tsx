@@ -104,6 +104,10 @@ export function App() {
             errorMessage={eventsFeature.events.status === 'error' ? eventsFeature.events.message : undefined}
             onRetry={() => void eventsFeature.retryEvents()}
             onCreateEvent={() => undefined}
+            onPreviousMonth={eventsFeature.goToPreviousMonth}
+            onNextMonth={eventsFeature.goToNextMonth}
+            onToday={eventsFeature.goToToday}
+            onCreateEventForDate={() => undefined}
             onOpenDate={(isoDate) => openModalInForeground({ type: 'date', isoDate })}
             onOpenEvent={(event) => openModalInForeground({ type: 'event', event })}
           />
