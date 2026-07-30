@@ -1,6 +1,7 @@
 mod commands;
 mod db;
 mod error;
+mod events;
 mod models;
 mod settings;
 mod wallpaper;
@@ -123,6 +124,7 @@ fn main() {
             commands::list_tasks,
             commands::list_notes,
             commands::get_app_settings,
+            events::list_events_in_range,
             wallpaper::enter_wallpaper_mode,
             wallpaper::enter_foreground_mode
         ])
