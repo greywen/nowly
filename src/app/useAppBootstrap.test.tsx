@@ -20,7 +20,10 @@ const settings: AppSettings = {
 
 function repository(overrides: Partial<NowlyRepository> = {}): NowlyRepository {
   return {
-    listEvents: vi.fn().mockResolvedValue([]),
+    listEventsInRange: vi.fn().mockResolvedValue([]),
+    createEvent: vi.fn().mockRejectedValue(new Error('unexpected write')),
+    updateEvent: vi.fn().mockRejectedValue(new Error('unexpected write')),
+    deleteEvent: vi.fn().mockRejectedValue(new Error('unexpected write')),
     listTasks: vi.fn().mockResolvedValue([]),
     listNotes: vi.fn().mockResolvedValue([]),
     getSettings: vi.fn().mockResolvedValue(settings),
@@ -35,13 +38,15 @@ function wrapper(value: NowlyRepository) {
 }
 
 describe('useAppBootstrap', () => {
-  it('loads empty data and settings independently', async () => {
-    const { result } = renderHook(() => useAppBootstrap(), { wrapper: wrapper(repository()) });
-    expect(result.current.events.status).toBe('loading');
+  it('loads only tasks, notes, and settings independently', async () => {
+    const value = repository();
+    const { result } = renderHook(() => useAppBootstrap(), { wrapper: wrapper(value) });
     await waitFor(() => expect(result.current.settings.status).toBe('ready'));
-    expect(result.current.events).toMatchObject({ status: 'ready', data: [] });
+    expect(result.current).not.toHaveProperty('events');
+    expect(result.current).not.toHaveProperty('retryEvents');
     expect(result.current.tasks).toMatchObject({ status: 'ready', data: [] });
     expect(result.current.notes).toMatchObject({ status: 'ready', data: [] });
+    expect(value.listEventsInRange).not.toHaveBeenCalled();
   });
 
   it('keeps other modules ready when notes fail and retries notes only', async () => {
@@ -53,7 +58,6 @@ describe('useAppBootstrap', () => {
     const { result } = renderHook(() => useAppBootstrap(), { wrapper: wrapper(value) });
 
     await waitFor(() => expect(result.current.notes.status).toBe('error'));
-    expect(result.current.events.status).toBe('ready');
     expect(result.current.tasks.status).toBe('ready');
 
     await act(() => result.current.retryNotes());

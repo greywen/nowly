@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { CalendarEvent } from '../calendar/calendar-model';
 import type { AppSettings } from '../data/nowly-repository';
 import { useNowlyRepository } from '../data/RepositoryContext';
 import type { MatrixTask } from '../matrix/matrix-model';
@@ -37,22 +36,12 @@ function messageFrom(error: unknown) {
 
 export function useAppBootstrap() {
   const repository = useNowlyRepository();
-  const [events, setEvents] = useState<Resource<CalendarEvent[]>>({ status: 'loading', data: [] });
   const [tasks, setTasks] = useState<Resource<MatrixTask[]>>({ status: 'loading', data: [] });
   const [notes, setNotes] = useState<Resource<Note[]>>({ status: 'loading', data: [] });
   const [settings, setSettings] = useState<Resource<AppSettings>>({
     status: 'loading',
     data: defaultSettings
   });
-
-  const loadEvents = useCallback(async () => {
-    setEvents((current) => ({ status: 'loading', data: current.data }));
-    try {
-      setEvents({ status: 'ready', data: await repository.listEvents() });
-    } catch (error) {
-      setEvents((current) => ({ status: 'error', data: current.data, message: messageFrom(error) }));
-    }
-  }, [repository]);
 
   const loadTasks = useCallback(async () => {
     setTasks((current) => ({ status: 'loading', data: current.data }));
@@ -86,15 +75,13 @@ export function useAppBootstrap() {
   }, [repository]);
 
   useEffect(() => {
-    void Promise.allSettled([loadEvents(), loadTasks(), loadNotes(), loadSettings()]);
-  }, [loadEvents, loadTasks, loadNotes, loadSettings]);
+    void Promise.allSettled([loadTasks(), loadNotes(), loadSettings()]);
+  }, [loadTasks, loadNotes, loadSettings]);
 
   return {
-    events,
     tasks,
     notes,
     settings,
-    retryEvents: loadEvents,
     retryTasks: loadTasks,
     retryNotes: loadNotes,
     retrySettings: loadSettings

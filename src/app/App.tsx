@@ -1,6 +1,7 @@
 import { listen } from '@tauri-apps/api/event';
 import { useEffect, useRef, useState } from 'react';
 import { CalendarWidget } from '../calendar/CalendarWidget';
+import { useEvents } from '../calendar/useEvents';
 import type { ModalState } from '../lib/modal-store';
 import { enterForegroundMode, enterWallpaperMode } from '../lib/window-mode';
 import { MatrixWidget } from '../matrix/MatrixWidget';
@@ -27,7 +28,8 @@ function localIsoDate(date = new Date()) {
 
 export function App() {
   const bootstrap = useAppBootstrap();
-  const events = bootstrap.events.data;
+  const eventsFeature = useEvents({ onRefreshTasks: bootstrap.retryTasks });
+  const events = eventsFeature.events.data;
   const tasks = bootstrap.tasks.data;
   const notes = bootstrap.notes.data;
   const [modal, setModal] = useState<ModalState>(null);
@@ -94,13 +96,13 @@ export function App() {
         summary={summary}
         calendar={
           <CalendarWidget
-            year={now.getFullYear()}
-            monthIndex={now.getMonth()}
+            year={eventsFeature.year}
+            monthIndex={eventsFeature.monthIndex}
             todayIso={todayIso}
             events={events}
-            status={bootstrap.events.status}
-            errorMessage={bootstrap.events.status === 'error' ? bootstrap.events.message : undefined}
-            onRetry={() => void bootstrap.retryEvents()}
+            status={eventsFeature.events.status}
+            errorMessage={eventsFeature.events.status === 'error' ? eventsFeature.events.message : undefined}
+            onRetry={() => void eventsFeature.retryEvents()}
             onCreateEvent={() => undefined}
             onOpenDate={(isoDate) => openModalInForeground({ type: 'date', isoDate })}
             onOpenEvent={(event) => openModalInForeground({ type: 'event', event })}
