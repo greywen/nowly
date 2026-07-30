@@ -119,11 +119,17 @@ export function App() {
         matrix={
           <MatrixWidget
             tasks={tasks}
+            events={events}
             status={tasksFeature.tasks.status}
             errorMessage={tasksFeature.tasks.status === 'error' ? tasksFeature.tasks.message : undefined}
+            completionError={tasksFeature.failedCompletion?.message ?? null}
+            pendingTaskIds={tasksFeature.pendingTaskIds}
             onRetry={() => void tasksFeature.retryTasks()}
             onCreateTask={() => undefined}
             onOpenTask={(task) => openModalInForeground({ type: 'task', task })}
+            onToggleTask={(task, completed) => void tasksFeature.setTaskCompleted(task, completed)}
+            onRetryCompletion={() => void tasksFeature.retryFailedCompletion()}
+            onDismissCompletionError={tasksFeature.dismissTaskError}
           />
         }
         notes={
