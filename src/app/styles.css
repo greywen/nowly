@@ -488,8 +488,24 @@ button:disabled { cursor: default; opacity: .65; }
 .date-detail-dialog__category--personal { color: #6f8617; background: var(--color-success-light); }
 .date-detail-dialog__category--learning { color: var(--color-info-active); background: var(--color-info-light); }
 
+.event-dialog { width: min(760px, calc(100vw - 32px)); }
+.event-form { display: grid; gap: 20px; }
+.form-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.form-check { display: inline-flex; align-items: center; gap: 12px; }
+.form-check-input { width: 28px; height: 28px; flex: none; appearance: none; border: 0; border-radius: 7.2px; background: #dad3c3; }
+.form-check-input:checked { background: var(--color-primary); box-shadow: inset 0 0 0 8px var(--color-primary), inset 0 0 0 10px #fff; }
+.form-check-input[type="radio"] { border-radius: 50%; }
+.form-check-label { color: var(--text-secondary); font-size: 15.2px; font-weight: 500; }
+.color-options { margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 16px; border: 0; }
+.color-options legend { width: 100%; margin-bottom: 8px; color: var(--text-secondary); font-size: 15.2px; font-weight: 500; }
+.event-dialog__actions { width: 100%; display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.event-dialog__actions .dialog-error { margin: 0 auto 0 0; }
+.good-button--danger-ghost { color: var(--color-danger-active); background: var(--color-danger-light); }
+.good-button--danger-ghost:hover { color: #fff; background: var(--color-danger); }
+
 @media (max-width: 640px) {
   .overlay { padding: 16px; }
+  .form-row { grid-template-columns: 1fr; }
   .good-dialog { max-height: calc(100vh - 32px); }
   .good-dialog__header,
   .good-dialog__footer { padding-inline: 24px; }
