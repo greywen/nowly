@@ -125,6 +125,9 @@ fn main() {
             commands::list_notes,
             commands::get_app_settings,
             events::list_events_in_range,
+            events::create_event,
+            events::update_event,
+            events::delete_event,
             wallpaper::enter_wallpaper_mode,
             wallpaper::enter_foreground_mode
         ])
