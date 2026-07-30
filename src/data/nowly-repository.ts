@@ -1,5 +1,5 @@
 import type { CalendarEvent, EventDraft, EventRange } from '../calendar/calendar-model';
-import type { MatrixTask } from '../matrix/matrix-model';
+import type { MatrixTask, TaskDraft } from '../matrix/matrix-model';
 import type { Note } from '../notes/notes-model';
 
 export type AppSettings = {
@@ -27,6 +27,10 @@ export type NowlyRepository = {
   updateEvent(id: string, draft: EventDraft): Promise<CalendarEvent>;
   deleteEvent(id: string): Promise<void>;
   listTasks(): Promise<MatrixTask[]>;
+  createTask(draft: TaskDraft): Promise<MatrixTask>;
+  updateTask(id: string, draft: TaskDraft): Promise<MatrixTask>;
+  deleteTask(id: string): Promise<void>;
+  setTaskCompleted(id: string, completed: boolean): Promise<MatrixTask>;
   listNotes(): Promise<Note[]>;
   getSettings(): Promise<AppSettings>;
 };
