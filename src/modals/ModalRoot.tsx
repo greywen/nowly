@@ -16,7 +16,7 @@ export function ModalRoot({modal,events,tasks,onClose,onChangeModal,createEvent,
  return <>
   {date?<DateDetailDialog isoDate={date} events={events} tasks={tasks} isTopLayer={modal.type==='date'} restoreFocusRef={modal.type==='date'?{current:modal.trigger}:undefined} onClose={onClose} onCreateEvent={(isoDate)=>onChangeModal({type:'event-create',dateIso:isoDate,trigger:null,parentDate:isoDate})} onEditEvent={(event,trigger)=>onChangeModal({type:'event-edit',event,trigger,parentDate:date})}/>:null}
   {modal.type==='event-create'||modal.type==='event-edit'?<EventModal mode={modal.type==='event-create'?{type:'create',dateIso:modal.dateIso}:{type:'edit',event:modal.event}} tasks={tasks} restoreFocusRef={{current:modal.trigger}} onClose={returnFromEvent} createEvent={createEvent} updateEvent={updateEvent} deleteEvent={deleteEvent} onSaved={async(e,old)=>{await onSaved(e,old);returnFromEvent();}} onDeleted={async(e)=>{await onDeleted(e);returnFromEvent();}}/>:null}
-  {modal.type==='task'?<TaskModal task={modal.task} events={events} onClose={onClose}/>:null}
+  {modal.type==='task'?<TaskModal mode={{type:'edit',task:modal.task}} events={events} onClose={onClose} onSaved={()=>undefined} onDeleted={()=>undefined} createTask={async()=>{throw new Error('任务创建尚未连接。');}} updateTask={async()=>{throw new Error('任务更新尚未连接。');}} deleteTask={async()=>{throw new Error('任务删除尚未连接。');}}/>:null}
   {modal.type==='note'?<NoteModal note={modal.note} onClose={onClose}/>:null}
  </>;
 }

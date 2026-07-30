@@ -40,7 +40,7 @@ describe('ModalRoot', () => {
 
   it('keeps existing task and note routing functional', () => {
     const { rerender }=render(<ModalRoot {...base({modal:{type:'task',task:sampleTasks[0]}})}/>);
-    expect(screen.getByText('任务编辑')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name:'编辑任务' })).toBeInTheDocument();
     rerender(<ModalRoot {...base({modal:{type:'note',note:sampleNotes[0]}})}/>);
     expect(screen.getByText('便签编辑')).toBeInTheDocument();
   });

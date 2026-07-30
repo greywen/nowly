@@ -16,9 +16,10 @@ type SelectProps = {
   placeholder?: string;
   searchable?: boolean;
   disabled?: boolean;
+  errorId?: string;
 };
 
-export function Select({ id, name, label, options, value, onChange, placeholder = '请选择', searchable = false, disabled = false }: SelectProps) {
+export function Select({ id, name, label, options, value, onChange, placeholder = '请选择', searchable = false, disabled = false, errorId }: SelectProps) {
   const listboxId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -130,6 +131,7 @@ export function Select({ id, name, label, options, value, onChange, placeholder 
         aria-controls={listboxId}
         aria-expanded={open}
         aria-activedescendant={open && activeOption ? `${listboxId}-${activeOption.value || 'empty'}` : undefined}
+        aria-describedby={errorId}
         disabled={disabled}
         className="select-trigger"
         onClick={() => open ? close(false) : openList()}
