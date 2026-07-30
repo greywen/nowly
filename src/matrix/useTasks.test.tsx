@@ -145,4 +145,115 @@ describe('useTasks', () => {
     expect(repository.listTasks).toHaveBeenCalledOnce();
     expect(onRefreshEvents).not.toHaveBeenCalled();
   });
+
+  it('optimistically completes, disables duplicate writes, and accepts the server entity', async () => {
+    const open = task('open');
+    const write = deferred<MatrixTask>();
+    const setTaskCompleted = vi.fn(() => write.promise);
+    const repository = createRepository({
+      listTasks: vi.fn().mockResolvedValue([open, task('later', { dueAt: null })]),
+      setTaskCompleted
+    });
+    const { result } = renderHook(() => useTasks({ onRefreshEvents: vi.fn() }), {
+      wrapper: wrapper(repository)
+    });
+    await waitFor(() => expect(result.current.tasks.status).toBe('ready'));
+
+    act(() => { void result.current.setTaskCompleted(open, true); });
+    expect(result.current.tasks.data.find((item) => item.id === open.id)?.completed).toBe(true);
+    expect(result.current.pendingTaskIds.has(open.id)).toBe(true);
+    act(() => { void result.current.setTaskCompleted(open, true); });
+    expect(setTaskCompleted).toHaveBeenCalledOnce();
+
+    await act(async () => write.resolve({ ...open, completed: true, updatedAt: 'server' }));
+    expect(result.current.pendingTaskIds.has(open.id)).toBe(false);
+    expect(result.current.tasks.data.find((item) => item.id === open.id)?.updatedAt).toBe('server');
+    expect(result.current.failedCompletion).toBeNull();
+  });
+
+  it('rolls back a failed completion and retries the original target', async () => {
+    const open = task('open');
+    const setTaskCompleted = vi.fn()
+      .mockRejectedValueOnce({ message: '完成状态保存失败' })
+      .mockResolvedValueOnce({ ...open, completed: true, updatedAt: 'retry' });
+    const repository = createRepository({
+      listTasks: vi.fn().mockResolvedValue([open]),
+      setTaskCompleted
+    });
+    const { result } = renderHook(() => useTasks({ onRefreshEvents: vi.fn() }), {
+      wrapper: wrapper(repository)
+    });
+    await waitFor(() => expect(result.current.tasks.status).toBe('ready'));
+
+    await act(() => result.current.setTaskCompleted(open, true));
+    expect(result.current.tasks.data[0].completed).toBe(false);
+    expect(result.current.failedCompletion).toMatchObject({
+      taskId: open.id,
+      targetCompleted: true,
+      message: '完成状态保存失败'
+    });
+
+    await act(() => result.current.retryFailedCompletion());
+    expect(setTaskCompleted).toHaveBeenLastCalledWith(open.id, true);
+    expect(result.current.tasks.data[0]).toMatchObject({ completed: true, updatedAt: 'retry' });
+    expect(result.current.failedCompletion).toBeNull();
+
+    act(() => result.current.dismissTaskError());
+    expect(result.current.failedCompletion).toBeNull();
+  });
+
+  it('invalidates a failed completion after editing or deleting the task', async () => {
+    const open = task('open');
+    const changed = task('open', { title: '已编辑' });
+    const listTasks = vi.fn()
+      .mockResolvedValueOnce([open])
+      .mockResolvedValueOnce([changed])
+      .mockResolvedValueOnce([changed])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    const repository = createRepository({
+      listTasks,
+      setTaskCompleted: vi.fn().mockRejectedValue({ message: '完成失败' }),
+      updateTask: vi.fn().mockResolvedValue(changed),
+      deleteTask: vi.fn().mockResolvedValue(undefined)
+    });
+    const { result } = renderHook(() => useTasks({ onRefreshEvents: vi.fn() }), {
+      wrapper: wrapper(repository)
+    });
+    await waitFor(() => expect(result.current.tasks.status).toBe('ready'));
+
+    await act(() => result.current.setTaskCompleted(open, true));
+    await act(() => result.current.updateTask(open, { ...draft, title: '已编辑' }));
+    await act(() => result.current.retryFailedCompletion());
+    expect(repository.setTaskCompleted).toHaveBeenCalledOnce();
+    expect(listTasks).toHaveBeenCalledTimes(3);
+
+    await act(() => result.current.setTaskCompleted(changed, true));
+    await act(() => result.current.deleteTask(changed));
+    await act(() => result.current.retryFailedCompletion());
+    expect(repository.setTaskCompleted).toHaveBeenCalledTimes(2);
+    expect(listTasks).toHaveBeenCalledTimes(5);
+  });
+
+  it('does not let an older completion response overwrite a newer edit', async () => {
+    const open = task('open');
+    const older = deferred<MatrixTask>();
+    const edited = task('open', { title: '已编辑', updatedAt: 'newer' });
+    const repository = createRepository({
+      listTasks: vi.fn().mockResolvedValueOnce([open]).mockResolvedValue([edited]),
+      setTaskCompleted: vi.fn(() => older.promise),
+      updateTask: vi.fn().mockResolvedValue(edited)
+    });
+    const { result } = renderHook(() => useTasks({ onRefreshEvents: vi.fn() }), {
+      wrapper: wrapper(repository)
+    });
+    await waitFor(() => expect(result.current.tasks.status).toBe('ready'));
+
+    act(() => { void result.current.setTaskCompleted(open, true); });
+    await act(() => result.current.updateTask(open, { ...draft, title: '已编辑' }));
+    await act(async () => older.resolve({ ...open, completed: true, updatedAt: 'older' }));
+
+    expect(result.current.tasks.data[0]).toMatchObject({ title: '已编辑', updatedAt: 'newer' });
+    expect(result.current.pendingTaskIds.has(open.id)).toBe(false);
+  });
 });
