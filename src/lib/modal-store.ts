@@ -6,7 +6,8 @@ export type ModalState =
   | { type: 'date'; isoDate: string; trigger: HTMLElement | null }
   | { type: 'event-create'; dateIso: string; trigger: HTMLElement | null; parentDate?: string }
   | { type: 'event-edit'; event: CalendarEvent; trigger: HTMLElement | null; parentDate?: string }
-  | { type: 'task'; task: MatrixTask }
+  | { type: 'task-create'; dueDate: string | null; trigger: HTMLElement | null; parentDate?: string }
+  | { type: 'task-edit'; task: MatrixTask; trigger: HTMLElement | null; parentDate?: string }
   | { type: 'note'; note: Note }
   | { type: 'settings' }
   | null;

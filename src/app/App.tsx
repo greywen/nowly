@@ -1,5 +1,5 @@
 import { listen } from '@tauri-apps/api/event';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { CalendarWidget } from '../calendar/CalendarWidget';
 import { useEvents } from '../calendar/useEvents';
 import type { ModalState } from '../lib/modal-store';
@@ -29,10 +29,14 @@ function localIsoDate(date = new Date()) {
 
 export function App() {
   const bootstrap = useAppBootstrap();
-  const retryTasksRef = useRef<() => Promise<unknown>>(async () => undefined);
-  const eventsFeature = useEvents({ onRefreshTasks: () => retryTasksRef.current() });
-  const tasksFeature = useTasks({ onRefreshEvents: eventsFeature.retryEvents });
-  retryTasksRef.current = tasksFeature.retryTasks;
+  const refreshTasksRef = useRef<() => Promise<unknown>>(async () => undefined);
+  const refreshEventsRef = useRef<() => Promise<unknown>>(async () => undefined);
+  const refreshTasks = useCallback(() => refreshTasksRef.current(), []);
+  const refreshEvents = useCallback(() => refreshEventsRef.current(), []);
+  const eventsFeature = useEvents({ onRefreshTasks: refreshTasks });
+  const tasksFeature = useTasks({ onRefreshEvents: refreshEvents });
+  refreshTasksRef.current = tasksFeature.retryTasks;
+  refreshEventsRef.current = eventsFeature.retryEvents;
   const events = eventsFeature.events.data;
   const tasks = tasksFeature.tasks.data;
   const notes = bootstrap.notes.data;
@@ -125,8 +129,8 @@ export function App() {
             completionError={tasksFeature.failedCompletion?.message ?? null}
             pendingTaskIds={tasksFeature.pendingTaskIds}
             onRetry={() => void tasksFeature.retryTasks()}
-            onCreateTask={() => undefined}
-            onOpenTask={(task) => openModalInForeground({ type: 'task', task })}
+            onCreateTask={() => openModalInForeground({ type:'task-create', dueDate:null, trigger:null })}
+            onOpenTask={(task, trigger) => openModalInForeground({ type:'task-edit', task, trigger })}
             onToggleTask={(task, completed) => void tasksFeature.setTaskCompleted(task, completed)}
             onRetryCompletion={() => void tasksFeature.retryFailedCompletion()}
             onDismissCompletionError={tasksFeature.dismissTaskError}
@@ -155,8 +159,13 @@ export function App() {
         createEvent={eventsFeature.createEvent}
         updateEvent={eventsFeature.updateEvent}
         deleteEvent={eventsFeature.deleteEvent}
-        onSaved={() => setModal(null)}
-        onDeleted={() => setModal(null)}
+        onSaved={() => undefined}
+        onDeleted={() => undefined}
+        createTask={tasksFeature.createTask}
+        updateTask={tasksFeature.updateTask}
+        deleteTask={tasksFeature.deleteTask}
+        onTaskSaved={() => undefined}
+        onTaskDeleted={() => undefined}
       />
     </>
   );

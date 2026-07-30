@@ -101,6 +101,50 @@ describe('App startup and window behavior', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name:'新建日程' })).not.toBeInTheDocument());
   });
 
+  it('creates and edits tasks through the task feature without duplicate startup reads', async () => {
+    const user = userEvent.setup();
+    const existing = {
+      id:'t1', title:'发布 Nowly', quadrant:'important_urgent' as const, dueAt:null, priority:1 as const,
+      completed:false, linkedEventId:null, note:'', createdAt:'x', updatedAt:'x'
+    };
+    const created = { ...existing, id:'t2', title:'新任务' };
+    const listTasks = vi.fn().mockResolvedValueOnce([existing]).mockResolvedValue([existing, created]);
+    const createTask = vi.fn().mockResolvedValue(created);
+    const repository = createRepository({ listTasks, createTask });
+    renderApp(repository);
+    await waitFor(() => expect(screen.getByRole('button', { name:'编辑任务：发布 Nowly' })).toBeInTheDocument());
+    expect(listTasks).toHaveBeenCalledOnce();
+
+    await user.click(screen.getByRole('button', { name:'新增任务' }));
+    expect(screen.getByRole('dialog', { name:'新建任务' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name:'截止日期' })).toHaveTextContent('请选择日期');
+    await user.type(screen.getByLabelText('任务标题'), '新任务');
+    await user.click(screen.getByRole('button', { name:'保存任务' }));
+    await waitFor(() => expect(createTask).toHaveBeenCalled());
+    await waitFor(() => expect(screen.queryByRole('dialog', { name:'新建任务' })).not.toBeInTheDocument());
+    expect(listTasks).toHaveBeenCalledTimes(2);
+
+    await user.click(screen.getByRole('button', { name:'编辑任务：发布 Nowly' }));
+    expect(screen.getByRole('dialog', { name:'编辑任务' })).toBeInTheDocument();
+  });
+
+  it('refreshes the current event month after creating a linked task', async () => {
+    const user = userEvent.setup();
+    const event = { id:'e1', title:'设计评审', startAt:'2026-07-23T14:00', endAt:'2026-07-23T15:00', allDay:false, category:'work' as const, color:'blue' as const, linkedTaskId:null, note:'', createdAt:'x', updatedAt:'x' };
+    const linked = { id:'t1', title:'关联任务', quadrant:'important_urgent' as const, dueAt:null, priority:2 as const, completed:false, linkedEventId:'e1', note:'', createdAt:'x', updatedAt:'x' };
+    const listEventsInRange = vi.fn().mockResolvedValue([event]);
+    const createTask = vi.fn().mockResolvedValue(linked);
+    renderApp(createRepository({ listEventsInRange, createTask }));
+    await waitFor(() => expect(listEventsInRange).toHaveBeenCalledOnce());
+
+    await user.click(screen.getByRole('button', { name:'新增任务' }));
+    await user.type(screen.getByLabelText('任务标题'), '关联任务');
+    await user.click(screen.getByRole('combobox', { name:'关联日程' }));
+    await user.click(screen.getByRole('option', { name:'设计评审' }));
+    await user.click(screen.getByRole('button', { name:'保存任务' }));
+    await waitFor(() => expect(listEventsInRange).toHaveBeenCalledTimes(2));
+  });
+
   it('starts in foreground without automatically entering wallpaper mode', () => {
     renderApp();
 
