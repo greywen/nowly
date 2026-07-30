@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { AppSettings } from '../data/nowly-repository';
 import { useNowlyRepository } from '../data/RepositoryContext';
-import type { MatrixTask } from '../matrix/matrix-model';
 import type { Note } from '../notes/notes-model';
 
 type Resource<T> =
@@ -36,21 +35,11 @@ function messageFrom(error: unknown) {
 
 export function useAppBootstrap() {
   const repository = useNowlyRepository();
-  const [tasks, setTasks] = useState<Resource<MatrixTask[]>>({ status: 'loading', data: [] });
   const [notes, setNotes] = useState<Resource<Note[]>>({ status: 'loading', data: [] });
   const [settings, setSettings] = useState<Resource<AppSettings>>({
     status: 'loading',
     data: defaultSettings
   });
-
-  const loadTasks = useCallback(async () => {
-    setTasks((current) => ({ status: 'loading', data: current.data }));
-    try {
-      setTasks({ status: 'ready', data: await repository.listTasks() });
-    } catch (error) {
-      setTasks((current) => ({ status: 'error', data: current.data, message: messageFrom(error) }));
-    }
-  }, [repository]);
 
   const loadNotes = useCallback(async () => {
     setNotes((current) => ({ status: 'loading', data: current.data }));
@@ -75,14 +64,12 @@ export function useAppBootstrap() {
   }, [repository]);
 
   useEffect(() => {
-    void Promise.allSettled([loadTasks(), loadNotes(), loadSettings()]);
-  }, [loadTasks, loadNotes, loadSettings]);
+    void Promise.allSettled([loadNotes(), loadSettings()]);
+  }, [loadNotes, loadSettings]);
 
   return {
-    tasks,
     notes,
     settings,
-    retryTasks: loadTasks,
     retryNotes: loadNotes,
     retrySettings: loadSettings
   };

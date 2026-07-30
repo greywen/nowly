@@ -5,6 +5,7 @@ import { useEvents } from '../calendar/useEvents';
 import type { ModalState } from '../lib/modal-store';
 import { enterForegroundMode, enterWallpaperMode } from '../lib/window-mode';
 import { MatrixWidget } from '../matrix/MatrixWidget';
+import { useTasks } from '../matrix/useTasks';
 import { ModalRoot } from '../modals/ModalRoot';
 import { NotesWidget } from '../notes/NotesWidget';
 import { DesktopShell } from './layout/DesktopShell';
@@ -28,9 +29,12 @@ function localIsoDate(date = new Date()) {
 
 export function App() {
   const bootstrap = useAppBootstrap();
-  const eventsFeature = useEvents({ onRefreshTasks: bootstrap.retryTasks });
+  const retryTasksRef = useRef<() => Promise<unknown>>(async () => undefined);
+  const eventsFeature = useEvents({ onRefreshTasks: () => retryTasksRef.current() });
+  const tasksFeature = useTasks({ onRefreshEvents: eventsFeature.retryEvents });
+  retryTasksRef.current = tasksFeature.retryTasks;
   const events = eventsFeature.events.data;
-  const tasks = bootstrap.tasks.data;
+  const tasks = tasksFeature.tasks.data;
   const notes = bootstrap.notes.data;
   const [modal, setModal] = useState<ModalState>(null);
   const [windowMode, setWindowMode] = useState<WindowMode>('foreground');
@@ -115,9 +119,9 @@ export function App() {
         matrix={
           <MatrixWidget
             tasks={tasks}
-            status={bootstrap.tasks.status}
-            errorMessage={bootstrap.tasks.status === 'error' ? bootstrap.tasks.message : undefined}
-            onRetry={() => void bootstrap.retryTasks()}
+            status={tasksFeature.tasks.status}
+            errorMessage={tasksFeature.tasks.status === 'error' ? tasksFeature.tasks.message : undefined}
+            onRetry={() => void tasksFeature.retryTasks()}
             onCreateTask={() => undefined}
             onOpenTask={(task) => openModalInForeground({ type: 'task', task })}
           />

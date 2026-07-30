@@ -42,15 +42,17 @@ function wrapper(value: NowlyRepository) {
 }
 
 describe('useAppBootstrap', () => {
-  it('loads only tasks, notes, and settings independently', async () => {
+  it('loads only notes and settings independently', async () => {
     const value = repository();
     const { result } = renderHook(() => useAppBootstrap(), { wrapper: wrapper(value) });
     await waitFor(() => expect(result.current.settings.status).toBe('ready'));
     expect(result.current).not.toHaveProperty('events');
     expect(result.current).not.toHaveProperty('retryEvents');
-    expect(result.current.tasks).toMatchObject({ status: 'ready', data: [] });
+    expect(result.current).not.toHaveProperty('tasks');
+    expect(result.current).not.toHaveProperty('retryTasks');
     expect(result.current.notes).toMatchObject({ status: 'ready', data: [] });
     expect(value.listEventsInRange).not.toHaveBeenCalled();
+    expect(value.listTasks).not.toHaveBeenCalled();
   });
 
   it('keeps other modules ready when notes fail and retries notes only', async () => {
@@ -62,7 +64,7 @@ describe('useAppBootstrap', () => {
     const { result } = renderHook(() => useAppBootstrap(), { wrapper: wrapper(value) });
 
     await waitFor(() => expect(result.current.notes.status).toBe('error'));
-    expect(result.current.tasks.status).toBe('ready');
+    expect(result.current.settings.status).toBe('ready');
 
     await act(() => result.current.retryNotes());
     await waitFor(() => expect(result.current.notes.status).toBe('ready'));
