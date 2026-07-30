@@ -58,6 +58,18 @@ pub struct EventDraft {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct TaskDraft {
+    pub title: String,
+    pub quadrant: String,
+    pub due_at: Option<String>,
+    pub priority: i64,
+    pub completed: bool,
+    pub linked_event_id: Option<String>,
+    pub note: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct EventRange {
     pub start_at: String,
     pub end_at_exclusive: String,
@@ -80,7 +92,25 @@ pub struct AppSettings {
 
 #[cfg(test)]
 mod tests {
-    use super::EventDraft;
+    use super::{EventDraft, TaskDraft};
+
+    #[test]
+    fn task_draft_deserializes_camel_case() {
+        let draft: TaskDraft = serde_json::from_value(serde_json::json!({
+            "title": "发布 Nowly",
+            "quadrant": "important_urgent",
+            "dueAt": "2026-07-23",
+            "priority": 1,
+            "completed": false,
+            "linkedEventId": "e1",
+            "note": "发布前检查"
+        }))
+        .unwrap();
+
+        assert_eq!(draft.due_at.as_deref(), Some("2026-07-23"));
+        assert_eq!(draft.linked_event_id.as_deref(), Some("e1"));
+        assert_eq!(draft.priority, 1);
+    }
 
     #[test]
     fn event_draft_deserializes_camel_case() {
