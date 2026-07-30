@@ -16,6 +16,7 @@ type DateDetailDialogProps = {
   restoreFocusRef?: RefObject<HTMLElement | null>;
   onClose: () => void;
   onCreateEvent: (date: string) => void;
+  onCreateTask?: (date: string, trigger: HTMLElement) => void;
   onEditEvent: (event: CalendarEvent, trigger: HTMLElement) => void;
 };
 
@@ -46,6 +47,7 @@ export function DateDetailDialog({
   restoreFocusRef,
   onClose,
   onCreateEvent,
+  onCreateTask,
   onEditEvent
 }: DateDetailDialogProps) {
   const titleId = useId();
@@ -67,9 +69,16 @@ export function DateDetailDialog({
         </button>
       }
       footer={
-        <button type="button" className="good-button good-button--primary" onClick={() => onCreateEvent(isoDate)}>
-          新建日程
-        </button>
+        <>
+          {onCreateTask ? (
+            <button type="button" className="good-button" onClick={(event) => onCreateTask(isoDate, event.currentTarget)}>
+              新建任务
+            </button>
+          ) : null}
+          <button type="button" className="good-button good-button--primary" onClick={() => onCreateEvent(isoDate)}>
+            新建日程
+          </button>
+        </>
       }
     >
       <p className="date-detail-dialog__summary">共 {dateEvents.length} 个日程</p>

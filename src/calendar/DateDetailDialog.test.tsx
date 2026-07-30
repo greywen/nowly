@@ -47,7 +47,7 @@ const events = [
 ];
 
 describe('DateDetailDialog', () => {
-  it('shows the full local date, weekday, count, and no task-creation entry', () => {
+  it('shows the full local date, weekday, count, and both creation entries', () => {
     render(
       <DateDetailDialog
         isoDate="2026-07-23"
@@ -56,6 +56,7 @@ describe('DateDetailDialog', () => {
         isTopLayer
         onClose={vi.fn()}
         onCreateEvent={vi.fn()}
+        onCreateTask={vi.fn()}
         onEditEvent={vi.fn()}
       />
     );
@@ -63,7 +64,8 @@ describe('DateDetailDialog', () => {
     expect(screen.getByRole('dialog', { name: '2026年7月23日 星期四' })).toBeInTheDocument();
     expect(screen.getByText('共 6 个日程')).toBeInTheDocument();
     expect(screen.queryByText('其他日期')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '新建任务' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '新建任务' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '新建日程' })).toBeInTheDocument();
   });
 
   it('sorts all-day first and timed events by start, end, and id', () => {
@@ -123,8 +125,9 @@ describe('DateDetailDialog', () => {
     expect(screen.getByText('共 0 个日程')).toBeInTheDocument();
   });
 
-  it('emits create and edit intents with the date, event, and trigger', async () => {
+  it('emits task, event, and edit intents with the date and trigger', async () => {
     const user = userEvent.setup();
+    const onCreateTask = vi.fn();
     const onCreateEvent = vi.fn();
     const onEditEvent = vi.fn();
     render(
@@ -135,9 +138,14 @@ describe('DateDetailDialog', () => {
         isTopLayer
         onClose={vi.fn()}
         onCreateEvent={onCreateEvent}
+        onCreateTask={onCreateTask}
         onEditEvent={onEditEvent}
       />
     );
+    const taskButton = screen.getByRole('button', { name: '新建任务' });
+    await user.click(taskButton);
+    expect(onCreateTask).toHaveBeenCalledWith('2026-07-23', taskButton);
+
     await user.click(screen.getByRole('button', { name: '新建日程' }));
     expect(onCreateEvent).toHaveBeenCalledWith('2026-07-23');
 
