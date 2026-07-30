@@ -30,7 +30,10 @@ const settings: AppSettings = {
 
 function createRepository(overrides: Partial<NowlyRepository> = {}): NowlyRepository {
   return {
-    listEvents: vi.fn().mockResolvedValue([]),
+    listEventsInRange: vi.fn().mockResolvedValue([]),
+    createEvent: vi.fn().mockRejectedValue(new Error('unexpected write')),
+    updateEvent: vi.fn().mockRejectedValue(new Error('unexpected write')),
+    deleteEvent: vi.fn().mockRejectedValue(new Error('unexpected write')),
     listTasks: vi.fn().mockResolvedValue([]),
     listNotes: vi.fn().mockResolvedValue([]),
     getSettings: vi.fn().mockResolvedValue(settings),

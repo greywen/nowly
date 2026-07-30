@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { X } from 'lucide-react';
 import { Select } from '../components/Select';
-import type { CalendarEvent } from '../calendar/calendar-model';
+import type { CalendarEvent, EventCategory } from '../calendar/calendar-model';
 import type { MatrixTask } from '../matrix/matrix-model';
 
 type EventModalProps = {
@@ -10,10 +10,11 @@ type EventModalProps = {
   onClose: () => void;
 };
 
-const categoryOptions = [
+const categoryOptions: { value: EventCategory; label: string }[] = [
   { value: 'work', label: '工作' },
+  { value: 'important', label: '重要' },
   { value: 'personal', label: '个人' },
-  { value: 'life', label: '生活' }
+  { value: 'learning', label: '学习' }
 ];
 
 export function EventModal({ event, tasks, onClose }: EventModalProps) {
@@ -30,7 +31,7 @@ export function EventModal({ event, tasks, onClose }: EventModalProps) {
       <div className="good-modal-body">
         <div className="good-field"><label htmlFor="event-title">标题</label><input id="event-title" className="good-input" defaultValue={event.title} /></div>
         <div className="good-field"><label htmlFor="event-start">开始</label><input id="event-start" className="good-input" defaultValue={event.startAt} /></div>
-        <Select id="event-category" name="categoryId" label="分类" options={categoryOptions} value={categoryId} onChange={setCategoryId} />
+        <Select id="event-category" name="categoryId" label="分类" options={categoryOptions} value={categoryId} onChange={(value) => setCategoryId(value as EventCategory)} />
         <Select id="event-linked-task" name="linkedTaskId" label="关联任务" options={taskOptions} value={linkedTaskId} onChange={setLinkedTaskId} searchable />
         <div className="good-field"><label htmlFor="event-note">备注</label><textarea id="event-note" className="good-input good-textarea" defaultValue={event.note} /></div>
       </div>
