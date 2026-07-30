@@ -4,6 +4,7 @@ mod error;
 mod events;
 mod models;
 mod settings;
+mod tasks;
 mod wallpaper;
 
 use db::{open_database, AppDb};
@@ -120,7 +121,7 @@ fn main() {
             }
         })
         .invoke_handler(tauri::generate_handler![
-            commands::list_tasks,
+            tasks::list_tasks,
             commands::list_notes,
             commands::get_app_settings,
             events::list_events_in_range,
