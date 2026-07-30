@@ -3,9 +3,10 @@ import type { MatrixTask } from '../matrix/matrix-model';
 import type { Note } from '../notes/notes-model';
 
 export type ModalState =
-  | { type: 'event'; event: CalendarEvent }
+  | { type: 'date'; isoDate: string; trigger: HTMLElement | null }
+  | { type: 'event-create'; dateIso: string; trigger: HTMLElement | null; parentDate?: string }
+  | { type: 'event-edit'; event: CalendarEvent; trigger: HTMLElement | null; parentDate?: string }
   | { type: 'task'; task: MatrixTask }
   | { type: 'note'; note: Note }
-  | { type: 'date'; isoDate: string }
   | { type: 'settings' }
   | null;

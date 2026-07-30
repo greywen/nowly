@@ -120,7 +120,6 @@ fn main() {
             }
         })
         .invoke_handler(tauri::generate_handler![
-            commands::list_events,
             commands::list_tasks,
             commands::list_notes,
             commands::get_app_settings,

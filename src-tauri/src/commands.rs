@@ -1,35 +1,9 @@
 use crate::db::AppDb;
 use crate::error::CommandError;
-use crate::models::{AppSettings, Event, Note, Task};
+use crate::models::{AppSettings, Note, Task};
 use crate::settings::read_app_settings;
 use rusqlite::{params, Connection};
 use tauri::State;
-
-pub fn query_events(connection: &Connection) -> rusqlite::Result<Vec<Event>> {
-    let mut statement = connection.prepare(
-        "SELECT id, title, start_at, end_at, all_day, category, color,
-                linked_task_id, note, created_at, updated_at
-         FROM events ORDER BY start_at ASC",
-    )?;
-    let events = statement
-        .query_map(params![], |row| {
-            Ok(Event {
-                id: row.get(0)?,
-                title: row.get(1)?,
-                start_at: row.get(2)?,
-                end_at: row.get(3)?,
-                all_day: row.get::<_, i64>(4)? == 1,
-                category: row.get(5)?,
-                color: row.get(6)?,
-                linked_task_id: row.get(7)?,
-                note: row.get(8)?,
-                created_at: row.get(9)?,
-                updated_at: row.get(10)?,
-            })
-        })?
-        .collect();
-    events
-}
 
 pub fn query_tasks(connection: &Connection) -> rusqlite::Result<Vec<Task>> {
     let mut statement = connection.prepare(
@@ -87,11 +61,6 @@ fn with_connection<T>(
 }
 
 #[tauri::command]
-pub fn list_events(db: State<'_, AppDb>) -> Result<Vec<Event>, CommandError> {
-    with_connection(db, query_events)
-}
-
-#[tauri::command]
 pub fn list_tasks(db: State<'_, AppDb>) -> Result<Vec<Task>, CommandError> {
     with_connection(db, query_tasks)
 }
@@ -108,7 +77,7 @@ pub fn get_app_settings(db: State<'_, AppDb>) -> Result<AppSettings, CommandErro
 
 #[cfg(test)]
 mod tests {
-    use super::{query_events, query_notes, query_tasks};
+    use super::{query_notes, query_tasks};
     use crate::db::migrate;
     use rusqlite::Connection;
 
@@ -117,23 +86,7 @@ mod tests {
         let mut connection = Connection::open_in_memory().unwrap();
         migrate(&mut connection).unwrap();
 
-        assert!(query_events(&connection).unwrap().is_empty());
         assert!(query_tasks(&connection).unwrap().is_empty());
         assert!(query_notes(&connection).unwrap().is_empty());
-    }
-
-    #[test]
-    fn event_query_reads_the_current_category_column() {
-        let mut connection = Connection::open_in_memory().unwrap();
-        migrate(&mut connection).unwrap();
-        connection.execute(
-            "INSERT INTO events(id,title,start_at,end_at,all_day,category,color,linked_task_id,note,created_at,updated_at)
-             VALUES ('e1','评审','2026-07-23T14:00','2026-07-23T15:00',0,'work','red',NULL,'','2026-07-23T09:00:00Z','2026-07-23T09:00:00Z')",
-            [],
-        ).unwrap();
-
-        let events = query_events(&connection).unwrap();
-
-        assert_eq!(events[0].category, "work");
     }
 }

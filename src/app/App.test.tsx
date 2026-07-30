@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RepositoryProvider } from '../data/RepositoryContext';
 import type { AppSettings, NowlyRepository } from '../data/nowly-repository';
@@ -74,6 +75,26 @@ describe('App startup and window behavior', () => {
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('便签读取失败'));
     expect(screen.getByText('本月暂无日程')).toBeInTheDocument();
     expect(screen.getAllByText('暂无任务')).toHaveLength(4);
+  });
+
+  it('queries month ranges, navigates, and creates an event from the header', async () => {
+    const user = userEvent.setup();
+    const created = { id:'e1', title:'评审', startAt:'2026-07-23T09:45', endAt:'2026-07-23T10:45', allDay:false, category:'work' as const, color:'blue' as const, linkedTaskId:null, note:'', createdAt:'x', updatedAt:'x' };
+    const listEventsInRange = vi.fn().mockResolvedValue([]);
+    const createEvent = vi.fn().mockResolvedValue(created);
+    const repository = createRepository({ listEventsInRange, createEvent });
+    renderApp(repository);
+    await waitFor(() => expect(listEventsInRange).toHaveBeenCalled());
+    expect(listEventsInRange.mock.calls[0][0].startAt).toMatch(/-01T00:00$/);
+    await user.click(screen.getByRole('button', { name:'下一个月' }));
+    await waitFor(() => expect(listEventsInRange).toHaveBeenCalledTimes(2));
+    await user.click(screen.getByRole('button', { name:'上一个月' }));
+    await user.click(screen.getByRole('button', { name:'新建日程' }));
+    expect(screen.getByRole('dialog', { name:'新建日程' })).toBeInTheDocument();
+    await user.type(screen.getByLabelText('日程标题'), '评审');
+    await user.click(screen.getByRole('button', { name:'保存' }));
+    await waitFor(() => expect(createEvent).toHaveBeenCalled());
+    await waitFor(() => expect(screen.queryByRole('dialog', { name:'新建日程' })).not.toBeInTheDocument());
   });
 
   it('starts in foreground without automatically entering wallpaper mode', () => {

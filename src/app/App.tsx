@@ -103,13 +103,13 @@ export function App() {
             status={eventsFeature.events.status}
             errorMessage={eventsFeature.events.status === 'error' ? eventsFeature.events.message : undefined}
             onRetry={() => void eventsFeature.retryEvents()}
-            onCreateEvent={() => undefined}
+            onCreateEvent={() => openModalInForeground({ type: 'event-create', dateIso: todayIso, trigger: null })}
             onPreviousMonth={eventsFeature.goToPreviousMonth}
             onNextMonth={eventsFeature.goToNextMonth}
             onToday={eventsFeature.goToToday}
-            onCreateEventForDate={() => undefined}
-            onOpenDate={(isoDate) => openModalInForeground({ type: 'date', isoDate })}
-            onOpenEvent={(event) => openModalInForeground({ type: 'event', event })}
+            onCreateEventForDate={(dateIso) => openModalInForeground({ type: 'event-create', dateIso, trigger: null })}
+            onOpenDate={(isoDate) => openModalInForeground({ type: 'date', isoDate, trigger: null })}
+            onOpenEvent={(event) => openModalInForeground({ type: 'event-edit', event, trigger: null })}
           />
         }
         matrix={
@@ -136,7 +136,18 @@ export function App() {
         onSetWallpaper={() => void runWindowModeSwitch(switchToWallpaper)}
         onWallpaperDoubleClick={() => void runWindowModeSwitch(switchToForeground)}
       />
-      <ModalRoot modal={modal} events={events} tasks={tasks} onClose={() => setModal(null)} />
+      <ModalRoot
+        modal={modal}
+        events={events}
+        tasks={tasks}
+        onClose={() => setModal(null)}
+        onChangeModal={setModal}
+        createEvent={eventsFeature.createEvent}
+        updateEvent={eventsFeature.updateEvent}
+        deleteEvent={eventsFeature.deleteEvent}
+        onSaved={() => setModal(null)}
+        onDeleted={() => setModal(null)}
+      />
     </>
   );
 }
