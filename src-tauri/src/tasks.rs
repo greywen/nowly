@@ -183,6 +183,28 @@ pub fn delete(connection: &mut Connection, id: &str) -> Result<(), CommandError>
     transaction.commit().map_err(sql_write_error)
 }
 
+pub fn set_completed(
+    connection: &mut Connection,
+    id: &str,
+    completed: bool,
+) -> Result<Task, CommandError> {
+    let now = timestamp();
+    let transaction = connection
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(CommandError::database)?;
+    let affected = transaction.execute(
+        "UPDATE tasks SET completed=?2,updated_at=?3 WHERE id=?1",
+        params![id, i64::from(completed), now],
+    ).map_err(sql_write_error)?;
+    if affected != 1 {
+        return Err(CommandError::not_found("未找到该任务。"));
+    }
+    let task = task_by_id(&transaction, id)?
+        .ok_or_else(|| CommandError::not_found("未找到该任务。"))?;
+    transaction.commit().map_err(sql_write_error)?;
+    Ok(task)
+}
+
 #[tauri::command]
 pub fn list_tasks(db: State<'_, AppDb>) -> Result<Vec<Task>, CommandError> {
     let connection = db.0.lock().map_err(CommandError::database)?;
@@ -207,9 +229,19 @@ pub fn delete_task(db: State<'_, AppDb>, id: String) -> Result<(), CommandError>
     delete(&mut connection, &id)
 }
 
+#[tauri::command]
+pub fn set_task_completed(
+    db: State<'_, AppDb>,
+    id: String,
+    completed: bool,
+) -> Result<Task, CommandError> {
+    let mut connection = db.0.lock().map_err(CommandError::database)?;
+    set_completed(&mut connection, &id, completed)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{create, delete, list, update, validate_and_normalize};
+    use super::{create, delete, list, set_completed, update, validate_and_normalize};
     use crate::db::migrate;
     use crate::models::TaskDraft;
     use rusqlite::Connection;
@@ -247,6 +279,26 @@ mod tests {
             linked_event_id: None,
             note: " 保留备注空白 ".into(),
         }
+    }
+
+    #[test]
+    fn completion_updates_only_status_and_timestamp() {
+        let mut connection = database();
+        let created = create(&mut connection, draft()).unwrap();
+        let completed = set_completed(&mut connection, &created.id, true).unwrap();
+        assert!(completed.completed);
+        assert_eq!(completed.title, created.title);
+        assert_eq!(completed.linked_event_id, created.linked_event_id);
+        assert!(completed.updated_at >= created.updated_at);
+
+        let reopened = set_completed(&mut connection, &created.id, false).unwrap();
+        assert!(!reopened.completed);
+    }
+
+    #[test]
+    fn completion_of_missing_task_returns_not_found() {
+        let mut connection = database();
+        assert_eq!(set_completed(&mut connection, "missing", true).unwrap_err().code, "not_found");
     }
 
     #[test]

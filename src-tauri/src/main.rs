@@ -125,6 +125,7 @@ fn main() {
             tasks::create_task,
             tasks::update_task,
             tasks::delete_task,
+            tasks::set_task_completed,
             commands::list_notes,
             commands::get_app_settings,
             events::list_events_in_range,
