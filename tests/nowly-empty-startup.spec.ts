@@ -19,6 +19,9 @@ test('shows the persisted-data empty dashboard without page overflow or motion',
         invoke: async (command: string) => {
           if (command === 'get_app_settings') return settings;
           if (command === 'list_events_in_range' || command === 'list_tasks' || command === 'list_notes') return [];
+          if (command === 'create_task' || command === 'update_task' || command === 'delete_task' || command === 'set_task_completed') {
+            throw new Error('Unexpected task write in empty-startup test');
+          }
           if (command === 'enter_wallpaper_mode' || command === 'enter_foreground_mode') return 'ok';
           throw new Error(`Unexpected command: ${command}`);
         },

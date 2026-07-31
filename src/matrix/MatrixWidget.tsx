@@ -73,7 +73,7 @@ export function MatrixWidget({
           {quadrantOrder.map((quadrant) => {
             const quadrantTasks = tasks.filter((task) => task.quadrant === quadrant);
             return (
-              <section key={quadrant} className={`quadrant ${quadrantClass[quadrant]}`}>
+              <section key={quadrant} aria-label={quadrantLabels[quadrant]} className={`quadrant ${quadrantClass[quadrant]}`}>
                 <div className="quadrant-head">
                   <h3>{quadrantLabels[quadrant]}</h3>
                   <span className="quadrant-count" aria-label={`${quadrantLabels[quadrant]} ${quadrantTasks.length} 个任务`}>

@@ -25,6 +25,7 @@ describe('MatrixWidget', () => {
   it('renders all quadrants, counts, and internal scroll containers', () => {
     render(<MatrixWidget {...props()} />);
 
+    expect(screen.getByRole('region', { name:'重要且紧急' })).toBeInTheDocument();
     expect(screen.getByText('重要且紧急')).toBeInTheDocument();
     expect(screen.getByText('重要不紧急')).toBeInTheDocument();
     expect(screen.getByText('不重要但紧急')).toBeInTheDocument();

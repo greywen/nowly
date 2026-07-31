@@ -14,7 +14,12 @@ test.beforeEach(async ({page})=>{
    if(command==='create_event'){const e={id:`e${sequence++}`,...args.draft,createdAt:now,updatedAt:now};events.push(e);if(e.linkedTaskId)tasks=tasks.map(t=>t.id===e.linkedTaskId?{...t,linkedEventId:e.id}:t);return e;}
    if(command==='update_event'){const old=events.find(e=>e.id===args.id);const updated={...old,...args.draft,updatedAt:now};events=events.map(e=>e.id===args.id?updated:e);return updated;}
    if(command==='delete_event'){events=events.filter(e=>e.id!==args.id);return null;}
-   if(command==='list_tasks')return tasks;if(command==='list_notes')return [];if(command==='get_app_settings')return settings;
+   if(command==='list_tasks')return tasks;
+   if(command==='create_task'){const t={id:`t${sequence++}`,...args.draft,createdAt:now,updatedAt:now};tasks.push(t);return t;}
+   if(command==='update_task'){const old=tasks.find(t=>t.id===args.id);const updated={...old,...args.draft,updatedAt:now};tasks=tasks.map(t=>t.id===args.id?updated:t);return updated;}
+   if(command==='delete_task'){tasks=tasks.filter(t=>t.id!==args.id);return null;}
+   if(command==='set_task_completed'){const old=tasks.find(t=>t.id===args.id);const updated={...old,completed:args.completed,updatedAt:now};tasks=tasks.map(t=>t.id===args.id?updated:t);return updated;}
+   if(command==='list_notes')return [];if(command==='get_app_settings')return settings;
    if(command==='enter_wallpaper_mode'||command==='enter_foreground_mode')return 'ok';throw new Error(`Unexpected command: ${command}`);
   },transformCallback:(callback:(payload:unknown)=>void)=>{const id=Math.floor(Math.random()*2**32);Reflect.set(window,`_${id}`,callback);return id;}}});
  });
