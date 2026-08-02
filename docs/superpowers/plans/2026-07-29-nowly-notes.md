@@ -10,6 +10,18 @@
 
 ---
 
+## Completion status
+
+| 项目 | 结果 |
+|---|---|
+| 状态 | **已完成**（2026-07-29） |
+| React/Vitest | 28 个测试文件，125 个测试通过 |
+| Rust | 46 个测试通过 |
+| Playwright | 192 个测试通过（4 组视口） |
+| 构建与静态检查 | `npm run build`、`git diff --check` 及禁止项扫描通过 |
+| 审查 | 已按阶段 4 规格、实施计划和 `design.md` 完成内联差异审查，无阻塞项 |
+| 计划偏差 | 执行环境无 subagent/Task 工具，代码审查改为内联；其余阶段门禁通过 |
+
 ## File map
 
 - Create `src-tauri/src/notes.rs`: note validation, stable ordering, transactional CRUD, Tauri commands, Rust tests.
