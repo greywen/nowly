@@ -41,6 +41,9 @@ function createRepository(overrides: Partial<NowlyRepository> = {}): NowlyReposi
     deleteTask: vi.fn().mockRejectedValue(new Error('unexpected task write')),
     setTaskCompleted: vi.fn().mockRejectedValue(new Error('unexpected task write')),
     listNotes: vi.fn().mockResolvedValue([]),
+    createNote: vi.fn().mockRejectedValue(new Error('unexpected note write')),
+    updateNote: vi.fn().mockRejectedValue(new Error('unexpected note write')),
+    deleteNote: vi.fn().mockRejectedValue(new Error('unexpected note write')),
     getSettings: vi.fn().mockResolvedValue(settings),
     ...overrides
   };
@@ -143,6 +146,23 @@ describe('App startup and window behavior', () => {
     await user.click(screen.getByRole('option', { name:'设计评审' }));
     await user.click(screen.getByRole('button', { name:'保存任务' }));
     await waitFor(() => expect(listEventsInRange).toHaveBeenCalledTimes(2));
+  });
+
+  it('creates notes and opens the all-notes manager', async () => {
+    const user = userEvent.setup();
+    const note = { id:'n1', title:'产品原则', content:'保持简单', color:'purple' as const, pinned:true, createdAt:'x', updatedAt:'x' };
+    const listNotes = vi.fn().mockResolvedValueOnce([]).mockResolvedValue([note]);
+    const createNote = vi.fn().mockResolvedValue(note);
+    renderApp(createRepository({listNotes, createNote}));
+    await waitFor(() => expect(screen.getByText('还没有便签')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', {name:'新增便签'}));
+    expect(screen.getByRole('dialog', {name:'新建便签'})).toBeInTheDocument();
+    await user.type(screen.getByLabelText('便签标题'), '产品原则');
+    await user.click(screen.getByRole('button', {name:'保存便签'}));
+    await waitFor(() => expect(createNote).toHaveBeenCalled());
+    expect(listNotes).toHaveBeenCalledTimes(2);
+    await user.click(screen.getByRole('button', {name:'查看全部便签'}));
+    expect(screen.getByRole('dialog', {name:'全部便签'})).toBeInTheDocument();
   });
 
   it('starts in foreground without automatically entering wallpaper mode', () => {

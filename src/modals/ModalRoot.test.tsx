@@ -12,7 +12,11 @@ const operations = {
   createTask: vi.fn().mockResolvedValue(sampleTasks[0]),
   updateTask: vi.fn().mockResolvedValue(sampleTasks[0]),
   deleteTask: vi.fn().mockResolvedValue(undefined),
-  onTaskSaved: vi.fn(), onTaskDeleted: vi.fn()
+  onTaskSaved: vi.fn(), onTaskDeleted: vi.fn(),
+  notes: sampleNotes,
+  createNote: vi.fn().mockResolvedValue(sampleNotes[0]),
+  updateNote: vi.fn().mockResolvedValue(sampleNotes[0]),
+  deleteNote: vi.fn().mockResolvedValue(undefined)
 };
 
 function base(overrides: Record<string, unknown> = {}) {
@@ -72,7 +76,7 @@ describe('ModalRoot', () => {
     await user.click(screen.getByRole('button', { name:'取消' }));
     expect(onClose).toHaveBeenCalledOnce();
 
-    rerender(<ModalRoot {...base({modal:{type:'note',note:sampleNotes[0]}})}/>);
-    expect(screen.getByText('便签编辑')).toBeInTheDocument();
+    rerender(<ModalRoot {...base({modal:{type:'note-edit',note:sampleNotes[0],trigger:null}})}/>);
+    expect(screen.getByRole('dialog', {name:'编辑便签'})).toBeInTheDocument();
   });
 });

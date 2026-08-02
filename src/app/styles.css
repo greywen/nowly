@@ -529,6 +529,19 @@ button:disabled { cursor: default; opacity: .65; }
 .good-button--danger-ghost { color: var(--color-danger-active); background: var(--color-danger-light); }
 .good-button--danger-ghost:hover { color: #fff; background: var(--color-danger); }
 
+.note-content { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.note-title { display: flex; align-items: center; gap: 8px; }
+.note-title svg { width: 16px; height: 16px; flex: none; color: var(--color-primary-active); }
+.note-dialog { width: min(640px, calc(100vw - 32px)); }
+.note-form { display: grid; gap: 20px; }
+.note-dialog__actions { width: 100%; display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.note-dialog__actions .dialog-error { margin: 0 auto 0 0; }
+.notes-manager-dialog { width: min(800px, calc(100vw - 32px)); }
+.notes-manager-dialog .good-dialog__body { min-height: 0; overflow: hidden; }
+.notes-manager-list { min-height: 0; max-height: calc(100vh - 230px); display: grid; align-content: start; gap: 12px; overflow: auto; }
+.notes-manager-list .note { padding: 16px 20px; }
+.good-button svg { width: 18px; height: 18px; }
+
 @media (max-width: 640px) {
   .overlay { padding: 16px; }
   .form-row, .task-quadrants { grid-template-columns: 1fr; }

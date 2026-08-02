@@ -8,6 +8,8 @@ export type ModalState =
   | { type: 'event-edit'; event: CalendarEvent; trigger: HTMLElement | null; parentDate?: string }
   | { type: 'task-create'; dueDate: string | null; trigger: HTMLElement | null; parentDate?: string }
   | { type: 'task-edit'; task: MatrixTask; trigger: HTMLElement | null; parentDate?: string }
-  | { type: 'note'; note: Note }
+  | { type: 'note-create'; trigger: HTMLElement | null; parentManager?: boolean }
+  | { type: 'note-edit'; note: Note; trigger: HTMLElement | null; parentManager?: boolean }
+  | { type: 'notes-manager'; trigger: HTMLElement | null }
   | { type: 'settings' }
   | null;

@@ -8,6 +8,7 @@ import { MatrixWidget } from '../matrix/MatrixWidget';
 import { useTasks } from '../matrix/useTasks';
 import { ModalRoot } from '../modals/ModalRoot';
 import { NotesWidget } from '../notes/NotesWidget';
+import { useNotes } from '../notes/useNotes';
 import { DesktopShell } from './layout/DesktopShell';
 import { useAppBootstrap } from './useAppBootstrap';
 
@@ -35,11 +36,12 @@ export function App() {
   const refreshEvents = useCallback(() => refreshEventsRef.current(), []);
   const eventsFeature = useEvents({ onRefreshTasks: refreshTasks });
   const tasksFeature = useTasks({ onRefreshEvents: refreshEvents });
+  const notesFeature = useNotes();
   refreshTasksRef.current = tasksFeature.retryTasks;
   refreshEventsRef.current = eventsFeature.retryEvents;
   const events = eventsFeature.events.data;
   const tasks = tasksFeature.tasks.data;
-  const notes = bootstrap.notes.data;
+  const notes = notesFeature.notes.data;
   const [modal, setModal] = useState<ModalState>(null);
   const [windowMode, setWindowMode] = useState<WindowMode>('foreground');
   const [isSwitchingWindowMode, setIsSwitchingWindowMode] = useState(false);
@@ -139,11 +141,12 @@ export function App() {
         notes={
           <NotesWidget
             notes={notes}
-            status={bootstrap.notes.status}
-            errorMessage={bootstrap.notes.status === 'error' ? bootstrap.notes.message : undefined}
-            onRetry={() => void bootstrap.retryNotes()}
-            onCreateNote={() => undefined}
-            onOpenNote={(note) => openModalInForeground({ type: 'note', note })}
+            status={notesFeature.notes.status}
+            errorMessage={notesFeature.notes.status === 'error' ? notesFeature.notes.message : undefined}
+            onRetry={() => void notesFeature.retryNotes()}
+            onCreateNote={() => openModalInForeground({type:'note-create',trigger:null})}
+            onOpenNote={(note,trigger) => openModalInForeground({type:'note-edit',note,trigger})}
+            onViewAll={(trigger) => openModalInForeground({type:'notes-manager',trigger})}
           />
         }
         isModeSwitching={isSwitchingWindowMode}
@@ -166,6 +169,10 @@ export function App() {
         deleteTask={tasksFeature.deleteTask}
         onTaskSaved={() => undefined}
         onTaskDeleted={() => undefined}
+        notes={notes}
+        createNote={notesFeature.createNote}
+        updateNote={notesFeature.updateNote}
+        deleteNote={notesFeature.deleteNote}
       />
     </>
   );
