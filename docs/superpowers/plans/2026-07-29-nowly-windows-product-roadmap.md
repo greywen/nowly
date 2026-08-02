@@ -18,13 +18,13 @@
 |---|---|---|
 | 1. Data foundation and empty startup | **已完成**（2026-07-29） | 阶段门禁全部通过；详见阶段 1 计划文首状态表 |
 | 2. Event vertical slice | **已完成**（2026-07-29） | 月份查询、完整 CRUD、离线日期/时间控件及自动化门禁通过 |
-| 3. Task vertical slice | 待开始 | 下一步：先编写并审批详细计划 |
-| 4. Note vertical slice | 未开始 | |
+| 3. Task vertical slice | **已完成**（2026-07-29） | 稳定排序、完整 CRUD、乐观完成回滚/重试、日期详情创建及双向事务关联通过 |
+| 4. Note vertical slice | 待开始 | 下一步：先编写并审批详细计划 |
 | 5. Settings and window lifecycle | 未开始 | |
 | 6. Windows system integration | 未开始 | |
 | 7. Release verification | 未开始 | |
 
-阶段 1–2 交付的、后续阶段必须遵守的契约：
+阶段 1–3 交付的、后续阶段必须遵守的契约：
 
 - Rust 迁移由 `src-tauri/src/db.rs` 的 `MIGRATIONS` 表驱动，编号递增且每个版本在独立事务中执行；新增 schema 变更一律追加版本号，禁止修改已发布迁移。当前最高版本为 5。
 - IPC 模型统一 `#[serde(rename_all = "camelCase")]`；`events.category` 为字符串列（旧 `category_id` 已由迁移 2 重命名）。
@@ -36,6 +36,10 @@
 - 启动资源经 `useAppBootstrap` 独立加载，单模块失败不影响其他模块，且各自提供 `retry*`。
 - 组件状态契约为 `status: 'loading' | 'ready' | 'error'` + `errorMessage?` + `onRetry`；加载态为静态文案，禁止 spinner/骨架。
 - 样式令牌集中在 `src/app/styles.css` 的 `:root`，语义类名（`app-shell`/`card`/`btn`/`quadrant`/`note` 等）为唯一视觉入口。
+- `useTasks` 是任务读取、CRUD、完成状态和写入错误的唯一前端状态拥有者；`useAppBootstrap` 不再读取任务。
+- 任务排序在 Rust 查询与 React 乐观状态中遵循同一语义：未完成优先、有截止日期优先、截止日期、优先级、创建时间、ID。
+- 完成状态写入失败必须回滚原任务与顺序，并保存受修订号保护的原始目标用于重试；陈旧响应不得覆盖后续编辑或删除。
+- 任务侧关联写入继续使用 Immediate 事务并双向同步日程；任务关联变化后必须刷新任务和当前可见日程月份。
 
 ## Plan sequence
 
@@ -47,8 +51,8 @@
    Planned document: `docs/superpowers/plans/2026-07-29-nowly-events.md`
    Outcome: month queries, date detail, event creation/edit/delete, validation, offline date/time pickers, permanent-delete confirmation, and calendar refresh.
 
-3. **Task vertical slice**
-   Planned document: `docs/superpowers/plans/2026-07-29-nowly-tasks.md`
+3. **Task vertical slice** — **已完成**
+   Plan: `docs/superpowers/plans/2026-07-29-nowly-tasks.md`
    Outcome: quadrant ordering, task creation/edit/delete/completion, event-task transactional linking, and failed-completion rollback.
 
 4. **Note vertical slice**

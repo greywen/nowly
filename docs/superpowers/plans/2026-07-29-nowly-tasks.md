@@ -10,6 +10,18 @@
 
 ---
 
+## Completion status
+
+| 项目 | 结果 |
+|---|---|
+| 状态 | **已完成**（2026-07-29） |
+| React/Vitest | 24 个测试文件，119 个测试通过 |
+| Rust | 43 个测试通过 |
+| Playwright | 184 个测试通过（4 组视口） |
+| 构建与静态检查 | `npm run build`、`git diff --check` 及禁止项扫描通过 |
+| 审查 | 已按阶段 3 规格、实施计划和 `design.md` 完成内联阶段差异审查；修复日期选择器 Escape 同时触发放弃更改确认的问题后，无阻塞项 |
+| 计划偏差 | 执行环境无 subagent/Task 工具，代码审查改为内联；其余范围与阶段门禁按计划完成 |
+
 **Specification:** `docs/superpowers/specs/2026-07-29-nowly-tasks-design.md`
 
 **Prerequisites and constraints:**
