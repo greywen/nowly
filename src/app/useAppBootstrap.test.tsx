@@ -1,4 +1,4 @@
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { RepositoryProvider } from '../data/RepositoryContext';
@@ -30,6 +30,9 @@ function repository(overrides: Partial<NowlyRepository> = {}): NowlyRepository {
     deleteTask: vi.fn().mockRejectedValue(new Error('unexpected task write')),
     setTaskCompleted: vi.fn().mockRejectedValue(new Error('unexpected task write')),
     listNotes: vi.fn().mockResolvedValue([]),
+    createNote: vi.fn().mockRejectedValue(new Error('unexpected note write')),
+    updateNote: vi.fn().mockRejectedValue(new Error('unexpected note write')),
+    deleteNote: vi.fn().mockRejectedValue(new Error('unexpected note write')),
     getSettings: vi.fn().mockResolvedValue(settings),
     ...overrides
   };
@@ -42,7 +45,7 @@ function wrapper(value: NowlyRepository) {
 }
 
 describe('useAppBootstrap', () => {
-  it('loads only notes and settings independently', async () => {
+  it('loads only settings', async () => {
     const value = repository();
     const { result } = renderHook(() => useAppBootstrap(), { wrapper: wrapper(value) });
     await waitFor(() => expect(result.current.settings.status).toBe('ready'));
@@ -50,24 +53,10 @@ describe('useAppBootstrap', () => {
     expect(result.current).not.toHaveProperty('retryEvents');
     expect(result.current).not.toHaveProperty('tasks');
     expect(result.current).not.toHaveProperty('retryTasks');
-    expect(result.current.notes).toMatchObject({ status: 'ready', data: [] });
+    expect(result.current).not.toHaveProperty('notes');
+    expect(result.current).not.toHaveProperty('retryNotes');
+    expect(value.listNotes).not.toHaveBeenCalled();
     expect(value.listEventsInRange).not.toHaveBeenCalled();
     expect(value.listTasks).not.toHaveBeenCalled();
-  });
-
-  it('keeps other modules ready when notes fail and retries notes only', async () => {
-    const listNotes = vi
-      .fn()
-      .mockRejectedValueOnce({ code: 'database_error', message: '便签读取失败' })
-      .mockResolvedValueOnce([]);
-    const value = repository({ listNotes });
-    const { result } = renderHook(() => useAppBootstrap(), { wrapper: wrapper(value) });
-
-    await waitFor(() => expect(result.current.notes.status).toBe('error'));
-    expect(result.current.settings.status).toBe('ready');
-
-    await act(() => result.current.retryNotes());
-    await waitFor(() => expect(result.current.notes.status).toBe('ready'));
-    expect(listNotes).toHaveBeenCalledTimes(2);
   });
 });

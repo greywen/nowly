@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { AppSettings } from '../data/nowly-repository';
 import { useNowlyRepository } from '../data/RepositoryContext';
-import type { Note } from '../notes/notes-model';
 
 type Resource<T> =
   | { status: 'loading'; data: T }
@@ -35,20 +34,10 @@ function messageFrom(error: unknown) {
 
 export function useAppBootstrap() {
   const repository = useNowlyRepository();
-  const [notes, setNotes] = useState<Resource<Note[]>>({ status: 'loading', data: [] });
   const [settings, setSettings] = useState<Resource<AppSettings>>({
     status: 'loading',
     data: defaultSettings
   });
-
-  const loadNotes = useCallback(async () => {
-    setNotes((current) => ({ status: 'loading', data: current.data }));
-    try {
-      setNotes({ status: 'ready', data: await repository.listNotes() });
-    } catch (error) {
-      setNotes((current) => ({ status: 'error', data: current.data, message: messageFrom(error) }));
-    }
-  }, [repository]);
 
   const loadSettings = useCallback(async () => {
     setSettings((current) => ({ status: 'loading', data: current.data }));
@@ -64,13 +53,11 @@ export function useAppBootstrap() {
   }, [repository]);
 
   useEffect(() => {
-    void Promise.allSettled([loadNotes(), loadSettings()]);
-  }, [loadNotes, loadSettings]);
+    void loadSettings();
+  }, [loadSettings]);
 
   return {
-    notes,
     settings,
-    retryNotes: loadNotes,
     retrySettings: loadSettings
   };
 }

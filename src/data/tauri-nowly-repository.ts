@@ -12,5 +12,8 @@ export const tauriNowlyRepository: NowlyRepository = {
   deleteTask: (id) => invoke('delete_task', { id }),
   setTaskCompleted: (id, completed) => invoke('set_task_completed', { id, completed }),
   listNotes: () => invoke('list_notes'),
+  createNote: (draft) => invoke('create_note', { draft }),
+  updateNote: (id, draft) => invoke('update_note', { id, draft }),
+  deleteNote: (id) => invoke('delete_note', { id }),
   getSettings: () => invoke('get_app_settings')
 };

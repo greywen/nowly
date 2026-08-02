@@ -43,7 +43,11 @@ describe('tauriNowlyRepository', () => {
     await tauriNowlyRepository.updateTask('t1', taskDraft);
     await tauriNowlyRepository.deleteTask('t1');
     await tauriNowlyRepository.setTaskCompleted('t1', true);
+    const noteDraft = { title: '产品原则', content: '保持简单', color: 'purple' as const, pinned: true };
     await tauriNowlyRepository.listNotes();
+    await tauriNowlyRepository.createNote(noteDraft);
+    await tauriNowlyRepository.updateNote('n1', noteDraft);
+    await tauriNowlyRepository.deleteNote('n1');
     await tauriNowlyRepository.getSettings();
 
     expect(invokeMock.mock.calls).toContainEqual(['list_events_in_range', { range }]);
@@ -56,6 +60,9 @@ describe('tauriNowlyRepository', () => {
     expect(invokeMock.mock.calls).toContainEqual(['delete_task', { id: 't1' }]);
     expect(invokeMock.mock.calls).toContainEqual(['set_task_completed', { id: 't1', completed: true }]);
     expect(invokeMock.mock.calls).toContainEqual(['list_notes']);
+    expect(invokeMock.mock.calls).toContainEqual(['create_note', { draft: noteDraft }]);
+    expect(invokeMock.mock.calls).toContainEqual(['update_note', { id: 'n1', draft: noteDraft }]);
+    expect(invokeMock.mock.calls).toContainEqual(['delete_note', { id: 'n1' }]);
     expect(invokeMock.mock.calls).toContainEqual(['get_app_settings']);
   });
 });
