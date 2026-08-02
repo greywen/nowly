@@ -3,6 +3,7 @@ mod db;
 mod error;
 mod events;
 mod models;
+mod notes;
 mod settings;
 mod tasks;
 mod wallpaper;
@@ -126,7 +127,10 @@ fn main() {
             tasks::update_task,
             tasks::delete_task,
             tasks::set_task_completed,
-            commands::list_notes,
+            notes::list_notes,
+            notes::create_note,
+            notes::update_note,
+            notes::delete_note,
             commands::get_app_settings,
             events::list_events_in_range,
             events::create_event,

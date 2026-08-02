@@ -70,6 +70,15 @@ pub struct TaskDraft {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct NoteDraft {
+    pub title: String,
+    pub content: String,
+    pub color: String,
+    pub pinned: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct EventRange {
     pub start_at: String,
     pub end_at_exclusive: String,
@@ -92,7 +101,22 @@ pub struct AppSettings {
 
 #[cfg(test)]
 mod tests {
-    use super::{EventDraft, TaskDraft};
+    use super::{EventDraft, NoteDraft, TaskDraft};
+
+    #[test]
+    fn note_draft_deserializes_camel_case() {
+        let draft: NoteDraft = serde_json::from_value(serde_json::json!({
+            "title": "产品原则",
+            "content": "保持简单",
+            "color": "purple",
+            "pinned": true
+        }))
+        .unwrap();
+
+        assert_eq!(draft.title, "产品原则");
+        assert_eq!(draft.color, "purple");
+        assert!(draft.pinned);
+    }
 
     #[test]
     fn task_draft_deserializes_camel_case() {
