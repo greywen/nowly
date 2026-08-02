@@ -85,6 +85,19 @@ describe('TaskModal', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  it('Escape closes an open date picker without opening discard confirmation', async () => {
+    const user = userEvent.setup();
+    render(<TaskModal {...props()} />);
+    await user.type(screen.getByLabelText('任务标题'), '草稿');
+    await user.click(screen.getByRole('button', { name:'截止日期' }));
+    expect(screen.getByRole('dialog', { name:'选择截止日期' })).toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name:'选择截止日期' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name:'放弃更改？' })).not.toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name:'新建任务' })).toBeInTheDocument();
+  });
+
   it('confirms dirty close and permanent deletion while retaining delete failures', async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();

@@ -112,7 +112,7 @@ export function TaskModal({
     <Dialog
       title={mode.type === 'create' ? '新建任务' : '编辑任务'}
       ariaLabelledBy={titleId}
-      isTopLayer={!confirm}
+      isTopLayer={!confirm && !dateOpen}
       restoreFocusRef={restoreFocusRef}
       onRequestClose={requestClose}
       className="task-dialog"
