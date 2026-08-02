@@ -16,7 +16,8 @@ type NotesWidgetProps = {
   errorMessage?: string;
   onRetry: () => void;
   onCreateNote: () => void;
-  onOpenNote: (note: Note) => void;
+  onOpenNote: (note: Note, trigger: HTMLElement) => void;
+  onViewAll: (trigger: HTMLElement) => void;
 };
 
 export function NotesWidget({
@@ -25,7 +26,8 @@ export function NotesWidget({
   errorMessage,
   onRetry,
   onCreateNote,
-  onOpenNote
+  onOpenNote,
+  onViewAll
 }: NotesWidgetProps) {
   const sortedNotes = [...notes].sort((left, right) => Number(right.pinned) - Number(left.pinned));
 
@@ -35,9 +37,12 @@ export function NotesWidget({
         <div className="heading-group">
           <h2>便签</h2>
         </div>
-        <button type="button" className="btn btn-icon" aria-label="新增便签" onClick={onCreateNote}>
-          <Plus aria-hidden="true" />
-        </button>
+        <div className="toolbar-actions">
+          <button type="button" className="link-btn" onClick={(event) => onViewAll(event.currentTarget)}>查看全部便签</button>
+          <button type="button" className="btn btn-icon" aria-label="新增便签" onClick={onCreateNote}>
+            <Plus aria-hidden="true" />
+          </button>
+        </div>
       </div>
       <div data-testid="notes-scroll" className="panel-body">
         {status === 'error' ? (
@@ -67,7 +72,7 @@ export function NotesWidget({
             <button
               key={note.id}
               type="button"
-              onClick={() => onOpenNote(note)}
+              onClick={(event) => onOpenNote(note, event.currentTarget)}
               className={`note ${noteColorClass[note.color]}`}
             >
               <div className="note-title">{note.title}</div>
