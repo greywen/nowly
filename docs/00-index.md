@@ -2,8 +2,8 @@
 
 ## Current Status
 
-- 阶段 1「数据基础与空状态启动」、阶段 2「日程纵切」与阶段 3「任务纵切」已完成（2026-07-29）。
-- 下一阶段为阶段 4「便签纵切」；开始实施前必须先编写并审批详细计划。
+- 阶段 1「数据基础与空状态启动」、阶段 2「日程纵切」、阶段 3「任务纵切」与阶段 4「便签纵切」已完成（2026-07-29）。
+- 下一阶段为阶段 5「设置与窗口生命周期」；开始实施前必须先编写并审批详细计划。
 - 总进度见 [Nowly Windows 完整产品实施路线图](./superpowers/plans/2026-07-29-nowly-windows-product-roadmap.md) 的 Overall status 表。
 
 ## Module Index
@@ -14,10 +14,10 @@
 | IPC 模型 | `src-tauri/src/models.rs` | camelCase 序列化的 Event/Task/Note/AppSettings |
 | 设置读取 | `src-tauri/src/settings.rs` | 从 settings 表读取 JSON 值为强类型 |
 | 错误契约 | `src-tauri/src/error.rs` | `CommandError`，屏蔽内部细节 |
-| 命令层 | `src-tauri/src/commands.rs`、`src-tauri/src/events.rs`、`src-tauri/src/tasks.rs` | 启动查询、日程范围查询及日程/任务事务 CRUD |
+| 命令层 | `src-tauri/src/commands.rs`、`src-tauri/src/events.rs`、`src-tauri/src/tasks.rs`、`src-tauri/src/notes.rs` | 启动查询与日程/任务/便签事务 CRUD |
 | 壁纸/托盘 | `src-tauri/src/wallpaper.rs`、`src-tauri/src/main.rs` | WorkerW、任务栏感知、托盘交互 |
 | 仓储边界 | `src/data/` | `NowlyRepository` 接口、Tauri 实现、注入 Context |
-| 启动装配 | `src/app/useAppBootstrap.ts`、`src/calendar/useEvents.ts`、`src/matrix/useTasks.ts` | 启动资源与日程/任务 Feature 独立加载、写入及重试 |
+| 启动装配 | `src/app/useAppBootstrap.ts`、`src/calendar/useEvents.ts`、`src/matrix/useTasks.ts`、`src/notes/useNotes.ts` | 设置与日程/任务/便签 Feature 独立加载、写入及重试 |
 | 应用外壳 | `src/app/layout/DesktopShell.tsx`、`src/app/styles.css` | 单屏栅格与全部设计令牌 |
 | 业务组件 | `src/calendar/`、`src/matrix/`、`src/notes/` | 日历、四象限、便签 |
 | 弹窗 | `src/modals/` | 日程/任务/便签编辑弹窗 |
@@ -54,6 +54,7 @@ cargo test --manifest-path src-tauri/Cargo.toml    # Rust 测试
 - [Nowly 数据基础与空状态启动实施计划](./superpowers/plans/2026-07-29-nowly-data-foundation.md)
 - [Nowly 日程纵切实施计划](./superpowers/plans/2026-07-29-nowly-events.md)
 - [Nowly 任务纵切实施计划](./superpowers/plans/2026-07-29-nowly-tasks.md)
+- [Nowly 便签纵切实施计划](./superpowers/plans/2026-07-29-nowly-notes.md)
 - [Nowly MVP Implementation Plan](./superpowers/plans/2026-07-23-nowly-mvp.md)
 - [Nowly Final UI/UX HTML Implementation Plan](./superpowers/plans/2026-07-29-nowly-final-uiux-html.md)
 - [Nowly Good 设计系统原型重设计实施计划](./superpowers/plans/2026-07-29-nowly-good-design-system-prototype-redesign.md)

@@ -19,8 +19,8 @@
 | 1. Data foundation and empty startup | **已完成**（2026-07-29） | 阶段门禁全部通过；详见阶段 1 计划文首状态表 |
 | 2. Event vertical slice | **已完成**（2026-07-29） | 月份查询、完整 CRUD、离线日期/时间控件及自动化门禁通过 |
 | 3. Task vertical slice | **已完成**（2026-07-29） | 稳定排序、完整 CRUD、乐观完成回滚/重试、日期详情创建及双向事务关联通过 |
-| 4. Note vertical slice | 待开始 | 下一步：先编写并审批详细计划 |
-| 5. Settings and window lifecycle | 未开始 | |
+| 4. Note vertical slice | **已完成**（2026-07-29） | 便签 CRUD、固定颜色、置顶排序、主界面摘要、全部便签管理及自动化门禁通过 |
+| 5. Settings and window lifecycle | 待开始 | 下一步：先编写并审批详细计划 |
 | 6. Windows system integration | 未开始 | |
 | 7. Release verification | 未开始 | |
 
@@ -40,6 +40,9 @@
 - 任务排序在 Rust 查询与 React 乐观状态中遵循同一语义：未完成优先、有截止日期优先、截止日期、优先级、创建时间、ID。
 - 完成状态写入失败必须回滚原任务与顺序，并保存受修订号保护的原始目标用于重试；陈旧响应不得覆盖后续编辑或删除。
 - 任务侧关联写入继续使用 Immediate 事务并双向同步日程；任务关联变化后必须刷新任务和当前可见日程月份。
+- `useNotes` 是便签读取、CRUD 与排序的唯一前端状态拥有者；`useAppBootstrap` 只保留设置读取。
+- 便签颜色固定为 `yellow | blue | green | purple`，前后端分别可信校验；排序统一为置顶优先、更新时间倒序、ID 稳定兜底。
+- 便签主界面只展示受容器约束的摘要；完整列表仅在内部滚动的“全部便签”弹窗展示。
 
 ## Plan sequence
 
@@ -55,8 +58,8 @@
    Plan: `docs/superpowers/plans/2026-07-29-nowly-tasks.md`
    Outcome: quadrant ordering, task creation/edit/delete/completion, event-task transactional linking, and failed-completion rollback.
 
-4. **Note vertical slice**
-   Planned document: `docs/superpowers/plans/2026-07-29-nowly-notes.md`
+4. **Note vertical slice** — **已完成**
+   Plan: `docs/superpowers/plans/2026-07-29-nowly-notes.md`
    Outcome: note creation/edit/delete, pinning, fixed colors, dashboard summaries, and the all-notes dialog.
 
 5. **Settings and window lifecycle**
