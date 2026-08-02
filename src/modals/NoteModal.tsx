@@ -1,30 +1,24 @@
 import { X } from 'lucide-react';
-import type { Note } from '../notes/notes-model';
+import { type RefObject, useId, useMemo, useState } from 'react';
+import { ConfirmDialog } from '../components/ConfirmDialog';
+import { Dialog } from '../components/Dialog';
+import type { RepositoryError } from '../data/nowly-repository';
+import { createNoteForm,isNoteFormDirty,noteToForm,toNoteDraft,validateNoteForm,type NoteFieldErrors,type NoteFormDraft } from '../lib/note-draft';
+import { noteColors,type Note,type NoteDraft } from '../notes/notes-model';
 
-type NoteModalProps = {
-  note: Note;
-  onClose: () => void;
-};
-
-export function NoteModal({ note, onClose }: NoteModalProps) {
-  return (
-    <section className="pointer-events-auto fixed right-6 top-24 z-20 grid max-h-[calc(100vh-7rem)] w-[min(420px,calc(100vw-3rem))] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-modal">
-      <header className="flex h-14 items-center justify-between border-b border-slate-100 px-4">
-        <h2 className="font-black">便签编辑</h2>
-        <button aria-label="关闭" onClick={onClose} className="grid h-8 w-8 place-items-center rounded-xl bg-slate-100">
-          <X className="h-4 w-4" />
-        </button>
-      </header>
-      <div className="min-h-0 overflow-auto p-4">
-        <label className="mb-1 block text-xs font-black text-muted">标题</label>
-        <input className="mb-3 h-10 w-full rounded-xl border border-slate-200 px-3 font-bold" defaultValue={note.title} />
-        <label className="mb-1 block text-xs font-black text-muted">内容</label>
-        <textarea className="h-28 w-full resize-none rounded-xl border border-slate-200 p-3 font-bold" defaultValue={note.content} />
-      </div>
-      <footer className="flex h-14 justify-end gap-2 border-t border-slate-100 px-4 py-2">
-        <button onClick={onClose} className="rounded-xl bg-slate-100 px-4 font-black">取消</button>
-        <button className="rounded-xl bg-brand px-4 font-black text-white">保存</button>
-      </footer>
-    </section>
-  );
+const labels={yellow:'黄色',blue:'蓝色',green:'绿色',purple:'紫色'} as const;
+const message=(error:unknown)=>typeof error==='object'&&error!==null&&'message'in error&&typeof error.message==='string'?error.message:'操作失败，请重试。';
+export function NoteModal({mode,onClose,onSaved,onDeleted,createNote,updateNote,deleteNote,restoreFocusRef}:{
+ mode:{type:'create'}|{type:'edit';note:Note}; onClose():void; onSaved(note:Note):void|Promise<void>; onDeleted(note:Note):void|Promise<void>;
+ createNote(draft:NoteDraft):Promise<Note>; updateNote(note:Note,draft:NoteDraft):Promise<Note>; deleteNote(note:Note):Promise<void>; restoreFocusRef?:RefObject<HTMLElement|null>;
+}){
+ const initial=useMemo(()=>mode.type==='edit'?noteToForm(mode.note):createNoteForm(),[mode]);
+ const [form,setForm]=useState<NoteFormDraft>(initial);const [errors,setErrors]=useState<NoteFieldErrors>({});const [dialogError,setDialogError]=useState('');const [busy,setBusy]=useState(false);const [confirm,setConfirm]=useState<'discard'|'delete'|null>(null);const titleId=useId();
+ const update=<K extends keyof NoteFormDraft>(key:K,value:NoteFormDraft[K])=>setForm(current=>({...current,[key]:value}));
+ function requestClose(){if(busy)return;if(isNoteFormDirty(initial,form))setConfirm('discard');else onClose();}
+ async function save(){const validation=validateNoteForm(form);setErrors(validation);setDialogError('');if(Object.keys(validation).length)return;setBusy(true);try{const saved=mode.type==='create'?await createNote(toNoteDraft(form)):await updateNote(mode.note,toNoteDraft(form));await onSaved(saved);onClose();}catch(error){const repositoryError=error as RepositoryError;if(repositoryError.code==='validation_error'&&repositoryError.field)setErrors({[repositoryError.field]:repositoryError.message});else setDialogError(message(error));}finally{setBusy(false);}}
+ async function remove(){if(mode.type!=='edit')return;setBusy(true);setDialogError('');try{await deleteNote(mode.note);await onDeleted(mode.note);setConfirm(null);onClose();}catch(error){setDialogError(message(error));}finally{setBusy(false);}}
+ return <><Dialog title={mode.type==='create'?'新建便签':'编辑便签'} ariaLabelledBy={titleId} isTopLayer={!confirm} restoreFocusRef={restoreFocusRef} onRequestClose={requestClose} className="note-dialog" headerActions={<button type="button" aria-label="关闭" className="good-icon-button" disabled={busy} onClick={requestClose}><X aria-hidden="true"/></button>} footer={<div className="note-dialog__actions">{dialogError&&!confirm?<div role="alert" className="dialog-error">{dialogError}</div>:null}{mode.type==='edit'?<button type="button" className="good-button good-button--danger-ghost" disabled={busy} onClick={()=>setConfirm('delete')}>删除便签</button>:null}<button type="button" className="good-button" disabled={busy} onClick={requestClose}>取消</button><button type="button" className="good-button good-button--primary" disabled={busy} onClick={()=>void save()}>{busy?'正在保存':'保存便签'}</button></div>}>
+ <form className="note-form" onSubmit={event=>{event.preventDefault();void save();}}><div className="good-field"><label htmlFor="note-title">便签标题</label><input id="note-title" className="good-input" value={form.title} disabled={busy} aria-describedby={errors.title?'note-title-error':undefined} onChange={e=>update('title',e.target.value)}/>{errors.title?<span id="note-title-error" className="field-error">{errors.title}</span>:null}</div><div className="good-field"><label htmlFor="note-content">便签内容</label><textarea id="note-content" className="good-input good-textarea" value={form.content} disabled={busy} onChange={e=>update('content',e.target.value)}/></div><fieldset className="color-options"><legend>便签颜色</legend>{noteColors.map(color=><label key={color} className="form-check form-check-custom form-check-solid"><input className="form-check-input" type="radio" name="note-color" checked={form.color===color} disabled={busy} onChange={()=>update('color',color)}/><span className="form-check-label">{labels[color]}</span></label>)}</fieldset><label className="form-check form-check-custom form-check-solid"><input className="form-check-input" type="checkbox" aria-label="置顶便签" checked={form.pinned} disabled={busy} onChange={e=>update('pinned',e.target.checked)}/><span className="form-check-label">置顶便签</span></label></form>
+ </Dialog>{confirm==='discard'?<ConfirmDialog title="放弃更改？" description="未保存的内容将丢失。" confirmLabel="放弃更改" busyLabel="正在放弃" onCancel={()=>setConfirm(null)} onConfirm={onClose}/>:null}{confirm==='delete'&&mode.type==='edit'?<ConfirmDialog title={`永久删除“${mode.note.title}”？`} description="删除后无法恢复。" tone="danger" confirmLabel="永久删除" busyLabel="正在删除" busy={busy} errorMessage={dialogError} onCancel={()=>{setConfirm(null);setDialogError('');}} onConfirm={()=>void remove()}/>:null}</>;
 }
