@@ -76,6 +76,17 @@ fn main() {
             app.manage(AppDb(Mutex::new(connection)));
             app.manage(Mutex::new(window_lifecycle::WindowLifecycle::default()));
 
+            #[cfg(target_os = "windows")]
+            {
+                let handle = app.handle().clone();
+                wallpaper::set_desktop_activation_handler(move || {
+                    let handle = handle.clone();
+                    let _ = handle
+                        .clone()
+                        .run_on_main_thread(move || show_main_window(&handle));
+                });
+            }
+
             let menu = MenuBuilder::new(app)
                 .text("open", "打开 Nowly")
                 .text("wallpaper", "设为壁纸 / 退出壁纸模式")

@@ -141,6 +141,28 @@ fn accepts_taskbar_event(tracked_hwnd: isize, event_hwnd: isize, object_id: i32)
     tracked_hwnd != 0 && tracked_hwnd == event_hwnd && object_id == 0
 }
 
+/// Pure double-click test: two left-button presses count as a double click when
+/// the previous press is still valid, they fall within the system double-click
+/// interval, and the cursor stayed inside the system double-click rectangle.
+#[allow(clippy::too_many_arguments)]
+fn double_click_within(
+    last_valid: bool,
+    last_time_ms: u32,
+    last_x: i32,
+    last_y: i32,
+    time_ms: u32,
+    x: i32,
+    y: i32,
+    interval_ms: u32,
+    max_dx: i32,
+    max_dy: i32,
+) -> bool {
+    last_valid
+        && time_ms.wrapping_sub(last_time_ms) <= interval_ms
+        && (x - last_x).abs() <= max_dx
+        && (y - last_y).abs() <= max_dy
+}
+
 fn corrected_outer_rect(
     desired_client: MonitorRect,
     current_outer: MonitorRect,
@@ -216,26 +238,39 @@ mod platform {
         corrected_outer_rect, native_foreground_style, wallpaper_rect, ListenerLifecycle,
         MonitorRect, TaskbarState, WS_EX_WINDOWEDGE_STYLE,
     };
+    use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Mutex, OnceLock};
     use std::time::Duration;
     use tauri::{Runtime, Window};
     use windows::core::{w, BOOL};
-    use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, POINT, RECT, WPARAM};
+    use windows::Win32::Foundation::{CloseHandle, COLORREF, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
     use windows::Win32::Graphics::Gdi::{
-        GetMonitorInfoW, MapWindowPoints, MonitorFromWindow, HMONITOR, MONITORINFO,
+        GetMonitorInfoW, MapWindowPoints, MonitorFromWindow, ScreenToClient, HMONITOR, MONITORINFO,
         MONITOR_DEFAULTTONEAREST,
     };
+    use windows::Win32::System::Diagnostics::Debug::{ReadProcessMemory, WriteProcessMemory};
+    use windows::Win32::System::Memory::{
+        VirtualAllocEx, VirtualFreeEx, MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_READWRITE,
+    };
+    use windows::Win32::System::Threading::{
+        GetCurrentThreadId, OpenProcess, PROCESS_VM_OPERATION, PROCESS_VM_READ, PROCESS_VM_WRITE,
+    };
+    use windows::Win32::UI::Input::KeyboardAndMouse::GetDoubleClickTime;
     use windows::Win32::UI::Accessibility::{SetWinEventHook, UnhookWinEvent, HWINEVENTHOOK};
+    use windows::Win32::UI::Controls::LVHITTESTINFO;
     use windows::Win32::UI::Shell::{SHAppBarMessage, ABM_GETSTATE, ABS_AUTOHIDE, APPBARDATA};
     use windows::Win32::UI::WindowsAndMessaging::{
-        EnumChildWindows, EnumWindows, FindWindowExW, FindWindowW, GetClassNameW, GetClientRect,
-        GetWindowLongPtrW, GetWindowRect, IsWindowVisible, SendMessageTimeoutW,
+        CallNextHookEx, DispatchMessageW, EnumChildWindows, EnumWindows, FindWindowExW, FindWindowW,
+        GetAncestor, GetClassNameW, GetClientRect, GetMessageW, GetSystemMetrics,
+        GetWindowLongPtrW, GetWindowRect, GetWindowThreadProcessId, IsWindowVisible,
+        PostThreadMessageW, SendMessageTimeoutW, SendMessageW,
         SetForegroundWindow, SetLayeredWindowAttributes, SetParent, SetWindowLongPtrW,
-        SetWindowPos, ShowWindow, EVENT_OBJECT_HIDE, EVENT_OBJECT_LOCATIONCHANGE,
-        EVENT_OBJECT_SHOW, GWL_EXSTYLE, GWL_STYLE, HWND_BOTTOM, LWA_ALPHA,
-        SEND_MESSAGE_TIMEOUT_FLAGS, SMTO_NORMAL, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE,
-        SWP_NOSIZE, SWP_SHOWWINDOW, SW_RESTORE, WINEVENT_OUTOFCONTEXT, WS_EX_LAYERED,
-        WS_EX_NOREDIRECTIONBITMAP,
+        SetWindowPos, SetWindowsHookExW, ShowWindow, TranslateMessage, UnhookWindowsHookEx,
+        WindowFromPoint, EVENT_OBJECT_HIDE, EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_SHOW,
+        GA_ROOT, GWL_EXSTYLE, GWL_STYLE, HWND_BOTTOM, LWA_ALPHA, MSG, SEND_MESSAGE_TIMEOUT_FLAGS,
+        SMTO_NORMAL, SM_CXDOUBLECLK, SM_CYDOUBLECLK, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE,
+        SWP_NOSIZE, SWP_SHOWWINDOW, SW_RESTORE, MSLLHOOKSTRUCT, WH_MOUSE_LL, WINEVENT_OUTOFCONTEXT,
+        WM_LBUTTONDOWN, WM_QUIT, WS_EX_LAYERED, WS_EX_NOREDIRECTIONBITMAP,
     };
 
     const CREATE_WORKERW_MESSAGE: u32 = 0x052C;
@@ -798,6 +833,7 @@ mod platform {
         };
         if matches {
             stop_listener();
+            stop_desktop_watch();
         }
     }
 
@@ -910,6 +946,8 @@ mod platform {
             listener.hooks = hooks;
         }
 
+        start_desktop_watch();
+
         Ok(format!(
             "wallpaper mode ok hwnd={:?} progman={:?} workerw={} shell={} raised={} parent={:?} monitor={:?} work={:?} taskbar={:?} state={:?} rect={}x{}+{},{}",
             hwnd,
@@ -931,6 +969,7 @@ mod platform {
 
     pub fn enter_foreground(hwnd: HWND) -> Result<String, String> {
         stop_listener();
+        stop_desktop_watch();
         let _operation = window_operation()
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -959,6 +998,340 @@ mod platform {
             let _ = SetForegroundWindow(hwnd);
         }
         Ok(format!("foreground mode ok hwnd={hwnd:?}"))
+    }
+
+    // ----- Desktop double-click activation -----
+
+    const LVM_FIRST: u32 = 0x1000;
+    const LVM_HITTEST: u32 = LVM_FIRST + 18;
+    const LVHT_ONITEM: u32 = 0x0002 | 0x0004 | 0x0008; // ONITEMICON | ONITEMLABEL | ONITEMSTATEICON
+
+    type ActivationHandler = Box<dyn Fn() + Send + Sync + 'static>;
+
+    #[derive(Default)]
+    struct DesktopWatch {
+        active: bool,
+        hook: isize,
+        thread_id: u32,
+    }
+
+    #[derive(Debug, Clone, Copy, Default)]
+    struct LastClick {
+        time_ms: u32,
+        x: i32,
+        y: i32,
+        valid: bool,
+    }
+
+    static ACTIVATION_HANDLER: OnceLock<Mutex<Option<ActivationHandler>>> = OnceLock::new();
+    static DESKTOP_WATCH: OnceLock<Mutex<DesktopWatch>> = OnceLock::new();
+    static LAST_CLICK: OnceLock<Mutex<LastClick>> = OnceLock::new();
+    static TRIGGER_GUARD: AtomicBool = AtomicBool::new(false);
+
+    fn activation_handler() -> &'static Mutex<Option<ActivationHandler>> {
+        ACTIVATION_HANDLER.get_or_init(|| Mutex::new(None))
+    }
+
+    fn desktop_watch() -> &'static Mutex<DesktopWatch> {
+        DESKTOP_WATCH.get_or_init(|| Mutex::new(DesktopWatch::default()))
+    }
+
+    fn last_click() -> &'static Mutex<LastClick> {
+        LAST_CLICK.get_or_init(|| Mutex::new(LastClick::default()))
+    }
+
+    pub fn set_activation_handler(handler: ActivationHandler) {
+        let mut slot = activation_handler()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        *slot = Some(handler);
+    }
+
+    fn class_name(hwnd: HWND) -> String {
+        let mut buffer = [0u16; 128];
+        let length = unsafe { GetClassNameW(hwnd, &mut buffer) };
+        if length == 0 {
+            return String::new();
+        }
+        String::from_utf16_lossy(&buffer[..length as usize])
+    }
+
+    /// Returns true when the double-click landed on empty desktop space (not an
+    /// icon and not inside a regular Explorer window). The wallpaper window sits
+    /// at the bottom of the desktop z-order, so `WindowFromPoint` reports the
+    /// desktop's `SysListView32`; we hit-test it to exclude icon clicks.
+    fn is_desktop_empty_area(point: POINT) -> bool {
+        unsafe {
+            let target = WindowFromPoint(point);
+            if hwnd_is_null(target) {
+                return false;
+            }
+
+            let root = GetAncestor(target, GA_ROOT);
+            let root = if hwnd_is_null(root) { target } else { root };
+            let root_class = class_name(root);
+            let target_class = class_name(target);
+            println!(
+                "desktop watch: hit target_class={target_class:?} root_class={root_class:?}"
+            );
+            // Only the live desktop counts. Progman/WorkerW host the wallpaper
+            // and desktop icons; anything else (Explorer folders, other apps)
+            // must be ignored.
+            if root_class != "Progman" && root_class != "WorkerW" {
+                return false;
+            }
+
+            if target_class == "SysListView32" {
+                return !list_view_hit_has_item(target, point);
+            }
+
+            // Clicked the desktop background directly (no icon list under cursor).
+            true
+        }
+    }
+
+    /// Cross-process `LVM_HITTEST` against the desktop icon list. Returns true
+    /// when an icon is under the cursor. On any failure we treat it as "no item"
+    /// so the feature keeps working rather than silently doing nothing.
+    fn list_view_hit_has_item(list_view: HWND, screen_point: POINT) -> bool {
+        unsafe {
+            let mut client_point = screen_point;
+            if !ScreenToClient(list_view, &mut client_point).as_bool() {
+                return false;
+            }
+
+            let mut process_id = 0u32;
+            GetWindowThreadProcessId(list_view, Some(&mut process_id));
+            if process_id == 0 {
+                return false;
+            }
+
+            let process = match OpenProcess(
+                PROCESS_VM_OPERATION | PROCESS_VM_READ | PROCESS_VM_WRITE,
+                false,
+                process_id,
+            ) {
+                Ok(handle) => handle,
+                Err(_) => return false,
+            };
+
+            let size = std::mem::size_of::<LVHITTESTINFO>();
+            let remote = VirtualAllocEx(
+                process,
+                None,
+                size,
+                MEM_COMMIT | MEM_RESERVE,
+                PAGE_READWRITE,
+            );
+            if remote.is_null() {
+                let _ = CloseHandle(process);
+                return false;
+            }
+
+            let mut hit = LVHITTESTINFO {
+                pt: POINT {
+                    x: client_point.x,
+                    y: client_point.y,
+                },
+                ..Default::default()
+            };
+
+            let wrote = WriteProcessMemory(
+                process,
+                remote,
+                &hit as *const _ as *const std::ffi::c_void,
+                size,
+                None,
+            )
+            .is_ok();
+
+            let has_item = if wrote {
+                let _ = SendMessageW(
+                    list_view,
+                    LVM_HITTEST,
+                    Some(WPARAM(usize::MAX)),
+                    Some(LPARAM(remote as isize)),
+                );
+                let read = ReadProcessMemory(
+                    process,
+                    remote,
+                    &mut hit as *mut _ as *mut std::ffi::c_void,
+                    size,
+                    None,
+                )
+                .is_ok();
+                read && (hit.flags.0 & LVHT_ONITEM) != 0
+            } else {
+                false
+            };
+
+            let _ = VirtualFreeEx(process, remote, 0, MEM_RELEASE);
+            let _ = CloseHandle(process);
+            has_item
+        }
+    }
+
+    fn is_double_click(point: POINT, time_ms: u32) -> bool {
+        let mut last = last_click()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let interval = unsafe { GetDoubleClickTime() };
+        let dx = unsafe { GetSystemMetrics(SM_CXDOUBLECLK) } / 2;
+        let dy = unsafe { GetSystemMetrics(SM_CYDOUBLECLK) } / 2;
+
+        let within = super::double_click_within(
+            last.valid,
+            last.time_ms,
+            last.x,
+            last.y,
+            time_ms,
+            point.x,
+            point.y,
+            interval,
+            dx,
+            dy,
+        );
+
+        if within {
+            // Reset so a triple click does not register as two double clicks.
+            last.valid = false;
+            true
+        } else {
+            last.time_ms = time_ms;
+            last.x = point.x;
+            last.y = point.y;
+            last.valid = true;
+            false
+        }
+    }
+
+    fn trigger_activation() {
+        if TRIGGER_GUARD.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        let handler = {
+            let slot = activation_handler()
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            slot.as_ref().map(|handler| handler as *const ActivationHandler)
+        };
+        // Run on a separate thread so the low-level hook returns promptly.
+        if handler.is_some() {
+            println!("desktop watch: activating foreground from desktop double-click");
+            std::thread::spawn(|| {
+                let slot = activation_handler()
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                if let Some(handler) = slot.as_ref() {
+                    handler();
+                }
+            });
+        } else {
+            TRIGGER_GUARD.store(false, Ordering::SeqCst);
+        }
+    }
+
+    unsafe extern "system" fn mouse_hook_proc(
+        code: i32,
+        wparam: WPARAM,
+        lparam: LPARAM,
+    ) -> LRESULT {
+        if code >= 0 && wparam.0 as u32 == WM_LBUTTONDOWN {
+            let _ = std::panic::catch_unwind(|| {
+                let data = unsafe { &*(lparam.0 as *const MSLLHOOKSTRUCT) };
+                let point = data.pt;
+                let time_ms = data.time;
+                let double = is_double_click(point, time_ms);
+                if double {
+                    let empty = is_desktop_empty_area(point);
+                    println!(
+                        "desktop watch: double-click at ({}, {}) empty_area={empty}",
+                        point.x, point.y
+                    );
+                    if empty {
+                        trigger_activation();
+                    }
+                }
+            });
+        }
+        unsafe { CallNextHookEx(None, code, wparam, lparam) }
+    }
+
+    pub fn start_desktop_watch() {
+        {
+            let watch = desktop_watch()
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if watch.active {
+                return;
+            }
+        }
+        TRIGGER_GUARD.store(false, Ordering::SeqCst);
+        {
+            let mut last = last_click()
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            *last = LastClick::default();
+        }
+
+        let (tx, rx) = std::sync::mpsc::channel::<Option<(isize, u32)>>();
+        std::thread::spawn(move || {
+            unsafe {
+                let hook = match SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_hook_proc), None, 0) {
+                    Ok(hook) => hook,
+                    Err(error) => {
+                        eprintln!("failed to install desktop mouse hook: {error}");
+                        let _ = tx.send(None);
+                        return;
+                    }
+                };
+                let thread_id = GetCurrentThreadId();
+                println!("desktop watch: mouse hook installed on thread {thread_id}");
+                let _ = tx.send(Some((hook.0 as isize, thread_id)));
+
+                let mut message = MSG::default();
+                while GetMessageW(&mut message, None, 0, 0).as_bool() {
+                    let _ = TranslateMessage(&message);
+                    DispatchMessageW(&message);
+                }
+
+                let _ = UnhookWindowsHookEx(hook);
+            }
+        });
+
+        match rx.recv() {
+            Ok(Some((hook, thread_id))) => {
+                let mut watch = desktop_watch()
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                watch.active = true;
+                watch.hook = hook;
+                watch.thread_id = thread_id;
+            }
+            _ => {
+                eprintln!("desktop mouse hook thread failed to start");
+            }
+        }
+    }
+
+    pub fn stop_desktop_watch() {
+        let thread_id = {
+            let mut watch = desktop_watch()
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if !watch.active {
+                return;
+            }
+            watch.active = false;
+            watch.hook = 0;
+            std::mem::take(&mut watch.thread_id)
+        };
+        TRIGGER_GUARD.store(false, Ordering::SeqCst);
+        if thread_id != 0 {
+            unsafe {
+                let _ = PostThreadMessageW(thread_id, WM_QUIT, WPARAM(0), LPARAM(0));
+            }
+        }
     }
 }
 
@@ -996,6 +1369,24 @@ pub fn notify_window_destroyed<R: tauri::Runtime>(window: &tauri::Window<R>) {
     if let Ok(hwnd) = window.hwnd() {
         platform::notify_window_destroyed(hwnd);
     }
+}
+
+/// Registers the callback invoked when the user double-clicks the empty desktop
+/// while the app runs in wallpaper mode. Double-clicks on desktop icons or other
+/// windows are ignored by the platform hook.
+#[cfg(target_os = "windows")]
+pub fn set_desktop_activation_handler<F>(handler: F)
+where
+    F: Fn() + Send + Sync + 'static,
+{
+    platform::set_activation_handler(Box::new(handler));
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn set_desktop_activation_handler<F>(_handler: F)
+where
+    F: Fn() + Send + Sync + 'static,
+{
 }
 
 #[tauri::command]
@@ -1339,5 +1730,52 @@ mod tests {
         assert!(!super::accepts_taskbar_event(42, 7, 0));
         assert!(!super::accepts_taskbar_event(42, 42, 1));
         assert!(!super::accepts_taskbar_event(0, 0, 0));
+    }
+
+    #[test]
+    fn second_click_in_time_and_bounds_is_a_double_click() {
+        assert!(super::double_click_within(
+            true, 1000, 500, 400, 1200, 502, 398, 500, 4, 4,
+        ));
+    }
+
+    #[test]
+    fn first_click_alone_is_not_a_double_click() {
+        assert!(!super::double_click_within(
+            false, 0, 0, 0, 1200, 500, 400, 500, 4, 4,
+        ));
+    }
+
+    #[test]
+    fn slow_second_click_is_not_a_double_click() {
+        assert!(!super::double_click_within(
+            true, 1000, 500, 400, 1600, 500, 400, 500, 4, 4,
+        ));
+    }
+
+    #[test]
+    fn distant_second_click_is_not_a_double_click() {
+        assert!(!super::double_click_within(
+            true, 1000, 500, 400, 1100, 520, 400, 500, 4, 4,
+        ));
+        assert!(!super::double_click_within(
+            true, 1000, 500, 400, 1100, 500, 420, 500, 4, 4,
+        ));
+    }
+
+    #[test]
+    fn wrapping_timestamp_still_measures_short_interval() {
+        assert!(super::double_click_within(
+            true,
+            u32::MAX - 50,
+            10,
+            10,
+            50,
+            10,
+            10,
+            500,
+            4,
+            4,
+        ));
     }
 }
