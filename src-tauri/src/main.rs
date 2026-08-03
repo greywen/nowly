@@ -71,7 +71,14 @@ fn main() {
             app.manage(AppDb(Mutex::new(connection)));
             app.manage(Mutex::new(window_lifecycle::WindowLifecycle::default()));
 
-            let menu = MenuBuilder::new(app).text("quit", "退出").build()?;
+            let menu = MenuBuilder::new(app)
+                .text("open", "打开 Nowly")
+                .text("wallpaper", "设为壁纸 / 退出壁纸模式")
+                .separator()
+                .text("settings", "设置")
+                .separator()
+                .text("quit", "退出 Nowly")
+                .build()?;
 
             let mut tray_builder = TrayIconBuilder::new()
                 .menu(&menu)
@@ -98,10 +105,24 @@ fn main() {
                         show_main_window(tray.app_handle());
                     }
                 })
-                .on_menu_event(|app, event| {
-                    if event.id().as_ref() == "quit" {
-                        app.exit(0);
+                .on_menu_event(|app, event| match event.id().as_ref() {
+                    "open" => show_main_window(app),
+                    "settings" => {
+                        show_main_window(app);
+                        if let Err(error) = app.emit("open-settings", ()) {
+                            eprintln!("failed to request settings: {error}");
+                        }
                     }
+                    "wallpaper" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            #[cfg(target_os = "windows")]
+                            if let Err(error) = wallpaper::enter_foreground_webview(&window) {
+                                eprintln!("failed to toggle wallpaper from tray: {error}");
+                            }
+                        }
+                    }
+                    "quit" => app.exit(0),
+                    _ => {}
                 })
                 .build(app)?;
 
@@ -115,9 +136,30 @@ fn main() {
                 | tauri::WindowEvent::Resized(_) => wallpaper::notify_window_changed(window),
                 tauri::WindowEvent::CloseRequested { api, .. } => {
                     api.prevent_close();
+                    let _ = window.emit("request-overlay-cleanup", ());
+                    let app = window.app_handle();
+                    let wallpaper_enabled = app.state::<AppDb>().0.lock().ok()
+                        .and_then(|connection| settings::read_app_settings(&connection).ok())
+                        .is_some_and(|settings| settings.wallpaper_enabled);
+                    if wallpaper_enabled {
+                        if let Some(webview) = app.get_webview_window("main") {
+                            if wallpaper::enter_wallpaper_webview(&webview).is_ok() {
+                                if let Ok(mut lifecycle) = app.state::<Mutex<window_lifecycle::WindowLifecycle>>().lock() {
+                                    lifecycle.enter_wallpaper();
+                                }
+                                let _ = window.emit("window-mode-changed", window_lifecycle::WindowMode::Wallpaper);
+                                return;
+                            }
+                        }
+                        eprintln!("failed to restore wallpaper on close; hiding to tray");
+                    }
+                    if let Ok(mut lifecycle) = app.state::<Mutex<window_lifecycle::WindowLifecycle>>().lock() {
+                        lifecycle.hide_to_tray();
+                    }
                     if let Err(error) = window.hide() {
                         eprintln!("failed to hide window to tray: {error}");
                     }
+                    let _ = window.emit("window-mode-changed", window_lifecycle::WindowMode::HiddenToTray);
                 }
                 tauri::WindowEvent::Destroyed => wallpaper::notify_window_destroyed(window),
                 _ => {}

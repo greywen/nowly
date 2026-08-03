@@ -56,13 +56,11 @@ export function App() {
   const summary = `今天 ${todayEventCount} 个日程 · ${importantTaskCount} 个重要任务 · ${notes.length} 条便签`;
 
   useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    void listen<WindowMode>('window-mode-changed', (event) => setWindowMode(event.payload)).then(
-      (removeListener) => {
-        unlisten = removeListener;
-      }
-    );
-    return () => unlisten?.();
+    const removers: Array<() => void> = [];
+    void listen<WindowMode>('window-mode-changed', (event) => setWindowMode(event.payload)).then(remove => removers.push(remove));
+    void listen('open-settings', () => setModal({type:'settings',trigger:null})).then(remove => removers.push(remove));
+    void listen('request-overlay-cleanup', () => setModal(null)).then(remove => removers.push(remove));
+    return () => removers.forEach(remove => remove());
   }, []);
 
   async function runWindowModeSwitch(switchMode: () => Promise<void>) {

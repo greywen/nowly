@@ -187,8 +187,8 @@ describe('App startup and window behavior', () => {
 
   it('updates the wallpaper action when the tray changes window mode', async () => {
     let modeListener: ((event: { payload: 'foreground' | 'wallpaper' }) => void) | undefined;
-    listenMock.mockImplementation((_eventName, listener) => {
-      modeListener = listener;
+    listenMock.mockImplementation((eventName, listener) => {
+      if (eventName === 'window-mode-changed') modeListener = listener;
       return Promise.resolve(() => undefined);
     });
     renderApp();

@@ -963,6 +963,16 @@ mod platform {
 }
 
 #[cfg(target_os = "windows")]
+pub fn enter_wallpaper_webview<R: tauri::Runtime>(
+    window: &tauri::WebviewWindow<R>,
+) -> Result<String, String> {
+    let hwnd = window.hwnd().map_err(|error| format!("failed to get webview window handle: {error}"))?;
+    let message = platform::enter_wallpaper(hwnd)?;
+    println!("{message}");
+    Ok(message)
+}
+
+#[cfg(target_os = "windows")]
 pub fn enter_foreground_webview<R: tauri::Runtime>(
     window: &tauri::WebviewWindow<R>,
 ) -> Result<String, String> {
