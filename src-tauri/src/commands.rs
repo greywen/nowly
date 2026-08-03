@@ -25,6 +25,10 @@ pub fn update_app_settings(
     db: State<'_, AppDb>,
     settings: AppSettings,
 ) -> Result<AppSettings, CommandError> {
+    crate::settings::validate(&settings).map_err(|error| match error {
+        rusqlite::Error::InvalidParameterName(field) => CommandError::validation(&field, "设置值无效。"),
+        other => CommandError::database(other),
+    })?;
     if settings.launch_at_login {
         app.autolaunch().enable().map_err(CommandError::system)?;
     } else {

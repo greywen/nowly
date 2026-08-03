@@ -32,7 +32,7 @@ pub fn read_app_settings(connection: &Connection) -> Result<AppSettings, rusqlit
     })
 }
 
-fn validate(settings: &AppSettings) -> Result<(), rusqlite::Error> {
+pub(crate) fn validate(settings: &AppSettings) -> Result<(), rusqlite::Error> {
     if !matches!(settings.density.as_str(), "balanced" | "comfortable") {
         return Err(rusqlite::Error::InvalidParameterName("density".into()));
     }
