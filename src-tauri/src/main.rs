@@ -7,6 +7,7 @@ mod notes;
 mod settings;
 mod tasks;
 mod wallpaper;
+mod window_lifecycle;
 
 use db::{open_database, AppDb};
 use std::sync::Mutex;
@@ -68,6 +69,7 @@ fn main() {
             let connection = open_database(app_dir.join("nowly.sqlite"))
                 .expect("failed to open database");
             app.manage(AppDb(Mutex::new(connection)));
+            app.manage(Mutex::new(window_lifecycle::WindowLifecycle::default()));
 
             let menu = MenuBuilder::new(app).text("quit", "退出").build()?;
 
@@ -138,7 +140,8 @@ fn main() {
             events::update_event,
             events::delete_event,
             wallpaper::enter_wallpaper_mode,
-            wallpaper::enter_foreground_mode
+            wallpaper::enter_foreground_mode,
+            window_lifecycle::get_window_mode
         ])
         .run(tauri::generate_context!())
         .expect("failed to run Nowly");

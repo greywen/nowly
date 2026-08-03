@@ -49,6 +49,11 @@ describe('tauriNowlyRepository', () => {
     await tauriNowlyRepository.updateNote('n1', noteDraft);
     await tauriNowlyRepository.deleteNote('n1');
     await tauriNowlyRepository.getSettings();
+    await tauriNowlyRepository.updateSettings({
+      wallpaperEnabled:false, launchAtLogin:false, targetMonitorId:null,
+      density:'balanced', weekStart:'monday', dateFormat:'localized',
+      showWeekends:true, calendarEnabled:true, matrixEnabled:true, notesEnabled:true
+    });
 
     expect(invokeMock.mock.calls).toContainEqual(['list_events_in_range', { range }]);
     expect(invokeMock.mock.calls).toContainEqual(['create_event', { draft }]);
@@ -64,5 +69,6 @@ describe('tauriNowlyRepository', () => {
     expect(invokeMock.mock.calls).toContainEqual(['update_note', { id: 'n1', draft: noteDraft }]);
     expect(invokeMock.mock.calls).toContainEqual(['delete_note', { id: 'n1' }]);
     expect(invokeMock.mock.calls).toContainEqual(['get_app_settings']);
+    expect(invokeMock.mock.calls).toContainEqual(['update_app_settings', { settings: expect.objectContaining({ density:'balanced' }) }]);
   });
 });

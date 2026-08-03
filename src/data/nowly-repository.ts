@@ -36,4 +36,5 @@ export type NowlyRepository = {
   updateNote(id: string, draft: NoteDraft): Promise<Note>;
   deleteNote(id: string): Promise<void>;
   getSettings(): Promise<AppSettings>;
+  updateSettings(settings: AppSettings): Promise<AppSettings>;
 };

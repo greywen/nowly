@@ -33,6 +33,11 @@ impl CommandError {
         eprintln!("database operation failed: {error}");
         Self::public("database_error", "无法读取本地数据，请重试。", None)
     }
+
+    pub fn system(error: impl std::fmt::Display) -> Self {
+        eprintln!("system operation failed: {error}");
+        Self::public("system_error", "系统操作失败，请重试。", None)
+    }
 }
 
 #[cfg(test)]

@@ -1,3 +1,5 @@
+use tauri::Emitter;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MonitorRect {
     pub left: i32,
@@ -987,11 +989,26 @@ pub fn notify_window_destroyed<R: tauri::Runtime>(window: &tauri::Window<R>) {
 }
 
 #[tauri::command]
-pub fn enter_wallpaper_mode(window: tauri::Window) -> Result<String, String> {
+pub fn enter_wallpaper_mode(
+    window: tauri::Window,
+    db: tauri::State<'_, crate::db::AppDb>,
+    lifecycle: tauri::State<'_, std::sync::Mutex<crate::window_lifecycle::WindowLifecycle>>,
+) -> Result<String, crate::error::CommandError> {
     #[cfg(target_os = "windows")]
     {
-        let hwnd = platform::hwnd_for_window(&window)?;
-        let message = platform::enter_wallpaper(hwnd)?;
+        let hwnd = platform::hwnd_for_window(&window).map_err(crate::error::CommandError::system)?;
+        let message = platform::enter_wallpaper(hwnd).map_err(crate::error::CommandError::system)?;
+        {
+            let mut connection = db.0.lock().map_err(crate::error::CommandError::database)?;
+            let mut settings = crate::settings::read_app_settings(&connection)
+                .map_err(crate::error::CommandError::database)?;
+            settings.wallpaper_enabled = true;
+            crate::settings::write_app_settings(&mut connection, &settings)
+                .map_err(crate::error::CommandError::database)?;
+        }
+        lifecycle.lock().map_err(crate::error::CommandError::system)?.enter_wallpaper();
+        window.emit("window-mode-changed", crate::window_lifecycle::WindowMode::Wallpaper)
+            .map_err(crate::error::CommandError::system)?;
         println!("{message}");
         Ok(message)
     }
@@ -999,16 +1016,23 @@ pub fn enter_wallpaper_mode(window: tauri::Window) -> Result<String, String> {
     #[cfg(not(target_os = "windows"))]
     {
         let _ = window;
-        Err("wallpaper mode is only supported on Windows".to_string())
+        let _ = (db, lifecycle);
+        Err(crate::error::CommandError::system("wallpaper mode is only supported on Windows"))
     }
 }
 
 #[tauri::command]
-pub fn enter_foreground_mode(window: tauri::Window) -> Result<String, String> {
+pub fn enter_foreground_mode(
+    window: tauri::Window,
+    lifecycle: tauri::State<'_, std::sync::Mutex<crate::window_lifecycle::WindowLifecycle>>,
+) -> Result<String, crate::error::CommandError> {
     #[cfg(target_os = "windows")]
     {
-        let hwnd = platform::hwnd_for_window(&window)?;
-        let message = platform::enter_foreground(hwnd)?;
+        let hwnd = platform::hwnd_for_window(&window).map_err(crate::error::CommandError::system)?;
+        let message = platform::enter_foreground(hwnd).map_err(crate::error::CommandError::system)?;
+        lifecycle.lock().map_err(crate::error::CommandError::system)?.enter_foreground();
+        window.emit("window-mode-changed", crate::window_lifecycle::WindowMode::Foreground)
+            .map_err(crate::error::CommandError::system)?;
         println!("{message}");
         Ok(message)
     }
@@ -1016,7 +1040,8 @@ pub fn enter_foreground_mode(window: tauri::Window) -> Result<String, String> {
     #[cfg(not(target_os = "windows"))]
     {
         let _ = window;
-        Err("foreground mode switching is only supported on Windows".to_string())
+        let _ = lifecycle;
+        Err(crate::error::CommandError::system("foreground mode switching is only supported on Windows"))
     }
 }
 
