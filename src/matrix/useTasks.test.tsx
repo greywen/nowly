@@ -54,6 +54,7 @@ function createRepository(overrides: Partial<NowlyRepository> = {}): NowlyReposi
     createNote: vi.fn(), updateNote: vi.fn(), deleteNote: vi.fn(),
     getSettings: vi.fn().mockResolvedValue(settings),
     updateSettings: vi.fn().mockResolvedValue(settings),
+    listMonitors: vi.fn().mockResolvedValue([]),
     ...overrides
   };
 }

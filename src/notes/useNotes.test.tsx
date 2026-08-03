@@ -11,7 +11,7 @@ function repository(overrides: Partial<NowlyRepository> = {}): NowlyRepository {
     listEventsInRange:vi.fn().mockResolvedValue([]), createEvent:vi.fn(), updateEvent:vi.fn(), deleteEvent:vi.fn(),
     listTasks:vi.fn().mockResolvedValue([]), createTask:vi.fn(), updateTask:vi.fn(), deleteTask:vi.fn(), setTaskCompleted:vi.fn(),
     listNotes:vi.fn().mockResolvedValue([note]), createNote:vi.fn().mockResolvedValue(note), updateNote:vi.fn().mockResolvedValue(note), deleteNote:vi.fn().mockResolvedValue(undefined),
-    getSettings:vi.fn(), updateSettings:vi.fn(), ...overrides
+    getSettings:vi.fn(), updateSettings:vi.fn(), listMonitors:vi.fn(), ...overrides
   };
 }
 function wrapper(value: NowlyRepository) { return ({children}:{children:ReactNode}) => <RepositoryProvider repository={value}>{children}</RepositoryProvider>; }

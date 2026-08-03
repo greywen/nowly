@@ -173,6 +173,7 @@ export function App() {
         updateNote={notesFeature.updateNote}
         deleteNote={notesFeature.deleteNote}
         settings={settingsFeature.settings.data}
+        monitors={settingsFeature.monitors.data}
         saveSettings={settingsFeature.saveSettings}
       />
     </>

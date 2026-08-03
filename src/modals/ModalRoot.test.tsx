@@ -17,6 +17,7 @@ const operations = {
   createNote: vi.fn().mockResolvedValue(sampleNotes[0]),
   updateNote: vi.fn().mockResolvedValue(sampleNotes[0]),
   deleteNote: vi.fn().mockResolvedValue(undefined),
+  monitors: [],
   settings: {wallpaperEnabled:false,launchAtLogin:false,targetMonitorId:null,density:'balanced' as const,weekStart:'monday' as const,dateFormat:'localized' as const,showWeekends:true,calendarEnabled:true,matrixEnabled:true,notesEnabled:true},
   saveSettings: vi.fn()
 };

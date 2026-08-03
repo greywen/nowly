@@ -15,6 +15,8 @@ export type AppSettings = {
   notesEnabled: boolean;
 };
 
+export type MonitorInfo = { id:string; name:string; isPrimary:boolean; positionX:number; positionY:number; width:number; height:number; scaleFactor:number };
+
 export type RepositoryError = {
   code: 'validation_error' | 'not_found' | 'conflict' | 'database_error' | 'system_error';
   message: string;
@@ -37,4 +39,5 @@ export type NowlyRepository = {
   deleteNote(id: string): Promise<void>;
   getSettings(): Promise<AppSettings>;
   updateSettings(settings: AppSettings): Promise<AppSettings>;
+  listMonitors(): Promise<MonitorInfo[]>;
 };

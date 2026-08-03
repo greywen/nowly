@@ -131,6 +131,33 @@ fn main() {
                 })
                 .build(app)?;
 
+            if std::env::args().any(|arg| arg == "--background") {
+                if let Some(window) = app.get_webview_window("main") {
+                    let wallpaper_enabled = app.state::<AppDb>().0.lock().ok()
+                        .and_then(|connection| settings::read_app_settings(&connection).ok())
+                        .is_some_and(|settings| settings.wallpaper_enabled);
+                    #[cfg(target_os = "windows")]
+                    if wallpaper_enabled {
+                        match wallpaper::enter_wallpaper_webview(&window) {
+                            Ok(_) => {
+                                if let Ok(mut lifecycle) = app.state::<Mutex<window_lifecycle::WindowLifecycle>>().lock() {
+                                    lifecycle.enter_wallpaper();
+                                }
+                            }
+                            Err(error) => {
+                                eprintln!("background wallpaper startup failed: {error}");
+                                let _ = window.hide();
+                            }
+                        }
+                    } else {
+                        let _ = window.hide();
+                        if let Ok(mut lifecycle) = app.state::<Mutex<window_lifecycle::WindowLifecycle>>().lock() {
+                            lifecycle.hide_to_tray();
+                        }
+                    }
+                }
+            }
+
             Ok(())
         })
         .on_window_event(|window, event| {

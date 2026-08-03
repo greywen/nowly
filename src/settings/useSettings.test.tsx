@@ -8,7 +8,7 @@ import { useSettings } from './useSettings';
 const settings: AppSettings = { wallpaperEnabled:false, launchAtLogin:false, targetMonitorId:null, density:'balanced', weekStart:'monday', dateFormat:'localized', showWeekends:true, calendarEnabled:true, matrixEnabled:true, notesEnabled:true };
 
 function repository(updateSettings = vi.fn().mockResolvedValue(settings)): NowlyRepository {
-  return { listEventsInRange:vi.fn(), createEvent:vi.fn(), updateEvent:vi.fn(), deleteEvent:vi.fn(), listTasks:vi.fn(), createTask:vi.fn(), updateTask:vi.fn(), deleteTask:vi.fn(), setTaskCompleted:vi.fn(), listNotes:vi.fn(), createNote:vi.fn(), updateNote:vi.fn(), deleteNote:vi.fn(), getSettings:vi.fn().mockResolvedValue(settings), updateSettings } as NowlyRepository;
+  return { listEventsInRange:vi.fn(), createEvent:vi.fn(), updateEvent:vi.fn(), deleteEvent:vi.fn(), listTasks:vi.fn(), createTask:vi.fn(), updateTask:vi.fn(), deleteTask:vi.fn(), setTaskCompleted:vi.fn(), listNotes:vi.fn(), createNote:vi.fn(), updateNote:vi.fn(), deleteNote:vi.fn(), getSettings:vi.fn().mockResolvedValue(settings), updateSettings, listMonitors:vi.fn().mockResolvedValue([]) } as NowlyRepository;
 }
 
 function wrapper(repo: NowlyRepository) { return ({children}:{children:ReactNode}) => <RepositoryProvider repository={repo}>{children}</RepositoryProvider>; }

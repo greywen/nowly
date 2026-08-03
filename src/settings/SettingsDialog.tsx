@@ -2,12 +2,12 @@ import { X } from 'lucide-react';
 import { useState } from 'react';
 import { Dialog } from '../components/Dialog';
 import { Select } from '../components/Select';
-import type { AppSettings } from '../data/nowly-repository';
+import type { AppSettings, MonitorInfo } from '../data/nowly-repository';
 
-type Props={settings:AppSettings;onClose():void;onSave(settings:AppSettings):Promise<AppSettings>};
+type Props={settings:AppSettings;monitors?:MonitorInfo[];onClose():void;onSave(settings:AppSettings):Promise<AppSettings>};
 function errorMessage(error:unknown){return typeof error==='object'&&error!==null&&'message'in error&&typeof error.message==='string'?error.message:'设置保存失败，请重试。'}
 
-export function SettingsDialog({settings,onClose,onSave}:Props){
+export function SettingsDialog({settings,monitors=[],onClose,onSave}:Props){
  const [draft,setDraft]=useState(()=>({...settings})); const [saving,setSaving]=useState(false); const [error,setError]=useState<string|null>(null);
  const toggle=(key:keyof AppSettings)=>(event:React.ChangeEvent<HTMLInputElement>)=>setDraft(current=>({...current,[key]:event.target.checked}));
  async function save(){setSaving(true);setError(null);try{await onSave(draft);onClose();}catch(reason){setError(errorMessage(reason));}finally{setSaving(false)}}
@@ -18,7 +18,7 @@ export function SettingsDialog({settings,onClose,onSave}:Props){
     <Select id="settings-week-start" label="每周开始日" value={draft.weekStart} options={[{value:'monday',label:'周一'},{value:'sunday',label:'周日'}]} onChange={value=>setDraft({...draft,weekStart:value as AppSettings['weekStart']})}/>
     <Select id="settings-date-format" label="日期格式" value={draft.dateFormat} options={[{value:'localized',label:'本地格式'},{value:'iso',label:'ISO 格式'}]} onChange={value=>setDraft({...draft,dateFormat:value as AppSettings['dateFormat']})}/>
    </div></section>
-   <section><h3>桌面与启动</h3><div className="settings-checks">
+   <section><h3>桌面与启动</h3>{monitors.length?<Select id="settings-monitor" label="目标显示器" value={draft.targetMonitorId??monitors.find(item=>item.isPrimary)?.id??monitors[0].id} options={monitors.map(item=>({value:item.id,label:`${item.name}${item.isPrimary?'（主显示器）':''} · ${item.width}×${item.height} · ${Math.round(item.scaleFactor*100)}%`}))} onChange={value=>setDraft({...draft,targetMonitorId:value})}/>:null}<div className="settings-checks">
     <Check label="关闭时恢复壁纸" checked={draft.wallpaperEnabled} onChange={toggle('wallpaperEnabled')}/><Check label="开机自动启动" checked={draft.launchAtLogin} onChange={toggle('launchAtLogin')}/>
    </div></section>
    <section><h3>模块显示</h3><div className="settings-checks">

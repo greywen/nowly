@@ -7,7 +7,7 @@ import { NoteModal } from './NoteModal';
 import { TaskModal } from './TaskModal';
 import { NotesManagerDialog } from '../notes/NotesManagerDialog';
 import type { Note, NoteDraft } from '../notes/notes-model';
-import type { AppSettings } from '../data/nowly-repository';
+import type { AppSettings, MonitorInfo } from '../data/nowly-repository';
 import { SettingsDialog } from '../settings/SettingsDialog';
 
 type Props = {
@@ -31,6 +31,7 @@ type Props = {
   updateNote(note: Note, draft: NoteDraft): Promise<Note>;
   deleteNote(note: Note): Promise<void>;
   settings: AppSettings;
+  monitors: MonitorInfo[];
   saveSettings(settings: AppSettings): Promise<AppSettings>;
 };
 
@@ -38,7 +39,7 @@ export function ModalRoot({
   modal, events, tasks, onClose, onChangeModal,
   createEvent, updateEvent, deleteEvent, onSaved, onDeleted,
   createTask, updateTask, deleteTask, onTaskSaved, onTaskDeleted,
-  notes, createNote, updateNote, deleteNote, settings, saveSettings
+  notes, createNote, updateNote, deleteNote, settings, monitors, saveSettings
 }: Props) {
   if (!modal) return null;
   const isEventChild = modal.type === 'event-create' || modal.type === 'event-edit';
@@ -92,6 +93,6 @@ export function ModalRoot({
     ) : null}
     {modal.type === 'notes-manager' ? <NotesManagerDialog notes={notes} restoreFocusRef={{current:modal.trigger}} onClose={onClose} onCreate={(trigger)=>onChangeModal({type:'note-create',trigger,parentManager:true})} onEdit={(note,trigger)=>onChangeModal({type:'note-edit',note,trigger,parentManager:true})} /> : null}
     {modal.type === 'note-create' || modal.type === 'note-edit' ? <NoteModal mode={modal.type === 'note-create' ? {type:'create'} : {type:'edit',note:modal.note}} restoreFocusRef={{current:modal.trigger}} onClose={()=>modal.parentManager?onChangeModal({type:'notes-manager',trigger:modal.trigger}):onClose()} onSaved={()=>undefined} onDeleted={()=>undefined} createNote={createNote} updateNote={updateNote} deleteNote={deleteNote} /> : null}
-    {modal.type === 'settings' ? <SettingsDialog settings={settings} onClose={onClose} onSave={saveSettings} /> : null}
+    {modal.type === 'settings' ? <SettingsDialog settings={settings} monitors={monitors} onClose={onClose} onSave={saveSettings} /> : null}
   </>;
 }
