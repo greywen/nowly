@@ -2,8 +2,8 @@
 
 ## Current Status
 
-- 阶段 1–4 业务纵切已完成（2026-07-29）；阶段 5「设置与窗口生命周期」、阶段 6「Windows 系统集成」和阶段 7「发布验证」已完成（2026-08-03）。
-- 自动化门禁及 Windows 安装包构建通过；交互式 Windows 10/11 实机矩阵和资源记录见 `docs/release/windows-verification.md`。
+- 阶段 1–4 业务纵切已完成（2026-07-29）；阶段 5「设置与窗口生命周期」和阶段 6「Windows 系统集成」已完成（2026-08-03）。
+- 阶段 7 的自动化门禁及 Windows 安装包构建已通过；交互式 Windows 10/11 实机矩阵和空闲资源记录仍待人工执行，清单见 `docs/release/windows-verification.md`。
 - 总进度见 [Nowly Windows 完整产品实施路线图](./superpowers/plans/2026-07-29-nowly-windows-product-roadmap.md) 的 Overall status 表。
 
 ## Module Index
