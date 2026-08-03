@@ -3,6 +3,7 @@ mod db;
 mod error;
 mod events;
 mod models;
+mod monitors;
 mod notes;
 mod settings;
 mod tasks;
@@ -172,6 +173,7 @@ fn main() {
             tasks::delete_task,
             tasks::set_task_completed,
             notes::list_notes,
+            monitors::list_monitors,
             notes::create_note,
             notes::update_note,
             notes::delete_note,
