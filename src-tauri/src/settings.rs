@@ -1,5 +1,5 @@
 use crate::models::AppSettings;
-use rusqlite::{Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, TransactionBehavior};
 use serde::de::DeserializeOwned;
 
 fn read_value<T: DeserializeOwned>(
@@ -32,6 +32,48 @@ pub fn read_app_settings(connection: &Connection) -> Result<AppSettings, rusqlit
     })
 }
 
+fn validate(settings: &AppSettings) -> Result<(), rusqlite::Error> {
+    if !matches!(settings.density.as_str(), "balanced" | "comfortable") {
+        return Err(rusqlite::Error::InvalidParameterName("density".into()));
+    }
+    if !matches!(settings.week_start.as_str(), "monday" | "sunday") {
+        return Err(rusqlite::Error::InvalidParameterName("weekStart".into()));
+    }
+    if !matches!(settings.date_format.as_str(), "localized" | "iso") {
+        return Err(rusqlite::Error::InvalidParameterName("dateFormat".into()));
+    }
+    Ok(())
+}
+
+pub fn write_app_settings(
+    connection: &mut Connection,
+    settings: &AppSettings,
+) -> Result<AppSettings, rusqlite::Error> {
+    validate(settings)?;
+    let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let values = [
+        ("wallpaper_enabled", serde_json::to_string(&settings.wallpaper_enabled)),
+        ("launch_at_login", serde_json::to_string(&settings.launch_at_login)),
+        ("target_monitor_id", serde_json::to_string(&settings.target_monitor_id)),
+        ("density", serde_json::to_string(&settings.density)),
+        ("week_start", serde_json::to_string(&settings.week_start)),
+        ("date_format", serde_json::to_string(&settings.date_format)),
+        ("show_weekends", serde_json::to_string(&settings.show_weekends)),
+        ("calendar_enabled", serde_json::to_string(&settings.calendar_enabled)),
+        ("matrix_enabled", serde_json::to_string(&settings.matrix_enabled)),
+        ("notes_enabled", serde_json::to_string(&settings.notes_enabled)),
+    ];
+    for (key, value) in values {
+        let value = value.map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
+        transaction.execute(
+            "UPDATE settings SET value = ?2, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE key = ?1",
+            (key, value),
+        )?;
+    }
+    transaction.commit()?;
+    read_app_settings(connection)
+}
+
 #[cfg(test)]
 mod tests {
     use super::read_app_settings;
@@ -55,6 +97,40 @@ mod tests {
         assert!(settings.calendar_enabled);
         assert!(settings.matrix_enabled);
         assert!(settings.notes_enabled);
+    }
+
+    #[test]
+    fn valid_settings_are_replaced_atomically() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        migrate(&mut connection).unwrap();
+        let settings = crate::models::AppSettings {
+            wallpaper_enabled: true,
+            launch_at_login: true,
+            target_monitor_id: Some("DISPLAY-2".into()),
+            density: "comfortable".into(),
+            week_start: "sunday".into(),
+            date_format: "iso".into(),
+            show_weekends: false,
+            calendar_enabled: false,
+            matrix_enabled: true,
+            notes_enabled: false,
+        };
+
+        super::write_app_settings(&mut connection, &settings).unwrap();
+
+        assert_eq!(read_app_settings(&connection).unwrap(), settings);
+    }
+
+    #[test]
+    fn invalid_settings_leave_storage_unchanged() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        migrate(&mut connection).unwrap();
+        let before = read_app_settings(&connection).unwrap();
+        let mut invalid = before.clone();
+        invalid.density = "tiny".into();
+
+        assert!(super::write_app_settings(&mut connection, &invalid).is_err());
+        assert_eq!(read_app_settings(&connection).unwrap(), before);
     }
 
     #[test]

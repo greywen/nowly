@@ -1,7 +1,7 @@
 use crate::db::AppDb;
 use crate::error::CommandError;
 use crate::models::AppSettings;
-use crate::settings::read_app_settings;
+use crate::settings::{read_app_settings, write_app_settings};
 use rusqlite::Connection;
 use tauri::State;
 
@@ -16,5 +16,19 @@ fn with_connection<T>(
 #[tauri::command]
 pub fn get_app_settings(db: State<'_, AppDb>) -> Result<AppSettings, CommandError> {
     with_connection(db, read_app_settings)
+}
+
+#[tauri::command]
+pub fn update_app_settings(
+    db: State<'_, AppDb>,
+    settings: AppSettings,
+) -> Result<AppSettings, CommandError> {
+    let mut connection = db.0.lock().map_err(CommandError::database)?;
+    write_app_settings(&mut connection, &settings).map_err(|error| match error {
+        rusqlite::Error::InvalidParameterName(field) => {
+            CommandError::validation(&field, "设置值无效。")
+        }
+        other => CommandError::database(other),
+    })
 }
 

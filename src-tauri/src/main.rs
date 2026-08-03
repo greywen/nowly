@@ -132,6 +132,7 @@ fn main() {
             notes::update_note,
             notes::delete_note,
             commands::get_app_settings,
+            commands::update_app_settings,
             events::list_events_in_range,
             events::create_event,
             events::update_event,
