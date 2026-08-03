@@ -10,7 +10,7 @@ import { ModalRoot } from '../modals/ModalRoot';
 import { NotesWidget } from '../notes/NotesWidget';
 import { useNotes } from '../notes/useNotes';
 import { DesktopShell } from './layout/DesktopShell';
-import { useAppBootstrap } from './useAppBootstrap';
+import { useSettings } from '../settings/useSettings';
 
 type WindowMode = 'wallpaper' | 'foreground';
 
@@ -29,7 +29,7 @@ function localIsoDate(date = new Date()) {
 }
 
 export function App() {
-  const bootstrap = useAppBootstrap();
+  const settingsFeature = useSettings();
   const refreshTasksRef = useRef<() => Promise<unknown>>(async () => undefined);
   const refreshEventsRef = useRef<() => Promise<unknown>>(async () => undefined);
   const refreshTasks = useCallback(() => refreshTasksRef.current(), []);
@@ -152,6 +152,7 @@ export function App() {
         isModeSwitching={isSwitchingWindowMode}
         onSetWallpaper={() => void runWindowModeSwitch(switchToWallpaper)}
         onWallpaperDoubleClick={() => void runWindowModeSwitch(switchToForeground)}
+        onOpenSettings={() => setModal({type:'settings',trigger:null})}
       />
       <ModalRoot
         modal={modal}
@@ -173,6 +174,8 @@ export function App() {
         createNote={notesFeature.createNote}
         updateNote={notesFeature.updateNote}
         deleteNote={notesFeature.deleteNote}
+        settings={settingsFeature.settings.data}
+        saveSettings={settingsFeature.saveSettings}
       />
     </>
   );

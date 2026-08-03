@@ -11,5 +11,5 @@ export type ModalState =
   | { type: 'note-create'; trigger: HTMLElement | null; parentManager?: boolean }
   | { type: 'note-edit'; note: Note; trigger: HTMLElement | null; parentManager?: boolean }
   | { type: 'notes-manager'; trigger: HTMLElement | null }
-  | { type: 'settings' }
+  | { type: 'settings'; trigger: HTMLElement | null }
   | null;

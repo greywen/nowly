@@ -45,6 +45,7 @@ function createRepository(overrides: Partial<NowlyRepository> = {}): NowlyReposi
     updateNote: vi.fn().mockRejectedValue(new Error('unexpected note write')),
     deleteNote: vi.fn().mockRejectedValue(new Error('unexpected note write')),
     getSettings: vi.fn().mockResolvedValue(settings),
+    updateSettings: vi.fn().mockResolvedValue(settings),
     ...overrides
   };
 }

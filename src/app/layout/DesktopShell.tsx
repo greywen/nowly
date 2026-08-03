@@ -1,4 +1,4 @@
-import { MonitorDown } from 'lucide-react';
+import { MonitorDown, Settings } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 type DesktopShellProps = {
@@ -12,6 +12,7 @@ type DesktopShellProps = {
   isModeSwitching?: boolean;
   onSetWallpaper?: () => void;
   onWallpaperDoubleClick?: () => void;
+  onOpenSettings?: () => void;
 };
 
 export function DesktopShell({
@@ -24,7 +25,8 @@ export function DesktopShell({
   notes,
   isModeSwitching = false,
   onSetWallpaper,
-  onWallpaperDoubleClick
+  onWallpaperDoubleClick,
+  onOpenSettings
 }: DesktopShellProps) {
   const foreground = mode === 'foreground';
 
@@ -43,6 +45,7 @@ export function DesktopShell({
           <span className="topbar-time" aria-label={`当前时间 ${time}`}>
             {time}
           </span>
+          {foreground ? <button type="button" className="btn btn-icon" aria-label="打开设置" onClick={onOpenSettings}><Settings aria-hidden="true" /></button> : null}
           {foreground ? (
             <button
               type="button"

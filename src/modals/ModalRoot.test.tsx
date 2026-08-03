@@ -16,7 +16,9 @@ const operations = {
   notes: sampleNotes,
   createNote: vi.fn().mockResolvedValue(sampleNotes[0]),
   updateNote: vi.fn().mockResolvedValue(sampleNotes[0]),
-  deleteNote: vi.fn().mockResolvedValue(undefined)
+  deleteNote: vi.fn().mockResolvedValue(undefined),
+  settings: {wallpaperEnabled:false,launchAtLogin:false,targetMonitorId:null,density:'balanced' as const,weekStart:'monday' as const,dateFormat:'localized' as const,showWeekends:true,calendarEnabled:true,matrixEnabled:true,notesEnabled:true},
+  saveSettings: vi.fn()
 };
 
 function base(overrides: Record<string, unknown> = {}) {
