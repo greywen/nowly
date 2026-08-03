@@ -2,8 +2,8 @@
 
 ## Current Status
 
-- 阶段 1「数据基础与空状态启动」、阶段 2「日程纵切」、阶段 3「任务纵切」与阶段 4「便签纵切」已完成（2026-07-29）。
-- 下一阶段为阶段 5「设置与窗口生命周期」；开始实施前必须先编写并审批详细计划。
+- 阶段 1–4 业务纵切已完成（2026-07-29）；阶段 5「设置与窗口生命周期」、阶段 6「Windows 系统集成」和阶段 7「发布验证」已完成（2026-08-03）。
+- 自动化门禁及 Windows 安装包构建通过；交互式 Windows 10/11 实机矩阵和资源记录见 `docs/release/windows-verification.md`。
 - 总进度见 [Nowly Windows 完整产品实施路线图](./superpowers/plans/2026-07-29-nowly-windows-product-roadmap.md) 的 Overall status 表。
 
 ## Module Index
@@ -55,6 +55,10 @@ cargo test --manifest-path src-tauri/Cargo.toml    # Rust 测试
 - [Nowly 日程纵切实施计划](./superpowers/plans/2026-07-29-nowly-events.md)
 - [Nowly 任务纵切实施计划](./superpowers/plans/2026-07-29-nowly-tasks.md)
 - [Nowly 便签纵切实施计划](./superpowers/plans/2026-07-29-nowly-notes.md)
+- [Nowly 设置与窗口生命周期实施计划](./superpowers/plans/2026-07-29-nowly-window-lifecycle.md)
+- [Nowly Windows 系统集成实施计划](./superpowers/plans/2026-07-29-nowly-windows-integration.md)
+- [Nowly 发布验证实施计划](./superpowers/plans/2026-07-29-nowly-release-verification.md)
+- [Nowly Windows 发布验证记录](./release/windows-verification.md)
 - [Nowly MVP Implementation Plan](./superpowers/plans/2026-07-23-nowly-mvp.md)
 - [Nowly Final UI/UX HTML Implementation Plan](./superpowers/plans/2026-07-29-nowly-final-uiux-html.md)
 - [Nowly Good 设计系统原型重设计实施计划](./superpowers/plans/2026-07-29-nowly-good-design-system-prototype-redesign.md)

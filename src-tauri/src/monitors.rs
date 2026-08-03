@@ -13,6 +13,16 @@ pub fn select_target_monitor<'a>(monitors:&'a [MonitorInfo], saved:Option<&str>)
         .or_else(||monitors.first())
 }
 
+pub fn position_target<R:tauri::Runtime>(window:&tauri::Window<R>, saved:Option<&str>)->Result<(),crate::error::CommandError>{
+    let monitors=window.available_monitors().map_err(crate::error::CommandError::system)?;
+    let primary=window.primary_monitor().map_err(crate::error::CommandError::system)?;
+    let selected=saved.and_then(|id|monitors.iter().find(|monitor|monitor.name().is_some_and(|name|name==id)))
+        .or_else(||primary.as_ref())
+        .or_else(||monitors.first())
+        .ok_or_else(||crate::error::CommandError::system("no monitor available"))?;
+    window.set_position(tauri::Position::Physical(*selected.position())).map_err(crate::error::CommandError::system)
+}
+
 #[tauri::command]
 pub fn list_monitors(window:tauri::Window)->Result<Vec<MonitorInfo>,crate::error::CommandError>{
     let primary=window.primary_monitor().map_err(crate::error::CommandError::system)?;

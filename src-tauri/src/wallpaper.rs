@@ -1006,6 +1006,9 @@ pub fn enter_wallpaper_mode(
 ) -> Result<String, crate::error::CommandError> {
     #[cfg(target_os = "windows")]
     {
+        let target_monitor_id = db.0.lock().map_err(crate::error::CommandError::database)
+            .and_then(|connection| crate::settings::read_app_settings(&connection).map_err(crate::error::CommandError::database))?.target_monitor_id;
+        crate::monitors::position_target(&window, target_monitor_id.as_deref())?;
         let hwnd = platform::hwnd_for_window(&window).map_err(crate::error::CommandError::system)?;
         let message = platform::enter_wallpaper(hwnd).map_err(crate::error::CommandError::system)?;
         {

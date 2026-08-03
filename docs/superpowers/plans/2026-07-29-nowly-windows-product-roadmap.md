@@ -20,9 +20,9 @@
 | 2. Event vertical slice | **已完成**（2026-07-29） | 月份查询、完整 CRUD、离线日期/时间控件及自动化门禁通过 |
 | 3. Task vertical slice | **已完成**（2026-07-29） | 稳定排序、完整 CRUD、乐观完成回滚/重试、日期详情创建及双向事务关联通过 |
 | 4. Note vertical slice | **已完成**（2026-07-29） | 便签 CRUD、固定颜色、置顶排序、主界面摘要、全部便签管理及自动化门禁通过 |
-| 5. Settings and window lifecycle | 待开始 | 下一步：先编写并审批详细计划 |
-| 6. Windows system integration | 未开始 | |
-| 7. Release verification | 未开始 | |
+| 5. Settings and window lifecycle | **已完成**（2026-08-03） | 设置持久化、权威窗口模式、关闭分流、浮层清理与托盘菜单已交付 |
+| 6. Windows system integration | **已完成**（2026-08-03） | 后台自启动、单实例、稳定显示器枚举/回退及现有事件驱动恢复已交付 |
+| 7. Release verification | **已完成**（2026-08-03） | 自动化门禁与安装包构建通过；实机矩阵及性能记录模板已归档 |
 
 阶段 1–3 交付的、后续阶段必须遵守的契约：
 
@@ -62,16 +62,16 @@
    Plan: `docs/superpowers/plans/2026-07-29-nowly-notes.md`
    Outcome: note creation/edit/delete, pinning, fixed colors, dashboard summaries, and the all-notes dialog.
 
-5. **Settings and window lifecycle**
-   Planned document: `docs/superpowers/plans/2026-07-29-nowly-window-lifecycle.md`
+5. **Settings and window lifecycle** — **已完成**
+   Plan: `docs/superpowers/plans/2026-07-29-nowly-window-lifecycle.md`
    Outcome: persisted settings, authoritative window mode, close-to-wallpaper/close-to-tray decision, overlay cleanup, and expanded tray actions.
 
-6. **Windows system integration**
-   Planned document: `docs/superpowers/plans/2026-07-29-nowly-windows-integration.md`
+6. **Windows system integration** — **已完成**
+   Plan: `docs/superpowers/plans/2026-07-29-nowly-windows-integration.md`
    Outcome: login startup, background launch, single instance, stable monitor enumeration/selection, disconnect fallback, display-change handling, and Explorer recovery.
 
-7. **Release verification**
-   Planned document: `docs/superpowers/plans/2026-07-29-nowly-release-verification.md`
+7. **Release verification** — **已完成**
+   Plan: `docs/superpowers/plans/2026-07-29-nowly-release-verification.md`
    Outcome: full automated suites, Windows 10/11 manual matrix, idle-resource checks, installer verification, usage documentation, and known limitations.
 
 ## Sequencing rules
