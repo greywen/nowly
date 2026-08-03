@@ -11,6 +11,7 @@ import { NotesWidget } from '../notes/NotesWidget';
 import { useNotes } from '../notes/useNotes';
 import { DesktopShell } from './layout/DesktopShell';
 import { useSettings } from '../settings/useSettings';
+import { useCurrentTime } from './useCurrentTime';
 
 type WindowMode = 'wallpaper' | 'foreground';
 
@@ -47,7 +48,7 @@ export function App() {
   const [isSwitchingWindowMode, setIsSwitchingWindowMode] = useState(false);
   const isSwitchingWindowModeRef = useRef(false);
 
-  const now = new Date();
+  const now = useCurrentTime();
   const todayIso = localIsoDate(now);
   const todayEventCount = events.filter((event) => event.startAt.startsWith(todayIso)).length;
   const importantTaskCount = tasks.filter(

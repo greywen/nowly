@@ -1,6 +1,6 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RepositoryProvider } from '../data/RepositoryContext';
 import type { AppSettings, NowlyRepository } from '../data/nowly-repository';
 import { App } from './App';
@@ -67,6 +67,10 @@ describe('App startup and window behavior', () => {
     invokeMock.mockResolvedValue('ok');
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('renders persisted empty startup data instead of samples', async () => {
     renderApp();
     expect(screen.getByText('正在读取本地日程')).toBeInTheDocument();
@@ -77,6 +81,18 @@ describe('App startup and window behavior', () => {
     expect(screen.getByText('还没有便签')).toBeInTheDocument();
     expect(screen.queryByText('设计评审')).not.toBeInTheDocument();
     expect(screen.queryByText('产品原则')).not.toBeInTheDocument();
+  });
+
+  it('updates the displayed time at the next minute without another state change', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 6, 23, 9, 41, 40));
+    renderApp();
+
+    expect(screen.getByLabelText('当前时间 09:41')).toBeInTheDocument();
+
+    act(() => vi.advanceTimersByTime(20_000));
+
+    expect(screen.getByLabelText('当前时间 09:42')).toBeInTheDocument();
   });
 
   it('keeps healthy modules visible when one read fails', async () => {
