@@ -15,7 +15,6 @@ pub fn select_target_monitor<'a>(monitors:&'a [MonitorInfo], saved:Option<&str>)
 
 #[tauri::command]
 pub fn list_monitors(window:tauri::Window)->Result<Vec<MonitorInfo>,crate::error::CommandError>{
-    let current=window.current_monitor().map_err(crate::error::CommandError::system)?;
     let primary=window.primary_monitor().map_err(crate::error::CommandError::system)?;
     let monitors=window.available_monitors().map_err(crate::error::CommandError::system)?;
     Ok(monitors.into_iter().map(|monitor|{

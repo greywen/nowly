@@ -61,6 +61,10 @@ fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main_window(app)))
+        .plugin(tauri_plugin_autostart::Builder::new()
+            .args(["--background"])
+            .build())
         .setup(|app| {
             let app_dir = app
                 .path()
