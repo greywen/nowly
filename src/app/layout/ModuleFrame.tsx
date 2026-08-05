@@ -1,4 +1,4 @@
-import { GripVertical } from 'lucide-react';
+import { GripVertical, MoveDiagonal2 } from 'lucide-react';
 import type { CSSProperties, PointerEvent, ReactNode } from 'react';
 import type { WidgetDefinition } from '../../widgets/widget-registry';
 
@@ -37,7 +37,12 @@ export function ModuleFrame({
     <section className={className} style={style} data-testid="module-frame" data-widget-id={definition.id}>
       {editing ? (
         <div className="module-frame__toolbar">
-          <span className="module-frame__handle" data-testid="module-frame-handle" aria-hidden="true">
+          <span
+            className="module-frame__handle"
+            data-testid="module-frame-handle"
+            aria-hidden="true"
+            onPointerDown={onMovePointerDown}
+          >
             <GripVertical />
           </span>
           <span className="module-frame__title">{definition.name}</span>
@@ -46,11 +51,7 @@ export function ModuleFrame({
       <div className="module-frame__body">
         {children}
         {editing ? (
-          <div
-            className="module-frame__overlay"
-            data-testid="module-frame-overlay"
-            onPointerDown={onMovePointerDown}
-          />
+          <div className="module-frame__overlay" data-testid="module-frame-overlay" />
         ) : null}
       </div>
       {editing ? (
@@ -59,7 +60,9 @@ export function ModuleFrame({
           data-testid="module-frame-resize"
           aria-hidden="true"
           onPointerDown={onResizePointerDown}
-        />
+        >
+          <MoveDiagonal2 />
+        </span>
       ) : null}
     </section>
   );

@@ -41,8 +41,8 @@ describe('ModuleGrid', () => {
     render(<ModuleGrid items={items} editing onMove={onMove} onResize={vi.fn()} />);
     const grid = sizeGrid();
 
-    const overlay = within(frameOf('notes region')).getByTestId('module-frame-overlay');
-    fireEvent.pointerDown(overlay, { clientX: 0, clientY: 0 });
+    const handle = within(frameOf('notes region')).getByTestId('module-frame-handle');
+    fireEvent.pointerDown(handle, { clientX: 0, clientY: 0 });
     fireEvent.pointerMove(grid, { clientX: 500, clientY: 0 });
     fireEvent.pointerUp(grid);
 
@@ -54,8 +54,8 @@ describe('ModuleGrid', () => {
     render(<ModuleGrid items={items} editing onMove={onMove} onResize={vi.fn()} />);
     const grid = sizeGrid();
 
-    const overlay = within(frameOf('notes region')).getByTestId('module-frame-overlay');
-    fireEvent.pointerDown(overlay, { clientX: 0, clientY: 0 });
+    const handle = within(frameOf('notes region')).getByTestId('module-frame-handle');
+    fireEvent.pointerDown(handle, { clientX: 0, clientY: 0 });
     fireEvent.pointerMove(grid, { clientX: 0, clientY: -400 });
     fireEvent.pointerUp(grid);
 

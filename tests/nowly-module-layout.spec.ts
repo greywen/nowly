@@ -124,9 +124,10 @@ test('moves the notes module into a freed cell', async ({ page }) => {
   await expect.poll(async () => await storedRect(page, 'calendar')).toMatchObject({ w: 5, h: 4 });
 
   // Now drag notes (bottom-right 5x3 at x=7,y=5) left into the freed column 0.
+  // Moves only start from the drag handle now, not the body.
   const notes = frame(page, 'notes');
-  const overlay = notes.getByTestId('module-frame-overlay');
-  const notesBox = (await overlay.boundingBox())!;
+  const handle = notes.getByTestId('module-frame-handle');
+  const notesBox = (await handle.boundingBox())!;
   await page.mouse.move(notesBox.x + notesBox.width / 2, notesBox.y + notesBox.height / 2);
   await page.mouse.down();
   await page.mouse.move(
@@ -148,8 +149,8 @@ test('rejects a move that would overlap another module', async ({ page }) => {
   const notes = frame(page, 'notes');
   await expect(notes).toHaveCSS('grid-column-start', '8');
 
-  const overlay = notes.getByTestId('module-frame-overlay');
-  const box = (await overlay.boundingBox())!;
+  const handle = notes.getByTestId('module-frame-handle');
+  const box = (await handle.boundingBox())!;
   const stride = await cellStride(page);
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();

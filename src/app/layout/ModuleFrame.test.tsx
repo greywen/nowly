@@ -32,7 +32,19 @@ describe('ModuleFrame', () => {
     expect(screen.getByText('日历')).toBeInTheDocument();
   });
 
-  it('starts a move on pointer down over the frame while editing', () => {
+  it('starts a move on pointer down over the drag handle while editing', () => {
+    const onMovePointerDown = vi.fn();
+    render(
+      <ModuleFrame definition={calendar} editing onMovePointerDown={onMovePointerDown}>
+        <div>calendar region</div>
+      </ModuleFrame>
+    );
+
+    fireEvent.pointerDown(screen.getByTestId('module-frame-handle'));
+    expect(onMovePointerDown).toHaveBeenCalledOnce();
+  });
+
+  it('does not start a move on pointer down over the blocking overlay', () => {
     const onMovePointerDown = vi.fn();
     render(
       <ModuleFrame definition={calendar} editing onMovePointerDown={onMovePointerDown}>
@@ -41,7 +53,7 @@ describe('ModuleFrame', () => {
     );
 
     fireEvent.pointerDown(screen.getByTestId('module-frame-overlay'));
-    expect(onMovePointerDown).toHaveBeenCalledOnce();
+    expect(onMovePointerDown).not.toHaveBeenCalled();
   });
 
   it('starts a resize on pointer down over the resize handle while editing', () => {
