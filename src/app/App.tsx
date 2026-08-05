@@ -1,5 +1,6 @@
 import { listen } from '@tauri-apps/api/event';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import type { WidgetId } from '../widgets/widget-registry';
 import { CalendarWidget } from '../calendar/CalendarWidget';
 import { useEvents } from '../calendar/useEvents';
 import type { ModalState } from '../lib/modal-store';
@@ -56,6 +57,66 @@ export function App() {
   ).length;
   const summary = `今天 ${todayEventCount} 个日程 · ${importantTaskCount} 个重要任务 · ${notes.length} 条便签`;
 
+  const settings = settingsFeature.settings.data;
+  const modules: Partial<Record<WidgetId, ReactNode>> = {};
+  if (settings.calendarEnabled) {
+    modules.calendar = (
+      <CalendarWidget
+        year={eventsFeature.year}
+        monthIndex={eventsFeature.monthIndex}
+        todayIso={todayIso}
+        events={events}
+        status={eventsFeature.events.status}
+        errorMessage={eventsFeature.events.status === 'error' ? eventsFeature.events.message : undefined}
+        view={eventsFeature.view}
+        anchorIso={eventsFeature.anchorIso}
+        onRetry={() => void eventsFeature.retryEvents()}
+        onCreateEvent={() => openModalInForeground({ type: 'event-create', dateIso: todayIso, trigger: null })}
+        onSetView={eventsFeature.setView}
+        onPreviousMonth={eventsFeature.goToPrevious}
+        onNextMonth={eventsFeature.goToNext}
+        onToday={eventsFeature.goToToday}
+        onCreateEventForDate={(dateIso) => openModalInForeground({ type: 'event-create', dateIso, trigger: null })}
+        onOpenDate={(isoDate) => openModalInForeground({ type: 'date', isoDate, trigger: null })}
+        onOpenEvent={(event) => openModalInForeground({ type: 'event-edit', event, trigger: null })}
+        onMoveEvent={(event, isoDate) => void eventsFeature.moveEvent(event, isoDate)}
+        onMoveEventToHour={(event, isoDate, startHour) => void eventsFeature.moveEventToHour(event, isoDate, startHour)}
+        onResizeEvent={(event, endIsoDate) => void eventsFeature.resizeEvent(event, endIsoDate)}
+      />
+    );
+  }
+  if (settings.matrixEnabled) {
+    modules.matrix = (
+      <MatrixWidget
+        tasks={tasks}
+        events={events}
+        status={tasksFeature.tasks.status}
+        errorMessage={tasksFeature.tasks.status === 'error' ? tasksFeature.tasks.message : undefined}
+        completionError={tasksFeature.failedCompletion?.message ?? null}
+        pendingTaskIds={tasksFeature.pendingTaskIds}
+        onRetry={() => void tasksFeature.retryTasks()}
+        onCreateTask={() => openModalInForeground({ type:'task-create', dueDate:null, trigger:null })}
+        onOpenTask={(task, trigger) => openModalInForeground({ type:'task-edit', task, trigger })}
+        onToggleTask={(task, completed) => void tasksFeature.setTaskCompleted(task, completed)}
+        onRetryCompletion={() => void tasksFeature.retryFailedCompletion()}
+        onDismissCompletionError={tasksFeature.dismissTaskError}
+      />
+    );
+  }
+  if (settings.notesEnabled) {
+    modules.notes = (
+      <NotesWidget
+        notes={notes}
+        status={notesFeature.notes.status}
+        errorMessage={notesFeature.notes.status === 'error' ? notesFeature.notes.message : undefined}
+        onRetry={() => void notesFeature.retryNotes()}
+        onCreateNote={() => openModalInForeground({type:'note-create',trigger:null})}
+        onOpenNote={(note,trigger) => openModalInForeground({type:'note-edit',note,trigger})}
+        onViewAll={(trigger) => openModalInForeground({type:'notes-manager',trigger})}
+      />
+    );
+  }
+
   useEffect(() => {
     const removers: Array<() => void> = [];
     void listen<WindowMode>('window-mode-changed', (event) => setWindowMode(event.payload)).then(remove => removers.push(remove));
@@ -103,57 +164,7 @@ export function App() {
         time={timeFormatter.format(now)}
         dateText={dateFormatter.format(now)}
         summary={summary}
-        calendar={
-          <CalendarWidget
-            year={eventsFeature.year}
-            monthIndex={eventsFeature.monthIndex}
-            todayIso={todayIso}
-            events={events}
-            status={eventsFeature.events.status}
-            errorMessage={eventsFeature.events.status === 'error' ? eventsFeature.events.message : undefined}
-            view={eventsFeature.view}
-            anchorIso={eventsFeature.anchorIso}
-            onRetry={() => void eventsFeature.retryEvents()}
-            onCreateEvent={() => openModalInForeground({ type: 'event-create', dateIso: todayIso, trigger: null })}
-            onSetView={eventsFeature.setView}
-            onPreviousMonth={eventsFeature.goToPrevious}
-            onNextMonth={eventsFeature.goToNext}
-            onToday={eventsFeature.goToToday}
-            onCreateEventForDate={(dateIso) => openModalInForeground({ type: 'event-create', dateIso, trigger: null })}
-            onOpenDate={(isoDate) => openModalInForeground({ type: 'date', isoDate, trigger: null })}
-            onOpenEvent={(event) => openModalInForeground({ type: 'event-edit', event, trigger: null })}
-            onMoveEvent={(event, isoDate) => void eventsFeature.moveEvent(event, isoDate)}
-            onMoveEventToHour={(event, isoDate, startHour) => void eventsFeature.moveEventToHour(event, isoDate, startHour)}
-            onResizeEvent={(event, endIsoDate) => void eventsFeature.resizeEvent(event, endIsoDate)}
-          />
-        }
-        matrix={
-          <MatrixWidget
-            tasks={tasks}
-            events={events}
-            status={tasksFeature.tasks.status}
-            errorMessage={tasksFeature.tasks.status === 'error' ? tasksFeature.tasks.message : undefined}
-            completionError={tasksFeature.failedCompletion?.message ?? null}
-            pendingTaskIds={tasksFeature.pendingTaskIds}
-            onRetry={() => void tasksFeature.retryTasks()}
-            onCreateTask={() => openModalInForeground({ type:'task-create', dueDate:null, trigger:null })}
-            onOpenTask={(task, trigger) => openModalInForeground({ type:'task-edit', task, trigger })}
-            onToggleTask={(task, completed) => void tasksFeature.setTaskCompleted(task, completed)}
-            onRetryCompletion={() => void tasksFeature.retryFailedCompletion()}
-            onDismissCompletionError={tasksFeature.dismissTaskError}
-          />
-        }
-        notes={
-          <NotesWidget
-            notes={notes}
-            status={notesFeature.notes.status}
-            errorMessage={notesFeature.notes.status === 'error' ? notesFeature.notes.message : undefined}
-            onRetry={() => void notesFeature.retryNotes()}
-            onCreateNote={() => openModalInForeground({type:'note-create',trigger:null})}
-            onOpenNote={(note,trigger) => openModalInForeground({type:'note-edit',note,trigger})}
-            onViewAll={(trigger) => openModalInForeground({type:'notes-manager',trigger})}
-          />
-        }
+        modules={modules}
         isModeSwitching={isSwitchingWindowMode}
         onSetWallpaper={() => void runWindowModeSwitch(switchToWallpaper)}
         onWallpaperDoubleClick={() => void runWindowModeSwitch(switchToForeground)}

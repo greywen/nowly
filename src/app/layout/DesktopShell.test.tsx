@@ -1,17 +1,30 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ReactNode } from 'react';
+import type { WidgetId } from '../../widgets/widget-registry';
 import { DesktopShell } from './DesktopShell';
 
+function modules(overrides: Partial<Record<WidgetId, ReactNode>> = {}): Partial<Record<WidgetId, ReactNode>> {
+  return {
+    calendar: <div>calendar region</div>,
+    matrix: <div>matrix region</div>,
+    notes: <div>notes region</div>,
+    ...overrides
+  };
+}
+
 describe('DesktopShell', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
   it('renders a fixed viewport shell with calendar, matrix, and notes regions', () => {
     render(
       <DesktopShell
         time="09:41"
         dateText="2026年7月23日 星期四"
         summary="今天 3 个日程 · 2 个重要任务 · 2 条便签"
-        calendar={<div>calendar region</div>}
-        matrix={<div>matrix region</div>}
-        notes={<div>notes region</div>}
+        modules={modules()}
       />
     );
 
@@ -28,9 +41,7 @@ describe('DesktopShell', () => {
         time="09:41"
         dateText="2026 年 7 月 23 日，星期四"
         summary="今天暂无日程 · 暂无重要任务 · 暂无便签"
-        calendar={<div>calendar</div>}
-        matrix={<div>matrix</div>}
-        notes={<div>notes</div>}
+        modules={modules()}
       />
     );
 
@@ -49,9 +60,7 @@ describe('DesktopShell', () => {
         time="09:41"
         dateText="2026年7月23日 星期四"
         summary="summary"
-        calendar={<div />}
-        matrix={<div />}
-        notes={<div />}
+        modules={modules()}
         onSetWallpaper={onSetWallpaper}
       />
     );
@@ -69,12 +78,11 @@ describe('DesktopShell', () => {
         time="09:41"
         dateText="2026年7月23日 星期四"
         summary="summary"
-        calendar={<div />}
-        matrix={<div />}
-        notes={<div />}
+        modules={modules()}
       />
     );
     expect(screen.queryByRole('button', { name: '设为壁纸' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '编辑布局' })).not.toBeInTheDocument();
   });
 
   it('returns wallpaper mode to foreground on a double click anywhere', () => {
@@ -85,9 +93,7 @@ describe('DesktopShell', () => {
         time="09:41"
         dateText="2026年7月23日 星期四"
         summary="summary"
-        calendar={<div>calendar region</div>}
-        matrix={<div />}
-        notes={<div />}
+        modules={modules()}
         onWallpaperDoubleClick={onWallpaperDoubleClick}
       />
     );
@@ -102,12 +108,65 @@ describe('DesktopShell', () => {
         time="09:41"
         dateText="2026年7月23日 星期四"
         summary="今天 3 个日程 · 2 个重要任务 · 2 条便签"
-        calendar={<div>calendar region</div>}
-        matrix={<div>matrix region</div>}
-        notes={<div>notes region</div>}
+        modules={modules()}
       />
     );
 
     expect(screen.getByTestId('desktop-root').className).not.toMatch(/(?:^|\s)(?:p-|sm:p-|xl:p-)/);
+  });
+
+  it('toggles edit mode to reveal size switchers and a reset control', () => {
+    render(
+      <DesktopShell
+        time="09:41"
+        dateText="2026年7月23日 星期四"
+        summary="summary"
+        modules={modules()}
+      />
+    );
+
+    expect(screen.queryByRole('button', { name: '切换日历尺寸' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '重置布局' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑布局' }));
+
+    expect(screen.getByRole('button', { name: '切换日历尺寸' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '重置布局' })).toBeInTheDocument();
+  });
+
+  it('cycles a module preset and resets the layout from edit mode', () => {
+    render(
+      <DesktopShell
+        time="09:41"
+        dateText="2026年7月23日 星期四"
+        summary="summary"
+        modules={modules()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑布局' }));
+    const sizeButton = screen.getByRole('button', { name: '切换日历尺寸' });
+    expect(sizeButton).toHaveTextContent('大');
+
+    fireEvent.click(sizeButton);
+    expect(screen.getByRole('button', { name: '切换日历尺寸' })).toHaveTextContent('中');
+
+    fireEvent.click(screen.getByRole('button', { name: '重置布局' }));
+    expect(screen.getByRole('button', { name: '切换日历尺寸' })).toHaveTextContent('大');
+  });
+
+  it('renders only the modules provided in the modules map', () => {
+    render(
+      <DesktopShell
+        time="09:41"
+        dateText="2026年7月23日 星期四"
+        summary="summary"
+        modules={{ calendar: <div>calendar region</div> }}
+      />
+    );
+
+    expect(screen.getByText('calendar region')).toBeInTheDocument();
+    expect(screen.queryByText('matrix region')).not.toBeInTheDocument();
+    expect(screen.queryByText('notes region')).not.toBeInTheDocument();
   });
 });
