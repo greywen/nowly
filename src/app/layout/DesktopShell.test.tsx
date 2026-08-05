@@ -115,7 +115,7 @@ describe('DesktopShell', () => {
     expect(screen.getByTestId('desktop-root').className).not.toMatch(/(?:^|\s)(?:p-|sm:p-|xl:p-)/);
   });
 
-  it('toggles edit mode to reveal size switchers and a reset control', () => {
+  it('toggles edit mode to reveal drag handles, resize handles, and a reset control', () => {
     render(
       <DesktopShell
         time="09:41"
@@ -125,16 +125,18 @@ describe('DesktopShell', () => {
       />
     );
 
-    expect(screen.queryByRole('button', { name: '切换日历尺寸' })).not.toBeInTheDocument();
+    expect(screen.queryAllByTestId('module-frame-handle')).toHaveLength(0);
+    expect(screen.queryAllByTestId('module-frame-resize')).toHaveLength(0);
     expect(screen.queryByRole('button', { name: '重置布局' })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '编辑布局' }));
 
-    expect(screen.getByRole('button', { name: '切换日历尺寸' })).toBeInTheDocument();
+    expect(screen.getAllByTestId('module-frame-handle')).toHaveLength(3);
+    expect(screen.getAllByTestId('module-frame-resize')).toHaveLength(3);
     expect(screen.getByRole('button', { name: '重置布局' })).toBeInTheDocument();
   });
 
-  it('cycles a module preset and resets the layout from edit mode', () => {
+  it('leaves edit mode and hides the editing affordances again', () => {
     render(
       <DesktopShell
         time="09:41"
@@ -145,14 +147,11 @@ describe('DesktopShell', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: '编辑布局' }));
-    const sizeButton = screen.getByRole('button', { name: '切换日历尺寸' });
-    expect(sizeButton).toHaveTextContent('大');
+    expect(screen.getAllByTestId('module-frame-resize')).toHaveLength(3);
 
-    fireEvent.click(sizeButton);
-    expect(screen.getByRole('button', { name: '切换日历尺寸' })).toHaveTextContent('中');
-
-    fireEvent.click(screen.getByRole('button', { name: '重置布局' }));
-    expect(screen.getByRole('button', { name: '切换日历尺寸' })).toHaveTextContent('大');
+    fireEvent.click(screen.getByRole('button', { name: '编辑布局' }));
+    expect(screen.queryAllByTestId('module-frame-resize')).toHaveLength(0);
+    expect(screen.queryByRole('button', { name: '重置布局' })).not.toBeInTheDocument();
   });
 
   it('renders only the modules provided in the modules map', () => {

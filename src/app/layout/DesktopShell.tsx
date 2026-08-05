@@ -28,12 +28,16 @@ export function DesktopShell({
   onOpenSettings
 }: DesktopShellProps) {
   const foreground = mode === 'foreground';
-  const { layout, reorder, cyclePreset, reset } = useModuleLayout();
+  const { layout, move, resize, reset } = useModuleLayout();
   const [isEditing, setIsEditing] = useState(false);
 
   const items: ModuleGridItem[] = layout
     .filter((entry) => modules[entry.id] !== undefined && getWidgetDefinition(entry.id) !== undefined)
-    .map((entry) => ({ id: entry.id, presetId: entry.presetId, content: modules[entry.id] }));
+    .map((entry) => ({
+      id: entry.id,
+      rect: { x: entry.x, y: entry.y, w: entry.w, h: entry.h },
+      content: modules[entry.id]
+    }));
 
   return (
     <div
@@ -86,12 +90,7 @@ export function DesktopShell({
         </div>
       </header>
       <main className="workspace">
-        <ModuleGrid
-          items={items}
-          editing={foreground && isEditing}
-          onReorder={reorder}
-          onCyclePreset={cyclePreset}
-        />
+        <ModuleGrid items={items} editing={foreground && isEditing} onMove={move} onResize={resize} />
       </main>
     </div>
   );
