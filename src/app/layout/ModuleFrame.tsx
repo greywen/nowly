@@ -61,8 +61,10 @@ export function ModuleFrame({
           </button>
         </div>
       ) : null}
-      <div className="module-frame__body">{children}</div>
-      {editing ? <div className="module-frame__overlay" data-testid="module-frame-overlay" /> : null}
+      <div className="module-frame__body">
+        {children}
+        {editing ? <div className="module-frame__overlay" data-testid="module-frame-overlay" /> : null}
+      </div>
     </section>
   );
 }

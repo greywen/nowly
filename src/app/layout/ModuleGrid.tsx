@@ -19,7 +19,12 @@ export function ModuleGrid({ items, editing, onReorder, onCyclePreset }: ModuleG
   const [draggingId, setDraggingId] = useState<WidgetId | null>(null);
   const [targetId, setTargetId] = useState<WidgetId | null>(null);
 
-  function handleDragStart(id: WidgetId) {
+  function handleDragStart(event: DragEvent<HTMLElement>, id: WidgetId) {
+    // Chromium-based webviews only start a drag when dataTransfer carries data.
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', id);
+    }
     setDraggingId(id);
   }
 
@@ -34,7 +39,8 @@ export function ModuleGrid({ items, editing, onReorder, onCyclePreset }: ModuleG
     if (id !== targetId) setTargetId(id);
   }
 
-  function handleDrop(id: WidgetId) {
+  function handleDrop(event: DragEvent<HTMLElement>, id: WidgetId) {
+    event.preventDefault();
     if (draggingId !== null && draggingId !== id) {
       onReorder(draggingId, id);
     }
@@ -57,11 +63,11 @@ export function ModuleGrid({ items, editing, onReorder, onCyclePreset }: ModuleG
             onCyclePreset={onCyclePreset}
             style={{ gridColumn: `span ${preset.cols}`, gridRow: `span ${preset.rows}` }}
             isDropTarget={editing && targetId === item.id && draggingId !== item.id}
-            onDragStart={() => handleDragStart(item.id)}
+            onDragStart={(event) => handleDragStart(event, item.id)}
             onDragEnd={handleDragEnd}
             onDragOver={(event) => handleDragOver(event, item.id)}
             onDragLeave={() => setTargetId((current) => (current === item.id ? null : current))}
-            onDrop={() => handleDrop(item.id)}
+            onDrop={(event) => handleDrop(event, item.id)}
           >
             {item.content}
           </ModuleFrame>
