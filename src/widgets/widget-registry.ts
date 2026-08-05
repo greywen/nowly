@@ -18,100 +18,114 @@ export function getEnabledWidgets(widgets: WidgetConfig[]): WidgetConfig[] {
   return widgets.filter((widget) => widget.enabled).sort((left, right) => left.order - right.order);
 }
 
-export type SizePreset = { id: string; label: string; cols: number; rows: number };
+// --- Free-form tiling layout -------------------------------------------------
+
+export const GRID_COLS = 12;
+export const GRID_ROWS = 8;
+export const GRID_GAP_PX = 16;
+
+export type Rect = { x: number; y: number; w: number; h: number };
 
 export type WidgetDefinition = {
   id: WidgetId;
   name: string;
-  presets: SizePreset[];
-  defaultPresetId: string;
+  minW: number;
+  minH: number;
+  default: Rect;
 };
 
-export type ModuleLayout = { id: WidgetId; presetId: string };
+export type ModuleLayout = { id: WidgetId } & Rect;
 export type LayoutState = ModuleLayout[];
 
 export const widgetDefinitions: WidgetDefinition[] = [
-  {
-    id: 'calendar',
-    name: '日历',
-    presets: [
-      { id: 'medium', label: '中', cols: 6, rows: 4 },
-      { id: 'large', label: '大', cols: 8, rows: 6 }
-    ],
-    defaultPresetId: 'large'
-  },
-  {
-    id: 'matrix',
-    name: '四象限',
-    presets: [
-      { id: 'small', label: '小', cols: 4, rows: 4 },
-      { id: 'medium', label: '中', cols: 6, rows: 5 }
-    ],
-    defaultPresetId: 'medium'
-  },
-  {
-    id: 'notes',
-    name: '便签',
-    presets: [
-      { id: 'small', label: '小', cols: 3, rows: 3 },
-      { id: 'medium', label: '中', cols: 4, rows: 5 }
-    ],
-    defaultPresetId: 'small'
-  }
+  { id: 'calendar', name: '日历', minW: 5, minH: 4, default: { x: 0, y: 0, w: 7, h: 8 } },
+  { id: 'matrix', name: '四象限', minW: 3, minH: 3, default: { x: 7, y: 0, w: 5, h: 5 } },
+  { id: 'notes', name: '便签', minW: 2, minH: 2, default: { x: 7, y: 5, w: 5, h: 3 } }
 ];
 
 export const defaultLayout: LayoutState = widgetDefinitions.map((definition) => ({
   id: definition.id,
-  presetId: definition.defaultPresetId
+  ...definition.default
 }));
 
 export function getWidgetDefinition(id: WidgetId): WidgetDefinition | undefined {
   return widgetDefinitions.find((definition) => definition.id === id);
 }
 
-export function getPreset(id: WidgetId, presetId: string): SizePreset | undefined {
-  return getWidgetDefinition(id)?.presets.find((preset) => preset.id === presetId);
+export function rectsOverlap(a: Rect, b: Rect): boolean {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 }
 
-export function getNextPresetId(id: WidgetId, presetId: string): string {
+export function isWithinBounds(rect: Rect): boolean {
+  return (
+    rect.x >= 0 &&
+    rect.y >= 0 &&
+    rect.w >= 1 &&
+    rect.h >= 1 &&
+    rect.x + rect.w <= GRID_COLS &&
+    rect.y + rect.h <= GRID_ROWS
+  );
+}
+
+export function clampToBounds(rect: Rect): Rect {
+  const w = Math.min(rect.w, GRID_COLS);
+  const h = Math.min(rect.h, GRID_ROWS);
+  const x = Math.min(Math.max(rect.x, 0), GRID_COLS - w);
+  const y = Math.min(Math.max(rect.y, 0), GRID_ROWS - h);
+  return { x, y, w, h };
+}
+
+// Can `id` occupy `rect` given the rest of `layout`? Enforces bounds, the
+// module's own minimum size, and no overlap with any other module.
+export function canPlace(layout: LayoutState, id: WidgetId, rect: Rect): boolean {
+  if (!isWithinBounds(rect)) return false;
   const definition = getWidgetDefinition(id);
-  if (!definition) return presetId;
-  const index = definition.presets.findIndex((preset) => preset.id === presetId);
-  const next = definition.presets[(index + 1) % definition.presets.length];
-  return next.id;
+  if (definition && (rect.w < definition.minW || rect.h < definition.minH)) return false;
+  return layout.every((item) => item.id === id || !rectsOverlap(item, rect));
 }
 
-export function reorderLayout(layout: LayoutState, fromId: WidgetId, toId: WidgetId): LayoutState {
-  if (fromId === toId) return layout;
-  const fromIndex = layout.findIndex((item) => item.id === fromId);
-  const toIndex = layout.findIndex((item) => item.id === toId);
-  if (fromIndex === -1 || toIndex === -1) return layout;
-  const next = layout.filter((item) => item.id !== fromId);
-  const insertAt = next.findIndex((item) => item.id === toId);
-  next.splice(insertAt, 0, layout[fromIndex]);
-  return next;
+function isValidLayout(layout: LayoutState): boolean {
+  for (const definition of widgetDefinitions) {
+    if (!layout.some((item) => item.id === definition.id)) return false;
+  }
+  for (let a = 0; a < layout.length; a += 1) {
+    const item = layout[a];
+    const definition = getWidgetDefinition(item.id);
+    if (!definition) return false;
+    if (!isWithinBounds(item)) return false;
+    if (item.w < definition.minW || item.h < definition.minH) return false;
+    for (let b = a + 1; b < layout.length; b += 1) {
+      if (rectsOverlap(item, layout[b])) return false;
+    }
+  }
+  return true;
+}
+
+function isIntRect(value: unknown): value is Rect {
+  if (typeof value !== 'object' || value === null) return false;
+  const rect = value as Record<string, unknown>;
+  return (
+    Number.isInteger(rect.x) &&
+    Number.isInteger(rect.y) &&
+    Number.isInteger(rect.w) &&
+    Number.isInteger(rect.h)
+  );
 }
 
 export function normalizeLayout(raw: unknown): LayoutState {
   if (!Array.isArray(raw)) return defaultLayout;
   const seen = new Set<WidgetId>();
   const result: LayoutState = [];
-  for (const item of raw) {
-    if (typeof item !== 'object' || item === null) return defaultLayout;
-    const id = (item as { id?: unknown }).id;
-    const presetId = (item as { presetId?: unknown }).presetId;
-    if (typeof id !== 'string' || typeof presetId !== 'string') return defaultLayout;
-    const definition = getWidgetDefinition(id as WidgetId);
-    if (!definition) return defaultLayout;
-    if (!definition.presets.some((preset) => preset.id === presetId)) return defaultLayout;
-    if (seen.has(id as WidgetId)) continue;
+  for (const entry of raw) {
+    if (typeof entry !== 'object' || entry === null) return defaultLayout;
+    const id = (entry as { id?: unknown }).id;
+    if (typeof id !== 'string' || !getWidgetDefinition(id as WidgetId)) return defaultLayout;
+    if (!isIntRect(entry)) return defaultLayout;
+    if (seen.has(id as WidgetId)) return defaultLayout;
     seen.add(id as WidgetId);
-    result.push({ id: id as WidgetId, presetId });
+    const { x, y, w, h } = entry as unknown as Rect;
+    result.push({ id: id as WidgetId, x, y, w, h });
   }
-  for (const definition of widgetDefinitions) {
-    if (!seen.has(definition.id)) {
-      result.push({ id: definition.id, presetId: definition.defaultPresetId });
-    }
-  }
+  if (!isValidLayout(result)) return defaultLayout;
   return result;
 }

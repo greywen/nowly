@@ -1,9 +1,9 @@
 import { useCallback, useState } from 'react';
 import {
+  canPlace,
+  clampToBounds,
   defaultLayout,
-  getNextPresetId,
   normalizeLayout,
-  reorderLayout,
   type LayoutState,
   type WidgetId
 } from './widget-registry';
@@ -31,40 +31,48 @@ function writeLayout(layout: LayoutState) {
 export function useModuleLayout() {
   const [layout, setLayout] = useState<LayoutState>(() => readLayout());
 
-  const persist = useCallback((next: LayoutState) => {
+  const commit = useCallback((next: LayoutState) => {
     writeLayout(next);
     setLayout(next);
   }, []);
 
-  const reorder = useCallback((fromId: WidgetId, toId: WidgetId) => {
-    setLayout((current) => {
-      const next = reorderLayout(current, fromId, toId);
-      if (next !== current) writeLayout(next);
-      return next;
-    });
-  }, []);
+  // Move `id` so its top-left sits at `{x, y}` (clamped inside the grid),
+  // keeping its size. Rejected if the target cells are taken by another module.
+  const move = useCallback(
+    (id: WidgetId, position: { x: number; y: number }) => {
+      setLayout((current) => {
+        const item = current.find((entry) => entry.id === id);
+        if (!item) return current;
+        const target = clampToBounds({ x: position.x, y: position.y, w: item.w, h: item.h });
+        if (!canPlace(current, id, target)) return current;
+        const next = current.map((entry) => (entry.id === id ? { ...entry, ...target } : entry));
+        writeLayout(next);
+        return next;
+      });
+    },
+    []
+  );
 
-  const setPreset = useCallback((id: WidgetId, presetId: string) => {
-    setLayout((current) => {
-      const next = current.map((item) => (item.id === id ? { ...item, presetId } : item));
-      writeLayout(next);
-      return next;
-    });
-  }, []);
-
-  const cyclePreset = useCallback((id: WidgetId) => {
-    setLayout((current) => {
-      const next = current.map((item) =>
-        item.id === id ? { ...item, presetId: getNextPresetId(id, item.presetId) } : item
-      );
-      writeLayout(next);
-      return next;
-    });
-  }, []);
+  // Resize `id` to `{w, h}` from its fixed top-left. Rejected if it would spill
+  // out of the grid, drop below the module minimum, or overlap another module.
+  const resize = useCallback(
+    (id: WidgetId, size: { w: number; h: number }) => {
+      setLayout((current) => {
+        const item = current.find((entry) => entry.id === id);
+        if (!item) return current;
+        const target = { x: item.x, y: item.y, w: size.w, h: size.h };
+        if (!canPlace(current, id, target)) return current;
+        const next = current.map((entry) => (entry.id === id ? { ...entry, ...target } : entry));
+        writeLayout(next);
+        return next;
+      });
+    },
+    []
+  );
 
   const reset = useCallback(() => {
-    persist(defaultLayout);
-  }, [persist]);
+    commit(defaultLayout);
+  }, [commit]);
 
-  return { layout, reorder, setPreset, cyclePreset, reset };
+  return { layout, move, resize, reset };
 }

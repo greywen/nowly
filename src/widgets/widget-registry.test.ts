@@ -1,14 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import {
+  GRID_COLS,
+  GRID_ROWS,
+  canPlace,
+  clampToBounds,
   defaultLayout,
   defaultWidgets,
   getEnabledWidgets,
-  getNextPresetId,
-  getPreset,
   getWidgetDefinition,
+  isWithinBounds,
   normalizeLayout,
-  reorderLayout,
-  widgetDefinitions
+  rectsOverlap,
+  widgetDefinitions,
+  type LayoutState
 } from './widget-registry';
 
 describe('widget registry', () => {
@@ -19,57 +23,88 @@ describe('widget registry', () => {
 });
 
 describe('widget definitions', () => {
-  it('defines presets and a valid default preset for calendar, matrix, and notes', () => {
+  it('defines a name, minimum size, and default rect for calendar, matrix, and notes', () => {
     expect(widgetDefinitions.map((definition) => definition.id)).toEqual(['calendar', 'matrix', 'notes']);
     for (const definition of widgetDefinitions) {
-      expect(definition.presets.length).toBeGreaterThan(0);
-      expect(definition.presets.some((preset) => preset.id === definition.defaultPresetId)).toBe(true);
+      expect(definition.minW).toBeGreaterThan(0);
+      expect(definition.minH).toBeGreaterThan(0);
+      expect(definition.default.w).toBeGreaterThanOrEqual(definition.minW);
+      expect(definition.default.h).toBeGreaterThanOrEqual(definition.minH);
+      expect(isWithinBounds(definition.default)).toBe(true);
     }
   });
 
-  it('looks up a definition and a preset by id', () => {
+  it('looks up a definition by id', () => {
     expect(getWidgetDefinition('calendar')?.name).toBe('日历');
-    expect(getPreset('calendar', 'large')).toMatchObject({ cols: 8, rows: 6 });
-    expect(getPreset('calendar', 'missing')).toBeUndefined();
-  });
-
-  it('cycles to the next preset and wraps around', () => {
-    expect(getNextPresetId('calendar', 'medium')).toBe('large');
-    expect(getNextPresetId('calendar', 'large')).toBe('medium');
-    expect(getNextPresetId('notes', 'small')).toBe('medium');
-    expect(getNextPresetId('notes', 'medium')).toBe('small');
+    expect(getWidgetDefinition('focusTimer')).toBeUndefined();
   });
 });
 
 describe('defaultLayout', () => {
-  it('orders calendar, matrix, notes with their default presets', () => {
-    expect(defaultLayout).toEqual([
-      { id: 'calendar', presetId: 'large' },
-      { id: 'matrix', presetId: 'medium' },
-      { id: 'notes', presetId: 'small' }
-    ]);
+  it('tiles the whole 12x8 grid with no overlap and no holes', () => {
+    expect(defaultLayout.map((item) => item.id)).toEqual(['calendar', 'matrix', 'notes']);
+
+    let coveredArea = 0;
+    for (const item of defaultLayout) {
+      coveredArea += item.w * item.h;
+      expect(isWithinBounds(item)).toBe(true);
+    }
+    expect(coveredArea).toBe(GRID_COLS * GRID_ROWS);
+
+    for (let a = 0; a < defaultLayout.length; a += 1) {
+      for (let b = a + 1; b < defaultLayout.length; b += 1) {
+        expect(rectsOverlap(defaultLayout[a], defaultLayout[b])).toBe(false);
+      }
+    }
   });
 });
 
-describe('reorderLayout', () => {
-  it('moves a module to the target position by removing then inserting at the target index', () => {
-    const result = reorderLayout(defaultLayout, 'calendar', 'notes');
-    expect(result.map((item) => item.id)).toEqual(['matrix', 'calendar', 'notes']);
+describe('rectsOverlap', () => {
+  it('detects overlapping and adjacent rects', () => {
+    expect(rectsOverlap({ x: 0, y: 0, w: 4, h: 4 }, { x: 2, y: 2, w: 4, h: 4 })).toBe(true);
+    expect(rectsOverlap({ x: 0, y: 0, w: 4, h: 4 }, { x: 4, y: 0, w: 4, h: 4 })).toBe(false);
+    expect(rectsOverlap({ x: 0, y: 0, w: 4, h: 4 }, { x: 0, y: 4, w: 4, h: 4 })).toBe(false);
+  });
+});
+
+describe('isWithinBounds', () => {
+  it('accepts rects inside the grid and rejects those spilling out', () => {
+    expect(isWithinBounds({ x: 0, y: 0, w: 12, h: 8 })).toBe(true);
+    expect(isWithinBounds({ x: -1, y: 0, w: 4, h: 4 })).toBe(false);
+    expect(isWithinBounds({ x: 10, y: 0, w: 4, h: 4 })).toBe(false);
+    expect(isWithinBounds({ x: 0, y: 6, w: 4, h: 4 })).toBe(false);
+  });
+});
+
+describe('clampToBounds', () => {
+  it('shifts a rect back inside the grid keeping its size', () => {
+    expect(clampToBounds({ x: -3, y: -2, w: 4, h: 4 })).toEqual({ x: 0, y: 0, w: 4, h: 4 });
+    expect(clampToBounds({ x: 20, y: 20, w: 4, h: 4 })).toEqual({ x: 8, y: 4, w: 4, h: 4 });
+  });
+});
+
+describe('canPlace', () => {
+  const layout: LayoutState = [
+    { id: 'calendar', x: 0, y: 0, w: 5, h: 4 },
+    { id: 'matrix', x: 5, y: 0, w: 4, h: 4 },
+    { id: 'notes', x: 0, y: 4, w: 4, h: 3 }
+  ];
+
+  it('accepts a rect that fits in free space', () => {
+    expect(canPlace(layout, 'notes', { x: 5, y: 4, w: 4, h: 3 })).toBe(true);
   });
 
-  it('moves a later module before an earlier target', () => {
-    const result = reorderLayout(defaultLayout, 'notes', 'calendar');
-    expect(result.map((item) => item.id)).toEqual(['notes', 'calendar', 'matrix']);
+  it('rejects a rect that overlaps another module', () => {
+    expect(canPlace(layout, 'notes', { x: 0, y: 0, w: 4, h: 3 })).toBe(false);
   });
 
-  it('returns the layout unchanged when ids match or are unknown', () => {
-    expect(reorderLayout(defaultLayout, 'calendar', 'calendar')).toEqual(defaultLayout);
-    expect(reorderLayout(defaultLayout, 'calendar', 'focusTimer')).toEqual(defaultLayout);
+  it('ignores the module being placed when checking overlap', () => {
+    expect(canPlace(layout, 'calendar', { x: 0, y: 0, w: 5, h: 4 })).toBe(true);
   });
 
-  it('preserves each module preset while reordering', () => {
-    const result = reorderLayout(defaultLayout, 'calendar', 'notes');
-    expect(result.find((item) => item.id === 'calendar')?.presetId).toBe('large');
+  it('rejects out-of-bounds rects and rects smaller than the minimum size', () => {
+    expect(canPlace(layout, 'matrix', { x: 10, y: 0, w: 4, h: 4 })).toBe(false);
+    expect(canPlace(layout, 'calendar', { x: 0, y: 0, w: 4, h: 4 })).toBe(false);
   });
 });
 
@@ -77,29 +112,36 @@ describe('normalizeLayout', () => {
   it('falls back to defaultLayout for empty, non-array, or malformed input', () => {
     expect(normalizeLayout(null)).toEqual(defaultLayout);
     expect(normalizeLayout('nope')).toEqual(defaultLayout);
-    expect(normalizeLayout([{ id: 'calendar' }])).toEqual(defaultLayout);
-    expect(normalizeLayout([{ id: 'unknown', presetId: 'x' }])).toEqual(defaultLayout);
-    expect(normalizeLayout([{ id: 'calendar', presetId: 'missing' }])).toEqual(defaultLayout);
+    expect(normalizeLayout([{ id: 'calendar', x: 0, y: 0, w: 5 }])).toEqual(defaultLayout);
+    expect(normalizeLayout([{ id: 'unknown', x: 0, y: 0, w: 4, h: 4 }])).toEqual(defaultLayout);
   });
 
-  it('keeps a valid custom order and appends missing defined modules', () => {
-    const stored = [{ id: 'notes', presetId: 'medium' }];
-    expect(normalizeLayout(stored)).toEqual([
-      { id: 'notes', presetId: 'medium' },
-      { id: 'calendar', presetId: 'large' },
-      { id: 'matrix', presetId: 'medium' }
-    ]);
-  });
-
-  it('drops duplicate ids while normalizing', () => {
-    const stored = [
-      { id: 'calendar', presetId: 'medium' },
-      { id: 'calendar', presetId: 'large' }
+  it('falls back when a stored rect is out of bounds, too small, or overlapping', () => {
+    const tooSmall: LayoutState = [
+      { id: 'calendar', x: 0, y: 0, w: 2, h: 2 },
+      { id: 'matrix', x: 5, y: 0, w: 4, h: 4 },
+      { id: 'notes', x: 0, y: 4, w: 4, h: 3 }
     ];
-    expect(normalizeLayout(stored)).toEqual([
-      { id: 'calendar', presetId: 'medium' },
-      { id: 'matrix', presetId: 'medium' },
-      { id: 'notes', presetId: 'small' }
-    ]);
+    expect(normalizeLayout(tooSmall)).toEqual(defaultLayout);
+
+    const overlapping: LayoutState = [
+      { id: 'calendar', x: 0, y: 0, w: 6, h: 6 },
+      { id: 'matrix', x: 4, y: 0, w: 5, h: 5 },
+      { id: 'notes', x: 0, y: 5, w: 4, h: 3 }
+    ];
+    expect(normalizeLayout(overlapping)).toEqual(defaultLayout);
+  });
+
+  it('falls back when not every defined module is present', () => {
+    expect(normalizeLayout([{ id: 'calendar', x: 0, y: 0, w: 7, h: 8 }])).toEqual(defaultLayout);
+  });
+
+  it('keeps a valid stored layout unchanged', () => {
+    const stored: LayoutState = [
+      { id: 'calendar', x: 0, y: 0, w: 5, h: 4 },
+      { id: 'matrix', x: 5, y: 0, w: 4, h: 4 },
+      { id: 'notes', x: 0, y: 4, w: 4, h: 3 }
+    ];
+    expect(normalizeLayout(stored)).toEqual(stored);
   });
 });
