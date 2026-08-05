@@ -8,16 +8,22 @@ const baseProps = {
   year: 2026,
   monthIndex: 6,
   todayIso: '2026-07-23',
+  anchorIso: '2026-07-23',
+  view: 'month' as const,
   events: sampleEvents,
   status: 'ready' as const,
   onRetry: vi.fn(),
   onCreateEvent: vi.fn(),
+  onSetView: vi.fn(),
   onPreviousMonth: vi.fn(),
   onNextMonth: vi.fn(),
   onToday: vi.fn(),
   onCreateEventForDate: vi.fn(),
   onOpenDate: vi.fn(),
-  onOpenEvent: vi.fn()
+  onOpenEvent: vi.fn(),
+  onMoveEvent: vi.fn(),
+  onMoveEventToHour: vi.fn(),
+  onResizeEvent: vi.fn()
 };
 
 afterEach(() => {
@@ -35,7 +41,7 @@ describe('CalendarWidget', () => {
       <CalendarWidget {...baseProps} onPreviousMonth={onPreviousMonth} onNextMonth={onNextMonth} onToday={onToday} />
     );
 
-    expect(container.querySelectorAll('.calendar-grid > [data-calendar-day]')).toHaveLength(42);
+    expect(container.querySelectorAll('.calendar-grid [data-calendar-day]')).toHaveLength(42);
     await user.click(screen.getByRole('button', { name: '上一个月' }));
     await user.click(screen.getByRole('button', { name: '今天' }));
     await user.click(screen.getByRole('button', { name: '下一个月' }));
@@ -105,7 +111,7 @@ describe('CalendarWidget', () => {
 
     expect(screen.getByRole('button', { name: '全天 产品发布日，重要' })).toBeInTheDocument();
     expect(screen.queryByText('健身')).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: '另有 1 个' }));
+    await user.click(screen.getByRole('button', { name: '另有 1 个日程' }));
     expect(onOpenDate).toHaveBeenCalledWith('2026-07-23');
   });
 
@@ -131,4 +137,66 @@ describe('CalendarWidget', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('日程读取失败');
     expect(retry).toHaveBeenCalledOnce();
   });
+
+  it('switches between month, week, day, and list views', async () => {
+    const user = userEvent.setup();
+    const onSetView = vi.fn();
+    render(<CalendarWidget {...baseProps} onSetView={onSetView} />);
+
+    const group = screen.getByRole('group', { name: '切换视图' });
+    expect(group).toBeInTheDocument();
+    for (const label of ['月', '周', '天', '列表']) {
+      await user.click(screen.getByRole('button', { name: label, pressed: undefined }));
+    }
+    expect(onSetView).toHaveBeenCalledTimes(4);
+    expect(onSetView).toHaveBeenNthCalledWith(1, 'month');
+    expect(onSetView).toHaveBeenNthCalledWith(2, 'week');
+    expect(onSetView).toHaveBeenNthCalledWith(3, 'day');
+    expect(onSetView).toHaveBeenNthCalledWith(4, 'list');
+  });
+
+  it('marks the active view and adapts navigation labels per view', () => {
+    const { rerender } = render(<CalendarWidget {...baseProps} view="month" />);
+    expect(screen.getByRole('button', { name: '月' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: '上一个月' })).toBeInTheDocument();
+
+    rerender(<CalendarWidget {...baseProps} view="week" />);
+    expect(screen.getByRole('button', { name: '周' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: '上一周' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '下一周' })).toBeInTheDocument();
+
+    rerender(<CalendarWidget {...baseProps} view="day" />);
+    expect(screen.getByRole('button', { name: '天' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: '前一天' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '后一天' })).toBeInTheDocument();
+  });
+
+  it('renders a 7-column week view with movable events', () => {
+    const { container } = render(<CalendarWidget {...baseProps} view="week" />);
+    expect(container.querySelectorAll('.calendar-week__cells > [data-calendar-day]')).toHaveLength(7);
+    // Events use pointer-driven move/resize (native HTML5 DnD is unreliable in
+    // the Tauri webview), signalled by the .event--movable affordance class.
+    const chip = screen.getByRole('button', { name: '09:30 站会，工作' });
+    expect(chip.className).toContain('event--movable');
+  });
+
+  it('renders the day view as a 24-hour time grid with movable events', () => {
+    const { container } = render(<CalendarWidget {...baseProps} view="day" />);
+    expect(container.querySelectorAll('.day-grid__row')).toHaveLength(24);
+    const chip = screen.getByRole('button', { name: '09:30 站会，工作' });
+    expect(chip).toHaveTextContent('09:30 – 10:00');
+    expect(chip.className).toContain('event--movable');
+  });
+
+  // Pointer-driven move/resize (drag a chip to another day/hour, resize from the
+  // handle) can't be exercised in jsdom because the gesture hit-tests with
+  // document.elementFromPoint and real element geometry, neither of which jsdom
+  // provides. That behavior is covered end-to-end in tests/nowly-event-resize.spec.ts.
+
+  it('groups the list view by date', () => {
+    render(<CalendarWidget {...baseProps} view="list" />);
+    expect(screen.getByRole('heading', { name: /7 月 23 日/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '09:30 站会，工作' })).toBeInTheDocument();
+  });
+
 });

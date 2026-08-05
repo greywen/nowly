@@ -79,20 +79,122 @@ button:disabled { cursor: default; opacity: .65; }
 .calendar-body { min-height: 0; flex: 1; padding: 12px 24px 24px; display: flex; flex-direction: column; }
 .weekdays { height: 36px; flex: none; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); align-items: center; }
 .weekdays span { text-align: center; color: var(--text-muted); font-size: 13.6px; font-weight: 600; }
-.calendar-grid { min-height: 0; flex: 1; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-template-rows: repeat(6, minmax(0, 1fr)); border-top: 1px solid var(--border-default); border-left: 1px solid var(--border-default); border-radius: var(--radius-default); overflow: hidden; }
+.calendar-grid { min-height: 0; flex: 1; display: flex; flex-direction: column; border-top: 1px solid var(--border-default); border-left: 1px solid var(--border-default); border-radius: var(--radius-default); overflow-x: hidden; overflow-y: auto; }
+/* Rows grow to fill a tall window but never shrink below the height needed for
+   three event lanes plus the "+N" overflow row. When the window is too short
+   the grid scrolls instead of squashing rows and letting bars bleed into the
+   next week. overflow:hidden clips any bar to its own week as a safety net. */
+.calendar-week-row { position: relative; flex: 1 0 auto; min-height: 120px; overflow: hidden; }
+.calendar-week-row__cells { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+/* Top zone that holds multi-day (spanning) bars only. Bars are absolutely
+   positioned by lane so a spanning event stays one connected bar; the zone
+   hugs the top (below the day-number strip) and single-day events center in
+   the space beneath it. */
+.calendar-week-row__bars { position: absolute; top: 36px; left: 0; right: 0; height: 0; pointer-events: none; z-index: 2; }
+.calendar-week-row__bars.is-dragging .event-bar { pointer-events: none; }
+/* Per-column stack of single-day events. Events start below the day number and
+   flow downward in order. Empty space stays click-through so the day underlay
+   still schedules. */
+.day-singles { position: absolute; top: 36px; left: 4px; right: 4px; bottom: 4px; display: flex; flex-direction: column; justify-content: flex-start; gap: 4px; pointer-events: none; z-index: 1; }
+.day-singles .event { pointer-events: auto; }
+.day-singles.is-dragging .event { pointer-events: none; }
+/* Use .event.event-cell / .event.event-bar so these win over the later base
+   `.event` rule (same specificity, but `.event` comes later in the file and
+   would otherwise force display:block, text-align:left and margin-top back on,
+   pushing chips to the top-left). */
+.event.event-cell { position: relative; width: 100%; height: 20px; min-height: 0; margin: 0; padding: 1px 8px; display: flex; align-items: center; justify-content: flex-start; overflow: hidden; line-height: 18px; font-size: 12.8px; text-align: left; white-space: nowrap; border-radius: var(--radius-sm); pointer-events: auto; cursor: grab; user-select: none; touch-action: none; }
+.event.event-cell:active { cursor: grabbing; }
+.event.event-bar { position: absolute; width: auto; height: 20px; min-height: 0; margin: 0; padding: 1px 8px; display: flex; align-items: center; justify-content: flex-start; overflow: hidden; line-height: 18px; font-size: 12.8px; text-align: left; white-space: nowrap; pointer-events: auto; cursor: grab; user-select: none; touch-action: none; }
+.event.event-bar:active { cursor: grabbing; }
+/* The title text opens the event on click; the surrounding chip body drags. */
+.event__title { cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.event-bar.event--spanning { border-right: 0; }
+.event-bar--open-start { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.event-bar--open-end { border-top-right-radius: 0; border-bottom-right-radius: 0; }
 .day { position: relative; min-width: 0; min-height: 0; padding: 8px; overflow: hidden; border-right: 1px solid var(--border-default); border-bottom: 1px solid var(--border-default); background: var(--bg-surface); }
-.day:nth-child(7n), .day:nth-child(7n - 1) { background: var(--bg-subtle); }
+.calendar-week-row__cells .day:nth-child(6), .calendar-week-row__cells .day:nth-child(7) { background: var(--bg-subtle); }
 .day.outside { color: var(--text-disabled); }
-.day.today { background: var(--color-primary-light); box-shadow: inset 0 0 0 1px var(--color-primary); }
+.day.today { background: var(--color-warning-light); box-shadow: none; }
 .day-underlay { position: absolute; inset: 0; width: 100%; padding: 8px; display: flex; align-items: flex-start; border: 0; background: transparent; color: inherit; text-align: left; }
 .day-number { width: 28px; height: 28px; display: grid; place-items: center; border-radius: var(--radius-sm); font-size: 13.6px; font-weight: 600; }
 .day-events { position: relative; z-index: 1; margin-top: 32px; pointer-events: none; }
-.event { width: 100%; min-height: 24px; margin-top: 4px; padding: 2px 8px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 0; border-radius: var(--radius-sm); font-size: 13.6px; font-weight: 500; text-align: left; pointer-events: auto; }
+.event { position: relative; width: 100%; min-height: 24px; margin-top: 4px; padding: 2px 8px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 0; border-radius: var(--radius-sm); font-size: 13.6px; font-weight: 500; text-align: left; pointer-events: auto; }
 .event-overflow { color: var(--text-secondary); background: var(--bg-neutral); }
+/* When a cell has more single-day events than fit, the extras collapse into a
+   row of dots (one per hidden event) instead of a "+N" label. */
+.event-overflow-dots { width: 100%; height: 12px; margin: 0; padding: 0; display: flex; align-items: center; justify-content: center; gap: 4px; flex-wrap: wrap; border: 0; background: transparent; pointer-events: auto; cursor: pointer; }
+.event-overflow-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--text-muted); }
 .event--work { color: var(--color-primary-active); background: var(--color-primary-light); }
 .event--important { color: var(--color-danger-active); background: var(--color-danger-light); }
 .event--personal { color: #6f8617; background: var(--color-success-light); }
 .event--learning { color: var(--color-info-active); background: var(--color-info-light); }
+.event[draggable="true"] { cursor: grab; }
+.event[draggable="true"]:active { cursor: grabbing; }
+.event { position: relative; }
+.event--spanning { border-right: 3px solid currentColor; }
+.event--resizable::after { content: ""; position: absolute; top: 0; right: 0; width: 12px; height: 100%; cursor: ew-resize; }
+.event-bar__resize-handle { position: absolute; top: 0; right: 0; width: 14px; height: 100%; cursor: ew-resize; pointer-events: auto; touch-action: none; z-index: 3; }
+.event-bar__resize-handle::after { content: ""; position: absolute; top: 50%; right: 3px; width: 3px; height: 12px; transform: translateY(-50%); border-radius: 2px; background: currentColor; opacity: 0; transition: opacity 120ms ease; }
+.event-bar:hover .event-bar__resize-handle::after,
+.event.event-cell:hover .event-bar__resize-handle::after { opacity: 0.55; }
+.event.event-cell:hover, .event-bar:hover { filter: brightness(0.97); }
+.calendar-week-row__bars.is-dragging .event-bar__resize-handle { pointer-events: none; }
+/* Pointer-driven move/resize for week + day views (parity with month bars). */
+.event--movable { cursor: grab; user-select: none; touch-action: none; }
+.event--movable:active { cursor: grabbing; }
+/* While a gesture runs, chips ignore pointer events so elementFromPoint reads
+   the slot underneath. */
+.day-grid.is-dragging .day-grid__event { pointer-events: none; }
+.day-grid__event.event--movable { cursor: grab; user-select: none; touch-action: none; }
+.day-grid__event.event--movable:active { cursor: grabbing; }
+
+.view-switch { display: inline-flex; padding: 4px; gap: 4px; border-radius: var(--radius-default); background: var(--bg-subtle); }
+.view-switch__btn { min-height: 32px; padding: 4px 12px; border: 0; border-radius: var(--radius-sm); color: var(--text-secondary); background: transparent; font-size: 13.6px; font-weight: 600; }
+.view-switch__btn:hover { color: var(--color-primary-active); }
+.view-switch__btn.is-active { color: #fff; background: var(--color-primary); }
+
+.calendar-empty { margin-top: 12px; padding: 24px; display: grid; place-items: center; border: 1px dashed var(--border-default); border-radius: var(--radius-default); color: var(--text-muted); font-size: 15.2px; }
+
+.calendar-week { min-height: 0; flex: 1; display: flex; flex-direction: column; border-top: 1px solid var(--border-default); border-left: 1px solid var(--border-default); border-radius: var(--radius-default); overflow: hidden; }
+.calendar-week__heads { flex: none; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.calendar-week__body { position: relative; min-height: 0; flex: 1; }
+.calendar-week__cells { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+/* Top zone for multi-day bars only, absolutely positioned by lane so a
+   spanning event stays one connected bar across the week. */
+.calendar-week__bars { position: absolute; top: 8px; left: 0; right: 0; height: 0; pointer-events: none; z-index: 2; }
+.calendar-week__bars.is-dragging .event-bar, .calendar-week__bars.is-dragging .event-bar__resize-handle { pointer-events: none; }
+.week-column { min-width: 0; min-height: 0; position: relative; border-right: 1px solid var(--border-default); background: var(--bg-surface); }
+.week-column.today { background: var(--color-warning-light); box-shadow: none; }
+.week-column__underlay { position: absolute; inset: 0; width: 100%; border: 0; background: transparent; }
+/* Per-column single-day event stack, vertically centered in the tall week
+   body with an even 4px gap; empty space stays click-through. */
+.week-column .day-singles { top: 8px; left: 4px; right: 4px; bottom: 8px; }
+.week-column__head { padding: 8px; display: flex; flex-direction: column; align-items: center; gap: 2px; border: 0; border-right: 1px solid var(--border-default); border-bottom: 1px solid var(--border-default); background: transparent; color: inherit; }
+.week-column__head.today { background: var(--color-warning-light); }
+.week-column__head:hover { background: var(--bg-subtle); }
+.week-column__weekday { color: var(--text-muted); font-size: 13.6px; font-weight: 600; }
+.week-column__date { color: var(--text-primary); font-size: 17.2px; font-weight: 700; }
+
+.calendar-day-view { min-height: 0; flex: 1; display: flex; flex-direction: column; overflow: auto; }
+.day-grid__allday { flex: none; margin-bottom: 12px; padding-bottom: 12px; display: flex; flex-wrap: wrap; gap: 8px; border-bottom: 1px solid var(--border-default); }
+.day-grid__allday .event { width: auto; margin-top: 0; }
+.day-grid { min-height: 0; display: grid; border-top: 1px solid var(--border-default); border-left: 1px solid var(--border-default); border-radius: var(--radius-default); overflow: hidden; }
+.day-grid__row { display: grid; grid-template-columns: 64px minmax(0, 1fr); min-height: 44px; }
+.day-grid__hour { padding: 6px 8px; display: flex; justify-content: flex-end; color: var(--text-muted); font-size: 13.6px; font-weight: 600; border-right: 1px solid var(--border-default); border-bottom: 1px solid var(--border-default); background: var(--bg-subtle); }
+.day-grid__slot { min-width: 0; padding: 4px 8px; display: flex; flex-direction: column; justify-content: center; gap: 4px; border-right: 1px solid var(--border-default); border-bottom: 1px solid var(--border-default); background: var(--bg-surface); }
+.day-grid__event { width: 100%; min-width: 0; padding: 6px 12px; display: flex; align-items: baseline; gap: 8px; border: 0; border-radius: var(--radius-sm); text-align: left; }
+.day-grid__event-time { flex: none; font-size: 13.6px; font-weight: 600; }
+.day-grid__event-title { min-width: 0; flex: 1; overflow: hidden; font-size: 15.2px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+
+.calendar-list-view { min-height: 0; flex: 1; display: grid; align-content: start; gap: 16px; overflow: auto; }
+.calendar-list-group { display: grid; gap: 8px; }
+.calendar-list-group__date { margin: 0; color: var(--text-muted); font-size: 13.6px; font-weight: 600; }
+.calendar-list-group__items { margin: 0; padding: 0; display: grid; gap: 8px; list-style: none; }
+.calendar-list-item { width: 100%; min-height: 48px; padding: 8px 16px; display: grid; grid-template-columns: 72px minmax(0, 1fr) auto; align-items: center; gap: 12px; border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-surface); text-align: left; }
+.calendar-list-item:hover { border-color: var(--color-primary); background: var(--bg-subtle); }
+.calendar-list-item__time { color: var(--text-muted); font-size: 13.6px; font-weight: 600; }
+.calendar-list-item__title { min-width: 0; overflow: hidden; color: var(--text-primary); font-size: 15.2px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.calendar-list-item__category { padding: 4px 8px; border-radius: var(--radius-sm); font-size: 13.6px; font-weight: 600; }
 .side-column { min-width: 0; min-height: 0; display: grid; grid-template-rows: minmax(0, 1.15fr) minmax(0, .85fr); gap: 24px; }
 .panel-body { min-height: 0; flex: 1; padding: 20px 24px 24px; overflow: auto; }
 .matrix-body { display: flex; flex-direction: column; }

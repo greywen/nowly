@@ -65,10 +65,13 @@ pub fn validate_and_normalize(mut draft: EventDraft) -> Result<EventDraft, Comma
     }
     let start = parse_local(&draft.start_at, "startAt")?;
     let end = parse_local(&draft.end_at, "endAt")?;
-    if start.date() != end.date() {
-        return Err(CommandError::validation("endAt", "首版日程不能跨日。"));
+    if end.date() < start.date() {
+        return Err(CommandError::validation(
+            "endAt",
+            "结束日期不能早于开始日期。",
+        ));
     }
-    if end < start {
+    if start.date() == end.date() && end < start {
         return Err(CommandError::validation(
             "endAt",
             "结束时间不能早于开始时间。",
@@ -81,9 +84,10 @@ pub fn validate_and_normalize(mut draft: EventDraft) -> Result<EventDraft, Comma
         return Err(CommandError::validation("color", "请选择有效颜色。"));
     }
     if draft.all_day {
-        let date = start.date().format("%Y-%m-%d");
-        draft.start_at = format!("{date}T00:00");
-        draft.end_at = format!("{date}T23:59");
+        let start_date = start.date().format("%Y-%m-%d");
+        let end_date = end.date().format("%Y-%m-%d");
+        draft.start_at = format!("{start_date}T00:00");
+        draft.end_at = format!("{end_date}T23:59");
     }
     Ok(draft)
 }
@@ -451,13 +455,20 @@ mod tests {
         for (invalid, field) in [
             (EventDraft { title: "  ".into(), ..base.clone() }, "title"),
             (EventDraft { start_at: "bad".into(), ..base.clone() }, "startAt"),
-            (EventDraft { end_at: "2026-07-24T15:00".into(), ..base.clone() }, "endAt"),
+            (EventDraft { end_at: "2026-07-22T15:00".into(), ..base.clone() }, "endAt"),
             (EventDraft { end_at: "2026-07-23T13:55".into(), ..base.clone() }, "endAt"),
             (EventDraft { category: "other".into(), ..base.clone() }, "category"),
             (EventDraft { color: "purple".into(), ..base.clone() }, "color"),
         ] {
             assert_eq!(validate_and_normalize(invalid).unwrap_err().field.as_deref(), Some(field));
         }
+        let multi_day = validate_and_normalize(EventDraft {
+            start_at: "2026-07-23T14:00".into(),
+            end_at: "2026-07-25T10:00".into(),
+            ..base.clone()
+        }).unwrap();
+        assert_eq!(multi_day.start_at, "2026-07-23T14:00");
+        assert_eq!(multi_day.end_at, "2026-07-25T10:00");
         let all_day = validate_and_normalize(EventDraft {
             all_day: true,
             start_at: "2026-07-23T09:30".into(),

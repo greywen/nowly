@@ -1,5 +1,6 @@
 export type EventCategory = 'work' | 'important' | 'personal' | 'learning';
 export type EventColor = 'blue' | 'red' | 'green' | 'yellow';
+export type CalendarView = 'month' | 'week' | 'day' | 'list';
 
 export const eventCategoryLabels: Record<EventCategory, string> = {
   work: '工作',

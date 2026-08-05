@@ -96,10 +96,12 @@ describe('event draft helpers', () => {
     expect(validateEventForm({ ...form, title: ' ' })).toEqual({ title: '请输入日程标题。' });
     expect(validateEventForm({ ...form, startDate: '' })).toEqual({ startAt: '请选择开始日期。' });
     expect(validateEventForm({ ...form, endDate: '' })).toEqual({ endAt: '请选择结束日期。' });
-    expect(validateEventForm({ ...form, endDate: '2026-07-24' })).toEqual({ endAt: '日程必须在同一天内结束。' });
+    expect(validateEventForm({ ...form, endDate: '2026-07-22' })).toEqual({ endAt: '结束日期不能早于开始日期。' });
+    expect(validateEventForm({ ...form, endDate: '2026-07-24' })).toEqual({});
     expect(validateEventForm({ ...form, startTime: '' })).toEqual({ startAt: '请选择开始时间。' });
     expect(validateEventForm({ ...form, endTime: '' })).toEqual({ endAt: '请选择结束时间。' });
     expect(validateEventForm({ ...form, endTime: '13:55' })).toEqual({ endAt: '结束时间不能早于开始时间。' });
+    expect(validateEventForm({ ...form, endDate: '2026-07-24', endTime: '13:55' })).toEqual({});
     expect(validateEventForm({ ...form, category: 'other' as never })).toEqual({ category: '请选择有效分类。' });
     expect(validateEventForm({ ...form, color: 'purple' as never })).toEqual({ color: '请选择有效颜色。' });
   });

@@ -111,14 +111,20 @@ export function App() {
             events={events}
             status={eventsFeature.events.status}
             errorMessage={eventsFeature.events.status === 'error' ? eventsFeature.events.message : undefined}
+            view={eventsFeature.view}
+            anchorIso={eventsFeature.anchorIso}
             onRetry={() => void eventsFeature.retryEvents()}
             onCreateEvent={() => openModalInForeground({ type: 'event-create', dateIso: todayIso, trigger: null })}
-            onPreviousMonth={eventsFeature.goToPreviousMonth}
-            onNextMonth={eventsFeature.goToNextMonth}
+            onSetView={eventsFeature.setView}
+            onPreviousMonth={eventsFeature.goToPrevious}
+            onNextMonth={eventsFeature.goToNext}
             onToday={eventsFeature.goToToday}
             onCreateEventForDate={(dateIso) => openModalInForeground({ type: 'event-create', dateIso, trigger: null })}
             onOpenDate={(isoDate) => openModalInForeground({ type: 'date', isoDate, trigger: null })}
             onOpenEvent={(event) => openModalInForeground({ type: 'event-edit', event, trigger: null })}
+            onMoveEvent={(event, isoDate) => void eventsFeature.moveEvent(event, isoDate)}
+            onMoveEventToHour={(event, isoDate, startHour) => void eventsFeature.moveEventToHour(event, isoDate, startHour)}
+            onResizeEvent={(event, endIsoDate) => void eventsFeature.resizeEvent(event, endIsoDate)}
           />
         }
         matrix={
