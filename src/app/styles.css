@@ -78,8 +78,8 @@ button:disabled { cursor: default; opacity: .65; }
 .module-frame__handle svg { width: 18px; height: 18px; }
 .module-frame__title { min-width: 0; flex: 1; overflow: hidden; color: var(--text-strong); font-size: 15.2px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .module-frame__overlay { position: absolute; inset: 0; z-index: 2; background: transparent; cursor: default; }
-.module-frame__resize { position: absolute; right: 2px; bottom: 2px; z-index: 3; width: 20px; height: 20px; display: inline-grid; place-items: center; color: var(--text-tertiary); cursor: nwse-resize; }
-.module-frame__resize svg { width: 16px; height: 16px; }
+.module-frame__resize { position: absolute; right: 0; bottom: 0; z-index: 3; width: 22px; height: 22px; cursor: nwse-resize; }
+.module-frame__resize::after { content: ""; position: absolute; right: 4px; bottom: 4px; width: 12px; height: 4px; border-radius: 2px; background: var(--color-primary); transform: rotate(-45deg); transform-origin: bottom right; }
 .widget-content, .calendar-card-content { min-height: 0; flex: 1; display: flex; flex-direction: column; }
 .card-header { min-height: 70px; padding: 12px 36px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px dashed var(--border-default); }
 .heading-group h1, .heading-group h2 { margin: 0; color: var(--text-primary); font-size: 20px; font-weight: 700; line-height: 1.4; }

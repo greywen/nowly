@@ -1,4 +1,4 @@
-import { GripVertical, MoveDiagonal2 } from 'lucide-react';
+import { GripVertical } from 'lucide-react';
 import type { CSSProperties, PointerEvent, ReactNode } from 'react';
 import type { WidgetDefinition } from '../../widgets/widget-registry';
 
@@ -60,9 +60,7 @@ export function ModuleFrame({
           data-testid="module-frame-resize"
           aria-hidden="true"
           onPointerDown={onResizePointerDown}
-        >
-          <MoveDiagonal2 />
-        </span>
+        />
       ) : null}
     </section>
   );
