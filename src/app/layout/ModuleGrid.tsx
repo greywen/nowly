@@ -34,6 +34,10 @@ type DragState = {
   origin: Rect;
   draft: Rect;
   valid: boolean;
+  // Last draft that could actually be placed. Committed on release so a drag
+  // that ends over an occupied cell settles at the last legal spot instead of
+  // snapping all the way back.
+  lastValid: Rect;
 };
 
 export function ModuleGrid({ items, editing, onMove, onResize }: ModuleGridProps) {
@@ -66,7 +70,8 @@ export function ModuleGrid({ items, editing, onMove, onResize }: ModuleGridProps
       startY: event.clientY,
       origin: item.rect,
       draft: item.rect,
-      valid: true
+      valid: true,
+      lastValid: item.rect
     });
   }
 
@@ -75,6 +80,9 @@ export function ModuleGrid({ items, editing, onMove, onResize }: ModuleGridProps
     const stride = cellStride();
     const deltaCol = Math.round((event.clientX - drag.startX) / stride.col);
     const deltaRow = Math.round((event.clientY - drag.startY) / stride.row);
+    const definition = getWidgetDefinition(drag.id);
+    const minW = definition?.minW ?? 1;
+    const minH = definition?.minH ?? 1;
 
     let draft: Rect;
     if (drag.mode === 'move') {
@@ -85,25 +93,29 @@ export function ModuleGrid({ items, editing, onMove, onResize }: ModuleGridProps
         h: drag.origin.h
       });
     } else {
-      const w = Math.min(Math.max(drag.origin.w + deltaCol, 1), GRID_COLS - drag.origin.x);
-      const h = Math.min(Math.max(drag.origin.h + deltaRow, 1), GRID_ROWS - drag.origin.y);
+      // Clamp resize to the module minimum and the grid edge so shrinking stops
+      // at the minimum instead of becoming an invalid (reverting) size.
+      const w = Math.min(Math.max(drag.origin.w + deltaCol, minW), GRID_COLS - drag.origin.x);
+      const h = Math.min(Math.max(drag.origin.h + deltaRow, minH), GRID_ROWS - drag.origin.y);
       draft = { x: drag.origin.x, y: drag.origin.y, w, h };
     }
 
     const valid = canPlace(layout, drag.id, draft);
-    setDrag((current) => (current ? { ...current, draft, valid } : current));
+    setDrag((current) =>
+      current ? { ...current, draft, valid, lastValid: valid ? draft : current.lastValid } : current
+    );
   }
 
   function endDrag(event: PointerEvent<HTMLDivElement>) {
     if (!drag) return;
     gridRef.current?.releasePointerCapture?.(event.pointerId);
-    const { mode, id, origin, draft, valid } = drag;
+    const { mode, id, origin, lastValid } = drag;
     setDrag(null);
-    if (!valid) return;
+    // Settle at the last legal spot reached during the drag.
     if (mode === 'move') {
-      if (draft.x !== origin.x || draft.y !== origin.y) onMove(id, { x: draft.x, y: draft.y });
-    } else if (draft.w !== origin.w || draft.h !== origin.h) {
-      onResize(id, { w: draft.w, h: draft.h });
+      if (lastValid.x !== origin.x || lastValid.y !== origin.y) onMove(id, { x: lastValid.x, y: lastValid.y });
+    } else if (lastValid.w !== origin.w || lastValid.h !== origin.h) {
+      onResize(id, { w: lastValid.w, h: lastValid.h });
     }
   }
 

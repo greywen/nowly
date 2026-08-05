@@ -34,7 +34,7 @@ export function ModuleFrame({
     .join(' ');
 
   return (
-    <section className={className} style={style} data-testid="module-frame">
+    <section className={className} style={style} data-testid="module-frame" data-widget-id={definition.id}>
       {editing ? (
         <div className="module-frame__toolbar">
           <span className="module-frame__handle" data-testid="module-frame-handle" aria-hidden="true">
