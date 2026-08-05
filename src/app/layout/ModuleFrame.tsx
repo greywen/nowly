@@ -1,70 +1,66 @@
 import { GripVertical } from 'lucide-react';
-import type { CSSProperties, DragEvent, ReactNode } from 'react';
-import { getPreset, type WidgetDefinition, type WidgetId } from '../../widgets/widget-registry';
+import type { CSSProperties, PointerEvent, ReactNode } from 'react';
+import type { WidgetDefinition } from '../../widgets/widget-registry';
 
 type ModuleFrameProps = {
   definition: WidgetDefinition;
-  presetId: string;
   editing: boolean;
-  onCyclePreset: (id: WidgetId) => void;
   children: ReactNode;
   style?: CSSProperties;
-  isDropTarget?: boolean;
-  onDragStart?: (event: DragEvent<HTMLElement>) => void;
-  onDragEnd?: (event: DragEvent<HTMLElement>) => void;
-  onDragOver?: (event: DragEvent<HTMLElement>) => void;
-  onDragLeave?: (event: DragEvent<HTMLElement>) => void;
-  onDrop?: (event: DragEvent<HTMLElement>) => void;
+  isInvalid?: boolean;
+  isDragging?: boolean;
+  onMovePointerDown?: (event: PointerEvent<HTMLElement>) => void;
+  onResizePointerDown?: (event: PointerEvent<HTMLElement>) => void;
 };
 
 export function ModuleFrame({
   definition,
-  presetId,
   editing,
-  onCyclePreset,
   children,
   style,
-  isDropTarget = false,
-  onDragStart,
-  onDragEnd,
-  onDragOver,
-  onDragLeave,
-  onDrop
+  isInvalid = false,
+  isDragging = false,
+  onMovePointerDown,
+  onResizePointerDown
 }: ModuleFrameProps) {
-  const preset = getPreset(definition.id, presetId) ?? definition.presets[0];
-  const className = `card module-frame${editing ? ' is-editing' : ''}${isDropTarget ? ' is-drop-target' : ''}`;
+  const className = [
+    'card',
+    'module-frame',
+    editing ? 'is-editing' : '',
+    isInvalid ? 'is-invalid' : '',
+    isDragging ? 'is-dragging' : ''
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   return (
-    <section
-      className={className}
-      style={style}
-      draggable={editing}
-      onDragStart={editing ? onDragStart : undefined}
-      onDragEnd={editing ? onDragEnd : undefined}
-      onDragOver={editing ? onDragOver : undefined}
-      onDragLeave={editing ? onDragLeave : undefined}
-      onDrop={editing ? onDrop : undefined}
-    >
+    <section className={className} style={style} data-testid="module-frame">
       {editing ? (
         <div className="module-frame__toolbar">
           <span className="module-frame__handle" data-testid="module-frame-handle" aria-hidden="true">
             <GripVertical />
           </span>
           <span className="module-frame__title">{definition.name}</span>
-          <button
-            type="button"
-            className="btn btn-icon module-frame__size"
-            aria-label={`切换${definition.name}尺寸`}
-            onClick={() => onCyclePreset(definition.id)}
-          >
-            {preset.label}
-          </button>
         </div>
       ) : null}
       <div className="module-frame__body">
         {children}
-        {editing ? <div className="module-frame__overlay" data-testid="module-frame-overlay" /> : null}
+        {editing ? (
+          <div
+            className="module-frame__overlay"
+            data-testid="module-frame-overlay"
+            onPointerDown={onMovePointerDown}
+          />
+        ) : null}
       </div>
+      {editing ? (
+        <span
+          className="module-frame__resize"
+          data-testid="module-frame-resize"
+          aria-hidden="true"
+          onPointerDown={onResizePointerDown}
+        />
+      ) : null}
     </section>
   );
 }
