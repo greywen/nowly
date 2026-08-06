@@ -17,5 +17,12 @@ export const tauriNowlyRepository: NowlyRepository = {
   deleteNote: (id) => invoke('delete_note', { id }),
   getSettings: () => invoke('get_app_settings'),
   updateSettings: (settings) => invoke('update_app_settings', { settings }),
-  listMonitors: () => invoke('list_monitors')
+  listMonitors: () => invoke('list_monitors'),
+  listModuleLayout: () => invoke('list_module_layout'),
+  saveModuleLayout: (layout) => invoke('save_module_layout', { layout }),
+  getModuleState: (moduleId) => invoke('get_module_state', { moduleId }),
+  setModuleState: (moduleId, state) => invoke('set_module_state', { moduleId, state }),
+  listExtensions: () => invoke('list_extensions'),
+  installExtension: (draft) => invoke('install_extension', { draft }),
+  uninstallExtension: (id) => invoke('uninstall_extension', { id })
 };

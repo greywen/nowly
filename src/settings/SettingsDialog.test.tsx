@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { AppSettings } from '../data/nowly-repository';
 import { SettingsDialog } from './SettingsDialog';
 
-const settings:AppSettings={wallpaperEnabled:false,launchAtLogin:false,targetMonitorId:null,density:'balanced',weekStart:'monday',dateFormat:'localized',showWeekends:true,calendarEnabled:true,matrixEnabled:true,notesEnabled:true};
+const settings:AppSettings={wallpaperEnabled:false,launchAtLogin:false,targetMonitorId:null,density:'balanced',weekStart:'monday',dateFormat:'localized',showWeekends:true};
 
 describe('SettingsDialog',()=>{
   it('edits a copied draft and saves the complete document',async()=>{

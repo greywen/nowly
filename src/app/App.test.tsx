@@ -23,10 +23,7 @@ const settings: AppSettings = {
   density: 'balanced',
   weekStart: 'monday',
   dateFormat: 'localized',
-  showWeekends: true,
-  calendarEnabled: true,
-  matrixEnabled: true,
-  notesEnabled: true
+  showWeekends: true
 };
 
 function createRepository(overrides: Partial<NowlyRepository> = {}): NowlyRepository {
@@ -47,6 +44,17 @@ function createRepository(overrides: Partial<NowlyRepository> = {}): NowlyReposi
     getSettings: vi.fn().mockResolvedValue(settings),
     updateSettings: vi.fn().mockResolvedValue(settings),
     listMonitors: vi.fn().mockResolvedValue([]),
+    listModuleLayout: vi.fn().mockResolvedValue([
+      { id: 'calendar', x: 0, y: 0, w: 7, h: 8 },
+      { id: 'matrix', x: 7, y: 0, w: 5, h: 5 },
+      { id: 'notes', x: 7, y: 5, w: 5, h: 3 }
+    ]),
+    saveModuleLayout: vi.fn().mockImplementation((layout) => Promise.resolve(layout)),
+    getModuleState: vi.fn().mockResolvedValue(null),
+    setModuleState: vi.fn().mockResolvedValue(undefined),
+    listExtensions: vi.fn().mockResolvedValue([]),
+    installExtension: vi.fn().mockRejectedValue(new Error('unexpected extension write')),
+    uninstallExtension: vi.fn().mockRejectedValue(new Error('unexpected extension write')),
     ...overrides
   };
 }

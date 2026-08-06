@@ -1,6 +1,10 @@
 import { listen } from '@tauri-apps/api/event';
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import type { WidgetId } from '../widgets/widget-registry';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  buildDefinitions,
+  getWidgetDefinition,
+  type WidgetId
+} from '../widgets/widget-registry';
 import { CalendarWidget } from '../calendar/CalendarWidget';
 import { useEvents } from '../calendar/useEvents';
 import type { ModalState } from '../lib/modal-store';
@@ -12,6 +16,12 @@ import { NotesWidget } from '../notes/NotesWidget';
 import { useNotes } from '../notes/useNotes';
 import { DesktopShell } from './layout/DesktopShell';
 import { useSettings } from '../settings/useSettings';
+import { useExtensions } from '../widgets/useExtensions';
+import { getExtensionComponent } from '../widgets/extension-modules';
+import { createModuleHost } from '../widgets/extension-module';
+import { SandboxModule } from '../widgets/sandbox/SandboxModule';
+import { SANDBOX_ID_PREFIX } from '../widgets/widget-registry';
+import { useNowlyRepository } from '../data/RepositoryContext';
 import { useCurrentTime } from './useCurrentTime';
 
 type WindowMode = 'wallpaper' | 'foreground';
@@ -31,6 +41,7 @@ function localIsoDate(date = new Date()) {
 }
 
 export function App() {
+  const repository = useNowlyRepository();
   const settingsFeature = useSettings();
   const refreshTasksRef = useRef<() => Promise<unknown>>(async () => undefined);
   const refreshEventsRef = useRef<() => Promise<unknown>>(async () => undefined);
@@ -39,6 +50,7 @@ export function App() {
   const eventsFeature = useEvents({ onRefreshTasks: refreshTasks });
   const tasksFeature = useTasks({ onRefreshEvents: refreshEvents });
   const notesFeature = useNotes();
+  const extensionsFeature = useExtensions();
   refreshTasksRef.current = tasksFeature.retryTasks;
   refreshEventsRef.current = eventsFeature.retryEvents;
   const events = eventsFeature.events.data;
@@ -51,15 +63,43 @@ export function App() {
 
   const now = useCurrentTime();
   const todayIso = localIsoDate(now);
+
+  // The full set of placeable modules: built-ins, extensions, and installed
+  // user modules.
+  const definitions = buildDefinitions(extensionsFeature.extensions);
+
+  // Build a stable host per extension module, rebuilt only when the day rolls
+  // over. Each module talks to the app only through this host (identity, today,
+  // its own persisted state) — the same contract a sandboxed extension would use.
+  const hostCache = useRef(new Map<string, ReturnType<typeof createModuleHost>>());
+  const hostDayRef = useRef(todayIso);
+  if (hostDayRef.current !== todayIso) {
+    hostDayRef.current = todayIso;
+    hostCache.current.clear();
+  }
+  const hostFor = (id: string) => {
+    let host = hostCache.current.get(id);
+    if (!host) {
+      host = createModuleHost(repository, id, todayIso);
+      hostCache.current.set(id, host);
+    }
+    return host;
+  };
+  const renderExtension = (id: string): ReactNode => {
+    // Native (in-app) extension component.
+    const Component = getExtensionComponent(id);
+    if (!Component) return undefined;
+    return <Component host={hostFor(id)} />;
+  };
+
   const todayEventCount = events.filter((event) => event.startAt.startsWith(todayIso)).length;
   const importantTaskCount = tasks.filter(
     (task) => !task.completed && task.quadrant.startsWith('important')
   ).length;
   const summary = `今天 ${todayEventCount} 个日程 · ${importantTaskCount} 个重要任务 · ${notes.length} 条便签`;
 
-  const settings = settingsFeature.settings.data;
   const modules: Partial<Record<WidgetId, ReactNode>> = {};
-  if (settings.calendarEnabled) {
+  {
     modules.calendar = (
       <CalendarWidget
         year={eventsFeature.year}
@@ -85,7 +125,7 @@ export function App() {
       />
     );
   }
-  if (settings.matrixEnabled) {
+  {
     modules.matrix = (
       <MatrixWidget
         tasks={tasks}
@@ -103,7 +143,7 @@ export function App() {
       />
     );
   }
-  if (settings.notesEnabled) {
+  {
     modules.notes = (
       <NotesWidget
         notes={notes}
@@ -113,6 +153,22 @@ export function App() {
         onCreateNote={() => openModalInForeground({type:'note-create',trigger:null})}
         onOpenNote={(note,trigger) => openModalInForeground({type:'note-edit',note,trigger})}
         onViewAll={(trigger) => openModalInForeground({type:'notes-manager',trigger})}
+      />
+    );
+  }
+  modules.focusTimer = renderExtension('focusTimer');
+  modules.newsWordCloud = renderExtension('newsWordCloud');
+  modules.vocabulary = renderExtension('vocabulary');
+  // Installed user modules run their uploaded source in an isolated
+  // iframe, gated by the permissions they declared at install time.
+  for (const extension of extensionsFeature.extensions) {
+    const id = `${SANDBOX_ID_PREFIX}${extension.id}`;
+    modules[id] = (
+      <SandboxModule
+        host={hostFor(id)}
+        source={extension.source}
+        title={extension.name}
+        permissions={extension.permissions}
       />
     );
   }
@@ -165,6 +221,10 @@ export function App() {
         dateText={dateFormatter.format(now)}
         summary={summary}
         modules={modules}
+        definitions={definitions}
+        sandboxExtensions={extensionsFeature.extensions}
+        onInstallExtension={extensionsFeature.install}
+        onUninstallExtension={extensionsFeature.uninstall}
         isModeSwitching={isSwitchingWindowMode}
         onSetWallpaper={() => void runWindowModeSwitch(switchToWallpaper)}
         onWallpaperDoubleClick={() => void runWindowModeSwitch(switchToForeground)}

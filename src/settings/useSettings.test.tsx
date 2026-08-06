@@ -5,10 +5,10 @@ import { RepositoryProvider } from '../data/RepositoryContext';
 import type { AppSettings, NowlyRepository } from '../data/nowly-repository';
 import { useSettings } from './useSettings';
 
-const settings: AppSettings = { wallpaperEnabled:false, launchAtLogin:false, targetMonitorId:null, density:'balanced', weekStart:'monday', dateFormat:'localized', showWeekends:true, calendarEnabled:true, matrixEnabled:true, notesEnabled:true };
+const settings: AppSettings = { wallpaperEnabled:false, launchAtLogin:false, targetMonitorId:null, density:'balanced', weekStart:'monday', dateFormat:'localized', showWeekends:true };
 
 function repository(updateSettings = vi.fn().mockResolvedValue(settings)): NowlyRepository {
-  return { listEventsInRange:vi.fn(), createEvent:vi.fn(), updateEvent:vi.fn(), deleteEvent:vi.fn(), listTasks:vi.fn(), createTask:vi.fn(), updateTask:vi.fn(), deleteTask:vi.fn(), setTaskCompleted:vi.fn(), listNotes:vi.fn(), createNote:vi.fn(), updateNote:vi.fn(), deleteNote:vi.fn(), getSettings:vi.fn().mockResolvedValue(settings), updateSettings, listMonitors:vi.fn().mockResolvedValue([]) } as NowlyRepository;
+  return { listEventsInRange:vi.fn(), createEvent:vi.fn(), updateEvent:vi.fn(), deleteEvent:vi.fn(), listTasks:vi.fn(), createTask:vi.fn(), updateTask:vi.fn(), deleteTask:vi.fn(), setTaskCompleted:vi.fn(), listNotes:vi.fn(), createNote:vi.fn(), updateNote:vi.fn(), deleteNote:vi.fn(), getSettings:vi.fn().mockResolvedValue(settings), updateSettings, listMonitors:vi.fn().mockResolvedValue([]), listModuleLayout:vi.fn().mockResolvedValue([]), saveModuleLayout:vi.fn(), getModuleState:vi.fn().mockResolvedValue(null), setModuleState:vi.fn().mockResolvedValue(undefined), listExtensions:vi.fn().mockResolvedValue([]), installExtension:vi.fn(), uninstallExtension:vi.fn() } as NowlyRepository;
 }
 
 function wrapper(repo: NowlyRepository) { return ({children}:{children:ReactNode}) => <RepositoryProvider repository={repo}>{children}</RepositoryProvider>; }
@@ -29,9 +29,9 @@ describe('useSettings', () => {
     const {result} = renderHook(useSettings, {wrapper:wrapper(repo)});
     await waitFor(() => expect(result.current.settings.status).toBe('ready'));
     await act(async () => {
-      try { await result.current.saveSettings({...settings, notesEnabled:false}); } catch { /* expected */ }
+      try { await result.current.saveSettings({...settings, showWeekends:false}); } catch { /* expected */ }
     });
-    expect(result.current.settings.data.notesEnabled).toBe(true);
+    expect(result.current.settings.data.showWeekends).toBe(true);
     await waitFor(() => expect(result.current.writeError).toBe('保存失败'));
   });
 });

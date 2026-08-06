@@ -26,9 +26,6 @@ pub fn read_app_settings(connection: &Connection) -> Result<AppSettings, rusqlit
         week_start: read_value(connection, "week_start")?,
         date_format: read_value(connection, "date_format")?,
         show_weekends: read_value(connection, "show_weekends")?,
-        calendar_enabled: read_value(connection, "calendar_enabled")?,
-        matrix_enabled: read_value(connection, "matrix_enabled")?,
-        notes_enabled: read_value(connection, "notes_enabled")?,
     })
 }
 
@@ -59,9 +56,6 @@ pub fn write_app_settings(
         ("week_start", serde_json::to_string(&settings.week_start)),
         ("date_format", serde_json::to_string(&settings.date_format)),
         ("show_weekends", serde_json::to_string(&settings.show_weekends)),
-        ("calendar_enabled", serde_json::to_string(&settings.calendar_enabled)),
-        ("matrix_enabled", serde_json::to_string(&settings.matrix_enabled)),
-        ("notes_enabled", serde_json::to_string(&settings.notes_enabled)),
     ];
     for (key, value) in values {
         let value = value.map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
@@ -94,9 +88,6 @@ mod tests {
         assert_eq!(settings.week_start, "monday");
         assert_eq!(settings.date_format, "localized");
         assert!(settings.show_weekends);
-        assert!(settings.calendar_enabled);
-        assert!(settings.matrix_enabled);
-        assert!(settings.notes_enabled);
     }
 
     #[test]
@@ -111,9 +102,6 @@ mod tests {
             week_start: "sunday".into(),
             date_format: "iso".into(),
             show_weekends: false,
-            calendar_enabled: false,
-            matrix_enabled: true,
-            notes_enabled: false,
         };
 
         super::write_app_settings(&mut connection, &settings).unwrap();

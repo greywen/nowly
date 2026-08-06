@@ -219,8 +219,8 @@ export type WeekRowLayout = {
   spanLaneCount: number;
   /** Single-day events per column (0-6), sorted, to be centered per cell. */
   singlesByCol: CalendarEvent[][];
-  /** Single-day events hidden past the per-column cap, per column. */
-  overflowByCol: number[];
+  /** Events hidden past the total per-date cap, per column. */
+  overflowByCol: CalendarEvent[][];
 };
 
 /**
@@ -260,6 +260,7 @@ export function layoutWeekRows(
 
   const laneOccupancy: boolean[][] = [];
   const spanning: EventSegment[] = [];
+  const overflowByCol: CalendarEvent[][] = Array.from({ length: 7 }, () => []);
   for (const event of sorted) {
     const start = event.startAt.slice(0, 10);
     const end = event.endAt.slice(0, 10);
@@ -278,25 +279,76 @@ export function layoutWeekRows(
       if (free) break;
       lane += 1;
     }
-    for (let col = startCol; col <= endCol; col += 1) laneOccupancy[lane][col] = true;
-    spanning.push({
-      event,
-      startCol,
-      endCol,
-      lane,
-      continuesBefore: start < weekStart,
-      continuesAfter: end > weekEnd
-    });
+
+    if (!Number.isFinite(maxSingles) || lane < maxSingles) {
+      for (let col = startCol; col <= endCol; col += 1) laneOccupancy[lane][col] = true;
+      spanning.push({
+        event,
+        startCol,
+        endCol,
+        lane,
+        continuesBefore: start < weekStart,
+        continuesAfter: end > weekEnd
+      });
+      continue;
+    }
+
+    // No one lane can carry the entire bar below the date cap. Preserve every
+    // visible remainder as a connected run and report only the saturated dates
+    // as overflow, rather than hiding the whole multi-day event for the week.
+    let runStart = -1;
+    let runLane = -1;
+    const flushRun = (runEnd: number) => {
+      if (runStart < 0) return;
+      spanning.push({
+        event,
+        startCol: runStart,
+        endCol: runEnd,
+        lane: runLane,
+        continuesBefore: start < weekStart || runStart > startCol,
+        continuesAfter: end > weekEnd || runEnd < endCol
+      });
+      runStart = -1;
+      runLane = -1;
+    };
+    for (let col = startCol; col <= endCol; col += 1) {
+      let freeLane = -1;
+      for (let candidate = 0; candidate < maxSingles; candidate += 1) {
+        if (!laneOccupancy[candidate]) laneOccupancy[candidate] = new Array(7).fill(false);
+        if (!laneOccupancy[candidate][col]) {
+          freeLane = candidate;
+          break;
+        }
+      }
+      if (freeLane < 0) {
+        flushRun(col - 1);
+        overflowByCol[col].push(event);
+      } else {
+        if (runStart >= 0 && runLane !== freeLane) flushRun(col - 1);
+        if (runStart < 0) {
+          runStart = col;
+          runLane = freeLane;
+        }
+        laneOccupancy[freeLane][col] = true;
+      }
+    }
+    flushRun(endCol);
   }
   const spanLaneCount = spanning.reduce((max, segment) => Math.max(max, segment.lane + 1), 0);
+  const spanLanesByCol = new Array(7).fill(0);
+  for (const segment of spanning) {
+    for (let col = segment.startCol; col <= segment.endCol; col += 1) {
+      spanLanesByCol[col] = Math.max(spanLanesByCol[col], segment.lane + 1);
+    }
+  }
 
-  // Group single-day events per column and cap each column independently.
+  // Group single-day events per column and use only the capacity left after
+  // visible spanning lanes have counted toward that date's total limit.
   const singlesByCol: CalendarEvent[][] = Array.from({ length: 7 }, () => []);
   for (const event of singleEvents) {
     const col = dayDiff(weekStart, event.startAt.slice(0, 10));
     if (col >= 0 && col <= 6) singlesByCol[col].push(event);
   }
-  const overflowByCol = new Array(7).fill(0);
   for (let col = 0; col < 7; col += 1) {
     // All-day events first, then the rest by nearest start time (earliest
     // first), with id as a stable tiebreaker.
@@ -308,9 +360,10 @@ export function layoutWeekRows(
         left.id.localeCompare(right.id)
       );
     });
-    if (Number.isFinite(maxSingles) && singlesByCol[col].length > maxSingles) {
-      overflowByCol[col] = singlesByCol[col].length - maxSingles;
-      singlesByCol[col] = singlesByCol[col].slice(0, maxSingles);
+    if (Number.isFinite(maxSingles)) {
+      const visibleSingles = Math.max(0, maxSingles - spanLanesByCol[col]);
+      overflowByCol[col].push(...singlesByCol[col].slice(visibleSingles));
+      singlesByCol[col] = singlesByCol[col].slice(0, visibleSingles);
     }
   }
 

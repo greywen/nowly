@@ -1,22 +1,11 @@
-export type WidgetId = 'calendar' | 'matrix' | 'notes' | 'focusTimer' | 'newsWordCloud' | 'vocabulary';
+import type { SandboxExtension } from '../data/nowly-repository';
 
-export type WidgetConfig = {
-  id: WidgetId;
-  name: string;
-  enabled: boolean;
-  order: number;
-  size: 'main' | 'side-large' | 'side-medium';
-};
+// Built-in module identifiers plus the free-form `sandbox:<uuid>` ids created by
+// user-uploaded modules. Kept as a string so user modules flow through the same
+// layout machinery as built-in modules.
+export type WidgetId = string;
 
-export const defaultWidgets: WidgetConfig[] = [
-  { id: 'calendar', name: '日历', enabled: true, order: 1, size: 'main' },
-  { id: 'matrix', name: '四象限', enabled: true, order: 2, size: 'side-large' },
-  { id: 'notes', name: '便签', enabled: true, order: 3, size: 'side-medium' }
-];
-
-export function getEnabledWidgets(widgets: WidgetConfig[]): WidgetConfig[] {
-  return widgets.filter((widget) => widget.enabled).sort((left, right) => left.order - right.order);
-}
+export type WidgetCategory = 'builtin' | 'extension' | 'sandbox';
 
 // --- Free-form tiling layout -------------------------------------------------
 
@@ -29,27 +18,123 @@ export type Rect = { x: number; y: number; w: number; h: number };
 export type WidgetDefinition = {
   id: WidgetId;
   name: string;
+  description: string;
+  category: WidgetCategory;
   minW: number;
   minH: number;
   default: Rect;
+  // Present only for user modules so the host can run their source.
+  extension?: SandboxExtension;
 };
 
 export type ModuleLayout = { id: WidgetId } & Rect;
 export type LayoutState = ModuleLayout[];
 
-export const widgetDefinitions: WidgetDefinition[] = [
-  { id: 'calendar', name: '日历', minW: 5, minH: 4, default: { x: 0, y: 0, w: 7, h: 8 } },
-  { id: 'matrix', name: '四象限', minW: 3, minH: 3, default: { x: 7, y: 0, w: 5, h: 5 } },
-  { id: 'notes', name: '便签', minW: 2, minH: 2, default: { x: 7, y: 5, w: 5, h: 3 } }
+// Built-in modules always available in the picker.
+export const builtinDefinitions: WidgetDefinition[] = [
+  {
+    id: 'calendar',
+    name: '日历',
+    description: '按月、周查看日程与安排。',
+    category: 'builtin',
+    minW: 5,
+    minH: 4,
+    default: { x: 0, y: 0, w: 7, h: 8 }
+  },
+  {
+    id: 'matrix',
+    name: '四象限',
+    description: '用重要 / 紧急四象限管理任务。',
+    category: 'builtin',
+    minW: 3,
+    minH: 3,
+    default: { x: 7, y: 0, w: 5, h: 5 }
+  },
+  {
+    id: 'notes',
+    name: '便签',
+    description: '记录灵感与待办的轻量便签墙。',
+    category: 'builtin',
+    minW: 2,
+    minH: 2,
+    default: { x: 7, y: 5, w: 5, h: 3 }
+  }
 ];
 
-export const defaultLayout: LayoutState = widgetDefinitions.map((definition) => ({
+// Optional extension modules the user can add or remove from the layout.
+export const extensionDefinitions: WidgetDefinition[] = [
+  {
+    id: 'focusTimer',
+    name: '专注计时',
+    description: '番茄钟式专注计时，帮助保持节奏。',
+    category: 'extension',
+    minW: 3,
+    minH: 3,
+    default: { x: 0, y: 0, w: 4, h: 4 }
+  },
+  {
+    id: 'newsWordCloud',
+    name: '热点词云',
+    description: '把当下热点关键词汇聚成词云。',
+    category: 'extension',
+    minW: 3,
+    minH: 3,
+    default: { x: 0, y: 0, w: 5, h: 4 }
+  },
+  {
+    id: 'vocabulary',
+    name: '每日单词',
+    description: '每天一个单词，积累词汇量。',
+    category: 'extension',
+    minW: 3,
+    minH: 2,
+    default: { x: 0, y: 0, w: 4, h: 3 }
+  }
+];
+
+export const SANDBOX_ID_PREFIX = 'sandbox:';
+
+export function isSandboxWidgetId(id: WidgetId): boolean {
+  return id.startsWith(SANDBOX_ID_PREFIX);
+}
+
+// Turn an installed user module into a placeable widget definition.
+export function sandboxExtensionToDefinition(extension: SandboxExtension): WidgetDefinition {
+  return {
+    id: `${SANDBOX_ID_PREFIX}${extension.id}`,
+    name: extension.name,
+    description: extension.description,
+    category: 'sandbox',
+    minW: extension.minW,
+    minH: extension.minH,
+    default: { x: 0, y: 0, w: extension.defaultW, h: extension.defaultH },
+    extension
+  };
+}
+
+// The full set of placeable modules: built-ins, extensions, and installed user
+// modules.
+export function buildDefinitions(
+  sandboxExtensions: SandboxExtension[] = []
+): WidgetDefinition[] {
+  return [
+    ...builtinDefinitions,
+    ...extensionDefinitions,
+    ...sandboxExtensions.map(sandboxExtensionToDefinition)
+  ];
+}
+
+// The default layout the app ships with (built-in modules tiling the grid).
+export const defaultLayout: LayoutState = builtinDefinitions.map((definition) => ({
   id: definition.id,
   ...definition.default
 }));
 
-export function getWidgetDefinition(id: WidgetId): WidgetDefinition | undefined {
-  return widgetDefinitions.find((definition) => definition.id === id);
+export function getWidgetDefinition(
+  id: WidgetId,
+  definitions: WidgetDefinition[] = builtinDefinitions
+): WidgetDefinition | undefined {
+  return definitions.find((definition) => definition.id === id);
 }
 
 export function rectsOverlap(a: Rect, b: Rect): boolean {
@@ -76,29 +161,31 @@ export function clampToBounds(rect: Rect): Rect {
 }
 
 // Can `id` occupy `rect` given the rest of `layout`? Enforces bounds, the
-// module's own minimum size, and no overlap with any other module.
-export function canPlace(layout: LayoutState, id: WidgetId, rect: Rect): boolean {
+// module's own minimum size (when known), and no overlap with any other module.
+export function canPlace(
+  layout: LayoutState,
+  id: WidgetId,
+  rect: Rect,
+  definitions: WidgetDefinition[] = builtinDefinitions
+): boolean {
   if (!isWithinBounds(rect)) return false;
-  const definition = getWidgetDefinition(id);
+  const definition = getWidgetDefinition(id, definitions);
   if (definition && (rect.w < definition.minW || rect.h < definition.minH)) return false;
   return layout.every((item) => item.id === id || !rectsOverlap(item, rect));
 }
 
-function isValidLayout(layout: LayoutState): boolean {
-  for (const definition of widgetDefinitions) {
-    if (!layout.some((item) => item.id === definition.id)) return false;
-  }
-  for (let a = 0; a < layout.length; a += 1) {
-    const item = layout[a];
-    const definition = getWidgetDefinition(item.id);
-    if (!definition) return false;
-    if (!isWithinBounds(item)) return false;
-    if (item.w < definition.minW || item.h < definition.minH) return false;
-    for (let b = a + 1; b < layout.length; b += 1) {
-      if (rectsOverlap(item, layout[b])) return false;
+// Find the first grid cell (row-major) where a `w`x`h` module fits without
+// overlapping the existing layout. Returns null when the grid is full.
+export function findFreeSlot(layout: LayoutState, w: number, h: number): Rect | null {
+  const width = Math.min(w, GRID_COLS);
+  const height = Math.min(h, GRID_ROWS);
+  for (let y = 0; y + height <= GRID_ROWS; y += 1) {
+    for (let x = 0; x + width <= GRID_COLS; x += 1) {
+      const candidate = { x, y, w: width, h: height };
+      if (layout.every((item) => !rectsOverlap(item, candidate))) return candidate;
     }
   }
-  return true;
+  return null;
 }
 
 function isIntRect(value: unknown): value is Rect {
@@ -112,20 +199,33 @@ function isIntRect(value: unknown): value is Rect {
   );
 }
 
-export function normalizeLayout(raw: unknown): LayoutState {
-  if (!Array.isArray(raw)) return defaultLayout;
+// Clean a stored layout against the known definitions: drop entries with an
+// unknown id, malformed rect, out-of-bounds rect, below-minimum size, duplicate
+// id, or overlap with an already-accepted entry. Unlike the old MVP behavior
+// this does NOT require every definition to be present — the layout is now a
+// free subset of modules the user has chosen to show.
+export function normalizeLayout(
+  raw: unknown,
+  definitions: WidgetDefinition[] = builtinDefinitions
+): LayoutState {
+  if (!Array.isArray(raw)) return [];
   const seen = new Set<WidgetId>();
   const result: LayoutState = [];
   for (const entry of raw) {
-    if (typeof entry !== 'object' || entry === null) return defaultLayout;
+    if (typeof entry !== 'object' || entry === null) continue;
     const id = (entry as { id?: unknown }).id;
-    if (typeof id !== 'string' || !getWidgetDefinition(id as WidgetId)) return defaultLayout;
-    if (!isIntRect(entry)) return defaultLayout;
-    if (seen.has(id as WidgetId)) return defaultLayout;
-    seen.add(id as WidgetId);
+    if (typeof id !== 'string') continue;
+    const definition = getWidgetDefinition(id, definitions);
+    if (!definition) continue;
+    if (!isIntRect(entry)) continue;
+    if (seen.has(id)) continue;
     const { x, y, w, h } = entry as unknown as Rect;
-    result.push({ id: id as WidgetId, x, y, w, h });
+    const rect = { x, y, w, h };
+    if (!isWithinBounds(rect)) continue;
+    if (w < definition.minW || h < definition.minH) continue;
+    if (result.some((item) => rectsOverlap(item, rect))) continue;
+    seen.add(id);
+    result.push({ id, x, y, w, h });
   }
-  if (!isValidLayout(result)) return defaultLayout;
   return result;
 }

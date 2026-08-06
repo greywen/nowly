@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import '../app/styles.css';
 import { sampleEvents } from '../lib/sample-data';
 import { CalendarWidget } from './CalendarWidget';
 
@@ -32,6 +33,20 @@ afterEach(() => {
 });
 
 describe('CalendarWidget', () => {
+  it('renders overflow dots in the dedicated event-row container', () => {
+    const overflowEvent = {
+      ...sampleEvents[0],
+      id: 'overflow-alignment',
+      startAt: '2026-07-23T20:00:00',
+      endAt: '2026-07-23T20:30:00'
+    };
+    render(<CalendarWidget {...baseProps} events={[...sampleEvents, overflowEvent]} />);
+
+    const row = screen.getByRole('button', { name: '另有 1 个日程' });
+    expect(row).toHaveClass('event-overflow-dots');
+    expect(row.querySelector('.event-overflow-dot')).toHaveClass('event--work');
+  });
+
   it('renders a 42-day month and invokes all header navigation callbacks', async () => {
     const user = userEvent.setup();
     const onPreviousMonth = vi.fn();
@@ -112,6 +127,37 @@ describe('CalendarWidget', () => {
     expect(screen.getByRole('button', { name: '全天 产品发布日，重要' })).toBeInTheDocument();
     expect(screen.queryByText('健身')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '另有 1 个日程' }));
+    expect(onOpenDate).toHaveBeenCalledWith('2026-07-23');
+  });
+
+  it('renders hidden month events as left-aligned dots with matching event colors', async () => {
+    const user = userEvent.setup();
+    const onOpenDate = vi.fn();
+    const colors = ['blue', 'red', 'green', 'yellow'] as const;
+    const overflowEvents = colors.map((color, index) => ({
+      ...sampleEvents[0],
+      id: `overflow-${color}`,
+      title: `隐藏日程 ${index + 1}`,
+      startAt: `2026-07-23T${20 + index}:00:00`,
+      endAt: `2026-07-23T${20 + index}:30:00`,
+      color
+    }));
+    render(
+      <CalendarWidget
+        {...baseProps}
+        events={[...sampleEvents, ...overflowEvents]}
+        onOpenDate={onOpenDate}
+      />
+    );
+
+    const overflowButton = screen.getByRole('button', { name: '另有 4 个日程' });
+    expect(overflowButton.querySelectorAll('.event-overflow-dot')).toHaveLength(4);
+    expect(overflowButton.querySelectorAll('.event--work')).toHaveLength(1);
+    expect(overflowButton.querySelectorAll('.event--important')).toHaveLength(1);
+    expect(overflowButton.querySelectorAll('.event--personal')).toHaveLength(1);
+    expect(overflowButton.querySelectorAll('.event--learning')).toHaveLength(1);
+
+    await user.click(overflowButton);
     expect(onOpenDate).toHaveBeenCalledWith('2026-07-23');
   });
 

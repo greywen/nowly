@@ -1,4 +1,4 @@
-import { GripVertical } from 'lucide-react';
+import { GripVertical, X } from 'lucide-react';
 import type { CSSProperties, PointerEvent, ReactNode } from 'react';
 import type { WidgetDefinition } from '../../widgets/widget-registry';
 
@@ -11,6 +11,7 @@ type ModuleFrameProps = {
   isDragging?: boolean;
   onMovePointerDown?: (event: PointerEvent<HTMLElement>) => void;
   onResizePointerDown?: (event: PointerEvent<HTMLElement>) => void;
+  onRemove?: () => void;
 };
 
 export function ModuleFrame({
@@ -21,7 +22,8 @@ export function ModuleFrame({
   isInvalid = false,
   isDragging = false,
   onMovePointerDown,
-  onResizePointerDown
+  onResizePointerDown,
+  onRemove
 }: ModuleFrameProps) {
   const className = [
     'card',
@@ -46,6 +48,14 @@ export function ModuleFrame({
             <GripVertical />
           </span>
           <span className="module-frame__title">{definition.name}</span>
+          <button
+            type="button"
+            className="good-icon-button module-frame__remove"
+            aria-label={`移除${definition.name}`}
+            onClick={onRemove}
+          >
+            <X aria-hidden="true" />
+          </button>
         </div>
       ) : null}
       <div className="module-frame__body">

@@ -8,24 +8,34 @@ import { expect, test, type Page } from '@playwright/test';
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
-    // Start every run from the default layout.
-    try {
-      window.localStorage.removeItem('nowly.module-layout');
-    } catch {
-      // ignore
-    }
     const settings = {
       wallpaperEnabled: false, launchAtLogin: false, targetMonitorId: null,
       density: 'balanced', weekStart: 'monday', dateFormat: 'localized',
-      showWeekends: true, calendarEnabled: true, matrixEnabled: true, notesEnabled: true
+      showWeekends: true
     };
+    // Module layout now lives in the database (accessed via invoke), not
+    // localStorage. Keep it in an in-memory store the invoke mock reads and
+    // writes so save/reload behaves like the real backend within a session.
+    const defaultLayout = [
+      { id: 'calendar', x: 0, y: 0, w: 7, h: 8 },
+      { id: 'matrix', x: 7, y: 0, w: 5, h: 5 },
+      { id: 'notes', x: 7, y: 5, w: 5, h: 3 }
+    ];
+    Reflect.set(window, '__moduleLayout__', defaultLayout);
     Object.defineProperty(window, '__TAURI_INTERNALS__', {
       value: {
-        invoke: async (command: string) => {
+        invoke: async (command: string, args?: Record<string, unknown>) => {
           if (command === 'get_app_settings') return settings;
           if (command === 'list_events_in_range') return [];
           if (command === 'list_tasks') return [];
           if (command === 'list_notes') return [];
+          if (command === 'list_custom_templates') return [];
+          if (command === 'list_module_layout') return Reflect.get(window, '__moduleLayout__');
+          if (command === 'save_module_layout') {
+            const layout = (args?.layout ?? []) as unknown;
+            Reflect.set(window, '__moduleLayout__', layout);
+            return layout;
+          }
           return 'ok';
         },
         transformCallback: (cb: (payload: unknown) => void) => {
@@ -40,12 +50,13 @@ test.beforeEach(async ({ page }) => {
 });
 
 // Reads the persisted layout so assertions test the committed result, not just
-// the visual box.
+// the visual box. The layout is the in-memory store the invoke mock writes to.
 async function storedRect(page: Page, id: string) {
   return page.evaluate((widgetId) => {
-    const raw = window.localStorage.getItem('nowly.module-layout');
-    if (!raw) return null;
-    const layout = JSON.parse(raw) as Array<{ id: string; x: number; y: number; w: number; h: number }>;
+    const layout = Reflect.get(window, '__moduleLayout__') as
+      | Array<{ id: string; x: number; y: number; w: number; h: number }>
+      | undefined;
+    if (!layout) return null;
     return layout.find((item) => item.id === widgetId) ?? null;
   }, id);
 }
@@ -157,8 +168,7 @@ test('rejects a move that would overlap another module', async ({ page }) => {
   await page.mouse.move(box.x + box.width / 2 - stride.col * 7, box.y + box.height / 2, { steps: 12 });
   await page.mouse.up();
 
-  // A rejected move commits nothing (storage stays empty) and the frame stays
-  // at its default column.
+  // A rejected move commits nothing and the frame stays at its default column.
   await expect(notes).toHaveCSS('grid-column-start', '8');
-  await expect.poll(async () => await storedRect(page, 'notes')).toBeNull();
+  await expect.poll(async () => (await storedRect(page, 'notes'))?.x).toBe(7);
 });

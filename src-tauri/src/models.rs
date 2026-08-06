@@ -94,9 +94,45 @@ pub struct AppSettings {
     pub week_start: String,
     pub date_format: String,
     pub show_weekends: bool,
-    pub calendar_enabled: bool,
-    pub matrix_enabled: bool,
-    pub notes_enabled: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModuleLayoutEntry {
+    pub id: String,
+    pub x: i64,
+    pub y: i64,
+    pub w: i64,
+    pub h: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SandboxExtension {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub source: String,
+    pub permissions: Vec<String>,
+    pub min_w: i64,
+    pub min_h: i64,
+    pub default_w: i64,
+    pub default_h: i64,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SandboxExtensionDraft {
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    pub source: String,
+    #[serde(default)]
+    pub permissions: Vec<String>,
+    pub default_w: i64,
+    pub default_h: i64,
 }
 
 #[cfg(test)]

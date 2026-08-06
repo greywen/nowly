@@ -10,9 +10,35 @@ export type AppSettings = {
   weekStart: 'monday' | 'sunday';
   dateFormat: 'localized' | 'iso';
   showWeekends: boolean;
-  calendarEnabled: boolean;
-  matrixEnabled: boolean;
-  notesEnabled: boolean;
+};
+
+export type ModuleLayoutEntry = { id: string; x: number; y: number; w: number; h: number };
+
+// A permission a sandbox extension may declare. Kept in lockstep with the
+// backend allow-list so the installer and host agree on the capability surface.
+export type SandboxPermission = 'state' | 'today';
+
+export type SandboxExtension = {
+  id: string;
+  name: string;
+  description: string;
+  source: string;
+  permissions: SandboxPermission[];
+  minW: number;
+  minH: number;
+  defaultW: number;
+  defaultH: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SandboxExtensionDraft = {
+  name: string;
+  description: string;
+  source: string;
+  permissions: SandboxPermission[];
+  defaultW: number;
+  defaultH: number;
 };
 
 export type MonitorInfo = { id:string; name:string; isPrimary:boolean; positionX:number; positionY:number; width:number; height:number; scaleFactor:number };
@@ -40,4 +66,11 @@ export type NowlyRepository = {
   getSettings(): Promise<AppSettings>;
   updateSettings(settings: AppSettings): Promise<AppSettings>;
   listMonitors(): Promise<MonitorInfo[]>;
+  listModuleLayout(): Promise<ModuleLayoutEntry[]>;
+  saveModuleLayout(layout: ModuleLayoutEntry[]): Promise<ModuleLayoutEntry[]>;
+  getModuleState(moduleId: string): Promise<string | null>;
+  setModuleState(moduleId: string, state: string): Promise<void>;
+  listExtensions(): Promise<SandboxExtension[]>;
+  installExtension(draft: SandboxExtensionDraft): Promise<SandboxExtension>;
+  uninstallExtension(id: string): Promise<void>;
 };

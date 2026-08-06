@@ -2,11 +2,13 @@ import { useRef, useState, type PointerEvent, type ReactNode } from 'react';
 import {
   GRID_COLS,
   GRID_ROWS,
+  builtinDefinitions,
   canPlace,
   clampToBounds,
   getWidgetDefinition,
   type LayoutState,
   type Rect,
+  type WidgetDefinition,
   type WidgetId
 } from '../../widgets/widget-registry';
 import { ModuleFrame } from './ModuleFrame';
@@ -20,8 +22,10 @@ export type ModuleGridItem = {
 type ModuleGridProps = {
   items: ModuleGridItem[];
   editing: boolean;
+  definitions?: WidgetDefinition[];
   onMove: (id: WidgetId, position: { x: number; y: number }) => void;
   onResize: (id: WidgetId, size: { w: number; h: number }) => void;
+  onRemove?: (id: WidgetId) => void;
 };
 
 type DragMode = 'move' | 'resize';
@@ -40,7 +44,14 @@ type DragState = {
   lastValid: Rect;
 };
 
-export function ModuleGrid({ items, editing, onMove, onResize }: ModuleGridProps) {
+export function ModuleGrid({
+  items,
+  editing,
+  definitions = builtinDefinitions,
+  onMove,
+  onResize,
+  onRemove
+}: ModuleGridProps) {
   const gridRef = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
 
@@ -80,7 +91,7 @@ export function ModuleGrid({ items, editing, onMove, onResize }: ModuleGridProps
     const stride = cellStride();
     const deltaCol = Math.round((event.clientX - drag.startX) / stride.col);
     const deltaRow = Math.round((event.clientY - drag.startY) / stride.row);
-    const definition = getWidgetDefinition(drag.id);
+    const definition = getWidgetDefinition(drag.id, definitions);
     const minW = definition?.minW ?? 1;
     const minH = definition?.minH ?? 1;
 
@@ -100,7 +111,7 @@ export function ModuleGrid({ items, editing, onMove, onResize }: ModuleGridProps
       draft = { x: drag.origin.x, y: drag.origin.y, w, h };
     }
 
-    const valid = canPlace(layout, drag.id, draft);
+    const valid = canPlace(layout, drag.id, draft, definitions);
     setDrag((current) =>
       current ? { ...current, draft, valid, lastValid: valid ? draft : current.lastValid } : current
     );
@@ -128,7 +139,7 @@ export function ModuleGrid({ items, editing, onMove, onResize }: ModuleGridProps
       onPointerUp={editing ? endDrag : undefined}
     >
       {items.map((item) => {
-        const definition = getWidgetDefinition(item.id);
+        const definition = getWidgetDefinition(item.id, definitions);
         if (!definition) return null;
         const isDragging = drag?.id === item.id;
         const rect = isDragging ? drag.draft : item.rect;
@@ -145,6 +156,7 @@ export function ModuleGrid({ items, editing, onMove, onResize }: ModuleGridProps
             }}
             onMovePointerDown={(event) => beginDrag('move', item.id, event)}
             onResizePointerDown={(event) => beginDrag('resize', item.id, event)}
+            onRemove={onRemove ? () => onRemove(item.id) : undefined}
           >
             {item.content}
           </ModuleFrame>

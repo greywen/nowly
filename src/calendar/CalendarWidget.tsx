@@ -479,12 +479,10 @@ export function CalendarWidget({
     // per column so every cell can center its own stack. First lay out the
     // spanning bars so we know how many lanes they claim, then cap the singles
     // so the spanning zone plus the visible singles never exceed the cell.
-    const spanLanes = layoutWeekRows(week, displayEvents).spanLaneCount;
-    const maxSingles = Math.max(1, MONTH_MAX_SINGLES - spanLanes);
     const { spanning, singlesByCol, overflowByCol } = layoutWeekRows(
       week,
       displayEvents,
-      maxSingles
+      MONTH_MAX_SINGLES
     );
     // Push the single-event stack below any spanning bars in that column. Both
     // layers start at 36px, so one 20px bar plus the standard 4px gap is 24px.
@@ -527,18 +525,22 @@ export function CalendarWidget({
                 style={{ paddingTop: `${singlesPadTopByCol[col]}px` }}
               >
                 {singlesByCol[col].map((event) => renderCellEvent(event))}
-                {overflowByCol[col] > 0 ? (
+                {overflowByCol[col].length > 0 ? (
                   <button
                     type="button"
                     className="event-overflow-dots"
-                    aria-label={`另有 ${overflowByCol[col]} 个日程`}
+                    aria-label={`另有 ${overflowByCol[col].length} 个日程`}
                     onClick={() => {
                       cancelDateClick();
                       onOpenDate(day.isoDate);
                     }}
                   >
-                    {Array.from({ length: overflowByCol[col] }, (_, index) => (
-                      <span key={index} className="event-overflow-dot" aria-hidden="true" />
+                    {overflowByCol[col].map((event) => (
+                      <span
+                        key={event.id}
+                        className={`event-overflow-dot ${eventToneClass[event.color]}`}
+                        aria-hidden="true"
+                      />
                     ))}
                   </button>
                 ) : null}

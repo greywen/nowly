@@ -227,18 +227,56 @@ describe('layoutWeekRows', () => {
     expect(singlesByCol[2].map((item) => item.id)).toEqual(['early', 'late']);
   });
 
-  it('caps single-day events per column and reports overflow', () => {
+  it('caps single-day events per column and returns the hidden events', () => {
+    const hidden = event('c', '2026-07-22T12:00:00', '2026-07-22T13:00:00');
     const { singlesByCol, overflowByCol } = layoutWeekRows(
       week,
       [
         event('a', '2026-07-22T08:00:00', '2026-07-22T09:00:00'),
         event('b', '2026-07-22T10:00:00', '2026-07-22T11:00:00'),
-        event('c', '2026-07-22T12:00:00', '2026-07-22T13:00:00')
+        hidden
       ],
       2
     );
-    expect(singlesByCol[2]).toHaveLength(2);
-    expect(overflowByCol[2]).toBe(1);
+    expect(singlesByCol[2].map((item) => item.id)).toEqual(['a', 'b']);
+    expect(overflowByCol[2]).toEqual([hidden]);
+  });
+
+  it('counts spanning events toward each date column cap', () => {
+    const hiddenSingle = event('hidden', '2026-07-22T12:00:00', '2026-07-22T13:00:00');
+    const { spanning, singlesByCol, overflowByCol } = layoutWeekRows(
+      week,
+      [
+        event('span-a', '2026-07-21T09:00:00', '2026-07-24T10:00:00'),
+        event('span-b', '2026-07-22T08:00:00', '2026-07-23T09:00:00'),
+        event('visible', '2026-07-22T10:00:00', '2026-07-22T11:00:00'),
+        hiddenSingle
+      ],
+      3
+    );
+    expect(spanning).toHaveLength(2);
+    expect(singlesByCol[2].map((item) => item.id)).toEqual(['visible']);
+    expect(overflowByCol[2]).toEqual([hiddenSingle]);
+  });
+
+  it('hides a spanning event only on capped dates and keeps its visible remainder', () => {
+    const partiallyHidden = event('partial', '2026-07-22T09:00:00', '2026-07-24T10:00:00');
+    const { spanning, overflowByCol } = layoutWeekRows(
+      week,
+      [
+        event('span-a', '2026-07-20T09:00:00', '2026-07-22T10:00:00'),
+        event('span-b', '2026-07-21T08:00:00', '2026-07-22T10:00:00'),
+        event('span-c', '2026-07-21T09:00:00', '2026-07-22T11:00:00'),
+        partiallyHidden
+      ],
+      3
+    );
+    expect(overflowByCol[2]).toEqual([partiallyHidden]);
+    expect(overflowByCol[3]).toEqual([]);
+    expect(spanning.find((segment) => segment.event.id === 'partial')).toMatchObject({
+      startCol: 3,
+      endCol: 4
+    });
   });
 
   it('lane-packs overlapping multi-day events into separate lanes', () => {

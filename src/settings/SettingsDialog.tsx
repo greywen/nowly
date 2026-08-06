@@ -17,12 +17,11 @@ export function SettingsDialog({settings,monitors=[],onClose,onSave}:Props){
     <Select id="settings-density" label="界面密度" value={draft.density} options={[{value:'balanced',label:'平衡'},{value:'comfortable',label:'舒适'}]} onChange={value=>setDraft({...draft,density:value as AppSettings['density']})}/>
     <Select id="settings-week-start" label="每周开始日" value={draft.weekStart} options={[{value:'monday',label:'周一'},{value:'sunday',label:'周日'}]} onChange={value=>setDraft({...draft,weekStart:value as AppSettings['weekStart']})}/>
     <Select id="settings-date-format" label="日期格式" value={draft.dateFormat} options={[{value:'localized',label:'本地格式'},{value:'iso',label:'ISO 格式'}]} onChange={value=>setDraft({...draft,dateFormat:value as AppSettings['dateFormat']})}/>
+   </div><div className="settings-checks">
+    <Check label="显示周末" checked={draft.showWeekends} onChange={toggle('showWeekends')}/>
    </div></section>
    <section><h3>桌面与启动</h3>{monitors.length?<Select id="settings-monitor" label="目标显示器" value={draft.targetMonitorId??monitors.find(item=>item.isPrimary)?.id??monitors[0].id} options={monitors.map(item=>({value:item.id,label:`${item.name}${item.isPrimary?'（主显示器）':''} · ${item.width}×${item.height} · ${Math.round(item.scaleFactor*100)}%`}))} onChange={value=>setDraft({...draft,targetMonitorId:value})}/>:null}<div className="settings-checks">
     <Check label="关闭时恢复壁纸" checked={draft.wallpaperEnabled} onChange={toggle('wallpaperEnabled')}/><Check label="开机自动启动" checked={draft.launchAtLogin} onChange={toggle('launchAtLogin')}/>
-   </div></section>
-   <section><h3>模块显示</h3><div className="settings-checks">
-    <Check label="显示周末" checked={draft.showWeekends} onChange={toggle('showWeekends')}/><Check label="显示日历" checked={draft.calendarEnabled} onChange={toggle('calendarEnabled')}/><Check label="显示四象限" checked={draft.matrixEnabled} onChange={toggle('matrixEnabled')}/><Check label="显示便签" checked={draft.notesEnabled} onChange={toggle('notesEnabled')}/>
    </div></section>
    {error?<div className="dialog-error" role="alert">{error}</div>:null}
   </div>

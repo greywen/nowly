@@ -4,6 +4,19 @@ import type { ReactNode } from 'react';
 import type { WidgetId } from '../../widgets/widget-registry';
 import { DesktopShell } from './DesktopShell';
 
+// useModuleLayout loads the layout from the repository via the Tauri bridge.
+// Return the default built-in layout so calendar/matrix/notes render.
+const defaultEntries = [
+  { id: 'calendar', x: 0, y: 0, w: 7, h: 8 },
+  { id: 'matrix', x: 7, y: 0, w: 5, h: 5 },
+  { id: 'notes', x: 7, y: 5, w: 5, h: 3 }
+];
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: vi.fn().mockImplementation((command: string, args?: { layout?: unknown }) =>
+    command === 'save_module_layout' ? Promise.resolve(args?.layout ?? []) : Promise.resolve(defaultEntries)
+  )
+}));
+
 function modules(overrides: Partial<Record<WidgetId, ReactNode>> = {}): Partial<Record<WidgetId, ReactNode>> {
   return {
     calendar: <div>calendar region</div>,
@@ -115,7 +128,7 @@ describe('DesktopShell', () => {
     expect(screen.getByTestId('desktop-root').className).not.toMatch(/(?:^|\s)(?:p-|sm:p-|xl:p-)/);
   });
 
-  it('toggles edit mode to reveal drag handles, resize handles, and a reset control', () => {
+  it('toggles edit mode to reveal drag and resize handles without a reset control', () => {
     render(
       <DesktopShell
         time="09:41"
@@ -133,7 +146,8 @@ describe('DesktopShell', () => {
 
     expect(screen.getAllByTestId('module-frame-handle')).toHaveLength(3);
     expect(screen.getAllByTestId('module-frame-resize')).toHaveLength(3);
-    expect(screen.getByRole('button', { name: '重置布局' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '添加模块' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '重置布局' })).not.toBeInTheDocument();
   });
 
   it('leaves edit mode and hides the editing affordances again', () => {

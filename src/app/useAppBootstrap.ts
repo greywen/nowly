@@ -14,10 +14,7 @@ const defaultSettings: AppSettings = {
   density: 'balanced',
   weekStart: 'monday',
   dateFormat: 'localized',
-  showWeekends: true,
-  calendarEnabled: true,
-  matrixEnabled: true,
-  notesEnabled: true
+  showWeekends: true
 };
 
 function messageFrom(error: unknown) {

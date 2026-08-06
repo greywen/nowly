@@ -3,7 +3,7 @@ import type { AppSettings, MonitorInfo } from '../data/nowly-repository';
 import { useNowlyRepository } from '../data/RepositoryContext';
 
 export type SettingsResource = { status:'loading'|'ready'|'error'; data:AppSettings; message?:string };
-export const defaultSettings: AppSettings = { wallpaperEnabled:false, launchAtLogin:false, targetMonitorId:null, density:'balanced', weekStart:'monday', dateFormat:'localized', showWeekends:true, calendarEnabled:true, matrixEnabled:true, notesEnabled:true };
+export const defaultSettings: AppSettings = { wallpaperEnabled:false, launchAtLogin:false, targetMonitorId:null, density:'balanced', weekStart:'monday', dateFormat:'localized', showWeekends:true };
 
 function message(error:unknown) {
   return typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string' ? error.message : '设置操作失败，请重试。';

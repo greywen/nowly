@@ -13,10 +13,7 @@ const settings: AppSettings = {
   density: 'balanced',
   weekStart: 'monday',
   dateFormat: 'localized',
-  showWeekends: true,
-  calendarEnabled: true,
-  matrixEnabled: true,
-  notesEnabled: true
+  showWeekends: true
 };
 
 const draft: EventDraft = {
@@ -56,6 +53,13 @@ function createRepository(overrides: Partial<NowlyRepository> = {}): NowlyReposi
     getSettings: vi.fn().mockResolvedValue(settings),
     updateSettings: vi.fn().mockResolvedValue(settings),
     listMonitors: vi.fn().mockResolvedValue([]),
+    listModuleLayout: vi.fn().mockResolvedValue([]),
+    saveModuleLayout: vi.fn().mockImplementation((layout) => Promise.resolve(layout)),
+    getModuleState: vi.fn().mockResolvedValue(null),
+    setModuleState: vi.fn().mockResolvedValue(undefined),
+    listExtensions: vi.fn().mockResolvedValue([]),
+    installExtension: vi.fn(),
+    uninstallExtension: vi.fn(),
     ...overrides
   };
 }

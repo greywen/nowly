@@ -2,7 +2,10 @@ mod commands;
 mod db;
 mod error;
 mod events;
+mod extensions;
+mod layout;
 mod models;
+mod module_state;
 mod monitors;
 mod notes;
 mod settings;
@@ -221,6 +224,13 @@ fn main() {
             notes::delete_note,
             commands::get_app_settings,
             commands::update_app_settings,
+            layout::list_module_layout,
+            layout::save_module_layout,
+            module_state::get_module_state,
+            module_state::set_module_state,
+            extensions::list_extensions,
+            extensions::install_extension,
+            extensions::uninstall_extension,
             events::list_events_in_range,
             events::create_event,
             events::update_event,

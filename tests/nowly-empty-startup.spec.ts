@@ -53,3 +53,25 @@ test('shows the persisted-data empty dashboard without page overflow or motion',
   expect(metrics.transition).toBe('0s');
   expect(metrics.animation).toBe('none');
 });
+
+test('keeps action buttons at 40px without resizing calendar content controls', async ({ page }) => {
+  await page.goto('/');
+
+  const actionButtons = [
+    page.getByRole('button', { name: '设为壁纸' }),
+    page.getByRole('button', { name: '编辑布局' }),
+    page.getByRole('button', { name: '今天' }),
+    page.getByRole('button', { name: '新建日程' })
+  ];
+
+  for (const button of actionButtons) {
+    await expect(button).toHaveCSS('height', '40px');
+  }
+
+  await page.getByRole('button', { name: '新建日程' }).click();
+  await expect(page.getByRole('button', { name: '取消' })).toHaveCSS('height', '40px');
+  await expect(page.getByRole('button', { name: '保存' })).toHaveCSS('height', '40px');
+
+  const calendarDay = page.locator('.day-underlay').first();
+  await expect(calendarDay).not.toHaveCSS('height', '40px');
+});

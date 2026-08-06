@@ -12,6 +12,9 @@ const MIGRATIONS: &[(i64, Migration)] = &[
     (3, migration_3_indexes),
     (4, migration_4_default_settings),
     (5, migration_5_event_task_foreign_keys),
+    (6, migration_6_module_layout_and_templates),
+    (7, migration_7_module_state),
+    (8, migration_8_extensions),
 ];
 
 pub fn open_database(path: PathBuf) -> Result<Connection> {
@@ -161,6 +164,135 @@ fn migration_4_default_settings(transaction: &Transaction<'_>) -> Result<()> {
     Ok(())
 }
 
+fn migration_6_module_layout_and_templates(transaction: &Transaction<'_>) -> Result<()> {
+    transaction.execute_batch(
+        "CREATE TABLE IF NOT EXISTS module_layout (
+            id TEXT PRIMARY KEY,
+            x INTEGER NOT NULL,
+            y INTEGER NOT NULL,
+            w INTEGER NOT NULL,
+            h INTEGER NOT NULL,
+            position INTEGER NOT NULL
+         );
+         CREATE TABLE IF NOT EXISTS custom_templates (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            blocks TEXT NOT NULL,
+            min_w INTEGER NOT NULL,
+            min_h INTEGER NOT NULL,
+            default_w INTEGER NOT NULL,
+            default_h INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+         );",
+    )?;
+    const DEFAULT_LAYOUT: &[(&str, i64, i64, i64, i64)] = &[
+        ("calendar", 0, 0, 7, 8),
+        ("matrix", 7, 0, 5, 5),
+        ("notes", 7, 5, 5, 3),
+    ];
+    for (index, (id, x, y, w, h)) in DEFAULT_LAYOUT.iter().enumerate() {
+        transaction.execute(
+            "INSERT OR IGNORE INTO module_layout(id, x, y, w, h, position)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            rusqlite::params![id, x, y, w, h, index as i64],
+        )?;
+    }
+    Ok(())
+}
+
+fn migration_7_module_state(transaction: &Transaction<'_>) -> Result<()> {
+    // Per-module persisted state. Each module owns one JSON blob keyed by its
+    // widget id. This is the storage a runnable module writes through the host
+    // API, and the seam a future sandboxed extension would talk to.
+    transaction.execute_batch(
+        "CREATE TABLE IF NOT EXISTS module_state (
+            module_id TEXT PRIMARY KEY,
+            state TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+         );",
+    )
+}
+
+fn migration_8_extensions(transaction: &Transaction<'_>) -> Result<()> {
+    // Installed sandbox extensions. Each row is third-party-style JS source that
+    // runs in an isolated iframe, plus a declared permission set. This is the
+    // real distribution seam: user-installed extension code lives here instead
+    // of being hard-coded in the app.
+    transaction.execute_batch(
+        "CREATE TABLE IF NOT EXISTS extensions (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            source TEXT NOT NULL,
+            permissions TEXT NOT NULL DEFAULT '[]',
+            min_w INTEGER NOT NULL,
+            min_h INTEGER NOT NULL,
+            default_w INTEGER NOT NULL,
+            default_h INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+         );",
+    )?;
+    // Seed a counter demo so the sandbox is discoverable out of the box. It is a
+    // normal installed extension — nothing special beyond being pre-populated.
+    let source = r#"
+Nowly.defineModule(async function ({ host, root }) {
+  var state = (await host.loadState()) || { count: 0 };
+
+  function render() {
+    root.innerHTML = '';
+
+    var date = document.createElement('p');
+    date.textContent = host.todayIso ? ('\u4eca\u5929\uff1a' + host.todayIso) : '';
+    date.style.margin = '0 0 12px';
+    date.style.color = '#5a6473';
+
+    var value = document.createElement('p');
+    value.textContent = '\u8ba1\u6570\uff1a' + state.count;
+    value.style.margin = '0 0 12px';
+    value.style.fontSize = '24px';
+    value.style.fontWeight = '700';
+
+    var row = document.createElement('div');
+    row.style.display = 'flex';
+    row.style.gap = '8px';
+
+    var inc = document.createElement('button');
+    inc.textContent = '+1';
+    inc.onclick = async function () {
+      state = { count: state.count + 1 };
+      await host.saveState(state);
+      render();
+    };
+
+    var resetBtn = document.createElement('button');
+    resetBtn.textContent = '\u91cd\u7f6e';
+    resetBtn.onclick = async function () {
+      state = { count: 0 };
+      await host.saveState(state);
+      render();
+    };
+
+    row.appendChild(inc);
+    row.appendChild(resetBtn);
+    root.appendChild(date);
+    root.appendChild(value);
+    root.appendChild(row);
+  }
+
+  render();
+});
+"#;
+    transaction.execute(
+        "INSERT OR IGNORE INTO extensions(id,name,description,source,permissions,min_w,min_h,default_w,default_h,created_at,updated_at)
+         VALUES ('counter-demo',?1,?2,?3,'[\"state\",\"today\"]',3,3,4,4,strftime('%Y-%m-%dT%H:%M:%fZ','now'),strftime('%Y-%m-%dT%H:%M:%fZ','now'))",
+        rusqlite::params!["沙箱计数器", "运行在隔离沙箱中的示例扩展，演示第三方扩展契约。", source],
+    )?;
+    Ok(())
+}
+
 fn migration_5_event_task_foreign_keys(transaction: &Transaction<'_>) -> Result<()> {
     transaction.execute_batch(
         "PRAGMA defer_foreign_keys = ON;
@@ -296,7 +428,7 @@ mod tests {
             .unwrap()
             .collect::<Result<_, _>>()
             .unwrap();
-        assert_eq!(versions, vec![1, 2, 3, 4, 5]);
+        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8]);
 
         let event_fks: Vec<(String, String, String)> = connection
             .prepare("PRAGMA foreign_key_list(events)")
@@ -390,8 +522,8 @@ mod tests {
             .collect::<Result<_, _>>()
             .expect("versions collect");
 
-        assert_eq!(versions, vec![1, 2, 3, 4, 5]);
-        for table in ["events", "tasks", "notes", "settings", "widgets"] {
+        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8]);
+        for table in ["events", "tasks", "notes", "settings", "widgets", "module_layout", "custom_templates", "module_state", "extensions"] {
             assert!(table_exists(&connection, table), "missing table {table}");
         }
     }

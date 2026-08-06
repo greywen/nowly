@@ -59,7 +59,7 @@ describe('TaskRow', () => {
     expect(onOpen).toHaveBeenCalledWith(open, title);
   });
 
-  it('shows and immediately hides a complete hover and focus tooltip', async () => {
+  it('does not show a tooltip on hover or keyboard focus', async () => {
     const user = userEvent.setup();
     render(
       <TaskRow task={open} events={[linkedEvent]} pending={false} onToggle={vi.fn()} onOpen={vi.fn()} />
@@ -67,18 +67,12 @@ describe('TaskRow', () => {
     const title = screen.getByRole('button', { name: '编辑任务：发布 Nowly' });
 
     await user.hover(title);
-    expect(screen.getByRole('tooltip')).toHaveTextContent('发布 Nowly');
-    expect(screen.getByRole('tooltip')).toHaveTextContent('截止日期：2026-07-23');
-    expect(screen.getByRole('tooltip')).toHaveTextContent('优先级：高');
-    expect(screen.getByRole('tooltip')).toHaveTextContent('关联日程：设计评审');
-    await user.unhover(title);
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+    await user.unhover(title);
 
     await user.tab();
     await user.tab();
     expect(title).toHaveFocus();
-    expect(screen.getByRole('tooltip')).toBeInTheDocument();
-    await user.tab();
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
   });
 
@@ -100,6 +94,6 @@ describe('TaskRow', () => {
     expect(checkbox).toBeDisabled();
     await user.tab();
     expect(screen.getByRole('button', { name: '编辑任务：发布 Nowly' })).toHaveFocus();
-    expect(screen.getByRole('tooltip')).toHaveTextContent('关联日程：已关联其他月份日程');
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
   });
 });

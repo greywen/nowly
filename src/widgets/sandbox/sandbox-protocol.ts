@@ -1,0 +1,143 @@
+import type { ModuleHost } from '../extension-module';
+
+// The wire protocol between the app (parent) and a sandboxed extension running
+// inside an isolated iframe. The channel marker lets both sides ignore any
+// unrelated postMessage traffic; the parent additionally verifies the message
+// source is the specific iframe, so this is not a trust boundary on its own.
+export const SANDBOX_CHANNEL = 'nowly-module-v1';
+
+// The capabilities an extension may hold. Declared at install time, granted at
+// init, and enforced per request — an extension can never reach a method it did
+// not declare.
+export type SandboxPermission = 'state' | 'today';
+
+// Which host methods each permission unlocks. `today` is not a method gate; it
+// controls whether `todayIso` is handed over at init (see below).
+const METHOD_PERMISSION: Record<'loadState' | 'saveState', SandboxPermission> = {
+  loadState: 'state',
+  saveState: 'state'
+};
+
+// Parent -> guest: sent once the guest reports ready. Carries the only ambient
+// context a module gets, filtered by its granted permissions. `todayIso` is
+// present only when the `today` permission was granted.
+export type SandboxInit = {
+  channel: typeof SANDBOX_CHANNEL;
+  kind: 'init';
+  moduleId: string;
+  permissions: SandboxPermission[];
+  todayIso?: string;
+};
+
+// Guest -> parent: an RPC call for one of the allowed host methods. This is the
+// entire capability surface a sandboxed extension has — nothing else is reachable.
+export type SandboxRequest = {
+  channel: typeof SANDBOX_CHANNEL;
+  kind: 'request';
+  id: number;
+  method: 'loadState' | 'saveState';
+  args: unknown[];
+};
+
+// Parent -> guest: the result of one request, matched back by `id`.
+export type SandboxResponse = {
+  channel: typeof SANDBOX_CHANNEL;
+  kind: 'response';
+  id: number;
+  ok: boolean;
+  result?: unknown;
+  error?: string;
+};
+
+// Guest -> parent: emitted once the guest runtime has loaded and registered its
+// module, so the parent knows it is safe to send `init`.
+export type SandboxReady = {
+  channel: typeof SANDBOX_CHANNEL;
+  kind: 'ready';
+};
+
+// Narrow untrusted postMessage data to a request we recognize. Anything failing
+// this guard is ignored rather than trusted.
+export function isSandboxRequest(data: unknown): data is SandboxRequest {
+  if (typeof data !== 'object' || data === null) return false;
+  const message = data as Record<string, unknown>;
+  return (
+    message.channel === SANDBOX_CHANNEL &&
+    message.kind === 'request' &&
+    typeof message.id === 'number' &&
+    (message.method === 'loadState' || message.method === 'saveState') &&
+    Array.isArray(message.args)
+  );
+}
+
+export function isSandboxReady(data: unknown): data is SandboxReady {
+  if (typeof data !== 'object' || data === null) return false;
+  const message = data as Record<string, unknown>;
+  return message.channel === SANDBOX_CHANNEL && message.kind === 'ready';
+}
+
+// A simple sliding-window rate limiter. A misbehaving extension that floods the
+// channel gets its excess requests rejected rather than tying up the host.
+export function createRateLimiter(limit: number, windowMs: number): () => boolean {
+  const hits: number[] = [];
+  return () => {
+    const now = Date.now();
+    while (hits.length > 0 && now - hits[0] >= windowMs) hits.shift();
+    if (hits.length >= limit) return false;
+    hits.push(now);
+    return true;
+  };
+}
+
+// How the host decides whether a request may run: the granted permission set and
+// a throttle predicate. Defaults are permissive on permissions (state granted)
+// but always throttled, so existing call sites keep working.
+export type SandboxGrant = {
+  permissions: SandboxPermission[];
+  allow: () => boolean;
+};
+
+const defaultGrant: SandboxGrant = {
+  permissions: ['state', 'today'],
+  allow: () => true
+};
+
+// The heart of the host side: turn one validated request into a response by
+// dispatching to the (already narrowed) host API, after checking the grant.
+// Pure aside from the host it is given, so it is unit-testable without a DOM or
+// a real iframe.
+export async function handleSandboxRequest(
+  host: ModuleHost,
+  request: SandboxRequest,
+  grant: SandboxGrant = defaultGrant
+): Promise<SandboxResponse> {
+  const reject = (error: string): SandboxResponse => ({
+    channel: SANDBOX_CHANNEL,
+    kind: 'response',
+    id: request.id,
+    ok: false,
+    error
+  });
+
+  // Permission gate: the method's required permission must have been granted.
+  const required = METHOD_PERMISSION[request.method];
+  if (!grant.permissions.includes(required)) {
+    return reject(`扩展未获得「${required}」权限。`);
+  }
+  // Throttle gate: reject once the window is saturated.
+  if (!grant.allow()) {
+    return reject('请求过于频繁，已被限流。');
+  }
+
+  try {
+    if (request.method === 'loadState') {
+      const result = await host.loadState();
+      return { channel: SANDBOX_CHANNEL, kind: 'response', id: request.id, ok: true, result };
+    }
+    // saveState
+    await host.saveState(request.args[0]);
+    return { channel: SANDBOX_CHANNEL, kind: 'response', id: request.id, ok: true };
+  } catch (error) {
+    return reject(error instanceof Error ? error.message : String(error));
+  }
+}
