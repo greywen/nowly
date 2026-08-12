@@ -201,6 +201,23 @@ describe('CalendarWidget', () => {
     expect(onSetView).toHaveBeenNthCalledWith(4, 'list');
   });
 
+  it('provides a persistent vertical scroll region in every calendar view', () => {
+    const { container, rerender } = render(<CalendarWidget {...baseProps} view="month" />);
+    const viewSelectors = {
+      month: '.calendar-grid',
+      week: '.calendar-week',
+      day: '.calendar-day-view',
+      list: '.calendar-list-view'
+    } as const;
+
+    for (const view of ['month', 'week', 'day', 'list'] as const) {
+      rerender(<CalendarWidget {...baseProps} view={view} />);
+      const scrollRegion = container.querySelector(viewSelectors[view]);
+      expect(scrollRegion).not.toBeNull();
+      expect(scrollRegion).toHaveClass('calendar-scroll-region');
+    }
+  });
+
   it('marks the active view and adapts navigation labels per view', () => {
     const { rerender } = render(<CalendarWidget {...baseProps} view="month" />);
     expect(screen.getByRole('button', { name: '月' })).toHaveAttribute('aria-pressed', 'true');
@@ -226,9 +243,14 @@ describe('CalendarWidget', () => {
     expect(chip.className).toContain('event--movable');
   });
 
-  it('renders the day view as a 24-hour time grid with movable events', () => {
+  it('renders the day view as a scrollable 24-hour time grid with movable events', () => {
     const { container } = render(<CalendarWidget {...baseProps} view="day" />);
+    const dayView = container.querySelector('.calendar-day-view');
+    const dayGrid = container.querySelector('.day-grid');
+
     expect(container.querySelectorAll('.day-grid__row')).toHaveLength(24);
+    expect(dayView).toHaveClass('calendar-scroll-region');
+    expect(dayGrid).toHaveClass('day-grid--full-day');
     const chip = screen.getByRole('button', { name: '09:30 站会，工作' });
     expect(chip).toHaveTextContent('09:30 – 10:00');
     expect(chip.className).toContain('event--movable');

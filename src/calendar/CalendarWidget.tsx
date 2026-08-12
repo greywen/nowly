@@ -564,7 +564,7 @@ export function CalendarWidget({
         <div className="weekdays">
           {weekdays.map((weekday) => <span key={weekday}>{weekday}</span>)}
         </div>
-        <div className="calendar-grid">
+        <div className="calendar-grid calendar-scroll-region">
           {weeks.map((week) => renderMonthWeek(week))}
         </div>
       </>
@@ -587,7 +587,7 @@ export function CalendarWidget({
       }
     }
     return (
-      <div className={`calendar-week${pointerActive ? ' is-dragging' : ''}`}>
+      <div className={`calendar-week calendar-scroll-region${pointerActive ? ' is-dragging' : ''}`}>
         <div className="calendar-week__heads">
           {weekDays.map((day, index) => (
             <button
@@ -652,7 +652,7 @@ export function CalendarWidget({
       else eventsByHour.set(hour, [event]);
     }
     return (
-      <div className="calendar-day-view">
+      <div className="calendar-day-view calendar-scroll-region">
         {allDayEvents.length > 0 ? (
           <div className="day-grid__allday">
             {allDayEvents.map((event) => (
@@ -668,7 +668,7 @@ export function CalendarWidget({
             ))}
           </div>
         ) : null}
-        <div className={`day-grid${pointerActive ? ' is-dragging' : ''}`} aria-label="当日日程">
+        <div className={`day-grid day-grid--full-day${pointerActive ? ' is-dragging' : ''}`} aria-label="当日日程">
           {hours.map((hour) => {
             const hourEvents = sortEvents(eventsByHour.get(hour) ?? []);
             return (
@@ -707,7 +707,7 @@ export function CalendarWidget({
   function renderList() {
     const groups = groupEventsByDate(events);
     return (
-      <div className="calendar-list-view">
+      <div className="calendar-list-view calendar-scroll-region">
         {groups.length === 0 ? (
           <div className="calendar-empty">本月暂无日程</div>
         ) : (
