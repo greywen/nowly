@@ -99,7 +99,7 @@ button:disabled { cursor: default; opacity: .65; }
 .date-copy { min-width: 0; }
 .date-copy strong { display: block; color: var(--text-primary); font-size: 17.2px; font-weight: 600; }
 .date-copy p { margin: 0; color: var(--text-muted); font-size: 13.6px; font-weight: 500; }
-.top-actions, .toolbar-actions { display: flex; align-items: center; gap: 8px; }
+.top-actions, .toolbar-actions { flex: none; display: flex; align-items: center; gap: 8px; }
 .topbar-time { color: var(--text-strong); font-size: 17.2px; font-weight: 600; }
 .workspace { min-width: 0; min-height: 0; padding: 24px 36px 36px; display: flex; }
 .module-grid { flex: 1; min-width: 0; min-height: 0; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); grid-template-rows: repeat(8, minmax(0, 1fr)); gap: 24px; }
@@ -122,12 +122,12 @@ button:disabled { cursor: default; opacity: .65; }
 .card-header { min-height: 70px; padding: 12px 36px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px dashed var(--border-default); }
 .heading-group h1, .heading-group h2 { margin: 0; color: var(--text-primary); font-size: 20px; font-weight: 700; line-height: 1.4; }
 .heading-group p { margin: 4px 0 0; color: var(--text-muted); font-size: 13.6px; font-weight: 500; }
-.btn { box-sizing: border-box; height: 40px; min-height: 40px; padding: 8px 24px; border: 1px solid transparent; border-radius: var(--radius-default); display: inline-flex; align-items: center; justify-content: center; gap: 8px; color: var(--text-strong); background: var(--bg-subtle); font-size: 16px; font-weight: 500; white-space: nowrap; }
+.btn { box-sizing: border-box; flex: none; height: 40px; min-height: 40px; padding: 8px 24px; border: 1px solid transparent; border-radius: var(--radius-default); display: inline-flex; align-items: center; justify-content: center; gap: 8px; color: var(--text-strong); background: var(--bg-subtle); font-size: 16px; font-weight: 500; white-space: nowrap; }
 .btn:hover { color: var(--color-primary); background: var(--bg-secondary); }
 .btn-primary { color: #fff; background: var(--color-primary); border-color: var(--color-primary); }
 .btn-primary:hover { color: #fff; background: var(--color-primary-hover); border-color: var(--color-primary-hover); }
-.btn-icon { width: 40px; height: 40px; min-height: 40px; padding: 0; }
-.btn svg { width: 18px; height: 18px; }
+.btn-icon { width: 40px; min-width: 40px; height: 40px; min-height: 40px; padding: 0; }
+.btn svg { width: 18px; height: 18px; flex: none; }
 .calendar-body { min-height: 0; flex: 1; padding: 12px 24px 24px; display: flex; flex-direction: column; }
 .weekdays { height: 36px; flex: none; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); align-items: center; }
 .weekdays span { text-align: center; color: var(--text-muted); font-size: 13.6px; font-weight: 600; }
@@ -354,7 +354,7 @@ button:disabled { cursor: default; opacity: .65; }
 .good-button--primary { color: #fff; border-color: var(--color-primary); background: var(--color-primary); }
 .good-button--primary:hover { color: #fff; border-color: var(--color-primary-hover); background: var(--color-primary-hover); }
 .good-icon-button { box-sizing: border-box; display: grid; width: 40px; height: 40px; min-height: 40px; padding: 0; place-items: center; }
-.good-icon-button svg { width: 18px; height: 18px; }
+.good-icon-button svg { width: 18px; height: 18px; flex: none; }
 .good-button:focus-visible,
 .good-icon-button:focus-visible { outline: 0; }
 
@@ -696,7 +696,7 @@ button:disabled { cursor: default; opacity: .65; }
 .notes-manager-dialog .good-dialog__body { min-height: 0; overflow: hidden; }
 .notes-manager-list { min-height: 0; max-height: calc(100vh - 230px); display: grid; align-content: start; gap: 12px; overflow: auto; }
 .notes-manager-list .note { padding: 16px 20px; }
-.good-button svg { width: 18px; height: 18px; }
+.good-button svg { width: 18px; height: 18px; flex: none; }
 
 .settings-dialog { width: min(760px, calc(100vw - 32px)); }
 .settings-form { display: grid; gap: 24px; }
