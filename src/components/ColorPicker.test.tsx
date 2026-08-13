@@ -10,7 +10,7 @@ const presets = [
 describe('ColorPicker', () => {
   it('renders accessible preset and recent radios without exposing HEX text', () => {
     render(<ColorPicker legend="颜色" name="test-color" value="#4FC9DA" presets={presets} recentColors={['#7C5CFC', '#4FC9DA']} onChange={vi.fn()} />);
-    expect(screen.getAllByRole('radio').some((radio) => (radio as HTMLInputElement).checked)).toBe(false);
+    expect(screen.getAllByRole('radio').some((radio) => (radio as HTMLInputElement).checked)).toBe(true);
     expect(screen.getAllByRole('radio')).toHaveLength(6);
     expect(screen.queryByText('#7C5CFC')).not.toBeInTheDocument();
     for (const radio of screen.getAllByRole('radio')) {
@@ -29,20 +29,20 @@ describe('ColorPicker', () => {
     expect(screen.getByRole('button', { name: '选择自定义颜色' }).querySelector('svg')).toBeInTheDocument();
   });
 
-  it('shows a custom-color preview only during the current picker session and restores plus next time', () => {
+  it('commits a custom color only when the picker closes', () => {
     const onChange = vi.fn();
-    const first = render(<ColorPicker legend="颜色" name="test-color" value="#7C5CFC" presets={presets} recentColors={['#7C5CFC']} onChange={onChange} />);
-    expect(screen.getByRole('button', { name: '选择自定义颜色' }).querySelector('svg')).toBeInTheDocument();
-
+    const onRememberColor = vi.fn();
+    render(<ColorPicker legend="颜色" name="test-color" value="#4FC9DA" presets={presets} recentColors={[]} onChange={onChange} onRememberColor={onRememberColor} />);
     fireEvent.click(screen.getByRole('button', { name: '选择自定义颜色' }));
     const palette = screen.getByRole('slider', { name: '饱和度和亮度' });
     vi.spyOn(palette, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, left: 0, top: 0, right: 240, bottom: 200, width: 240, height: 200, toJSON: () => ({}) });
     fireEvent.pointerDown(palette, { clientX: 120, clientY: 100, pointerId: 1 });
-    expect(screen.getByRole('button', { name: '选择自定义颜色' }).querySelector('svg')).not.toBeInTheDocument();
+    expect(onChange).not.toHaveBeenCalled();
+    expect(onRememberColor).not.toHaveBeenCalled();
 
-    const selected = onChange.mock.calls[onChange.mock.calls.length - 1]?.[0] ?? '#7C5CFC';
-    first.unmount();
-    render(<ColorPicker legend="颜色" name="test-color-next" value={selected} presets={presets} recentColors={[selected]} onChange={vi.fn()} />);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onChange).toHaveBeenCalledWith(expect.stringMatching(/^#[0-9A-F]{6}$/));
+    expect(onRememberColor).toHaveBeenCalledWith(onChange.mock.calls[0][0]);
     expect(screen.getByRole('button', { name: '选择自定义颜色' }).querySelector('svg')).toBeInTheDocument();
   });
 
@@ -58,17 +58,19 @@ describe('ColorPicker', () => {
     expect(screen.getByRole('slider', { name: '饱和度和亮度' })).toBeInTheDocument();
     expect(screen.getByRole('slider', { name: '色相' })).toBeInTheDocument();
     expect(screen.getByRole('group', { name: '最近使用颜色' })).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: /历史颜色/ })).toHaveLength(5);
+    expect(screen.queryAllByRole('button', { name: /历史颜色/ })).toHaveLength(0);
     expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
     expect(document.querySelector('input[type="color"], input[type="range"]')).toBeNull();
   });
 
-  it('selects a color from the five-color history inside the custom picker', () => {
-    const onChange = vi.fn();
-    render(<ColorPicker legend="颜色" name="test-color" value="#4FC9DA" presets={presets} recentColors={['#7C5CFC']} onChange={onChange} />);
+  it('keeps five defaults outside and shows only custom history inside', () => {
+    render(<ColorPicker legend="颜色" name="test-color" value="#4FC9DA" presets={presets} recentColors={['#7C5CFC', '#FF8800']} onChange={vi.fn()} />);
+    expect(screen.getAllByRole('radio')).toHaveLength(6);
+    expect(screen.getByRole('radio', { name: '青色' })).toBeInTheDocument();
+    expect(screen.queryByRole('radio', { name: '最近颜色 1' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '选择自定义颜色' }));
-    fireEvent.click(screen.getByRole('button', { name: '历史颜色 #7C5CFC' }));
-    expect(onChange).toHaveBeenCalledWith('#7C5CFC');
+    expect(screen.getAllByRole('button', { name: /历史颜色/ })).toHaveLength(2);
+    expect(screen.getByRole('button', { name: '历史颜色 #7C5CFC' })).toBeInTheDocument();
   });
 
   it('emits an uppercase HEX color from the visual palette and remains editable', () => {
@@ -80,12 +82,12 @@ describe('ColorPicker', () => {
     const palette = screen.getByRole('slider', { name: '饱和度和亮度' });
     vi.spyOn(palette, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, left: 0, top: 0, right: 240, bottom: 200, width: 240, height: 200, toJSON: () => ({}) });
     fireEvent.pointerDown(palette, { clientX: 120, clientY: 100, pointerId: 1 });
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.keyDown(document, { key: 'Escape' });
     expect(onChange).toHaveBeenCalledWith(expect.stringMatching(/^#[0-9A-F]{6}$/));
 
     const changed = onChange.mock.calls[onChange.mock.calls.length - 1]?.[0] ?? '#7C5CFC';
     rerender(<ColorPicker legend="颜色" name="test-color" value={changed} presets={presets} recentColors={[changed]} onChange={onChange} />);
-    fireEvent.click(screen.getByRole('button', { name: '选择自定义颜色' }));
-    expect(screen.queryByRole('dialog', { name: '自定义颜色' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '选择自定义颜色' }));
     expect(screen.getByRole('dialog', { name: '自定义颜色' })).toBeInTheDocument();
   });

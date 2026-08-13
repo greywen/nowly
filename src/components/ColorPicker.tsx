@@ -4,6 +4,7 @@ import { Plus } from 'lucide-react';
 import {
   buildGlobalColorPalette,
   DEFAULT_COLOR_PRESETS,
+  DEFAULT_COLOR_VALUES,
   colorStyle,
   normalizeHexColor,
   type ColorPreset,
@@ -109,14 +110,18 @@ export function ColorPicker({ legend, name, value, presets, recentColors, disabl
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<PickerPosition>({ left: VIEWPORT_GAP, top: VIEWPORT_GAP });
   const palette = buildGlobalColorPalette(recentColors);
-  const selectedIndex = palette.indexOf(value);
-  const customValue = value;
+  const history = recentColors.filter((color) => {
+    const normalized = normalizeHexColor(color);
+    return normalized && !DEFAULT_COLOR_VALUES.includes(normalized as typeof DEFAULT_COLOR_VALUES[number]);
+  }).map((color) => normalizeHexColor(color)).filter((color): color is HexColor => color !== null).slice(0, 5);
   const [customPreview, setCustomPreview] = useState(false);
-  const [hsv, setHsv] = useState<Hsv>(() => rgbToHsv(hexToRgb(customValue)));
+  const draftColorRef = useRef<HexColor>(value);
+  const customValue = customPreview ? draftColorRef.current : value;
+  const [hsv, setHsv] = useState<Hsv>(() => rgbToHsv(hexToRgb(value)));
   const hsvRef = useRef(hsv);
-  const choices = palette.map((color, index) => ({
+  const choices = DEFAULT_COLOR_VALUES.map((color) => ({
     value: color,
-    label: DEFAULT_COLOR_PRESETS.find((preset) => preset.value === color)?.label ?? `最近颜色 ${index + 1}`
+    label: DEFAULT_COLOR_PRESETS.find((preset) => preset.value === color)?.label ?? '颜色'
   }));
 
   useEffect(() => {
@@ -143,11 +148,11 @@ export function ColorPicker({ legend, name, value, presets, recentColors, disabl
     if (!open) return;
     const closeOutside = (event: globalThis.PointerEvent) => {
       const target = event.target as Node;
-      if (!customRef.current?.contains(target) && !popoverRef.current?.contains(target)) setOpen(false);
+      if (!customRef.current?.contains(target) && !popoverRef.current?.contains(target)) finishCustomSelection();
     };
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setOpen(false);
+        finishCustomSelection();
         triggerRef.current?.focus();
       }
     };
@@ -159,10 +164,21 @@ export function ColorPicker({ legend, name, value, presets, recentColors, disabl
     };
   }, [open]);
 
-  function select(color: HexColor) {
+  function finishCustomSelection() {
+    if (!open) return;
+    const color = draftColorRef.current;
     setOpen(false);
+    setCustomPreview(false);
     onChange(color);
     if (!DEFAULT_COLOR_PRESETS.some((preset) => preset.value === color)) onRememberColor?.(color);
+  }
+
+  function selectHistory(color: HexColor) {
+    draftColorRef.current = color;
+    setOpen(false);
+    setCustomPreview(false);
+    onChange(color);
+    onRememberColor?.(color);
   }
 
   function commit(next: Hsv) {
@@ -174,9 +190,8 @@ export function ColorPicker({ legend, name, value, presets, recentColors, disabl
     hsvRef.current = normalized;
     setHsv(normalized);
     const color = rgbToHex(hsvToRgb(normalized));
+    draftColorRef.current = color;
     setCustomPreview(true);
-    onChange(color);
-    onRememberColor?.(color);
   }
 
   function updateSaturationBrightness(event: ReactPointerEvent<HTMLDivElement>) {
@@ -264,14 +279,14 @@ export function ColorPicker({ legend, name, value, presets, recentColors, disabl
         <span className="color-picker__hue-thumb" style={{ top: `${(hsv.h / 359) * 100}%` }} aria-hidden="true" />
       </div>
       <div className="color-picker__recent" role="group" aria-label="最近使用颜色">
-        {palette.map((color) => (
+        {history.map((color) => (
           <button
             key={color}
             type="button"
             className="color-picker__recent-color"
             aria-label={`历史颜色 ${color}`}
             style={colorStyle(color)}
-            onClick={() => select(color)}
+            onClick={() => selectHistory(color)}
           />
         ))}
       </div>
@@ -292,7 +307,10 @@ export function ColorPicker({ legend, name, value, presets, recentColors, disabl
               aria-label={choice.label}
               checked={value === choice.value}
               disabled={disabled}
-              onChange={() => select(choice.value)}
+              onChange={() => {
+                setOpen(false);
+                onChange(choice.value);
+              }}
             />
             <span className="color-picker__swatch" aria-hidden="true" />
           </label>
@@ -319,7 +337,13 @@ export function ColorPicker({ legend, name, value, presets, recentColors, disabl
             aria-expanded={open}
             disabled={disabled}
             style={colorStyle(customValue)}
-            onClick={() => setOpen((current) => !current)}
+            onClick={() => {
+              if (open) finishCustomSelection();
+              else {
+                draftColorRef.current = value;
+                setOpen(true);
+              }
+            }}
           >
             {customPreview ? <span aria-hidden="true" /> : <Plus aria-hidden="true" size={18} strokeWidth={2} />}
           </button>
