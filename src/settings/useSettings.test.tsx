@@ -14,6 +14,19 @@ function repository(updateSettings = vi.fn().mockResolvedValue(settings)): Nowly
 function wrapper(repo: NowlyRepository) { return ({children}:{children:ReactNode}) => <RepositoryProvider repository={repo}>{children}</RepositoryProvider>; }
 
 describe('useSettings', () => {
+  it('updates settings in memory before persistence resolves', async () => {
+    let resolveSave!: (value: AppSettings) => void;
+    const updateSettings = vi.fn(() => new Promise<AppSettings>((resolve) => { resolveSave = resolve; }));
+    const repo = repository(updateSettings);
+    const {result} = renderHook(useSettings, {wrapper:wrapper(repo)});
+    await waitFor(() => expect(result.current.settings.status).toBe('ready'));
+    const changed = {...settings, recentColors:['#7C5CFC']};
+    act(() => { void result.current.saveSettings(changed); });
+    expect(result.current.settings.data.recentColors).toEqual(['#7C5CFC']);
+    resolveSave(changed);
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledWith(changed));
+  });
+
   it('loads and replaces settings after a successful save', async () => {
     const repo = repository(vi.fn().mockImplementation(async (value) => value));
     const {result} = renderHook(useSettings, {wrapper:wrapper(repo)});

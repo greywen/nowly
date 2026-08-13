@@ -27,11 +27,13 @@ export function useSettings() {
   useEffect(()=>{ void loadSettings(); void loadMonitors(); },[loadSettings,loadMonitors]);
   const saveSettings = useCallback(async (draft:AppSettings) => {
     setWriteError(null);
+    const previous = settings;
+    setSettings({status:'ready',data:draft});
     try {
       const saved=await repository.updateSettings(draft);
       setSettings({status:'ready',data:saved});
       return saved;
-    } catch(error) { setWriteError(message(error)); throw error; }
-  },[repository]);
+    } catch(error) { setSettings(previous); setWriteError(message(error)); throw error; }
+  },[repository, settings]);
   return {settings,monitors,writeError,retrySettings:loadSettings,retryMonitors:loadMonitors,saveSettings,dismissWriteError:()=>setWriteError(null)};
 }
