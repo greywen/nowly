@@ -10,7 +10,7 @@ const presets = [
 describe('ColorPicker', () => {
   it('renders accessible preset and recent radios without exposing HEX text', () => {
     render(<ColorPicker legend="颜色" name="test-color" value="#4FC9DA" presets={presets} recentColors={['#7C5CFC', '#4FC9DA']} onChange={vi.fn()} />);
-    expect(screen.getAllByRole('radio').some((radio) => (radio as HTMLInputElement).checked)).toBe(true);
+    expect(screen.getAllByRole('radio').some((radio) => (radio as HTMLInputElement).checked)).toBe(false);
     expect(screen.getAllByRole('radio')).toHaveLength(6);
     expect(screen.queryByText('#7C5CFC')).not.toBeInTheDocument();
     for (const radio of screen.getAllByRole('radio')) {
@@ -26,6 +26,16 @@ describe('ColorPicker', () => {
     expect(trigger).toHaveClass('color-picker__trigger');
     expect(trigger.querySelector('span')).not.toBeInTheDocument();
     rerender(<ColorPicker legend="颜色" name="test-color" value="#DC3545" presets={presets} recentColors={[]} onChange={vi.fn()} />);
+    expect(screen.getByRole('button', { name: '选择自定义颜色' }).querySelector('svg')).toBeInTheDocument();
+  });
+
+  it('shows the selected custom color in the custom slot while presets keep the plus icon', () => {
+    const { rerender } = render(<ColorPicker legend="颜色" name="test-color" value="#7C5CFC" presets={presets} recentColors={['#7C5CFC']} onChange={vi.fn()} />);
+    const customTrigger = screen.getByRole('button', { name: '选择自定义颜色' });
+    expect(customTrigger).toHaveStyle('--selected-color: #7C5CFC');
+    expect(customTrigger.querySelector('svg')).not.toBeInTheDocument();
+
+    rerender(<ColorPicker legend="颜色" name="test-color" value="#4FC9DA" presets={presets} recentColors={['#7C5CFC']} onChange={vi.fn()} />);
     expect(screen.getByRole('button', { name: '选择自定义颜色' }).querySelector('svg')).toBeInTheDocument();
   });
 

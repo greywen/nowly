@@ -4,6 +4,7 @@ import { Plus } from 'lucide-react';
 import {
   buildGlobalColorPalette,
   DEFAULT_COLOR_PRESETS,
+  DEFAULT_COLOR_VALUES,
   colorStyle,
   normalizeHexColor,
   type ColorPreset,
@@ -110,7 +111,7 @@ export function ColorPicker({ legend, name, value, presets, recentColors, disabl
   const [position, setPosition] = useState<PickerPosition>({ left: VIEWPORT_GAP, top: VIEWPORT_GAP });
   const palette = buildGlobalColorPalette(recentColors);
   const selectedIndex = palette.indexOf(value);
-  const selectedIsCustom = !palette.includes(value);
+  const selectedIsCustom = !DEFAULT_COLOR_VALUES.includes(value as typeof DEFAULT_COLOR_VALUES[number]);
   const customValue = selectedIsCustom ? value : value;
   const [hsv, setHsv] = useState<Hsv>(() => rgbToHsv(hexToRgb(customValue)));
   const hsvRef = useRef(hsv);
@@ -308,7 +309,7 @@ export function ColorPicker({ legend, name, value, presets, recentColors, disabl
             style={colorStyle(customValue)}
             onClick={() => setOpen((current) => !current)}
           >
-            <Plus aria-hidden="true" size={18} strokeWidth={2} />
+            {selectedIsCustom ? <span aria-hidden="true" /> : <Plus aria-hidden="true" size={18} strokeWidth={2} />}
           </button>
         </div>
       </div>
