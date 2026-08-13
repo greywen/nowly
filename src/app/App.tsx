@@ -65,10 +65,17 @@ export function App() {
 
   const now = useCurrentTime();
   const todayIso = localIsoDate(now);
+  const recentColorsRef = useRef(settingsFeature.settings.data.recentColors ?? []);
+  recentColorsRef.current = settingsFeature.settings.data.recentColors ?? [];
   const rememberCustomColor = useCallback(async (color: string) => {
     const current = settingsFeature.settings.data;
-    const next = addRecentColor(current.recentColors ?? [], color);
-    try { await settingsFeature.saveSettings({ ...current, recentColors: next }); } catch { /* business save remains valid */ }
+    const next = addRecentColor(recentColorsRef.current, color);
+    recentColorsRef.current = next;
+    try {
+      await settingsFeature.saveSettings({ ...current, recentColors: next });
+    } catch {
+      /* business save remains valid */
+    }
   }, [settingsFeature.settings.data, settingsFeature.saveSettings]);
 
   // The full set of placeable modules: built-ins, extensions, and installed

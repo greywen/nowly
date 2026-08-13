@@ -162,7 +162,7 @@ export function ColorPicker({ legend, name, value, presets, recentColors, disabl
   function select(color: HexColor) {
     setOpen(false);
     onChange(color);
-    onRememberColor?.(color);
+    if (!DEFAULT_COLOR_PRESETS.some((preset) => preset.value === color)) onRememberColor?.(color);
   }
 
   function commit(next: Hsv) {
