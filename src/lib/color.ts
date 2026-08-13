@@ -13,7 +13,15 @@ export const DESIGN_COLORS = {
   danger: '#F06445'
 } as const satisfies Record<string, HexColor>;
 
-export const MAX_RECENT_COLORS = 8;
+export const MAX_RECENT_COLORS = 5;
+export const DEFAULT_COLOR_VALUES = ['#4FC9DA', '#198754', '#0D6EFD', '#FFC107', '#DC3545'] as const satisfies readonly HexColor[];
+export const DEFAULT_COLOR_PRESETS: readonly ColorPreset[] = [
+  { value: '#4FC9DA', label: '青色' },
+  { value: '#198754', label: '绿色' },
+  { value: '#0D6EFD', label: '蓝色' },
+  { value: '#FFC107', label: '黄色' },
+  { value: '#DC3545', label: '红色' }
+];
 const HEX = /^#[0-9A-F]{6}$/i;
 
 export function isHexColor(value: unknown): value is HexColor {
@@ -90,7 +98,15 @@ export function sanitizeRecentColors(values: unknown): HexColor[] {
 export function addRecentColor(values: readonly string[], value: string): HexColor[] {
   const normalized = normalizeHexColor(value);
   if (!normalized) return sanitizeRecentColors(values);
-  return [normalized, ...sanitizeRecentColors(values).filter((color) => color !== normalized)].slice(0, MAX_RECENT_COLORS);
+  const existing = sanitizeRecentColors(values).filter((color) => !DEFAULT_COLOR_VALUES.includes(color as typeof DEFAULT_COLOR_VALUES[number]));
+  if (DEFAULT_COLOR_VALUES.includes(normalized as typeof DEFAULT_COLOR_VALUES[number])) return existing;
+  if (existing.includes(normalized)) return [normalized, ...existing.filter((color) => color !== normalized)];
+  return [normalized, ...existing].slice(0, MAX_RECENT_COLORS);
+}
+
+export function buildGlobalColorPalette(values: readonly string[]): HexColor[] {
+  const history = sanitizeRecentColors(values).filter((color) => !DEFAULT_COLOR_VALUES.includes(color as typeof DEFAULT_COLOR_VALUES[number]));
+  return [...history, ...DEFAULT_COLOR_VALUES.slice(history.length)].slice(0, MAX_RECENT_COLORS);
 }
 
 export function isPresetColor(color: HexColor, presets: readonly ColorPreset[]): boolean {

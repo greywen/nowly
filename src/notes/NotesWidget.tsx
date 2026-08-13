@@ -27,10 +27,7 @@ export function NotesWidget({
 
   return (
     <div className="widget-content">
-      <div className="card-header">
-        <div className="heading-group">
-          <h2>便签</h2>
-        </div>
+      <div className="card-header card-header--actions-only">
         <div className="toolbar-actions">
           <button type="button" className="link-btn" onClick={(event) => onViewAll(event.currentTarget)}>查看全部便签</button>
           <button type="button" className="btn btn-icon" aria-label="新增便签" onClick={onCreateNote}>

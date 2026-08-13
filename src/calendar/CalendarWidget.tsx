@@ -708,7 +708,7 @@ export function CalendarWidget({
         ) : (
           groups.map((group) => (
             <section key={group.isoDate} className="calendar-list-group">
-              <h3 className="calendar-list-group__date">{listDateLabel(group.isoDate)}</h3>
+              <h3 className="calendar-list-group__date">{listDateLabel(group.isoDate).replace('月', ' 月 ').replace('日', ' 日')}</h3>
               <ul className="calendar-list-group__items">
                 {group.events.map((event) => (
                   <li key={event.id}>

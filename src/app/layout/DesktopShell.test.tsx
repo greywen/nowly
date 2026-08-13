@@ -213,7 +213,7 @@ describe('DesktopShell', () => {
     fireEvent.click(screen.getByRole('button', { name: '编辑布局' }));
     expect(screen.getAllByTestId('module-frame-resize')).toHaveLength(3);
 
-    fireEvent.click(screen.getByRole('button', { name: '编辑布局' }));
+    fireEvent.click(screen.getByRole('button', { name: '完成编辑' }));
     expect(screen.queryAllByTestId('module-frame-resize')).toHaveLength(0);
     expect(screen.queryByRole('button', { name: '重置布局' })).not.toBeInTheDocument();
   });

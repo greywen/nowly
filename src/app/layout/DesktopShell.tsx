@@ -1,4 +1,4 @@
-import { LayoutGrid, MonitorDown, Plus, Settings } from 'lucide-react';
+import { Check, LayoutGrid, MonitorDown, Plus, Settings } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import {
   builtinDefinitions,
@@ -116,11 +116,11 @@ export function DesktopShell({
             <button
               type="button"
               className={`btn btn-icon${isEditing ? ' is-active' : ''}`}
-              aria-label="编辑布局"
+              aria-label={isEditing ? '完成编辑' : '编辑布局'}
               aria-pressed={isEditing}
               onClick={() => setIsEditing((current) => !current)}
             >
-              <LayoutGrid aria-hidden="true" />
+              {isEditing ? <Check aria-hidden="true" /> : <LayoutGrid aria-hidden="true" />}
             </button>
           ) : null}
           {foreground ? (

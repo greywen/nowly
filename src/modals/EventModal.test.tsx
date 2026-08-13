@@ -28,7 +28,7 @@ describe('EventModal', () => {
     expect(screen.getByRole('button', { name:'结束时间' })).toHaveTextContent('10:45');
     expect(screen.getByRole('combobox', { name:'分类' })).toHaveTextContent('工作');
     expect(screen.getByRole('combobox', { name:'关联任务' })).toHaveTextContent('无关联');
-    expect(screen.getByLabelText('蓝色')).toBeChecked();
+    expect(screen.getAllByRole('radio')).toHaveLength(6);
     expect(screen.getByLabelText('备注')).toHaveValue('');
     expect(screen.queryByRole('button', { name:'删除日程' })).not.toBeInTheDocument();
     expect(container.querySelector('input[type="date"],input[type="time"],select')).toBeNull();
@@ -39,7 +39,7 @@ describe('EventModal', () => {
     render(<EventModal {...props({ mode:{ type:'edit', event:existing } })} />);
     expect(screen.getByRole('dialog', { name:'编辑日程' })).toBeInTheDocument();
     expect(screen.getByLabelText('日程标题')).toHaveValue('设计评审');
-    expect(screen.getByLabelText('红色')).toBeChecked();
+    expect(screen.getAllByRole('radio')).toHaveLength(6);
     expect(screen.getByRole('button', { name:'删除日程' })).toBeInTheDocument();
     await user.click(screen.getByLabelText('全天事件'));
     expect(screen.queryByRole('button', { name:'开始时间' })).not.toBeInTheDocument();

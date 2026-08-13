@@ -69,22 +69,19 @@ export function buildWeekDays(anchor: Date, today = new Date()): CalendarDay[] {
 export { buildMonthGrid };
 
 export function monthTitle(year: number, monthIndex: number) {
-  return `${year} 年 ${monthIndex + 1} 月`;
+  return `${year}年${monthIndex + 1}月`;
 }
 
 export function weekTitle(anchor: Date) {
   const start = startOfWeek(anchor);
   const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6);
-  const startPart = `${start.getFullYear()} 年 ${start.getMonth() + 1} 月 ${start.getDate()} 日`;
-  const endPart =
-    start.getFullYear() === end.getFullYear()
-      ? `${end.getMonth() + 1} 月 ${end.getDate()} 日`
-      : `${end.getFullYear()} 年 ${end.getMonth() + 1} 月 ${end.getDate()} 日`;
-  return `${startPart} – ${endPart}`;
+  const startPart = `${start.getFullYear()}年${start.getMonth() + 1}月${start.getDate()}日`;
+  const endPart = `${end.getFullYear()}年${end.getMonth() + 1}月${end.getDate()}日`;
+  return `${startPart} - ${endPart}`;
 }
 
 export function dayTitle(anchor: Date) {
-  return `${anchor.getFullYear()} 年 ${anchor.getMonth() + 1} 月 ${anchor.getDate()} 日 ${weekdayNames[anchor.getDay()]}`;
+  return `${anchor.getFullYear()}年${anchor.getMonth() + 1}月${anchor.getDate()}日 ${weekdayNames[anchor.getDay()]}`;
 }
 
 export function viewTitle(view: CalendarView, year: number, monthIndex: number, anchor: Date) {
@@ -484,5 +481,5 @@ export function groupEventsByDate(events: CalendarEvent[]): Array<{ isoDate: str
 
 export function listDateLabel(isoDate: string) {
   const date = localDate(isoDate);
-  return `${date.getMonth() + 1} 月 ${date.getDate()} 日 ${weekdayNames[date.getDay()]}`;
+  return `${date.getMonth() + 1}月${date.getDate()}日 ${weekdayNames[date.getDay()]}`;
 }

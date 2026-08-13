@@ -147,7 +147,6 @@ export function KanbanWidget({ todayIso, recentColors = [], onRememberCustomColo
     <div className="widget-content kanban-widget">
       <div className="card-header">
         <div className="heading-group">
-          <h2>看板</h2>
           <p>{`${totalCardCount(data)} 张任务`}</p>
         </div>
         <div className="toolbar-actions">
@@ -240,6 +239,8 @@ export function KanbanWidget({ todayIso, recentColors = [], onRememberCustomColo
           onCreate={kanban.createLane}
           onUpdate={(lane, draft) => kanban.updateLane(lane.id, draft)}
           onDelete={(lane) => kanban.deleteLane(lane.id)}
+          recentColors={recentColors}
+          onRememberCustomColor={onRememberCustomColor}
         />
       ) : null}
       {dialog?.type === 'lane-edit' && editingLane ? (
@@ -250,6 +251,8 @@ export function KanbanWidget({ todayIso, recentColors = [], onRememberCustomColo
           onCreate={kanban.createLane}
           onUpdate={(lane, draft) => kanban.updateLane(lane.id, draft)}
           onDelete={(lane) => kanban.deleteLane(lane.id)}
+          recentColors={recentColors}
+          onRememberCustomColor={onRememberCustomColor}
         />
       ) : null}
       {dialog?.type === 'card-create' && creatingCardLane ? (
@@ -293,6 +296,8 @@ export function KanbanWidget({ todayIso, recentColors = [], onRememberCustomColo
           createCollaborator={kanban.createCollaborator}
           updateCollaborator={kanban.updateCollaborator}
           deleteCollaborator={kanban.deleteCollaborator}
+          recentColors={recentColors}
+          onRememberCustomColor={onRememberCustomColor}
         />
       ) : null}
     </div>

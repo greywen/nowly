@@ -62,8 +62,7 @@ describe('KanbanWidget', () => {
   it('shows the header with add-lane and a more menu carrying manage-fields', async () => {
     const user = userEvent.setup();
     renderWidget(repository());
-    expect(await screen.findByRole('heading', { name: '看板' })).toBeInTheDocument();
-    expect(screen.getByText('3 张任务')).toBeInTheDocument();
+    expect(await screen.findByText('3 张任务')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '添加泳道' })).toBeInTheDocument();
     // Manage-fields lives in the board more-menu, not directly in the header.
     expect(screen.queryByRole('button', { name: '管理字段' })).not.toBeInTheDocument();

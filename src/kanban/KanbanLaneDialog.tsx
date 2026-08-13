@@ -155,7 +155,7 @@ export function KanbanLaneDialog({ mode, restoreFocusRef, onClose, onCreate, onU
             ) : null}
           </div>
 
-          <ColorPicker legend="泳道颜色" name="lane-color" value={color} presets={kanbanColorPresets} recentColors={recentColors} disabled={busy} onChange={setColor} />
+          <ColorPicker legend="泳道颜色" name="lane-color" value={color} presets={kanbanColorPresets} recentColors={recentColors} disabled={busy} onChange={setColor} onRememberColor={onRememberCustomColor} />
         </form>
       </Dialog>
 

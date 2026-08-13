@@ -44,8 +44,7 @@ export function MatrixWidget({
 }: MatrixWidgetProps) {
   return (
     <div className="widget-content">
-      <div className="card-header">
-        <div className="heading-group"><h2>四象限</h2></div>
+      <div className="card-header card-header--actions-only">
         <button type="button" className="btn btn-icon" aria-label="新增任务" onClick={onCreateTask}>
           <Plus aria-hidden="true" />
         </button>

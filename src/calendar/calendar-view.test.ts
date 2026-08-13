@@ -69,9 +69,9 @@ describe('calendar-view ranges', () => {
 describe('calendar-view titles and grouping', () => {
   it('renders a title per view', () => {
     const anchor = new Date(2026, 6, 23);
-    expect(viewTitle('month', 2026, 6, anchor)).toBe('2026 年 7 月');
-    expect(viewTitle('week', 2026, 6, anchor)).toBe('2026 年 7 月 20 日 – 7 月 26 日');
-    expect(viewTitle('day', 2026, 6, anchor)).toBe('2026 年 7 月 23 日 星期四');
+    expect(viewTitle('month', 2026, 6, anchor)).toBe('2026年7月');
+    expect(viewTitle('week', 2026, 6, anchor)).toBe('2026年7月20日 - 2026年7月26日');
+    expect(viewTitle('day', 2026, 6, anchor)).toBe('2026年7月23日 星期四');
   });
 
   it('groups events by date and sorts all-day first then by start time', () => {

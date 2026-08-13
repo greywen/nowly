@@ -1,10 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { createPortal } from 'react-dom';
 import {
+  buildGlobalColorPalette,
+  DEFAULT_COLOR_PRESETS,
   colorStyle,
-  isPresetColor,
   normalizeHexColor,
-  sanitizeRecentColors,
   type ColorPreset,
   type HexColor
 } from '../lib/color';
@@ -17,6 +17,7 @@ type ColorPickerProps = {
   recentColors: readonly HexColor[];
   disabled?: boolean;
   onChange(color: HexColor): void;
+  onRememberColor?(color: HexColor): void;
 };
 
 type Rgb = { r: number; g: number; b: number };
@@ -100,23 +101,22 @@ function pickerPosition(anchor: DOMRect): PickerPosition {
   return { left, top };
 }
 
-export function ColorPicker({ legend, name, value, presets, recentColors, disabled = false, onChange }: ColorPickerProps) {
+export function ColorPicker({ legend, name, value, presets, recentColors, disabled = false, onChange, onRememberColor }: ColorPickerProps) {
   const customRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<PickerPosition>({ left: VIEWPORT_GAP, top: VIEWPORT_GAP });
-  const selectedIsCustom = !isPresetColor(value, presets);
-  const customValue = selectedIsCustom ? value : presets[0]?.value ?? '#4FC9DA';
+  const palette = buildGlobalColorPalette(recentColors);
+  const selectedIndex = palette.indexOf(value);
+  const selectedIsCustom = !palette.includes(value);
+  const customValue = selectedIsCustom ? value : value;
   const [hsv, setHsv] = useState<Hsv>(() => rgbToHsv(hexToRgb(customValue)));
   const hsvRef = useRef(hsv);
-  const recent = sanitizeRecentColors(recentColors).filter(
-    (color) => !isPresetColor(color, presets) && color !== value
-  );
-  const choices = [
-    ...presets.map((preset) => ({ value: preset.value, label: preset.label })),
-    ...recent.map((color, index) => ({ value: color, label: `最近使用 ${index + 1}` }))
-  ];
+  const choices = palette.map((color, index) => ({
+    value: color,
+    label: DEFAULT_COLOR_PRESETS.find((preset) => preset.value === color)?.label ?? `最近颜色 ${index + 1}`
+  }));
 
   useEffect(() => {
     const next = rgbToHsv(hexToRgb(customValue));
@@ -161,6 +161,7 @@ export function ColorPicker({ legend, name, value, presets, recentColors, disabl
   function select(color: HexColor) {
     setOpen(false);
     onChange(color);
+    onRememberColor?.(color);
   }
 
   function commit(next: Hsv) {
@@ -171,7 +172,9 @@ export function ColorPicker({ legend, name, value, presets, recentColors, disabl
     };
     hsvRef.current = normalized;
     setHsv(normalized);
-    onChange(rgbToHex(hsvToRgb(normalized)));
+    const color = rgbToHex(hsvToRgb(normalized));
+    onChange(color);
+    onRememberColor?.(color);
   }
 
   function updateSaturationBrightness(event: ReactPointerEvent<HTMLDivElement>) {
@@ -265,23 +268,19 @@ export function ColorPicker({ legend, name, value, presets, recentColors, disabl
   return (
     <fieldset className="color-picker">
       <legend>{legend}</legend>
-      <div className="color-picker__choices">
-        {choices.map((choice) => (
-          <label
-            key={choice.value}
-            className="form-check form-check-custom form-check-solid color-picker__choice"
-            style={colorStyle(choice.value)}
-          >
+      <div className="color-picker__choices color-picker__choices--single-row">
+        {choices.map((choice, index) => (
+          <label key={choice.value} className="color-picker__choice" style={colorStyle(choice.value)}>
             <input
               className="form-check-input"
               type="radio"
               name={name}
+              aria-label={choice.label}
               checked={value === choice.value}
               disabled={disabled}
               onChange={() => select(choice.value)}
             />
             <span className="color-picker__swatch" aria-hidden="true" />
-            <span className="form-check-label">{choice.label}</span>
           </label>
         ))}
         <div ref={customRef} className="color-picker__choice color-picker__custom" style={colorStyle(customValue)}>

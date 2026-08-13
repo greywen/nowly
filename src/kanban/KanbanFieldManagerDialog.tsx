@@ -244,7 +244,7 @@ export function KanbanFieldManagerDialog({
             />
           </div>
           {hasColor ? (
-            <ColorPicker legend="颜色" name="kanban-field-color" value={color} presets={kanbanColorPresets} recentColors={recentColors} disabled={busy} onChange={setColor} />
+            <ColorPicker legend="颜色" name="kanban-field-color" value={color} presets={kanbanColorPresets} recentColors={recentColors} disabled={busy} onChange={setColor} onRememberColor={onRememberCustomColor} />
           ) : null}
           {formError ? <div role="alert" className="dialog-error">{formError}</div> : null}
           <div className="kanban-field__form-actions">
