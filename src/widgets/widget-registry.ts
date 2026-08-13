@@ -61,6 +61,20 @@ export const builtinDefinitions: WidgetDefinition[] = [
   }
 ];
 
+// The kanban board is a built-in module, but unlike calendar / matrix / notes
+// it is not part of the default layout: it is added from the module picker.
+// Keeping it out of `builtinDefinitions` keeps `defaultLayout` a clean tiling
+// of the three starting modules while still exposing kanban as placeable.
+export const kanbanDefinition: WidgetDefinition = {
+  id: 'kanban',
+  name: '看板',
+  description: '用泳道管理任务状态的看板。',
+  category: 'builtin',
+  minW: 4,
+  minH: 3,
+  default: { x: 0, y: 0, w: 8, h: 5 }
+};
+
 // Optional extension modules the user can add or remove from the layout.
 export const extensionDefinitions: WidgetDefinition[] = [
   {
@@ -119,6 +133,7 @@ export function buildDefinitions(
 ): WidgetDefinition[] {
   return [
     ...builtinDefinitions,
+    kanbanDefinition,
     ...extensionDefinitions,
     ...sandboxExtensions.map(sandboxExtensionToDefinition)
   ];

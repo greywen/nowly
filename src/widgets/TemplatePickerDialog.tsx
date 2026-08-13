@@ -5,6 +5,7 @@ import type { SandboxExtension, SandboxExtensionDraft } from '../data/nowly-repo
 import {
   builtinDefinitions,
   extensionDefinitions,
+  kanbanDefinition,
   sandboxExtensionToDefinition,
   type WidgetDefinition,
   type WidgetId
@@ -78,7 +79,7 @@ export function TemplatePickerDialog({
   onInstallExtension,
   onUninstallExtension
 }: Props) {
-  const builtinModules = [...builtinDefinitions, ...extensionDefinitions];
+  const builtinModules = [...builtinDefinitions, kanbanDefinition, ...extensionDefinitions];
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
 

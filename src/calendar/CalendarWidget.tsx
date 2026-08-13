@@ -17,8 +17,8 @@ import {
   type CalendarDay,
   type CalendarEvent,
   type CalendarView,
-  type EventColor
 } from './calendar-model';
+import { colorStyle } from '../lib/color';
 
 const weekdays = ['一', '二', '三', '四', '五', '六', '日'];
 const hours = Array.from({ length: 24 }, (_, index) => index);
@@ -61,13 +61,6 @@ const navLabels: Record<CalendarView, { previous: string; next: string }> = {
   week: { previous: '上一周', next: '下一周' },
   day: { previous: '前一天', next: '后一天' },
   list: { previous: '上一个月', next: '下一个月' }
-};
-
-const eventToneClass: Record<EventColor, string> = {
-  blue: 'event--work',
-  red: 'event--important',
-  green: 'event--personal',
-  yellow: 'event--learning'
 };
 
 type LoadStatus = 'loading' | 'ready' | 'error';
@@ -419,12 +412,13 @@ export function CalendarWidget({
         onPointerDown={dropEnabled ? (pointerEvent) => handleMovePointerDown(pointerEvent, event) : undefined}
         onClick={() => handleBarClick(event)}
         style={{
+          ...colorStyle(event.color),
           left: `calc(${left}% + 4px)`,
           width: `calc(${width}% - 8px)`,
           top: `${lane * LANE_HEIGHT_PX}px`
         }}
         className={
-          `event event-bar event--spanning ${eventToneClass[event.color]}` +
+          'event event-bar event--spanning event--colored' +
           `${dropEnabled ? ' event--movable' : ''}` +
           `${continuesBefore ? ' event-bar--open-start' : ''}` +
           `${continuesAfter ? ' event-bar--open-end' : ''}`
@@ -455,8 +449,9 @@ export function CalendarWidget({
         aria-label={eventLabel(event)}
         onPointerDown={dropEnabled ? (pointerEvent) => handleMovePointerDown(pointerEvent, event) : undefined}
         onClick={() => handleBarClick(event)}
+        style={colorStyle(event.color)}
         className={
-          `event event-cell ${eventToneClass[event.color]}` +
+          'event event-cell event--colored' +
           `${dropEnabled ? ' event--movable' : ''}`
         }
       >
@@ -538,7 +533,7 @@ export function CalendarWidget({
                     {overflowByCol[col].map((event) => (
                       <span
                         key={event.id}
-                        className={`event-overflow-dot ${eventToneClass[event.color]}`}
+                        className="event-overflow-dot" style={colorStyle(event.color)}
                         aria-hidden="true"
                       />
                     ))}
@@ -661,7 +656,7 @@ export function CalendarWidget({
                 key={event.id}
                 aria-label={eventLabel(event)}
                 onClick={() => onOpenEvent(event)}
-                className={`event ${eventToneClass[event.color]}`}
+                className="event event--colored" style={colorStyle(event.color)}
               >
                 {event.title}
               </button>
@@ -687,7 +682,7 @@ export function CalendarWidget({
                       aria-label={eventLabel(event)}
                       onPointerDown={hourDropEnabled ? (pointerEvent) => handleHourMovePointerDown(pointerEvent, event, iso) : undefined}
                       onClick={() => handleBarClick(event)}
-                      className={`day-grid__event ${eventToneClass[event.color]}${hourDropEnabled ? ' event--movable' : ''}`}
+                      className={`day-grid__event event--colored${hourDropEnabled ? ' event--movable' : ''}`} style={colorStyle(event.color)}
                     >
                       <span className="day-grid__event-time">
                         {event.startAt.slice(11, 16)} – {event.endAt.slice(11, 16)}

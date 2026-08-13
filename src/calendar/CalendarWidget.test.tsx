@@ -44,7 +44,7 @@ describe('CalendarWidget', () => {
 
     const row = screen.getByRole('button', { name: '另有 1 个日程' });
     expect(row).toHaveClass('event-overflow-dots');
-    expect(row.querySelector('.event-overflow-dot')).toHaveClass('event--work');
+    expect(row.querySelector('.event-overflow-dot')).toHaveStyle({ '--selected-color': '#4FC9DA' });
   });
 
   it('renders a 42-day month and invokes all header navigation callbacks', async () => {
@@ -133,7 +133,7 @@ describe('CalendarWidget', () => {
   it('renders hidden month events as left-aligned dots with matching event colors', async () => {
     const user = userEvent.setup();
     const onOpenDate = vi.fn();
-    const colors = ['blue', 'red', 'green', 'yellow'] as const;
+    const colors = ['#4FC9DA', '#F06445', '#B8D935', '#4F55DA'] as const;
     const overflowEvents = colors.map((color, index) => ({
       ...sampleEvents[0],
       id: `overflow-${color}`,
@@ -152,10 +152,10 @@ describe('CalendarWidget', () => {
 
     const overflowButton = screen.getByRole('button', { name: '另有 4 个日程' });
     expect(overflowButton.querySelectorAll('.event-overflow-dot')).toHaveLength(4);
-    expect(overflowButton.querySelectorAll('.event--work')).toHaveLength(1);
-    expect(overflowButton.querySelectorAll('.event--important')).toHaveLength(1);
-    expect(overflowButton.querySelectorAll('.event--personal')).toHaveLength(1);
-    expect(overflowButton.querySelectorAll('.event--learning')).toHaveLength(1);
+    const dots = [...overflowButton.querySelectorAll<HTMLElement>('.event-overflow-dot')];
+    expect(dots.map((dot) => dot.style.getPropertyValue('--selected-color'))).toEqual([
+      '#4FC9DA', '#F06445', '#B8D935', '#4F55DA'
+    ]);
 
     await user.click(overflowButton);
     expect(onOpenDate).toHaveBeenCalledWith('2026-07-23');

@@ -15,6 +15,8 @@ const MIGRATIONS: &[(i64, Migration)] = &[
     (6, migration_6_module_layout_and_templates),
     (7, migration_7_module_state),
     (8, migration_8_extensions),
+    (9, migration_9_kanban),
+    (10, migration_10_hex_colors_and_recent_colors),
 ];
 
 pub fn open_database(path: PathBuf) -> Result<Connection> {
@@ -153,6 +155,7 @@ fn migration_4_default_settings(transaction: &Transaction<'_>) -> Result<()> {
         ("calendar_enabled", "true"),
         ("matrix_enabled", "true"),
         ("notes_enabled", "true"),
+        ("recent_colors", "[]"),
     ];
     for (key, value) in DEFAULTS {
         transaction.execute(
@@ -293,6 +296,126 @@ Nowly.defineModule(async function ({ host, root }) {
     Ok(())
 }
 
+fn migration_9_kanban(transaction: &Transaction<'_>) -> Result<()> {
+    // Kanban module tables. A single board first version: lanes hold cards,
+    // cards may reference one priority and many tags / collaborators through
+    // join tables. Deleting a lane cascades to its cards and their links;
+    // deleting a global field only clears its links (or nulls a card's
+    // priority) without removing cards. Positions are dense integers per
+    // parent, renumbered on every mutation by the repository layer.
+    transaction.execute_batch(
+        "CREATE TABLE IF NOT EXISTS kanban_lanes (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            color TEXT NOT NULL,
+            position INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+         );
+         CREATE TABLE IF NOT EXISTS kanban_priorities (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            color TEXT NOT NULL,
+            position INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+         );
+         CREATE TABLE IF NOT EXISTS kanban_tags (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            color TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+         );
+         CREATE TABLE IF NOT EXISTS kanban_collaborators (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+         );
+         CREATE TABLE IF NOT EXISTS kanban_cards (
+            id TEXT PRIMARY KEY,
+            lane_id TEXT NOT NULL REFERENCES kanban_lanes(id) ON DELETE CASCADE,
+            title TEXT NOT NULL,
+            description TEXT,
+            due_date TEXT,
+            priority_id TEXT REFERENCES kanban_priorities(id) ON DELETE SET NULL,
+            position INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+         );
+         CREATE TABLE IF NOT EXISTS kanban_card_tags (
+            card_id TEXT NOT NULL REFERENCES kanban_cards(id) ON DELETE CASCADE,
+            tag_id TEXT NOT NULL REFERENCES kanban_tags(id) ON DELETE CASCADE,
+            PRIMARY KEY (card_id, tag_id)
+         );
+         CREATE TABLE IF NOT EXISTS kanban_card_collaborators (
+            card_id TEXT NOT NULL REFERENCES kanban_cards(id) ON DELETE CASCADE,
+            collaborator_id TEXT NOT NULL REFERENCES kanban_collaborators(id) ON DELETE CASCADE,
+            PRIMARY KEY (card_id, collaborator_id)
+         );
+         CREATE INDEX IF NOT EXISTS idx_kanban_lanes_position ON kanban_lanes(position);
+         CREATE INDEX IF NOT EXISTS idx_kanban_cards_lane ON kanban_cards(lane_id, position);
+         CREATE INDEX IF NOT EXISTS idx_kanban_priorities_position ON kanban_priorities(position);",
+    )?;
+    // Seed the three default lanes exactly once. Because the migration runs a
+    // single time, this is naturally idempotent and never re-creates lanes the
+    // user later deletes.
+    const DEFAULT_LANES: &[(&str, &str, &str, i64)] = &[
+        ("kanban-lane-todo", "待处理", "#4FC9DA", 0),
+        ("kanban-lane-doing", "进行中", "#E8C444", 1),
+        ("kanban-lane-done", "已完成", "#B8D935", 2),
+    ];
+    for (id, name, color, position) in DEFAULT_LANES {
+        transaction.execute(
+            "INSERT OR IGNORE INTO kanban_lanes(id, name, color, position, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+            rusqlite::params![id, name, color, position],
+        )?;
+    }
+    Ok(())
+}
+
+fn migration_10_hex_colors_and_recent_colors(transaction: &Transaction<'_>) -> Result<()> {
+    transaction.execute_batch(
+        "UPDATE events SET color = CASE lower(color)
+           WHEN 'blue' THEN '#4FC9DA' WHEN 'red' THEN '#F06445'
+           WHEN 'green' THEN '#B8D935' WHEN 'yellow' THEN '#E8C444'
+           ELSE upper(color) END;
+         UPDATE notes SET color = CASE lower(color)
+           WHEN 'yellow' THEN '#E8C444' WHEN 'blue' THEN '#4FC9DA'
+           WHEN 'green' THEN '#B8D935' WHEN 'purple' THEN '#4F55DA'
+           ELSE upper(color) END;
+         UPDATE kanban_lanes SET color = CASE lower(color)
+           WHEN 'primary' THEN '#4FC9DA' WHEN 'success' THEN '#B8D935'
+           WHEN 'info' THEN '#4F55DA' WHEN 'warning' THEN '#E8C444'
+           WHEN 'danger' THEN '#F06445' ELSE upper(color) END;
+         UPDATE kanban_priorities SET color = CASE lower(color)
+           WHEN 'primary' THEN '#4FC9DA' WHEN 'success' THEN '#B8D935'
+           WHEN 'info' THEN '#4F55DA' WHEN 'warning' THEN '#E8C444'
+           WHEN 'danger' THEN '#F06445' ELSE upper(color) END;
+         UPDATE kanban_tags SET color = CASE lower(color)
+           WHEN 'primary' THEN '#4FC9DA' WHEN 'success' THEN '#B8D935'
+           WHEN 'info' THEN '#4F55DA' WHEN 'warning' THEN '#E8C444'
+           WHEN 'danger' THEN '#F06445' ELSE upper(color) END;
+         INSERT OR IGNORE INTO settings(key,value,updated_at)
+           VALUES ('recent_colors','[]',strftime('%Y-%m-%dT%H:%M:%fZ','now'));",
+    )?;
+    for (table, fallback) in [
+        ("events", "#4FC9DA"),
+        ("notes", "#E8C444"),
+        ("kanban_lanes", "#4FC9DA"),
+        ("kanban_priorities", "#4FC9DA"),
+        ("kanban_tags", "#4FC9DA"),
+    ] {
+        transaction.execute(
+            &format!("UPDATE {table} SET color=?1 WHERE color NOT GLOB '#[0-9A-F][0-9A-F][0-9A-F][0-9A-F][0-9A-F][0-9A-F]'"),
+            [fallback],
+        )?;
+    }
+    Ok(())
+}
+
 fn migration_5_event_task_foreign_keys(transaction: &Transaction<'_>) -> Result<()> {
     transaction.execute_batch(
         "PRAGMA defer_foreign_keys = ON;
@@ -428,7 +551,7 @@ mod tests {
             .unwrap()
             .collect::<Result<_, _>>()
             .unwrap();
-        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8]);
+        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
 
         let event_fks: Vec<(String, String, String)> = connection
             .prepare("PRAGMA foreign_key_list(events)")
@@ -522,10 +645,42 @@ mod tests {
             .collect::<Result<_, _>>()
             .expect("versions collect");
 
-        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8]);
-        for table in ["events", "tasks", "notes", "settings", "widgets", "module_layout", "custom_templates", "module_state", "extensions"] {
+        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+        for table in ["events", "tasks", "notes", "settings", "widgets", "module_layout", "custom_templates", "module_state", "extensions", "kanban_lanes", "kanban_cards", "kanban_priorities", "kanban_tags", "kanban_collaborators", "kanban_card_tags", "kanban_card_collaborators"] {
             assert!(table_exists(&connection, table), "missing table {table}");
         }
+    }
+
+    #[test]
+    fn migration_9_seeds_three_default_lanes_once_and_never_recreates_them() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        connection.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        migrate(&mut connection).unwrap();
+
+        let lanes: Vec<(String, String, String, i64)> = connection
+            .prepare("SELECT id, name, color, position FROM kanban_lanes ORDER BY position")
+            .unwrap()
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(
+            lanes,
+            vec![
+                ("kanban-lane-todo".into(), "待处理".into(), "#4FC9DA".into(), 0),
+                ("kanban-lane-doing".into(), "进行中".into(), "#E8C444".into(), 1),
+                ("kanban-lane-done".into(), "已完成".into(), "#B8D935".into(), 2),
+            ]
+        );
+
+        // Deleting every lane and migrating again must not re-seed defaults,
+        // because the migration version already ran once.
+        connection.execute("DELETE FROM kanban_lanes", []).unwrap();
+        migrate(&mut connection).unwrap();
+        let remaining: i64 = connection
+            .query_row("SELECT COUNT(*) FROM kanban_lanes", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(remaining, 0);
     }
 
     #[test]

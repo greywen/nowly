@@ -26,6 +26,7 @@ pub fn read_app_settings(connection: &Connection) -> Result<AppSettings, rusqlit
         week_start: read_value(connection, "week_start")?,
         date_format: read_value(connection, "date_format")?,
         show_weekends: read_value(connection, "show_weekends")?,
+        recent_colors: read_value(connection, "recent_colors").unwrap_or_default(),
     })
 }
 
@@ -56,6 +57,7 @@ pub fn write_app_settings(
         ("week_start", serde_json::to_string(&settings.week_start)),
         ("date_format", serde_json::to_string(&settings.date_format)),
         ("show_weekends", serde_json::to_string(&settings.show_weekends)),
+        ("recent_colors", serde_json::to_string(&settings.recent_colors)),
     ];
     for (key, value) in values {
         let value = value.map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
@@ -102,6 +104,7 @@ mod tests {
             week_start: "sunday".into(),
             date_format: "iso".into(),
             show_weekends: false,
+            recent_colors: vec![],
         };
 
         super::write_app_settings(&mut connection, &settings).unwrap();

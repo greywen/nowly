@@ -55,6 +55,12 @@ function createRepository(overrides: Partial<NowlyRepository> = {}): NowlyReposi
     listExtensions: vi.fn().mockResolvedValue([]),
     installExtension: vi.fn().mockRejectedValue(new Error('unexpected extension write')),
     uninstallExtension: vi.fn().mockRejectedValue(new Error('unexpected extension write')),
+    getKanbanSnapshot: vi.fn().mockResolvedValue({ lanes: [], cards: [], priorities: [], tags: [], collaborators: [] }),
+    createKanbanLane: vi.fn(), updateKanbanLane: vi.fn(), deleteKanbanLane: vi.fn(), reorderKanbanLanes: vi.fn(),
+    createKanbanCard: vi.fn(), updateKanbanCard: vi.fn(), deleteKanbanCard: vi.fn(), moveKanbanCard: vi.fn(),
+    createKanbanPriority: vi.fn(), updateKanbanPriority: vi.fn(), deleteKanbanPriority: vi.fn(), reorderKanbanPriorities: vi.fn(),
+    createKanbanTag: vi.fn(), updateKanbanTag: vi.fn(), deleteKanbanTag: vi.fn(),
+    createKanbanCollaborator: vi.fn(), updateKanbanCollaborator: vi.fn(), deleteKanbanCollaborator: vi.fn(),
     ...overrides
   };
 }

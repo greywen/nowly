@@ -1,12 +1,6 @@
 import { Plus } from 'lucide-react';
 import type { Note } from './notes-model';
-
-const noteColorClass: Record<Note['color'], string> = {
-  yellow: 'note--yellow',
-  blue: 'note--blue',
-  green: 'note--green',
-  purple: 'note--purple'
-};
+import { colorStyle } from '../lib/color';
 
 type LoadStatus = 'loading' | 'ready' | 'error';
 
@@ -73,7 +67,8 @@ export function NotesWidget({
               key={note.id}
               type="button"
               onClick={(event) => onOpenNote(note, event.currentTarget)}
-              className={`note ${noteColorClass[note.color]}`}
+              className="note"
+              style={colorStyle(note.color)}
             >
               <div className="note-title">{note.title}</div>
               <div className="note-content">{note.content}</div>

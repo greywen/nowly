@@ -6,8 +6,6 @@ use rusqlite::{params, Connection, OptionalExtension, Row, TransactionBehavior};
 use tauri::State;
 use uuid::Uuid;
 
-const COLORS: &[&str] = &["yellow", "blue", "green", "purple"];
-
 fn read_note(row: &Row<'_>) -> rusqlite::Result<Note> {
     Ok(Note {
         id: row.get(0)?, title: row.get(1)?, content: row.get(2)?, color: row.get(3)?,
@@ -20,9 +18,8 @@ pub fn validate_and_normalize(mut draft: NoteDraft) -> Result<NoteDraft, Command
     if draft.title.is_empty() {
         return Err(CommandError::validation("title", "请输入便签标题。"));
     }
-    if !COLORS.contains(&draft.color.as_str()) {
-        return Err(CommandError::validation("color", "请选择有效颜色。"));
-    }
+    draft.color = crate::color::normalize_hex(&draft.color)
+        .ok_or_else(|| CommandError::validation("color", "请选择有效颜色。"))?;
     Ok(draft)
 }
 
@@ -121,7 +118,7 @@ mod tests {
         NoteDraft {
             title: "  产品原则  ".into(),
             content: " 保持简单 ".into(),
-            color: "purple".into(),
+            color: "#4F55DA".into(),
             pinned: true,
         }
     }
@@ -132,7 +129,7 @@ mod tests {
         assert_eq!(valid.title, "产品原则");
         assert_eq!(valid.content, " 保持简单 ");
         assert_eq!(validate_and_normalize(NoteDraft { title: "  ".into(), ..draft() }).unwrap_err().field.as_deref(), Some("title"));
-        assert_eq!(validate_and_normalize(NoteDraft { color: "red".into(), ..draft() }).unwrap_err().field.as_deref(), Some("color"));
+        assert_eq!(validate_and_normalize(NoteDraft { color: "#GGGGGG".into(), ..draft() }).unwrap_err().field.as_deref(), Some("color"));
     }
 
     #[test]

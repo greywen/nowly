@@ -24,5 +24,25 @@ export const tauriNowlyRepository: NowlyRepository = {
   setModuleState: (moduleId, state) => invoke('set_module_state', { moduleId, state }),
   listExtensions: () => invoke('list_extensions'),
   installExtension: (draft) => invoke('install_extension', { draft }),
-  uninstallExtension: (id) => invoke('uninstall_extension', { id })
+  uninstallExtension: (id) => invoke('uninstall_extension', { id }),
+  getKanbanSnapshot: () => invoke('get_kanban_snapshot'),
+  createKanbanLane: (draft) => invoke('create_kanban_lane', { draft }),
+  updateKanbanLane: (id, draft) => invoke('update_kanban_lane', { id, draft }),
+  deleteKanbanLane: (id) => invoke('delete_kanban_lane', { id }),
+  reorderKanbanLanes: (orderedIds) => invoke('reorder_kanban_lanes', { orderedIds }),
+  createKanbanCard: (draft) => invoke('create_kanban_card', { draft }),
+  updateKanbanCard: (id, draft) => invoke('update_kanban_card', { id, draft }),
+  deleteKanbanCard: (id) => invoke('delete_kanban_card', { id }),
+  moveKanbanCard: (id, targetLaneId, targetIndex) =>
+    invoke('move_kanban_card', { id, targetLaneId, targetIndex }),
+  createKanbanPriority: (draft) => invoke('create_kanban_priority', { draft }),
+  updateKanbanPriority: (id, draft) => invoke('update_kanban_priority', { id, draft }),
+  deleteKanbanPriority: (id) => invoke('delete_kanban_priority', { id }),
+  reorderKanbanPriorities: (orderedIds) => invoke('reorder_kanban_priorities', { orderedIds }),
+  createKanbanTag: (draft) => invoke('create_kanban_tag', { draft }),
+  updateKanbanTag: (id, draft) => invoke('update_kanban_tag', { id, draft }),
+  deleteKanbanTag: (id) => invoke('delete_kanban_tag', { id }),
+  createKanbanCollaborator: (draft) => invoke('create_kanban_collaborator', { draft }),
+  updateKanbanCollaborator: (id, draft) => invoke('update_kanban_collaborator', { id, draft }),
+  deleteKanbanCollaborator: (id) => invoke('delete_kanban_collaborator', { id })
 };

@@ -8,7 +8,6 @@ use tauri::State;
 
 const LOCAL_MINUTE_FORMAT: &str = "%Y-%m-%dT%H:%M";
 const CATEGORIES: &[&str] = &["work", "important", "personal", "learning"];
-const COLORS: &[&str] = &["blue", "red", "green", "yellow"];
 
 fn parse_local(value: &str, field: &str) -> Result<NaiveDateTime, CommandError> {
     NaiveDateTime::parse_from_str(value, LOCAL_MINUTE_FORMAT)
@@ -80,9 +79,8 @@ pub fn validate_and_normalize(mut draft: EventDraft) -> Result<EventDraft, Comma
     if !CATEGORIES.contains(&draft.category.as_str()) {
         return Err(CommandError::validation("category", "请选择有效分类。"));
     }
-    if !COLORS.contains(&draft.color.as_str()) {
-        return Err(CommandError::validation("color", "请选择有效颜色。"));
-    }
+    draft.color = crate::color::normalize_hex(&draft.color)
+        .ok_or_else(|| CommandError::validation("color", "请选择有效颜色。"))?;
     if draft.all_day {
         let start_date = start.date().format("%Y-%m-%d");
         let end_date = end.date().format("%Y-%m-%d");
@@ -356,7 +354,7 @@ mod tests {
             end_at: "2026-07-23T15:00".into(),
             all_day: false,
             category: "work".into(),
-            color: "blue".into(),
+            color: "#4FC9DA".into(),
             linked_task_id: None,
             note: "".into(),
         }
@@ -386,7 +384,7 @@ mod tests {
         assert!(uuid::Uuid::parse_str(&created.id).is_ok());
 
         let updated = update(&mut connection, &created.id, EventDraft {
-            title: "复盘".into(), color: "red".into(), ..draft()
+            title: "复盘".into(), color: "#F06445".into(), ..draft()
         }).unwrap();
         assert_eq!(updated.title, "复盘");
         assert_eq!(updated.created_at, created.created_at);
@@ -458,7 +456,7 @@ mod tests {
             (EventDraft { end_at: "2026-07-22T15:00".into(), ..base.clone() }, "endAt"),
             (EventDraft { end_at: "2026-07-23T13:55".into(), ..base.clone() }, "endAt"),
             (EventDraft { category: "other".into(), ..base.clone() }, "category"),
-            (EventDraft { color: "purple".into(), ..base.clone() }, "color"),
+            (EventDraft { color: "#GGGGGG".into(), ..base.clone() }, "color"),
         ] {
             assert_eq!(validate_and_normalize(invalid).unwrap_err().field.as_deref(), Some(field));
         }

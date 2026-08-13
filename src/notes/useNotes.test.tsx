@@ -13,7 +13,13 @@ function repository(overrides: Partial<NowlyRepository> = {}): NowlyRepository {
     listNotes:vi.fn().mockResolvedValue([note]), createNote:vi.fn().mockResolvedValue(note), updateNote:vi.fn().mockResolvedValue(note), deleteNote:vi.fn().mockResolvedValue(undefined),
     getSettings:vi.fn(), updateSettings:vi.fn(), listMonitors:vi.fn(),
     listModuleLayout:vi.fn().mockResolvedValue([]), saveModuleLayout:vi.fn().mockImplementation((l)=>Promise.resolve(l)),
-    getModuleState:vi.fn().mockResolvedValue(null), setModuleState:vi.fn().mockResolvedValue(undefined), listExtensions:vi.fn().mockResolvedValue([]), installExtension:vi.fn(), uninstallExtension:vi.fn(), ...overrides
+    getModuleState:vi.fn().mockResolvedValue(null), setModuleState:vi.fn().mockResolvedValue(undefined), listExtensions:vi.fn().mockResolvedValue([]), installExtension:vi.fn(), uninstallExtension:vi.fn(),
+    getKanbanSnapshot:vi.fn().mockResolvedValue({ lanes:[], cards:[], priorities:[], tags:[], collaborators:[] }),
+    createKanbanLane:vi.fn(), updateKanbanLane:vi.fn(), deleteKanbanLane:vi.fn(), reorderKanbanLanes:vi.fn(),
+    createKanbanCard:vi.fn(), updateKanbanCard:vi.fn(), deleteKanbanCard:vi.fn(), moveKanbanCard:vi.fn(),
+    createKanbanPriority:vi.fn(), updateKanbanPriority:vi.fn(), deleteKanbanPriority:vi.fn(), reorderKanbanPriorities:vi.fn(),
+    createKanbanTag:vi.fn(), updateKanbanTag:vi.fn(), deleteKanbanTag:vi.fn(),
+    createKanbanCollaborator:vi.fn(), updateKanbanCollaborator:vi.fn(), deleteKanbanCollaborator:vi.fn(), ...overrides
   };
 }
 function wrapper(value: NowlyRepository) { return ({children}:{children:ReactNode}) => <RepositoryProvider repository={value}>{children}</RepositoryProvider>; }

@@ -1,6 +1,8 @@
 import type { CSSProperties } from 'react';
 
-export type HexColor = `#${string}`;
+// The runtime validator is the source of truth; keeping this as a string type
+// lets legacy records load during the database migration window.
+export type HexColor = string;
 export type ColorPreset = { value: HexColor; label: string };
 
 export const DESIGN_COLORS = {
@@ -50,7 +52,7 @@ export function contrastRatio(left: HexColor, right: HexColor): number {
 }
 
 export function deriveColorTone(value: HexColor) {
-  const base = normalizeHexColor(value) as HexColor;
+  const base = normalizeHexColor(value) ?? DESIGN_COLORS.primary;
   const background = mix(base, '#FFFFFF', 0.86);
   let foreground = mix(base, '#211F1C', 0.45);
   for (let weight = 0.5; contrastRatio(foreground, background) < 4.5 && weight <= 1; weight += 0.05) {

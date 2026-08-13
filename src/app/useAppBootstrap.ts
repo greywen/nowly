@@ -14,7 +14,8 @@ const defaultSettings: AppSettings = {
   density: 'balanced',
   weekStart: 'monday',
   dateFormat: 'localized',
-  showWeekends: true
+  showWeekends: true,
+  recentColors: []
 };
 
 function messageFrom(error: unknown) {

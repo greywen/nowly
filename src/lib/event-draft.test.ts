@@ -17,7 +17,7 @@ const form: EventFormDraft = {
   endTime: '15:00',
   allDay: false,
   category: 'work',
-  color: 'blue',
+  color: '#4FC9DA',
   linkedTaskId: null,
   note: '  保留备注空格  '
 };
@@ -29,7 +29,7 @@ const event: CalendarEvent = {
   endAt: '2026-07-23T15:00',
   allDay: false,
   category: 'important',
-  color: 'red',
+  color: '#F06445',
   linkedTaskId: 't1',
   note: '确认范围',
   createdAt: '2026-07-23T09:00:00Z',
@@ -46,7 +46,7 @@ describe('event draft helpers', () => {
       endTime: '10:45',
       allDay: false,
       category: 'work',
-      color: 'blue',
+      color: '#4FC9DA',
       linkedTaskId: null,
       note: ''
     });
@@ -68,7 +68,7 @@ describe('event draft helpers', () => {
       endTime: '15:00',
       allDay: false,
       category: 'important',
-      color: 'red',
+      color: '#F06445',
       linkedTaskId: 't1',
       note: '确认范围'
     });
@@ -81,7 +81,7 @@ describe('event draft helpers', () => {
       endAt: '2026-07-23T15:00',
       allDay: false,
       category: 'work',
-      color: 'blue',
+      color: '#4FC9DA',
       linkedTaskId: null,
       note: '  保留备注空格  '
     });
@@ -103,6 +103,8 @@ describe('event draft helpers', () => {
     expect(validateEventForm({ ...form, endTime: '13:55' })).toEqual({ endAt: '结束时间不能早于开始时间。' });
     expect(validateEventForm({ ...form, endDate: '2026-07-24', endTime: '13:55' })).toEqual({});
     expect(validateEventForm({ ...form, category: 'other' as never })).toEqual({ category: '请选择有效分类。' });
+    expect(validateEventForm({ ...form, color: '#7c5cfc' })).toEqual({});
+    expect(toEventDraft({ ...form, color: '#7c5cfc' })).toMatchObject({ color: '#7C5CFC' });
     expect(validateEventForm({ ...form, color: 'purple' as never })).toEqual({ color: '请选择有效颜色。' });
   });
 

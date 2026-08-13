@@ -1,8 +1,10 @@
+mod color;
 mod commands;
 mod db;
 mod error;
 mod events;
 mod extensions;
+mod kanban;
 mod layout;
 mod models;
 mod module_state;
@@ -235,6 +237,25 @@ fn main() {
             events::create_event,
             events::update_event,
             events::delete_event,
+            kanban::get_kanban_snapshot,
+            kanban::create_kanban_lane,
+            kanban::update_kanban_lane,
+            kanban::delete_kanban_lane,
+            kanban::reorder_kanban_lanes,
+            kanban::create_kanban_card,
+            kanban::update_kanban_card,
+            kanban::delete_kanban_card,
+            kanban::move_kanban_card,
+            kanban::create_kanban_priority,
+            kanban::update_kanban_priority,
+            kanban::delete_kanban_priority,
+            kanban::reorder_kanban_priorities,
+            kanban::create_kanban_tag,
+            kanban::update_kanban_tag,
+            kanban::delete_kanban_tag,
+            kanban::create_kanban_collaborator,
+            kanban::update_kanban_collaborator,
+            kanban::delete_kanban_collaborator,
             wallpaper::enter_wallpaper_mode,
             wallpaper::enter_foreground_mode,
             window_lifecycle::get_window_mode

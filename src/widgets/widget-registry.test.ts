@@ -65,6 +65,15 @@ describe('widget definitions', () => {
     const all = buildDefinitions();
     expect(getWidgetDefinition('focusTimer', all)?.name).toBe('专注计时');
   });
+
+  it('exposes kanban as an addable built-in that is not in the default layout', () => {
+    expect(builtinDefinitions.map((definition) => definition.id)).not.toContain('kanban');
+    expect(defaultLayout.map((item) => item.id)).not.toContain('kanban');
+    const all = buildDefinitions();
+    const kanban = getWidgetDefinition('kanban', all);
+    expect(kanban?.name).toBe('看板');
+    expect(kanban?.category).toBe('builtin');
+  });
 });
 
 describe('user modules (sandbox extensions)', () => {
@@ -84,7 +93,8 @@ describe('user modules (sandbox extensions)', () => {
   it('merges built-ins, extensions, and user modules into the full set', () => {
     const all = buildDefinitions([extension()]);
     expect(all.map((definition) => definition.id)).toContain(`${SANDBOX_ID_PREFIX}ext1`);
-    expect(all.filter((definition) => definition.category === 'builtin')).toHaveLength(3);
+    // Built-in count is 4: calendar, matrix, notes, plus the picker-only kanban.
+    expect(all.filter((definition) => definition.category === 'builtin')).toHaveLength(4);
     expect(all.filter((definition) => definition.category === 'extension')).toHaveLength(3);
     expect(all.filter((definition) => definition.category === 'sandbox')).toHaveLength(1);
   });

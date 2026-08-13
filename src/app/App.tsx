@@ -11,6 +11,7 @@ import type { ModalState } from '../lib/modal-store';
 import { enterForegroundMode, enterWallpaperMode } from '../lib/window-mode';
 import { MatrixWidget } from '../matrix/MatrixWidget';
 import { useTasks } from '../matrix/useTasks';
+import { KanbanWidget } from '../kanban/KanbanWidget';
 import { ModalRoot } from '../modals/ModalRoot';
 import { NotesWidget } from '../notes/NotesWidget';
 import { useNotes } from '../notes/useNotes';
@@ -23,6 +24,7 @@ import { SandboxModule } from '../widgets/sandbox/SandboxModule';
 import { SANDBOX_ID_PREFIX } from '../widgets/widget-registry';
 import { useNowlyRepository } from '../data/RepositoryContext';
 import { useCurrentTime } from './useCurrentTime';
+import { addRecentColor } from '../lib/color';
 
 type WindowMode = 'wallpaper' | 'foreground';
 
@@ -63,6 +65,11 @@ export function App() {
 
   const now = useCurrentTime();
   const todayIso = localIsoDate(now);
+  const rememberCustomColor = useCallback(async (color: string) => {
+    const current = settingsFeature.settings.data;
+    const next = addRecentColor(current.recentColors ?? [], color);
+    try { await settingsFeature.saveSettings({ ...current, recentColors: next }); } catch { /* business save remains valid */ }
+  }, [settingsFeature.settings.data, settingsFeature.saveSettings]);
 
   // The full set of placeable modules: built-ins, extensions, and installed
   // user modules.
@@ -156,6 +163,7 @@ export function App() {
       />
     );
   }
+  modules.kanban = <KanbanWidget todayIso={todayIso} recentColors={settingsFeature.settings.data.recentColors ?? []} onRememberCustomColor={rememberCustomColor} />;
   modules.focusTimer = renderExtension('focusTimer');
   modules.newsWordCloud = renderExtension('newsWordCloud');
   modules.vocabulary = renderExtension('vocabulary');
@@ -253,6 +261,8 @@ export function App() {
         settings={settingsFeature.settings.data}
         monitors={settingsFeature.monitors.data}
         saveSettings={settingsFeature.saveSettings}
+        recentColors={settingsFeature.settings.data.recentColors ?? []}
+        onRememberCustomColor={rememberCustomColor}
       />
     </>
   );

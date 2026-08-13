@@ -1,5 +1,7 @@
+import { DESIGN_COLORS, type ColorPreset, type HexColor } from '../lib/color';
+
 export type EventCategory = 'work' | 'important' | 'personal' | 'learning';
-export type EventColor = 'blue' | 'red' | 'green' | 'yellow';
+export type EventColor = HexColor;
 export type CalendarView = 'month' | 'week' | 'day' | 'list';
 
 export const eventCategoryLabels: Record<EventCategory, string> = {
@@ -9,12 +11,13 @@ export const eventCategoryLabels: Record<EventCategory, string> = {
   learning: '学习'
 };
 
-export const eventColorLabels: Record<EventColor, string> = {
-  blue: '蓝色',
-  red: '红色',
-  green: '绿色',
-  yellow: '黄色'
-};
+export const eventColorPresets: readonly ColorPreset[] = [
+  { value: DESIGN_COLORS.primary, label: '青绿' },
+  { value: DESIGN_COLORS.danger, label: '珊瑚红' },
+  { value: DESIGN_COLORS.success, label: '草绿' },
+  { value: DESIGN_COLORS.warning, label: '暖黄' }
+];
+export const DEFAULT_EVENT_COLOR = DESIGN_COLORS.primary;
 
 export type EventDraft = {
   title: string;

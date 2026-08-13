@@ -1,9 +1,11 @@
-import type {
-  CalendarEvent,
-  EventCategory,
-  EventColor,
-  EventDraft
+import {
+  DEFAULT_EVENT_COLOR,
+  type CalendarEvent,
+  type EventCategory,
+  type EventColor,
+  type EventDraft
 } from '../calendar/calendar-model';
+import { normalizeHexColor } from './color';
 
 export type EventFormDraft = {
   title: string;
@@ -23,7 +25,6 @@ export type EventFieldErrors = Partial<
 >;
 
 const categories: EventCategory[] = ['work', 'important', 'personal', 'learning'];
-const colors: EventColor[] = ['blue', 'red', 'green', 'yellow'];
 
 function pad(value: number) {
   return String(value).padStart(2, '0');
@@ -48,7 +49,7 @@ export function createEventDraft(dateIso: string, now: Date): EventFormDraft {
     endTime: minutesToTime(endMinutes),
     allDay: false,
     category: 'work',
-    color: 'blue',
+    color: DEFAULT_EVENT_COLOR,
     linkedTaskId: null,
     note: ''
   };
@@ -76,7 +77,7 @@ export function toEventDraft(form: EventFormDraft): EventDraft {
     endAt: `${form.endDate}T${form.allDay ? '23:59' : form.endTime}`,
     allDay: form.allDay,
     category: form.category,
-    color: form.color,
+    color: normalizeHexColor(form.color) as EventColor,
     linkedTaskId: form.linkedTaskId,
     note: form.note
   };
@@ -93,7 +94,7 @@ export function validateEventForm(form: EventFormDraft): EventFieldErrors {
     return { endAt: '结束时间不能早于开始时间。' };
   }
   if (!categories.includes(form.category)) return { category: '请选择有效分类。' };
-  if (!colors.includes(form.color)) return { color: '请选择有效颜色。' };
+  if (!normalizeHexColor(form.color)) return { color: '请选择有效颜色。' };
   return {};
 }
 
