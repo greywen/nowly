@@ -19,6 +19,16 @@ describe('ColorPicker', () => {
     }
   });
 
+  it('keeps the custom control as a fixed-size plus icon instead of mirroring the selected color', () => {
+    const { rerender } = render(<ColorPicker legend="颜色" name="test-color" value="#4FC9DA" presets={presets} recentColors={[]} onChange={vi.fn()} />);
+    const trigger = screen.getByRole('button', { name: '选择自定义颜色' });
+    expect(trigger.querySelector('svg')).toBeInTheDocument();
+    expect(trigger).toHaveClass('color-picker__trigger');
+    expect(trigger.querySelector('span')).not.toBeInTheDocument();
+    rerender(<ColorPicker legend="颜色" name="test-color" value="#DC3545" presets={presets} recentColors={[]} onChange={vi.fn()} />);
+    expect(screen.getByRole('button', { name: '选择自定义颜色' }).querySelector('svg')).toBeInTheDocument();
+  });
+
   it('portals a minimal picker above dialogs without value controls', () => {
     render(<ColorPicker legend="颜色" name="test-color" value="#4FC9DA" presets={presets} recentColors={[]} onChange={vi.fn()} />);
 

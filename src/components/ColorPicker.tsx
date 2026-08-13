@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { createPortal } from 'react-dom';
+import { Plus } from 'lucide-react';
 import {
   buildGlobalColorPalette,
   DEFAULT_COLOR_PRESETS,
@@ -307,7 +308,7 @@ export function ColorPicker({ legend, name, value, presets, recentColors, disabl
             style={colorStyle(customValue)}
             onClick={() => setOpen((current) => !current)}
           >
-            <span aria-hidden="true" />
+            <Plus aria-hidden="true" size={18} strokeWidth={2} />
           </button>
         </div>
       </div>
