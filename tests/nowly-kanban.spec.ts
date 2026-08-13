@@ -288,8 +288,7 @@ test('deleting a lane confirms the task count and cascades', async ({ page }) =>
   await page.getByLabel('任务标题').fill('临时任务');
   await page.getByRole('button', { name: '保存任务' }).click();
 
-  await todo.getByRole('button', { name: '泳道操作：待处理' }).click();
-  await page.getByRole('menuitem', { name: '编辑泳道' }).click();
+  await todo.getByRole('button', { name: '待处理', exact: true }).click();
   await page.getByRole('button', { name: '删除泳道' }).click();
   await expect(page.getByRole('dialog', { name: /永久删除泳道“待处理”/ })).toContainText('1 张任务');
   await page.getByRole('button', { name: '永久删除' }).click();

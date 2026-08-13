@@ -4,25 +4,15 @@ import type { DragEvent } from 'react';
 import { cardsInLane, type KanbanLane as KanbanLaneModel, type KanbanSnapshot } from './kanban-model';
 import { resolveCard } from './kanban-view';
 import { KanbanCard } from './KanbanCard';
-import { KanbanMenu, type KanbanMenuItem } from './KanbanMenu';
 
 type KanbanLaneProps = {
   lane: KanbanLaneModel;
   snapshot: KanbanSnapshot;
   todayIso: string;
-  canMoveLaneLeft: boolean;
-  canMoveLaneRight: boolean;
   isDropTarget: boolean;
   onAddCard: () => void;
   onEditLane: () => void;
-  onMoveLaneLeft: () => void;
-  onMoveLaneRight: () => void;
   onOpenCard: (cardId: string) => void;
-  onMoveCardUp: (cardId: string) => void;
-  onMoveCardDown: (cardId: string) => void;
-  onMoveCardLeft: (cardId: string) => void;
-  onMoveCardRight: (cardId: string) => void;
-  onDeleteCard: (cardId: string) => void;
   onLaneDragStart: (event: DragEvent<HTMLElement>) => void;
   onLaneDragEnd: () => void;
   onLaneDragOver: (event: DragEvent<HTMLElement>) => void;
@@ -31,26 +21,17 @@ type KanbanLaneProps = {
   onCardDragEnd: () => void;
 };
 
-// One fixed-width lane: a draggable header carrying colour, name and count, an
-// add-card button, an actions menu, and the vertical list of task cards. The
-// lane is also a drop target for cards.
+// One fixed-width lane: a draggable header carrying colour, an editable name
+// button and a card count, an add-card button, and the vertical list of task
+// cards. The lane is also a drop target for cards.
 export function KanbanLane({
   lane,
   snapshot,
   todayIso,
-  canMoveLaneLeft,
-  canMoveLaneRight,
   isDropTarget,
   onAddCard,
   onEditLane,
-  onMoveLaneLeft,
-  onMoveLaneRight,
   onOpenCard,
-  onMoveCardUp,
-  onMoveCardDown,
-  onMoveCardLeft,
-  onMoveCardRight,
-  onDeleteCard,
   onLaneDragStart,
   onLaneDragEnd,
   onLaneDragOver,
@@ -59,11 +40,6 @@ export function KanbanLane({
   onCardDragEnd
 }: KanbanLaneProps) {
   const laneCards = cardsInLane(snapshot.cards, lane.id);
-  const laneMenuItems: KanbanMenuItem[] = [
-    { label: '编辑泳道', onSelect: onEditLane },
-    { label: '左移', onSelect: onMoveLaneLeft, disabled: !canMoveLaneLeft },
-    { label: '右移', onSelect: onMoveLaneRight, disabled: !canMoveLaneRight }
-  ];
 
   return (
     <section
@@ -80,7 +56,9 @@ export function KanbanLane({
         onDragEnd={onLaneDragEnd}
       >
         <span className="kanban-lane__dot" style={colorStyle(lane.color)} aria-hidden="true" />
-        <h3 className="kanban-lane__name">{lane.name}</h3>
+        <button type="button" className="kanban-lane__name" onClick={onEditLane}>
+          {lane.name}
+        </button>
         <span className="kanban-lane__count" aria-label={`${lane.name} ${laneCards.length} 张任务`}>
           {laneCards.length}
         </span>
@@ -93,7 +71,6 @@ export function KanbanLane({
           >
             <Plus aria-hidden="true" />
           </button>
-          <KanbanMenu label={`泳道操作：${lane.name}`} items={laneMenuItems} />
         </div>
       </header>
 

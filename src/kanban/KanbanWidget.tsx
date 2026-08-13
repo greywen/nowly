@@ -1,13 +1,6 @@
 import { Plus } from 'lucide-react';
 import { type DragEvent, useRef, useState } from 'react';
-import { cardsInLane, type KanbanCard as KanbanCardModel } from './kanban-model';
-import {
-  adjacentLaneId,
-  cardIndexInLane,
-  laneCardCount,
-  laneOrderAfterMove,
-  totalCardCount
-} from './kanban-view';
+import { laneCardCount, totalCardCount } from './kanban-view';
 import { KanbanLane } from './KanbanLane';
 import { KanbanMenu } from './KanbanMenu';
 import { KanbanLaneDialog } from './KanbanLaneDialog';
@@ -46,41 +39,9 @@ export function KanbanWidget({ todayIso, recentColors = [], onRememberCustomColo
     restoreFocusRef.current = event.currentTarget;
   }
 
-  // ----- keyboard / menu moves ------------------------------------------------
+  // ----- card moves -----------------------------------------------------------
   function moveCardWithinOrAcross(cardId: string, laneId: string, targetIndex: number) {
     void kanban.moveCard(cardId, laneId, targetIndex);
-  }
-
-  function cardById(cardId: string): KanbanCardModel | undefined {
-    return data.cards.find((card) => card.id === cardId);
-  }
-
-  function moveCardUp(cardId: string) {
-    const card = cardById(cardId);
-    if (!card) return;
-    const index = cardIndexInLane(data, card);
-    if (index > 0) moveCardWithinOrAcross(cardId, card.laneId, index - 1);
-  }
-
-  function moveCardDown(cardId: string) {
-    const card = cardById(cardId);
-    if (!card) return;
-    const index = cardIndexInLane(data, card);
-    if (index < cardsInLane(data.cards, card.laneId).length - 1) {
-      moveCardWithinOrAcross(cardId, card.laneId, index + 1);
-    }
-  }
-
-  function moveCardToLane(cardId: string, delta: number) {
-    const card = cardById(cardId);
-    if (!card) return;
-    const target = adjacentLaneId(data.lanes, card.laneId, delta);
-    if (target) moveCardWithinOrAcross(cardId, target, cardsInLane(data.cards, target).length);
-  }
-
-  function moveLane(laneId: string, delta: number) {
-    const next = laneOrderAfterMove(data, laneId, delta);
-    if (next) void kanban.reorderLanes(next);
   }
 
   // ----- drag and drop --------------------------------------------------------
@@ -152,7 +113,7 @@ export function KanbanWidget({ todayIso, recentColors = [], onRememberCustomColo
         <div className="toolbar-actions">
           <button
             type="button"
-            className="btn btn-primary"
+            className="good-icon-button"
             aria-label="添加泳道"
             onClick={(event) => {
               rememberTrigger(event);
@@ -160,7 +121,6 @@ export function KanbanWidget({ todayIso, recentColors = [], onRememberCustomColo
             }}
           >
             <Plus aria-hidden="true" />
-            添加泳道
           </button>
           <KanbanMenu label="看板更多操作" items={boardMenuItems} />
         </div>
@@ -192,25 +152,16 @@ export function KanbanWidget({ todayIso, recentColors = [], onRememberCustomColo
         ) : (
           <div className="kanban-scroll" data-testid="kanban-scroll">
             <div className="kanban-lanes">
-              {data.lanes.map((lane, index) => (
+              {data.lanes.map((lane) => (
                 <KanbanLane
                   key={lane.id}
                   lane={lane}
                   snapshot={data}
                   todayIso={todayIso}
-                  canMoveLaneLeft={index > 0}
-                  canMoveLaneRight={index < data.lanes.length - 1}
                   isDropTarget={drag?.kind === 'card' && dropLaneId === lane.id}
                   onAddCard={() => setDialog({ type: 'card-create', laneId: lane.id })}
                   onEditLane={() => setDialog({ type: 'lane-edit', laneId: lane.id })}
-                  onMoveLaneLeft={() => moveLane(lane.id, -1)}
-                  onMoveLaneRight={() => moveLane(lane.id, 1)}
                   onOpenCard={(cardId) => setDialog({ type: 'card-edit', cardId })}
-                  onMoveCardUp={moveCardUp}
-                  onMoveCardDown={moveCardDown}
-                  onMoveCardLeft={(cardId) => moveCardToLane(cardId, -1)}
-                  onMoveCardRight={(cardId) => moveCardToLane(cardId, 1)}
-                  onDeleteCard={(cardId) => void kanban.deleteCard(cardId)}
                   onLaneDragStart={(event) => onLaneDragStart(event, lane.id)}
                   onLaneDragEnd={onDragEnd}
                   onLaneDragOver={(event) => {

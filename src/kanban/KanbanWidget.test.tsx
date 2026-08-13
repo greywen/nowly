@@ -86,13 +86,18 @@ describe('KanbanWidget', () => {
     expect(screen.getByRole('heading', { name: '在“进行中”新建任务' })).toBeInTheDocument();
   });
 
-  it('disables boundary lane moves in the lane menu', async () => {
+  it('opens the lane editor by clicking the lane name', async () => {
     const user = userEvent.setup();
     renderWidget(repository());
     await screen.findByRole('region', { name: '泳道：待处理' });
-    await user.click(screen.getByRole('button', { name: '泳道操作：待处理' }));
-    expect(screen.getByRole('menuitem', { name: '左移' })).toBeDisabled();
-    expect(screen.getByRole('menuitem', { name: '右移' })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: '待处理' }));
+    expect(screen.getByRole('button', { name: '删除泳道' })).toBeInTheDocument();
+  });
+
+  it('does not render a lane action menu', async () => {
+    renderWidget(repository());
+    await screen.findByRole('region', { name: '泳道：待处理' });
+    expect(screen.queryByRole('button', { name: '泳道操作：待处理' })).not.toBeInTheDocument();
   });
 
   it('does not render the removed task-card action menu', async () => {
@@ -106,8 +111,7 @@ describe('KanbanWidget', () => {
     const repo = repository();
     renderWidget(repo);
     await screen.findByRole('region', { name: '泳道：待处理' });
-    await user.click(screen.getByRole('button', { name: '泳道操作：待处理' }));
-    await user.click(screen.getByRole('menuitem', { name: '编辑泳道' }));
+    await user.click(screen.getByRole('button', { name: '待处理' }));
     await user.click(screen.getByRole('button', { name: '删除泳道' }));
     expect(screen.getByText(/该泳道包含 2 张任务/)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '永久删除' }));

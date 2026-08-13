@@ -1,7 +1,6 @@
 import { CalendarDays } from 'lucide-react';
 import { colorStyle } from '../lib/color';
 import type { DragEvent } from 'react';
-import { colorClass } from './kanban-view';
 import type { ResolvedCard } from './kanban-view';
 import { formatDueDate } from './kanban-view';
 
@@ -39,32 +38,35 @@ export function KanbanCard({
   const visibleCollaborators = collaborators.slice(0, MAX_AVATARS);
   const overflowCount = collaborators.length - visibleCollaborators.length;
   const hasFooter = collaborators.length > 0 || tags.length > 0;
+  const hasTop = Boolean(card.dueDate) || Boolean(priority);
 
   return (
     <article
-      className="kanban-card"
+      className={`kanban-card${hasTop ? '' : ' kanban-card--no-top'}`}
       draggable
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       aria-label={`任务：${card.title}`}
     >
-      <div className="kanban-card__top">
-        {card.dueDate ? (
-          <span className="kanban-card__date">
-            <CalendarDays aria-hidden="true" />
-            {formatDueDate(card.dueDate, todayIso)}
-          </span>
-        ) : (
-          <span className="kanban-card__date kanban-card__date--empty" aria-hidden="true" />
-        )}
-        <div className="kanban-card__top-right">
-          {priority ? (
-            <span className="kanban-badge" style={colorStyle(priority.color)}>
-              {priority.name}
+      {hasTop ? (
+        <div className="kanban-card__top">
+          {card.dueDate ? (
+            <span className="kanban-card__date">
+              <CalendarDays aria-hidden="true" />
+              {formatDueDate(card.dueDate, todayIso)}
             </span>
-          ) : null}
+          ) : (
+            <span className="kanban-card__date kanban-card__date--empty" aria-hidden="true" />
+          )}
+          <div className="kanban-card__top-right">
+            {priority ? (
+              <span className="kanban-badge" style={colorStyle(priority.color)}>
+                {priority.name}
+              </span>
+            ) : null}
+          </div>
         </div>
-      </div>
+      ) : null}
 
       <button type="button" className="kanban-card__title" onClick={onOpen}>
         {card.title}
@@ -92,7 +94,7 @@ export function KanbanCard({
           {tags.length > 0 ? (
             <span className="kanban-card__tags">
               {tags.map((tag) => (
-                <span key={tag.id} className="kanban-tag">
+                <span key={tag.id} className="kanban-tag" style={{ color: tag.color }}>
                   <span className="kanban-tag__hash" aria-hidden="true">#</span>
                   {tag.name}
                 </span>
