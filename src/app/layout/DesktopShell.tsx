@@ -13,6 +13,8 @@ import type {
 import { useModuleLayout } from '../../widgets/useModuleLayout';
 import { TemplatePickerDialog } from '../../widgets/TemplatePickerDialog';
 import { ModuleGrid, type ModuleGridItem } from './ModuleGrid';
+import { TransparencyControl } from '../TransparencyControl';
+import { DEFAULT_OPACITY, useTransparency } from '../useTransparency';
 
 type DesktopShellProps = {
   mode?: 'foreground' | 'wallpaper';
@@ -29,6 +31,13 @@ type DesktopShellProps = {
   onWallpaperDoubleClick?: () => void;
   onOpenSettings?: () => void;
 };
+
+// The wallpaper layer sits behind the app content. It stays hidden until a
+// wallpaper source is configured; for now it only anchors the stacking order
+// so the transparency layer can reveal the shell background beneath modules.
+function WallpaperLayer() {
+  return <div className="wallpaper-layer" data-testid="wallpaper-layer" aria-hidden="true" hidden />;
+}
 
 export function DesktopShell({
   mode = 'foreground',
@@ -48,8 +57,20 @@ export function DesktopShell({
   const foreground = mode === 'foreground';
   const { layout, move, resize, addWidget, removeWidget, presentIds } =
     useModuleLayout(definitions);
+  const { opacity, setOpacity } = useTransparency();
   const [isEditing, setIsEditing] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [previewingTransparency, setPreviewingTransparency] = useState(false);
+
+  // Transparency persists as a wallpaper-only look. As the wallpaper it fades
+  // the whole app content, topbar included, so the wallpaper shows through
+  // everything. While the slider popover is open we also preview the fade live
+  // in foreground, but only on the workspace — leaving the topbar (and the
+  // slider itself) fully usable so you never lose the control you're dragging.
+  const faded = opacity < DEFAULT_OPACITY;
+  const topbarStyle = !foreground && faded ? { opacity } : undefined;
+  const workspaceStyle =
+    (!foreground || previewingTransparency) && faded ? { opacity } : undefined;
 
   const items: ModuleGridItem[] = layout
     .filter(
@@ -67,7 +88,8 @@ export function DesktopShell({
       onDoubleClickCapture={foreground ? undefined : onWallpaperDoubleClick}
       className="app-shell"
     >
-      <header className="topbar">
+      <WallpaperLayer />
+      <header className="topbar" style={topbarStyle}>
         <div className="date-copy">
           <strong>{dateText}</strong>
           <p>{summary}</p>
@@ -76,6 +98,9 @@ export function DesktopShell({
           <span className="topbar-time" aria-label={`当前时间 ${time}`}>
             {time}
           </span>
+          {foreground ? (
+            <TransparencyControl opacity={opacity} onChange={setOpacity} onOpenChange={setPreviewingTransparency} />
+          ) : null}
           {foreground && isEditing ? (
             <button
               type="button"
@@ -117,7 +142,7 @@ export function DesktopShell({
           ) : null}
         </div>
       </header>
-      <main className="workspace">
+      <main className="workspace" style={workspaceStyle}>
         <ModuleGrid
           items={items}
           editing={foreground && isEditing}

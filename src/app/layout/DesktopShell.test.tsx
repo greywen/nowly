@@ -115,6 +115,56 @@ describe('DesktopShell', () => {
     expect(onWallpaperDoubleClick).toHaveBeenCalledOnce();
   });
 
+  it('fades the whole app content only while running as the wallpaper', () => {
+    localStorage.setItem('nowly:page-opacity', '0.4');
+    const { rerender } = render(
+      <DesktopShell
+        mode="foreground"
+        time="09:41"
+        dateText="2026年7月23日 星期四"
+        summary="summary"
+        modules={modules()}
+      />
+    );
+
+    // Foreground only records the preference; content stays fully opaque.
+    expect(screen.getByRole('banner').style.opacity).toBe('');
+    expect(screen.getByRole('main').style.opacity).toBe('');
+
+    rerender(
+      <DesktopShell
+        mode="wallpaper"
+        time="09:41"
+        dateText="2026年7月23日 星期四"
+        summary="summary"
+        modules={modules()}
+      />
+    );
+
+    // Wallpaper mode fades the topbar and workspace together.
+    expect(screen.getByRole('banner').style.opacity).toBe('0.4');
+    expect(screen.getByRole('main').style.opacity).toBe('0.4');
+  });
+
+  it('previews the fade live on the workspace while the slider is open in foreground', () => {
+    localStorage.setItem('nowly:page-opacity', '0.4');
+    render(
+      <DesktopShell
+        mode="foreground"
+        time="09:41"
+        dateText="2026年7月23日 星期四"
+        summary="summary"
+        modules={modules()}
+      />
+    );
+
+    // Opening the slider previews the fade on the workspace, but the topbar
+    // stays opaque so the control itself remains usable.
+    fireEvent.click(screen.getByRole('button', { name: '调整透明度' }));
+    expect(screen.getByRole('main').style.opacity).toBe('0.4');
+    expect(screen.getByRole('banner').style.opacity).toBe('');
+  });
+
   it('does not inset the root from viewport edges', () => {
     render(
       <DesktopShell

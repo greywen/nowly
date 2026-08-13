@@ -94,14 +94,31 @@ button { cursor: pointer; }
 button:disabled { cursor: default; opacity: .65; }
 :where(button, input, textarea, select):focus-visible { outline: 0; }
 
-.app-shell { width: 100vw; height: 100vh; display: grid; grid-template-rows: 70px minmax(0, 1fr); overflow: hidden; background: var(--bg-subtle); }
-.topbar { min-width: 0; padding: 0 36px; display: flex; align-items: center; justify-content: space-between; gap: 24px; background: var(--bg-surface); border-bottom: 1px solid var(--border-default); }
+.app-shell { position: relative; width: 100vw; height: 100vh; display: grid; grid-template-rows: 70px minmax(0, 1fr); overflow: hidden; background: var(--bg-subtle); }
+/* Wallpaper layer sits behind the app content. Hidden until a wallpaper is
+   configured; it only anchors the stacking order for now. */
+.wallpaper-layer { position: absolute; inset: 0; z-index: 0; background-size: cover; background-position: center; pointer-events: none; }
+.topbar { position: relative; z-index: 2; min-width: 0; padding: 0 36px; display: flex; align-items: center; justify-content: space-between; gap: 24px; background: var(--bg-surface); border-bottom: 1px solid var(--border-default); }
 .date-copy { min-width: 0; }
 .date-copy strong { display: block; color: var(--text-primary); font-size: 17.2px; font-weight: 600; }
 .date-copy p { margin: 0; color: var(--text-muted); font-size: 13.6px; font-weight: 500; }
 .top-actions, .toolbar-actions { flex: none; display: flex; align-items: center; gap: 8px; }
 .topbar-time { color: var(--text-strong); font-size: 17.2px; font-weight: 600; }
-.workspace { min-width: 0; min-height: 0; padding: 24px 36px 36px; display: flex; }
+.workspace { position: relative; z-index: 1; min-width: 0; min-height: 0; padding: 24px 36px 36px; display: flex; }
+
+/* Transparency control: an icon button in the topbar that opens a slider
+   popover. The slider drives the workspace opacity so the wallpaper layer (or
+   shell background) shows through the modules. */
+.transparency-control { position: relative; display: inline-flex; }
+.btn.btn-icon.is-active { color: var(--color-primary); background: var(--color-primary-light); }
+.transparency-popup { position: absolute; z-index: 60; top: calc(100% + 8px); right: 0; box-sizing: border-box; width: 260px; padding: 16px; border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-surface); box-shadow: var(--shadow-dropdown); }
+.transparency-popup__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.transparency-popup__title { color: var(--text-strong); font-size: 15.2px; font-weight: 600; }
+.transparency-popup__value { color: var(--color-primary-active); font-size: 15.2px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.transparency-slider { width: 100%; height: 4px; margin: 0; padding: 0; appearance: none; -webkit-appearance: none; border-radius: var(--radius-pill); background: var(--bg-secondary); outline: 0; }
+.transparency-slider::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 18px; height: 18px; border: 0; border-radius: 50%; background: var(--color-primary); box-shadow: inset 0 0 0 3px #fff; }
+.transparency-slider::-moz-range-thumb { width: 18px; height: 18px; border: 0; border-radius: 50%; background: var(--color-primary); box-shadow: inset 0 0 0 3px #fff; }
+.transparency-slider:focus-visible { outline: 0; box-shadow: 0 0 0 4px var(--focus-ring); }
 .module-grid { flex: 1; min-width: 0; min-height: 0; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); grid-template-rows: repeat(8, minmax(0, 1fr)); gap: 24px; }
 .card { min-width: 0; min-height: 0; overflow: hidden; border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-surface); box-shadow: none; }
 .calendar-card, .priority-card, .notes-card { min-height: 0; display: flex; flex-direction: column; }
