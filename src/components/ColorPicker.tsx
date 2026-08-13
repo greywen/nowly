@@ -263,6 +263,18 @@ export function ColorPicker({ legend, name, value, presets, recentColors, disabl
       >
         <span className="color-picker__hue-thumb" style={{ top: `${(hsv.h / 359) * 100}%` }} aria-hidden="true" />
       </div>
+      <div className="color-picker__recent" role="group" aria-label="最近使用颜色">
+        {palette.map((color) => (
+          <button
+            key={color}
+            type="button"
+            className="color-picker__recent-color"
+            aria-label={`历史颜色 ${color}`}
+            style={colorStyle(color)}
+            onClick={() => select(color)}
+          />
+        ))}
+      </div>
     </div>,
     document.body
   ) : null;

@@ -57,8 +57,18 @@ describe('ColorPicker', () => {
     expect(popover).toHaveStyle({ position: 'fixed' });
     expect(screen.getByRole('slider', { name: '饱和度和亮度' })).toBeInTheDocument();
     expect(screen.getByRole('slider', { name: '色相' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '最近使用颜色' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /历史颜色/ })).toHaveLength(5);
     expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
     expect(document.querySelector('input[type="color"], input[type="range"]')).toBeNull();
+  });
+
+  it('selects a color from the five-color history inside the custom picker', () => {
+    const onChange = vi.fn();
+    render(<ColorPicker legend="颜色" name="test-color" value="#4FC9DA" presets={presets} recentColors={['#7C5CFC']} onChange={onChange} />);
+    fireEvent.click(screen.getByRole('button', { name: '选择自定义颜色' }));
+    fireEvent.click(screen.getByRole('button', { name: '历史颜色 #7C5CFC' }));
+    expect(onChange).toHaveBeenCalledWith('#7C5CFC');
   });
 
   it('emits an uppercase HEX color from the visual palette and remains editable', () => {
