@@ -4,7 +4,6 @@ import { Plus } from 'lucide-react';
 import {
   buildGlobalColorPalette,
   DEFAULT_COLOR_PRESETS,
-  DEFAULT_COLOR_VALUES,
   colorStyle,
   normalizeHexColor,
   type ColorPreset,
@@ -111,8 +110,8 @@ export function ColorPicker({ legend, name, value, presets, recentColors, disabl
   const [position, setPosition] = useState<PickerPosition>({ left: VIEWPORT_GAP, top: VIEWPORT_GAP });
   const palette = buildGlobalColorPalette(recentColors);
   const selectedIndex = palette.indexOf(value);
-  const selectedIsCustom = !DEFAULT_COLOR_VALUES.includes(value as typeof DEFAULT_COLOR_VALUES[number]);
-  const customValue = selectedIsCustom ? value : value;
+  const customValue = value;
+  const [customPreview, setCustomPreview] = useState(false);
   const [hsv, setHsv] = useState<Hsv>(() => rgbToHsv(hexToRgb(customValue)));
   const hsvRef = useRef(hsv);
   const choices = palette.map((color, index) => ({
@@ -175,6 +174,7 @@ export function ColorPicker({ legend, name, value, presets, recentColors, disabl
     hsvRef.current = normalized;
     setHsv(normalized);
     const color = rgbToHex(hsvToRgb(normalized));
+    setCustomPreview(true);
     onChange(color);
     onRememberColor?.(color);
   }
@@ -292,7 +292,7 @@ export function ColorPicker({ legend, name, value, presets, recentColors, disabl
               type="radio"
               name={name}
               aria-label="自定义"
-              checked={selectedIsCustom}
+              checked={customPreview}
               disabled={disabled}
               onClick={() => !disabled && setOpen(true)}
               onChange={() => undefined}
@@ -309,7 +309,7 @@ export function ColorPicker({ legend, name, value, presets, recentColors, disabl
             style={colorStyle(customValue)}
             onClick={() => setOpen((current) => !current)}
           >
-            {selectedIsCustom ? <span aria-hidden="true" /> : <Plus aria-hidden="true" size={18} strokeWidth={2} />}
+            {customPreview ? <span aria-hidden="true" /> : <Plus aria-hidden="true" size={18} strokeWidth={2} />}
           </button>
         </div>
       </div>

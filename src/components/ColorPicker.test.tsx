@@ -29,13 +29,20 @@ describe('ColorPicker', () => {
     expect(screen.getByRole('button', { name: '选择自定义颜色' }).querySelector('svg')).toBeInTheDocument();
   });
 
-  it('shows the selected custom color in the custom slot while presets keep the plus icon', () => {
-    const { rerender } = render(<ColorPicker legend="颜色" name="test-color" value="#7C5CFC" presets={presets} recentColors={['#7C5CFC']} onChange={vi.fn()} />);
-    const customTrigger = screen.getByRole('button', { name: '选择自定义颜色' });
-    expect(customTrigger).toHaveStyle('--selected-color: #7C5CFC');
-    expect(customTrigger.querySelector('svg')).not.toBeInTheDocument();
+  it('shows a custom-color preview only during the current picker session and restores plus next time', () => {
+    const onChange = vi.fn();
+    const first = render(<ColorPicker legend="颜色" name="test-color" value="#7C5CFC" presets={presets} recentColors={['#7C5CFC']} onChange={onChange} />);
+    expect(screen.getByRole('button', { name: '选择自定义颜色' }).querySelector('svg')).toBeInTheDocument();
 
-    rerender(<ColorPicker legend="颜色" name="test-color" value="#4FC9DA" presets={presets} recentColors={['#7C5CFC']} onChange={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: '选择自定义颜色' }));
+    const palette = screen.getByRole('slider', { name: '饱和度和亮度' });
+    vi.spyOn(palette, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, left: 0, top: 0, right: 240, bottom: 200, width: 240, height: 200, toJSON: () => ({}) });
+    fireEvent.pointerDown(palette, { clientX: 120, clientY: 100, pointerId: 1 });
+    expect(screen.getByRole('button', { name: '选择自定义颜色' }).querySelector('svg')).not.toBeInTheDocument();
+
+    const selected = onChange.mock.calls[onChange.mock.calls.length - 1]?.[0] ?? '#7C5CFC';
+    first.unmount();
+    render(<ColorPicker legend="颜色" name="test-color-next" value={selected} presets={presets} recentColors={[selected]} onChange={vi.fn()} />);
     expect(screen.getByRole('button', { name: '选择自定义颜色' }).querySelector('svg')).toBeInTheDocument();
   });
 
