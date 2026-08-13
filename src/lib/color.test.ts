@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   addRecentColor,
-  buildGlobalColorPalette,
-  DEFAULT_COLOR_VALUES,
+  DESIGN_COLORS,
+  DESIGN_PRESET_VALUES,
   contrastRatio,
   deriveColorTone,
   isHexColor,
@@ -28,19 +28,17 @@ describe('HEX colors', () => {
   });
 });
 
-describe('global color palette', () => {
-  it('fills five positions with defaults and replaces them from left to right', () => {
-    expect(DEFAULT_COLOR_VALUES).toEqual(['#4FC9DA', '#198754', '#0D6EFD', '#FFC107', '#DC3545']);
-    expect(buildGlobalColorPalette([])).toEqual(DEFAULT_COLOR_VALUES);
-    expect(buildGlobalColorPalette(['#abcdef', '#123456'])).toEqual([
-      '#ABCDEF', '#123456', '#0D6EFD', '#FFC107', '#DC3545'
-    ]);
+describe('design presets and recent colors', () => {
+  it('exposes the design palette as canonical preset values', () => {
+    expect(DESIGN_PRESET_VALUES).toEqual(Object.values(DESIGN_COLORS).map((color) => color.toUpperCase()));
   });
 
-  it('deduplicates history and cycles from the oldest position after five colors', () => {
-    expect(buildGlobalColorPalette(['#abcdef', '#ABCDEF', '#123456'])).toEqual([
-      '#ABCDEF', '#123456', '#0D6EFD', '#FFC107', '#DC3545'
-    ]);
+  it('never keeps a design preset in the recent list', () => {
+    expect(addRecentColor([], DESIGN_COLORS.primary)).toEqual([]);
+    expect(addRecentColor(['#7C5CFC'], DESIGN_COLORS.danger)).toEqual(['#7C5CFC']);
+  });
+
+  it('deduplicates history and caps it at five, newest first', () => {
     expect(addRecentColor(['#111111', '#222222'], '#111111')).toEqual(['#111111', '#222222']);
     expect(addRecentColor(['#111111', '#222222', '#333333', '#444444', '#555555'], '#666666')).toEqual([
       '#666666', '#111111', '#222222', '#333333', '#444444'

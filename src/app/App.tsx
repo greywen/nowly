@@ -17,6 +17,7 @@ import { NotesWidget } from '../notes/NotesWidget';
 import { useNotes } from '../notes/useNotes';
 import { DesktopShell } from './layout/DesktopShell';
 import { useSettings } from '../settings/useSettings';
+import { useRecentColors } from '../settings/useRecentColors';
 import { useExtensions } from '../widgets/useExtensions';
 import { getExtensionComponent } from '../widgets/extension-modules';
 import { createModuleHost } from '../widgets/extension-module';
@@ -24,7 +25,6 @@ import { SandboxModule } from '../widgets/sandbox/SandboxModule';
 import { SANDBOX_ID_PREFIX } from '../widgets/widget-registry';
 import { useNowlyRepository } from '../data/RepositoryContext';
 import { useCurrentTime } from './useCurrentTime';
-import { addRecentColor } from '../lib/color';
 
 type WindowMode = 'wallpaper' | 'foreground';
 
@@ -65,18 +65,7 @@ export function App() {
 
   const now = useCurrentTime();
   const todayIso = localIsoDate(now);
-  const recentColorsRef = useRef(settingsFeature.settings.data.recentColors ?? []);
-  recentColorsRef.current = settingsFeature.settings.data.recentColors ?? [];
-  const rememberCustomColor = useCallback(async (color: string) => {
-    const current = settingsFeature.settings.data;
-    const next = addRecentColor(recentColorsRef.current, color);
-    recentColorsRef.current = next;
-    try {
-      await settingsFeature.saveSettings({ ...current, recentColors: next });
-    } catch {
-      /* business save remains valid */
-    }
-  }, [settingsFeature.settings.data, settingsFeature.saveSettings]);
+  const { recentColors, rememberColor: rememberCustomColor } = useRecentColors();
 
   // The full set of placeable modules: built-ins, extensions, and installed
   // user modules.
@@ -170,7 +159,7 @@ export function App() {
       />
     );
   }
-  modules.kanban = <KanbanWidget todayIso={todayIso} recentColors={settingsFeature.settings.data.recentColors ?? []} onRememberCustomColor={rememberCustomColor} />;
+  modules.kanban = <KanbanWidget todayIso={todayIso} recentColors={recentColors} onRememberCustomColor={rememberCustomColor} />;
   modules.focusTimer = renderExtension('focusTimer');
   modules.newsWordCloud = renderExtension('newsWordCloud');
   modules.vocabulary = renderExtension('vocabulary');
@@ -268,7 +257,7 @@ export function App() {
         settings={settingsFeature.settings.data}
         monitors={settingsFeature.monitors.data}
         saveSettings={settingsFeature.saveSettings}
-        recentColors={settingsFeature.settings.data.recentColors ?? []}
+        recentColors={recentColors}
         onRememberCustomColor={rememberCustomColor}
       />
     </>

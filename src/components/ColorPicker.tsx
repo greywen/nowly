@@ -2,10 +2,9 @@ import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type 
 import { createPortal } from 'react-dom';
 import { Plus } from 'lucide-react';
 import {
-  buildGlobalColorPalette,
-  DEFAULT_COLOR_PRESETS,
-  DEFAULT_COLOR_VALUES,
   colorStyle,
+  isHexColor,
+  isPresetColor,
   normalizeHexColor,
   type ColorPreset,
   type HexColor
@@ -26,16 +25,18 @@ type Rgb = { r: number; g: number; b: number };
 type Hsv = { h: number; s: number; v: number };
 type PickerPosition = { left: number; top: number };
 
-const PICKER_WIDTH = 286;
-const PICKER_HEIGHT = 222;
+const PICKER_WIDTH = 260;
+const PICKER_HEIGHT = 250;
 const VIEWPORT_GAP = 8;
+const MAX_HISTORY = 5;
+const FALLBACK_COLOR: HexColor = '#4FC9DA';
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, Number.isFinite(value) ? value : min));
 }
 
 function hexToRgb(color: HexColor): Rgb {
-  const normalized = normalizeHexColor(color) ?? '#4FC9DA';
+  const normalized = normalizeHexColor(color) ?? FALLBACK_COLOR;
   return {
     r: Number.parseInt(normalized.slice(1, 3), 16),
     g: Number.parseInt(normalized.slice(3, 5), 16),
@@ -92,6 +93,14 @@ function hsvToRgb({ h, s, v }: Hsv): Rgb {
   };
 }
 
+function hexToHsv(color: HexColor): Hsv {
+  return rgbToHsv(hexToRgb(color));
+}
+
+function hsvToHex(hsv: Hsv): HexColor {
+  return rgbToHex(hsvToRgb(hsv));
+}
+
 function pickerPosition(anchor: DOMRect): PickerPosition {
   const viewportWidth = window.innerWidth;
   const viewportHeight = window.innerHeight;
@@ -109,26 +118,36 @@ export function ColorPicker({ legend, name, value, presets, recentColors, disabl
   const popoverRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<PickerPosition>({ left: VIEWPORT_GAP, top: VIEWPORT_GAP });
-  const palette = buildGlobalColorPalette(recentColors);
-  const history = recentColors.filter((color) => {
-    const normalized = normalizeHexColor(color);
-    return normalized && !DEFAULT_COLOR_VALUES.includes(normalized as typeof DEFAULT_COLOR_VALUES[number]);
-  }).map((color) => normalizeHexColor(color)).filter((color): color is HexColor => color !== null).slice(0, 5);
-  const [customPreview, setCustomPreview] = useState(false);
-  const draftColorRef = useRef<HexColor>(value);
-  const customValue = customPreview ? draftColorRef.current : value;
-  const [hsv, setHsv] = useState<Hsv>(() => rgbToHsv(hexToRgb(value)));
+  const [hsv, setHsv] = useState<Hsv>(() => hexToHsv(value));
+  const [hexInput, setHexInput] = useState<HexColor>(() => normalizeHexColor(value) ?? FALLBACK_COLOR);
+  // The draft hex is the authoritative committed color. HSV drives the slider
+  // positions but is lossy (integer rounding), so a typed hex is stored exactly
+  // rather than round-tripped through HSV.
+  const [draftHex, setDraftHex] = useState<HexColor>(() => normalizeHexColor(value) ?? FALLBACK_COLOR);
   const hsvRef = useRef(hsv);
-  const choices = DEFAULT_COLOR_VALUES.map((color) => ({
-    value: color,
-    label: DEFAULT_COLOR_PRESETS.find((preset) => preset.value === color)?.label ?? '颜色'
-  }));
+  const draftHexRef = useRef(draftHex);
 
-  useEffect(() => {
-    const next = rgbToHsv(hexToRgb(customValue));
-    hsvRef.current = next;
-    setHsv(next);
-  }, [customValue]);
+  // The presets passed by the caller are the single source of truth for the
+  // outer swatch row; anything not in that set counts as a custom color.
+  const choices = presets
+    .map((preset) => ({ value: normalizeHexColor(preset.value), label: preset.label }))
+    .filter((choice): choice is { value: HexColor; label: string } => choice.value !== null);
+  const normalizedValue = normalizeHexColor(value);
+  const isCustom = normalizedValue !== null && !isPresetColor(normalizedValue, presets);
+
+  // History shows only genuine custom colors: normalize, drop presets, dedupe,
+  // and cap the list. The current value stays visible so a freshly picked color
+  // still appears in history.
+  const history = recentColors
+    .map((color) => normalizeHexColor(color))
+    .filter((color): color is HexColor => color !== null)
+    .filter((color) => !isPresetColor(color, presets))
+    .filter((color, index, list) => list.indexOf(color) === index)
+    .slice(0, MAX_HISTORY);
+
+  // While the popover is open the trigger mirrors the live draft; when closed it
+  // shows the committed custom color, otherwise a neutral "add" affordance.
+  const triggerColor = open ? draftHex : (isCustom ? normalizedValue ?? FALLBACK_COLOR : null);
 
   useLayoutEffect(() => {
     if (!open || !triggerRef.current) return;
@@ -162,21 +181,35 @@ export function ColorPicker({ legend, name, value, presets, recentColors, disabl
       document.removeEventListener('pointerdown', closeOutside);
       document.removeEventListener('keydown', closeOnEscape);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  function openPicker() {
+    const seed = normalizedValue ?? FALLBACK_COLOR;
+    const nextHsv = hexToHsv(seed);
+    hsvRef.current = nextHsv;
+    draftHexRef.current = seed;
+    setHsv(nextHsv);
+    setDraftHex(seed);
+    setHexInput(seed);
+    setOpen(true);
+  }
 
   function finishCustomSelection() {
     if (!open) return;
-    const color = draftColorRef.current;
+    const color = draftHexRef.current;
     setOpen(false);
-    setCustomPreview(true);
     onChange(color);
-    if (!DEFAULT_COLOR_PRESETS.some((preset) => preset.value === color)) onRememberColor?.(color);
+    if (!isPresetColor(color, presets)) onRememberColor?.(color);
+  }
+
+  function selectPreset(color: HexColor) {
+    setOpen(false);
+    onChange(color);
   }
 
   function selectHistory(color: HexColor) {
-    draftColorRef.current = color;
     setOpen(false);
-    setCustomPreview(false);
     onChange(color);
     onRememberColor?.(color);
   }
@@ -187,11 +220,25 @@ export function ColorPicker({ legend, name, value, presets, recentColors, disabl
       s: clamp(next.s, 0, 100),
       v: clamp(next.v, 0, 100)
     };
+    const nextHex = hsvToHex(normalized);
     hsvRef.current = normalized;
+    draftHexRef.current = nextHex;
     setHsv(normalized);
-    const color = rgbToHex(hsvToRgb(normalized));
-    draftColorRef.current = color;
-    setCustomPreview(true);
+    setDraftHex(nextHex);
+    setHexInput(nextHex);
+  }
+
+  function onHexInputChange(raw: string) {
+    const next = raw.startsWith('#') ? raw : `#${raw}`;
+    setHexInput(next.toUpperCase() as HexColor);
+    if (isHexColor(next)) {
+      const normalized = normalizeHexColor(next) as HexColor;
+      const nextHsv = hexToHsv(normalized);
+      hsvRef.current = nextHsv;
+      draftHexRef.current = normalized;
+      setHsv(nextHsv);
+      setDraftHex(normalized);
+    }
   }
 
   function updateSaturationBrightness(event: ReactPointerEvent<HTMLDivElement>) {
@@ -227,69 +274,89 @@ export function ColorPicker({ legend, name, value, presets, recentColors, disabl
       aria-label="自定义颜色"
       style={{ position: 'fixed', left: position.left, top: position.top } as CSSProperties}
     >
-      <div
-        className="color-picker__sv"
-        role="slider"
-        tabIndex={0}
-        aria-label="饱和度和亮度"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={Math.round(hsv.s)}
-        aria-valuetext={`饱和度 ${Math.round(hsv.s)}%，亮度 ${Math.round(hsv.v)}%`}
-        style={{ '--picker-hue': `hsl(${hsv.h} 100% 50%)` } as CSSProperties}
-        onPointerDown={(event) => beginDrag(event, updateSaturationBrightness)}
-        onPointerMove={(event) => {
-          if (event.currentTarget.hasPointerCapture?.(event.pointerId)) updateSaturationBrightness(event);
-        }}
-        onKeyDown={(event) => {
-          if (event.key === 'ArrowLeft') commit({ ...hsvRef.current, s: hsvRef.current.s - 1 });
-          else if (event.key === 'ArrowRight') commit({ ...hsvRef.current, s: hsvRef.current.s + 1 });
-          else if (event.key === 'ArrowUp') commit({ ...hsvRef.current, v: hsvRef.current.v + 1 });
-          else if (event.key === 'ArrowDown') commit({ ...hsvRef.current, v: hsvRef.current.v - 1 });
-          else return;
-          event.preventDefault();
-        }}
-      >
-        <span
-          className="color-picker__sv-thumb"
-          style={{ left: `${hsv.s}%`, top: `${100 - hsv.v}%` }}
-          aria-hidden="true"
+      <div className="color-picker__canvas">
+        <div
+          className="color-picker__sv"
+          role="slider"
+          tabIndex={0}
+          aria-label="饱和度和亮度"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(hsv.s)}
+          aria-valuetext={`饱和度 ${Math.round(hsv.s)}%，亮度 ${Math.round(hsv.v)}%`}
+          style={{ '--picker-hue': `hsl(${hsv.h} 100% 50%)` } as CSSProperties}
+          onPointerDown={(event) => beginDrag(event, updateSaturationBrightness)}
+          onPointerMove={(event) => {
+            if (event.currentTarget.hasPointerCapture?.(event.pointerId)) updateSaturationBrightness(event);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'ArrowLeft') commit({ ...hsvRef.current, s: hsvRef.current.s - 1 });
+            else if (event.key === 'ArrowRight') commit({ ...hsvRef.current, s: hsvRef.current.s + 1 });
+            else if (event.key === 'ArrowUp') commit({ ...hsvRef.current, v: hsvRef.current.v + 1 });
+            else if (event.key === 'ArrowDown') commit({ ...hsvRef.current, v: hsvRef.current.v - 1 });
+            else return;
+            event.preventDefault();
+          }}
+        >
+          <span
+            className="color-picker__sv-thumb"
+            style={{ left: `${hsv.s}%`, top: `${100 - hsv.v}%` }}
+            aria-hidden="true"
+          />
+        </div>
+        <div
+          className="color-picker__hue"
+          role="slider"
+          tabIndex={0}
+          aria-label="色相"
+          aria-orientation="vertical"
+          aria-valuemin={0}
+          aria-valuemax={359}
+          aria-valuenow={Math.round(hsv.h)}
+          onPointerDown={(event) => beginDrag(event, updateHue)}
+          onPointerMove={(event) => {
+            if (event.currentTarget.hasPointerCapture?.(event.pointerId)) updateHue(event);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'ArrowUp') commit({ ...hsvRef.current, h: hsvRef.current.h - 1 });
+            else if (event.key === 'ArrowDown') commit({ ...hsvRef.current, h: hsvRef.current.h + 1 });
+            else return;
+            event.preventDefault();
+          }}
+        >
+          <span className="color-picker__hue-thumb" style={{ top: `${(hsv.h / 359) * 100}%` }} aria-hidden="true" />
+        </div>
+      </div>
+      <div className="color-picker__footer">
+        <span className="color-picker__preview" style={{ background: draftHex }} aria-hidden="true" />
+        <input
+          className="color-picker__hex"
+          type="text"
+          inputMode="text"
+          spellCheck={false}
+          maxLength={7}
+          aria-label="十六进制颜色值"
+          value={hexInput}
+          onChange={(event) => onHexInputChange(event.target.value)}
+          onBlur={() => setHexInput(draftHex)}
         />
       </div>
-      <div
-        className="color-picker__hue"
-        role="slider"
-        tabIndex={0}
-        aria-label="色相"
-        aria-orientation="vertical"
-        aria-valuemin={0}
-        aria-valuemax={359}
-        aria-valuenow={Math.round(hsv.h)}
-        onPointerDown={(event) => beginDrag(event, updateHue)}
-        onPointerMove={(event) => {
-          if (event.currentTarget.hasPointerCapture?.(event.pointerId)) updateHue(event);
-        }}
-        onKeyDown={(event) => {
-          if (event.key === 'ArrowUp') commit({ ...hsvRef.current, h: hsvRef.current.h - 1 });
-          else if (event.key === 'ArrowDown') commit({ ...hsvRef.current, h: hsvRef.current.h + 1 });
-          else return;
-          event.preventDefault();
-        }}
-      >
-        <span className="color-picker__hue-thumb" style={{ top: `${(hsv.h / 359) * 100}%` }} aria-hidden="true" />
-      </div>
-      <div className="color-picker__recent" role="group" aria-label="最近使用颜色">
-        {history.map((color) => (
-          <button
-            key={color}
-            type="button"
-            className="color-picker__recent-color"
-            aria-label={`历史颜色 ${color}`}
-            style={colorStyle(color)}
-            onClick={() => selectHistory(color)}
-          />
-        ))}
-      </div>
+      {history.length > 0 ? (
+        <div className="color-picker__recent" role="group" aria-label="最近使用颜色">
+          {history.map((color) => (
+            <button
+              key={color}
+              type="button"
+              className="color-picker__recent-color"
+              aria-label={`历史颜色 ${color}`}
+              style={colorStyle(color)}
+              onClick={() => selectHistory(color)}
+            />
+          ))}
+        </div>
+      ) : (
+        <p className="color-picker__recent-empty" role="group" aria-label="最近使用颜色">暂无历史颜色</p>
+      )}
     </div>,
     document.body
   ) : null;
@@ -298,55 +365,37 @@ export function ColorPicker({ legend, name, value, presets, recentColors, disabl
     <fieldset className="color-picker">
       <legend>{legend}</legend>
       <div className="color-picker__choices color-picker__choices--single-row">
-        {choices.map((choice, index) => (
+        {choices.map((choice) => (
           <label key={choice.value} className="color-picker__choice" style={colorStyle(choice.value)}>
             <input
               className="form-check-input"
               type="radio"
               name={name}
               aria-label={choice.label}
-              checked={value === choice.value}
+              checked={normalizedValue === choice.value}
               disabled={disabled}
-              onChange={() => {
-                setOpen(false);
-                onChange(choice.value);
-              }}
+              onChange={() => selectPreset(choice.value)}
             />
             <span className="color-picker__swatch" aria-hidden="true" />
           </label>
         ))}
-        <div ref={customRef} className="color-picker__choice color-picker__custom" style={colorStyle(customValue)}>
-          <label className="form-check form-check-custom form-check-solid color-picker__custom-label">
-            <input
-              className="form-check-input"
-              type="radio"
-              name={name}
-              aria-label="自定义"
-              checked={customPreview}
-              disabled={disabled}
-              onClick={() => !disabled && setOpen(true)}
-              onChange={() => undefined}
-            />
-            <span className="form-check-label">自定义</span>
-          </label>
+        <div ref={customRef} className="color-picker__choice color-picker__custom" style={triggerColor ? colorStyle(triggerColor) : undefined}>
           <button
             ref={triggerRef}
             type="button"
             className="color-picker__trigger"
             aria-label="选择自定义颜色"
             aria-expanded={open}
+            aria-pressed={isCustom}
             disabled={disabled}
-            style={colorStyle(customValue)}
+            style={triggerColor ? { background: triggerColor, borderColor: triggerColor } : undefined}
             onClick={() => {
+              if (disabled) return;
               if (open) finishCustomSelection();
-              else {
-                setCustomPreview(false);
-                draftColorRef.current = value;
-                setOpen(true);
-              }
+              else openPicker();
             }}
           >
-            {customPreview ? <span aria-hidden="true" /> : <Plus aria-hidden="true" size={18} strokeWidth={2} />}
+            {triggerColor ? <span aria-hidden="true" /> : <Plus aria-hidden="true" size={18} strokeWidth={2} />}
           </button>
         </div>
       </div>

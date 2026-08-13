@@ -14,14 +14,13 @@ export const DESIGN_COLORS = {
 } as const satisfies Record<string, HexColor>;
 
 export const MAX_RECENT_COLORS = 5;
-export const DEFAULT_COLOR_VALUES = ['#4FC9DA', '#198754', '#0D6EFD', '#FFC107', '#DC3545'] as const satisfies readonly HexColor[];
-export const DEFAULT_COLOR_PRESETS: readonly ColorPreset[] = [
-  { value: '#4FC9DA', label: '青色' },
-  { value: '#198754', label: '绿色' },
-  { value: '#0D6EFD', label: '蓝色' },
-  { value: '#FFC107', label: '黄色' },
-  { value: '#DC3545', label: '红色' }
-];
+// The design-system palette. Colors in this set are always available as
+// context presets, so they never occupy a "recent" slot.
+export const DESIGN_PRESET_VALUES: readonly HexColor[] = Object.values(DESIGN_COLORS).map((color) => color.toUpperCase() as HexColor);
+
+function isDesignPreset(color: HexColor): boolean {
+  return DESIGN_PRESET_VALUES.includes(color);
+}
 const HEX = /^#[0-9A-F]{6}$/i;
 
 export function isHexColor(value: unknown): value is HexColor {
@@ -98,17 +97,13 @@ export function sanitizeRecentColors(values: unknown): HexColor[] {
 export function addRecentColor(values: readonly string[], value: string): HexColor[] {
   const normalized = normalizeHexColor(value);
   if (!normalized) return sanitizeRecentColors(values);
-  const existing = sanitizeRecentColors(values).filter((color) => !DEFAULT_COLOR_VALUES.includes(color as typeof DEFAULT_COLOR_VALUES[number]));
-  if (DEFAULT_COLOR_VALUES.includes(normalized as typeof DEFAULT_COLOR_VALUES[number])) return existing;
+  const existing = sanitizeRecentColors(values).filter((color) => !isDesignPreset(color));
+  if (isDesignPreset(normalized)) return existing;
   if (existing.includes(normalized)) return [normalized, ...existing.filter((color) => color !== normalized)];
   return [normalized, ...existing].slice(0, MAX_RECENT_COLORS);
 }
 
-export function buildGlobalColorPalette(values: readonly string[]): HexColor[] {
-  const history = sanitizeRecentColors(values).filter((color) => !DEFAULT_COLOR_VALUES.includes(color as typeof DEFAULT_COLOR_VALUES[number]));
-  return [...history, ...DEFAULT_COLOR_VALUES.slice(history.length)].slice(0, MAX_RECENT_COLORS);
-}
-
 export function isPresetColor(color: HexColor, presets: readonly ColorPreset[]): boolean {
-  return presets.some((preset) => preset.value === color);
+  const normalized = normalizeHexColor(color);
+  return normalized !== null && presets.some((preset) => normalizeHexColor(preset.value) === normalized);
 }
