@@ -41,7 +41,6 @@ function WallpaperLayer() {
 
 export function DesktopShell({
   mode = 'foreground',
-  time,
   dateText,
   summary,
   modules,
@@ -95,9 +94,6 @@ export function DesktopShell({
           <p>{summary}</p>
         </div>
         <div className="top-actions">
-          <span className="topbar-time" aria-label={`当前时间 ${time}`}>
-            {time}
-          </span>
           {foreground ? (
             <TransparencyControl opacity={opacity} onChange={setOpacity} onOpenChange={setPreviewingTransparency} />
           ) : null}
@@ -131,13 +127,12 @@ export function DesktopShell({
           {foreground ? (
             <button
               type="button"
-              className="btn btn-primary"
+              className="btn btn-icon btn-primary"
               aria-label="设为壁纸"
               disabled={isModeSwitching}
               onClick={onSetWallpaper}
             >
               <MonitorDown aria-hidden="true" />
-              {isModeSwitching ? '设置中' : '设为壁纸'}
             </button>
           ) : null}
         </div>

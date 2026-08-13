@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { CalendarSettingsControl, type CalendarSettings } from './CalendarSettingsControl';
 import {
   buildMonthGrid,
   buildWeekDays,
@@ -86,6 +87,8 @@ type CalendarWidgetProps = {
   onMoveEvent?: (event: CalendarEvent, isoDate: string) => void;
   onMoveEventToHour?: (event: CalendarEvent, isoDate: string, startHour: number) => void;
   onResizeEvent?: (event: CalendarEvent, endIsoDate: string) => void;
+  calendarSettings?: CalendarSettings;
+  onChangeCalendarSettings?: (settings: CalendarSettings) => void;
 };
 
 function summaryFor(status: LoadStatus, count: number, view: CalendarView) {
@@ -124,7 +127,9 @@ export function CalendarWidget({
   onOpenEvent,
   onMoveEvent,
   onMoveEventToHour,
-  onResizeEvent
+  onResizeEvent,
+  calendarSettings,
+  onChangeCalendarSettings
 }: CalendarWidgetProps) {
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const anchor = anchorIso ? new Date(`${anchorIso}T00:00:00`) : new Date(year, monthIndex, 1);
@@ -766,8 +771,11 @@ export function CalendarWidget({
           <button type="button" className="btn btn-icon" aria-label={navLabels[view].next} onClick={onNextMonth}>
             <ChevronRight aria-hidden="true" />
           </button>
-          <button type="button" className="btn btn-primary" onClick={onCreateEvent}>
-            新建日程
+          {calendarSettings && onChangeCalendarSettings ? (
+            <CalendarSettingsControl settings={calendarSettings} onChange={onChangeCalendarSettings} />
+          ) : null}
+          <button type="button" className="btn btn-icon btn-primary" aria-label="新建日程" onClick={onCreateEvent}>
+            <Plus aria-hidden="true" />
           </button>
         </div>
       </div>

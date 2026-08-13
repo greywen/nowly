@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RepositoryProvider } from '../data/RepositoryContext';
@@ -95,18 +95,6 @@ describe('App startup and window behavior', () => {
     expect(screen.getByText('还没有便签')).toBeInTheDocument();
     expect(screen.queryByText('设计评审')).not.toBeInTheDocument();
     expect(screen.queryByText('产品原则')).not.toBeInTheDocument();
-  });
-
-  it('updates the displayed time at the next minute without another state change', () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date(2026, 6, 23, 9, 41, 40));
-    renderApp();
-
-    expect(screen.getByLabelText('当前时间 09:41')).toBeInTheDocument();
-
-    act(() => vi.advanceTimersByTime(20_000));
-
-    expect(screen.getByLabelText('当前时间 09:42')).toBeInTheDocument();
   });
 
   it('keeps healthy modules visible when one read fails', async () => {

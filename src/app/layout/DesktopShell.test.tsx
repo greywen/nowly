@@ -41,7 +41,7 @@ describe('DesktopShell', () => {
       />
     );
 
-    expect(screen.getByText('09:41')).toBeInTheDocument();
+    expect(screen.getByText('2026年7月23日 星期四')).toBeInTheDocument();
     expect(screen.getByText('calendar region')).toBeInTheDocument();
     expect(screen.getByText('matrix region')).toBeInTheDocument();
     expect(screen.getByText('notes region')).toBeInTheDocument();

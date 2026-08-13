@@ -11,10 +11,10 @@ describe('SettingsDialog',()=>{
     const user=userEvent.setup(); const save=vi.fn().mockImplementation(async value=>value);
     render(<SettingsDialog settings={settings} onClose={vi.fn()} onSave={save}/>);
     expect(screen.getByRole('dialog',{name:'设置'})).toBeInTheDocument();
-    await user.click(screen.getByRole('checkbox',{name:'显示周末'}));
-    expect(settings.showWeekends).toBe(true);
+    await user.click(screen.getByRole('checkbox',{name:'开机自动启动'}));
+    expect(settings.launchAtLogin).toBe(false);
     await user.click(screen.getByRole('button',{name:'保存设置'}));
-    expect(save).toHaveBeenCalledWith(expect.objectContaining({showWeekends:false}));
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({launchAtLogin:true}));
   });
 
   it('retains the dialog and reports save failures',async()=>{
