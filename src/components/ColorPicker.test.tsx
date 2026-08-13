@@ -43,6 +43,8 @@ describe('ColorPicker', () => {
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(onChange).toHaveBeenCalledWith(expect.stringMatching(/^#[0-9A-F]{6}$/));
     expect(onRememberColor).toHaveBeenCalledWith(onChange.mock.calls[0][0]);
+    expect(screen.getByRole('button', { name: '选择自定义颜色' }).querySelector('svg')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '选择自定义颜色' }));
     expect(screen.getByRole('button', { name: '选择自定义颜色' }).querySelector('svg')).toBeInTheDocument();
   });
 

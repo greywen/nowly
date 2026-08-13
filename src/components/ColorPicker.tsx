@@ -168,7 +168,7 @@ export function ColorPicker({ legend, name, value, presets, recentColors, disabl
     if (!open) return;
     const color = draftColorRef.current;
     setOpen(false);
-    setCustomPreview(false);
+    setCustomPreview(true);
     onChange(color);
     if (!DEFAULT_COLOR_PRESETS.some((preset) => preset.value === color)) onRememberColor?.(color);
   }
@@ -340,6 +340,7 @@ export function ColorPicker({ legend, name, value, presets, recentColors, disabl
             onClick={() => {
               if (open) finishCustomSelection();
               else {
+                setCustomPreview(false);
                 draftColorRef.current = value;
                 setOpen(true);
               }
