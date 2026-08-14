@@ -115,28 +115,7 @@ describe('DesktopShell', () => {
     expect(onWallpaperDoubleClick).toHaveBeenCalledOnce();
   });
 
-  it('only blurs the content layer while the blur control is open in foreground', () => {
-    localStorage.setItem('nowly:page-blur-radius', '8');
-    render(
-      <DesktopShell
-        mode="foreground"
-        time="09:41"
-        dateText="2026年7月23日 星期四"
-        summary="summary"
-        modules={modules()}
-      />
-    );
-
-    const root = screen.getByTestId('desktop-root');
-    expect(root.style.filter).toBe('');
-    expect((root.querySelector('.app-content-layer') as HTMLElement)?.style.filter).toBe('blur(0px)');
-
-    fireEvent.click(screen.getByRole('button', { name: '调整模糊' }));
-    expect((root.querySelector('.app-content-layer') as HTMLElement)?.style.filter).toBe('blur(8px)');
-    expect(screen.getByRole('dialog', { name: '模糊' }).closest('.app-content-layer')).toBeNull();
-  });
-
-  it('keeps the content blur active in wallpaper mode', () => {
+  it('applies the persisted blur radius to the complete shell in every mode', () => {
     localStorage.setItem('nowly:page-blur-radius', '8');
     const { rerender } = render(
       <DesktopShell
@@ -148,6 +127,7 @@ describe('DesktopShell', () => {
       />
     );
 
+    expect(screen.getByTestId('desktop-root').style.getPropertyValue('--app-blur-radius')).toBe('8px');
     expect(screen.getByRole('banner').style.opacity).toBe('');
     expect(screen.getByRole('main').style.opacity).toBe('');
 
@@ -161,12 +141,12 @@ describe('DesktopShell', () => {
       />
     );
 
+    expect(screen.getByTestId('desktop-root').style.getPropertyValue('--app-blur-radius')).toBe('8px');
     expect(screen.getByRole('banner').style.opacity).toBe('');
     expect(screen.getByRole('main').style.opacity).toBe('');
-    expect((screen.getByRole('banner').closest('.app-content-layer') as HTMLElement)?.style.filter).toBe('blur(8px)');
   });
 
-  it('keeps the content layer blurred while the slider is open', () => {
+  it('keeps the whole shell blurred while the slider is open', () => {
     localStorage.setItem('nowly:page-blur-radius', '8');
     render(
       <DesktopShell
@@ -178,8 +158,8 @@ describe('DesktopShell', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: '调整模糊' }));
-    expect((screen.getByTestId('desktop-root').querySelector('.app-content-layer') as HTMLElement)?.style.filter).toBe('blur(8px)');
+    fireEvent.click(screen.getByRole('button', { name: '调整高斯模糊' }));
+    expect(screen.getByTestId('desktop-root').style.getPropertyValue('--app-blur-radius')).toBe('8px');
     expect(screen.getByRole('main').style.opacity).toBe('');
     expect(screen.getByRole('banner').style.opacity).toBe('');
   });

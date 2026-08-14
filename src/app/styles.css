@@ -94,8 +94,7 @@ button { cursor: pointer; }
 button:disabled { cursor: default; opacity: .65; }
 :where(button, input, textarea, select):focus-visible { outline: 0; }
 
-.app-shell { position: relative; width: 100vw; height: 100vh; overflow: hidden; background: var(--bg-subtle); }
-.app-content-layer { position: relative; z-index: 1; width: 100%; height: 100%; display: grid; grid-template-rows: 70px minmax(0, 1fr); filter: blur(var(--app-blur-radius, 0px)); }
+.app-shell { position: relative; width: 100vw; height: 100vh; display: grid; grid-template-rows: 70px minmax(0, 1fr); overflow: hidden; background: var(--bg-subtle); filter: blur(var(--app-blur-radius, 0px)); }
 /* Wallpaper layer sits behind the app content. Hidden until a wallpaper is
    configured; it only anchors the stacking order for now. */
 .wallpaper-layer { position: absolute; inset: 0; z-index: 0; background-size: cover; background-position: center; pointer-events: none; }
@@ -115,7 +114,6 @@ button:disabled { cursor: default; opacity: .65; }
 .transparency-popup { position: absolute; z-index: 60; top: calc(100% + 8px); right: 0; box-sizing: border-box; width: 260px; padding: 16px; border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-surface); box-shadow: var(--shadow-dropdown); }
 .transparency-popup__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .transparency-popup__title { color: var(--text-strong); font-size: 15.2px; font-weight: 600; }
-.transparency-popup__hint { margin: 4px 0 0; color: var(--text-muted); font-size: 13.6px; line-height: 1.5; }
 .transparency-popup__value { color: var(--color-primary-active); font-size: 15.2px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .transparency-slider { width: 100%; height: 4px; margin: 0; padding: 0; appearance: none; -webkit-appearance: none; border-radius: var(--radius-pill); background: var(--bg-secondary); outline: 0; }
 .transparency-slider::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 18px; height: 18px; border: 0; border-radius: 50%; background: var(--color-primary); box-shadow: inset 0 0 0 3px #fff; }
