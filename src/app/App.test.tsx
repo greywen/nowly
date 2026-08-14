@@ -197,7 +197,7 @@ describe('App startup and window behavior', () => {
     renderApp();
 
     expect(screen.getByRole('button', { name: '设为壁纸' })).toBeInTheDocument();
-    expect(invokeMock).not.toHaveBeenCalled();
+    expect(invokeMock).not.toHaveBeenCalledWith('enter_wallpaper_mode');
   });
 
   it('enters wallpaper from the content action and returns on wallpaper double click', async () => {

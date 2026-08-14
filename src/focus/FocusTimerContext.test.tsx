@@ -53,4 +53,12 @@ describe('FocusTimerProvider', () => {
     renderHook(useFocusTimer,{wrapper:wrapper(repo)});
     await waitFor(()=>expect(repo.getFocusStatistics).toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({period:expect.any(String)})])));
   });
+
+  it('recovers and acknowledges a completion that occurred while the webview was suspended', async () => {
+    invoke.mockImplementation((command:string)=>command==='get_pending_focus_completion'?Promise.resolve({id:'native-1',plannedSeconds:1500,startedAt:'2026-08-14T09:00:00.000Z'}):Promise.resolve(null));
+    const repo=repository();
+    renderHook(useFocusTimer,{wrapper:wrapper(repo)});
+    await waitFor(()=>expect(repo.createFocusSession).toHaveBeenCalledWith(expect.objectContaining({id:'native-1',status:'completed',focusedSeconds:1500})));
+    expect(invoke).toHaveBeenCalledWith('acknowledge_focus_completion',{id:'native-1'});
+  });
 });
