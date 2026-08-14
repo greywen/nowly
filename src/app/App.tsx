@@ -180,8 +180,6 @@ export function App() {
   }
   modules.kanban = <KanbanWidget todayIso={todayIso} recentColors={recentColors} onRememberCustomColor={rememberCustomColor} />;
   modules.focusTimer = renderExtension('focusTimer');
-  modules.newsWordCloud = renderExtension('newsWordCloud');
-  modules.vocabulary = renderExtension('vocabulary');
   // Installed user modules run their uploaded source in an isolated
   // iframe, gated by the permissions they declared at install time.
   for (const extension of extensionsFeature.extensions) {

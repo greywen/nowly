@@ -30,9 +30,9 @@ describe('createModuleHost', () => {
 
   it('serializes state to JSON when saving', async () => {
     const setModuleState = vi.fn().mockResolvedValue(undefined);
-    const host = createModuleHost(repository({ setModuleState }), 'vocabulary', '2026-07-23');
+    const host = createModuleHost(repository({ setModuleState }), 'focusTimer', '2026-07-23');
     await host.saveState({ starred: ['nuance'] });
-    expect(setModuleState).toHaveBeenCalledWith('vocabulary', '{"starred":["nuance"]}');
+    expect(setModuleState).toHaveBeenCalledWith('focusTimer', '{"starred":["nuance"]}');
   });
 });
 

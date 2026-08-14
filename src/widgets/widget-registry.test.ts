@@ -50,9 +50,7 @@ describe('widget definitions', () => {
 
   it('exposes the extension modules as an addable set', () => {
     expect(extensionDefinitions.map((definition) => definition.id)).toEqual([
-      'focusTimer',
-      'newsWordCloud',
-      'vocabulary'
+      'focusTimer'
     ]);
     for (const definition of extensionDefinitions) {
       expect(definition.category).toBe('extension');
@@ -95,7 +93,7 @@ describe('user modules (sandbox extensions)', () => {
     expect(all.map((definition) => definition.id)).toContain(`${SANDBOX_ID_PREFIX}ext1`);
     // Built-in count is 4: calendar, matrix, notes, plus the picker-only kanban.
     expect(all.filter((definition) => definition.category === 'builtin')).toHaveLength(4);
-    expect(all.filter((definition) => definition.category === 'extension')).toHaveLength(3);
+    expect(all.filter((definition) => definition.category === 'extension')).toHaveLength(1);
     expect(all.filter((definition) => definition.category === 'sandbox')).toHaveLength(1);
   });
 });

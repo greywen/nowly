@@ -85,24 +85,6 @@ export const extensionDefinitions: WidgetDefinition[] = [
     minW: 3,
     minH: 3,
     default: { x: 0, y: 0, w: 4, h: 4 }
-  },
-  {
-    id: 'newsWordCloud',
-    name: '热点词云',
-    description: '把当下热点关键词汇聚成词云。',
-    category: 'extension',
-    minW: 3,
-    minH: 3,
-    default: { x: 0, y: 0, w: 5, h: 4 }
-  },
-  {
-    id: 'vocabulary',
-    name: '每日单词',
-    description: '每天一个单词，积累词汇量。',
-    category: 'extension',
-    minW: 3,
-    minH: 2,
-    default: { x: 0, y: 0, w: 4, h: 3 }
   }
 ];
 

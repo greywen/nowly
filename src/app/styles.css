@@ -803,14 +803,6 @@ button:disabled { cursor: default; opacity: .65; }
 .word-cloud__term--heat-4 { color: var(--text-primary); }
 .word-cloud__term--heat-1 { color: var(--text-muted); }
 
-/* Vocabulary widget */
-.vocabulary__body { gap: 8px; }
-.vocabulary__word { margin: 0; color: var(--text-primary); font-size: 24px; font-weight: 700; line-height: 1.3; }
-.vocabulary__phonetic { margin: 0; color: var(--text-muted); font-size: 15.2px; }
-.vocabulary__meaning { margin: 8px 0 0; color: var(--text-strong); font-size: 16px; font-weight: 500; }
-.vocabulary__example { margin: 4px 0 0; color: var(--text-secondary); font-size: 15.2px; line-height: 1.5; }
-.vocabulary__star.is-active { color: var(--color-primary); border-color: var(--color-primary); }
-.vocabulary__star.is-active svg { fill: var(--color-primary); }
 
 /* Sandboxed extension module (runs in an isolated iframe) */
 .sandbox-module__body { padding: 0; }
