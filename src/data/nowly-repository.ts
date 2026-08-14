@@ -20,7 +20,7 @@ export type AppSettings = {
   wallpaperEnabled: boolean;
   launchAtLogin: boolean;
   targetMonitorId: string | null;
-  density: 'balanced' | 'comfortable';
+  density: 'compact' | 'balanced' | 'comfortable';
   weekStart: 'monday' | 'sunday';
   dateFormat: 'localized' | 'iso';
   showWeekends: boolean;

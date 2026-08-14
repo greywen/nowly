@@ -331,6 +331,42 @@ button:disabled { cursor: default; opacity: .65; }
   .btn { padding-inline: 16px; font-size: 15.2px; }
 }
 
+/* Interface density: "balanced" (适中) keeps the standard spacing above and is
+   the default. "compact" (紧凑) tightens the primary layout paddings and gaps
+   for a denser view; "comfortable" (宽松) widens them for more breathing room.
+   Applied via the data-density attribute on the document root so it covers
+   content and overlays alike. Spacing changes are instant, in keeping with the
+   no-animation rule. */
+[data-density="compact"] .workspace { padding: 12px 12px 12px; }
+[data-density="compact"] .module-grid { gap: 12px; }
+[data-density="compact"] .side-column { gap: 12px; }
+[data-density="compact"] .card-header { min-height: 44px; padding: 4px 12px; }
+[data-density="compact"] .calendar-body { padding: 6px 12px 12px; }
+[data-density="compact"] .panel-body { padding: 8px 12px 12px; }
+[data-density="compact"] .quadrant-grid { gap: 6px; }
+[data-density="compact"] .quadrant { padding: 8px; }
+[data-density="compact"] .notes-list { gap: 6px; }
+[data-density="compact"] .task-row { padding: 4px 6px; }
+[data-density="compact"] .good-modal-body { padding: 24px; }
+[data-density="compact"] .good-modal-body > * + * { margin-top: 16px; }
+[data-density="compact"] .good-modal-header,
+[data-density="compact"] .good-modal-footer { min-height: 56px; padding: 0 24px; }
+
+[data-density="comfortable"] .workspace { padding: 32px 44px 44px; }
+[data-density="comfortable"] .module-grid { gap: 32px; }
+[data-density="comfortable"] .side-column { gap: 32px; }
+[data-density="comfortable"] .card-header { min-height: 64px; padding: 12px 28px; }
+[data-density="comfortable"] .calendar-body { padding: 20px 32px 32px; }
+[data-density="comfortable"] .panel-body { padding: 28px 32px 32px; }
+[data-density="comfortable"] .quadrant-grid { gap: 20px; }
+[data-density="comfortable"] .quadrant { padding: 20px; }
+[data-density="comfortable"] .notes-list { gap: 16px; }
+[data-density="comfortable"] .task-row { padding: 12px; }
+[data-density="comfortable"] .good-modal-body { padding: 40px; }
+[data-density="comfortable"] .good-modal-body > * + * { margin-top: 28px; }
+[data-density="comfortable"] .good-modal-header,
+[data-density="comfortable"] .good-modal-footer { padding: 0 40px; }
+
 .good-modal {
   color: var(--text-secondary);
   border: 1px solid var(--border-default);

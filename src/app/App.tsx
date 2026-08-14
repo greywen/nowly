@@ -67,6 +67,19 @@ export function App() {
   const todayIso = localIsoDate(now);
   const { recentColors, rememberColor: rememberCustomColor } = useRecentColors();
 
+  // Interface density is a global visual preference: it drives the spacing
+  // scale for the whole app, modals included. We reflect it as a data attribute
+  // on the document root so CSS can tighten (compact) or widen (comfortable)
+  // paddings and gaps without threading the value through every view. The
+  // balanced default needs no overrides.
+  const density = settingsFeature.settings.data.density;
+  useEffect(() => {
+    document.documentElement.dataset.density = density;
+    return () => {
+      delete document.documentElement.dataset.density;
+    };
+  }, [density]);
+
   // The full set of placeable modules: built-ins, extensions, and installed
   // user modules.
   const definitions = buildDefinitions(extensionsFeature.extensions);

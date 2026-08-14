@@ -14,7 +14,7 @@ export function SettingsDialog({settings,monitors=[],onClose,onSave}:Props){
  return <Dialog title="设置" ariaLabelledBy="settings-title" onRequestClose={onClose} className="settings-dialog" headerActions={<button className="good-icon-button" aria-label="关闭设置" onClick={onClose}><X aria-hidden="true"/></button>} footer={<><button className="good-button" onClick={onClose}>取消</button><button className="good-button good-button--primary" disabled={saving} onClick={()=>void save()}>{saving?'正在保存':'保存设置'}</button></>}>
   <div className="settings-form">
    <section><h3>界面</h3><div className="settings-grid">
-    <Select id="settings-density" label="界面密度" value={draft.density} options={[{value:'balanced',label:'平衡'},{value:'comfortable',label:'舒适'}]} onChange={value=>setDraft({...draft,density:value as AppSettings['density']})}/>
+    <Select id="settings-density" label="界面密度" value={draft.density} options={[{value:'compact',label:'紧凑'},{value:'balanced',label:'适中'},{value:'comfortable',label:'宽松'}]} onChange={value=>setDraft({...draft,density:value as AppSettings['density']})}/>
    </div></section>
    <section><h3>桌面与启动</h3>{monitors.length?<Select id="settings-monitor" label="目标显示器" value={draft.targetMonitorId??monitors.find(item=>item.isPrimary)?.id??monitors[0].id} options={monitors.map(item=>({value:item.id,label:`${item.name}${item.isPrimary?'（主显示器）':''} · ${item.width}×${item.height} · ${Math.round(item.scaleFactor*100)}%`}))} onChange={value=>setDraft({...draft,targetMonitorId:value})}/>:null}<div className="settings-checks">
     <Check label="关闭时恢复壁纸" checked={draft.wallpaperEnabled} onChange={toggle('wallpaperEnabled')}/><Check label="开机自动启动" checked={draft.launchAtLogin} onChange={toggle('launchAtLogin')}/>

@@ -45,7 +45,7 @@ pub fn read_app_settings(connection: &Connection) -> Result<AppSettings, rusqlit
 }
 
 pub(crate) fn validate(settings: &AppSettings) -> Result<(), rusqlite::Error> {
-    if !matches!(settings.density.as_str(), "balanced" | "comfortable") {
+    if !matches!(settings.density.as_str(), "compact" | "balanced" | "comfortable") {
         return Err(rusqlite::Error::InvalidParameterName("density".into()));
     }
     if !matches!(settings.week_start.as_str(), "monday" | "sunday") {

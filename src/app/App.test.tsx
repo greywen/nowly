@@ -185,6 +185,11 @@ describe('App startup and window behavior', () => {
     expect(screen.getByRole('dialog', {name:'全部便签'})).toBeInTheDocument();
   });
 
+  it('reflects the persisted interface density on the document root', async () => {
+    renderApp(createRepository({ getSettings: vi.fn().mockResolvedValue({ ...settings, density: 'comfortable' }) }));
+    await waitFor(() => expect(document.documentElement.dataset.density).toBe('comfortable'));
+  });
+
   it('starts in foreground without automatically entering wallpaper mode', () => {
     renderApp();
 
