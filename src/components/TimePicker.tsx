@@ -1,5 +1,6 @@
 import { ChevronDown, ChevronUp, Clock3 } from 'lucide-react';
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
+import { t } from '../i18n';
 
 const QUICK_TIMES = ['09:00', '09:30', '12:00', '14:00', '15:00', '18:00'] as const;
 
@@ -154,19 +155,19 @@ export function TimePicker({
         disabled={disabled}
         onClick={() => onOpenChange(!open)}
       >
-        <span>{value || '请选择时间'}</span>
+        <span>{value || t('timePicker.placeholder')}</span>
         <Clock3 aria-hidden="true" />
       </button>
       {open ? (
-        <div id={dialogId} role="dialog" aria-label={`选择${label}`} className="time-picker__popup">
+        <div id={dialogId} role="dialog" aria-label={t('timePicker.select', { label })} className="time-picker__popup">
           <div className="time-picker__steppers">
             <div className="time-picker__stepper">
-              <span className="time-picker__unit">小时</span>
-              <button type="button" aria-label="增加小时" onClick={() => changeHour(1)}><ChevronUp aria-hidden="true" /></button>
+              <span className="time-picker__unit">{t('timePicker.hour')}</span>
+              <button type="button" aria-label={t('timePicker.increaseHour')} onClick={() => changeHour(1)}><ChevronUp aria-hidden="true" /></button>
               <div
                 role="spinbutton"
                 tabIndex={0}
-                aria-label="小时"
+                aria-label={t('timePicker.hour')}
                 aria-valuemin={0}
                 aria-valuemax={23}
                 aria-valuenow={time.hour}
@@ -174,16 +175,16 @@ export function TimePicker({
                 className="time-picker__value"
                 onKeyDown={(event) => handleSpinKey(event, 'hour')}
               >{pad(time.hour)}</div>
-              <button type="button" aria-label="减少小时" onClick={() => changeHour(-1)}><ChevronDown aria-hidden="true" /></button>
+              <button type="button" aria-label={t('timePicker.decreaseHour')} onClick={() => changeHour(-1)}><ChevronDown aria-hidden="true" /></button>
             </div>
             <span className="time-picker__separator" aria-hidden="true">:</span>
             <div className="time-picker__stepper">
-              <span className="time-picker__unit">分钟</span>
-              <button type="button" aria-label="增加分钟" onClick={() => changeMinute(5)}><ChevronUp aria-hidden="true" /></button>
+              <span className="time-picker__unit">{t('timePicker.minute')}</span>
+              <button type="button" aria-label={t('timePicker.increaseMinute')} onClick={() => changeMinute(5)}><ChevronUp aria-hidden="true" /></button>
               <div
                 role="spinbutton"
                 tabIndex={0}
-                aria-label="分钟"
+                aria-label={t('timePicker.minute')}
                 aria-valuemin={0}
                 aria-valuemax={55}
                 aria-valuenow={time.minute}
@@ -191,7 +192,7 @@ export function TimePicker({
                 className="time-picker__value"
                 onKeyDown={(event) => handleSpinKey(event, 'minute')}
               >{pad(time.minute)}</div>
-              <button type="button" aria-label="减少分钟" onClick={() => changeMinute(-5)}><ChevronDown aria-hidden="true" /></button>
+              <button type="button" aria-label={t('timePicker.decreaseMinute')} onClick={() => changeMinute(-5)}><ChevronDown aria-hidden="true" /></button>
             </div>
           </div>
           <div className="time-picker__quick-values">
@@ -200,8 +201,8 @@ export function TimePicker({
             ))}
           </div>
           <div className="time-picker__footer">
-            <button type="button" aria-label="清除时间" onClick={() => { onChange(''); close(true); }}>清除</button>
-            <button type="button" onClick={() => choose(parseTime('', now()))}>现在</button>
+            <button type="button" aria-label={t('timePicker.clear')} onClick={() => { onChange(''); close(true); }}>{t('timePicker.clearShort')}</button>
+            <button type="button" onClick={() => choose(parseTime('', now()))}>{t('timePicker.now')}</button>
           </div>
         </div>
       ) : null}

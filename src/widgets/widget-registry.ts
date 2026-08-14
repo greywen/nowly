@@ -1,4 +1,5 @@
 import type { SandboxExtension } from '../data/nowly-repository';
+import { t } from '../i18n';
 
 // Built-in module identifiers plus the free-form `sandbox:<uuid>` ids created by
 // user-uploaded modules. Kept as a string so user modules flow through the same
@@ -34,8 +35,8 @@ export type LayoutState = ModuleLayout[];
 export const builtinDefinitions: WidgetDefinition[] = [
   {
     id: 'calendar',
-    name: '日历',
-    description: '按月、周查看日程与安排。',
+    get name() { return t('widget.calendar.name'); },
+    get description() { return t('widget.calendar.desc'); },
     category: 'builtin',
     minW: 5,
     minH: 4,
@@ -43,8 +44,8 @@ export const builtinDefinitions: WidgetDefinition[] = [
   },
   {
     id: 'matrix',
-    name: '四象限',
-    description: '用重要 / 紧急四象限管理任务。',
+    get name() { return t('widget.matrix.name'); },
+    get description() { return t('widget.matrix.desc'); },
     category: 'builtin',
     minW: 3,
     minH: 3,
@@ -52,8 +53,8 @@ export const builtinDefinitions: WidgetDefinition[] = [
   },
   {
     id: 'notes',
-    name: '便签',
-    description: '记录灵感与待办的轻量便签墙。',
+    get name() { return t('widget.notes.name'); },
+    get description() { return t('widget.notes.desc'); },
     category: 'builtin',
     minW: 2,
     minH: 2,
@@ -67,8 +68,8 @@ export const builtinDefinitions: WidgetDefinition[] = [
 // of the three starting modules while still exposing kanban as placeable.
 export const kanbanDefinition: WidgetDefinition = {
   id: 'kanban',
-  name: '看板',
-  description: '用泳道管理任务状态的看板。',
+  get name() { return t('widget.kanban.name'); },
+  get description() { return t('widget.kanban.desc'); },
   category: 'builtin',
   minW: 4,
   minH: 3,
@@ -79,8 +80,8 @@ export const kanbanDefinition: WidgetDefinition = {
 export const extensionDefinitions: WidgetDefinition[] = [
   {
     id: 'focusTimer',
-    name: '专注计时',
-    description: '番茄钟式专注计时，帮助保持节奏。',
+    get name() { return t('widget.focusTimer.name'); },
+    get description() { return t('widget.focusTimer.desc'); },
     category: 'extension',
     minW: 3,
     minH: 3,

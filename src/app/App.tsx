@@ -25,15 +25,13 @@ import { SandboxModule } from '../widgets/sandbox/SandboxModule';
 import { SANDBOX_ID_PREFIX } from '../widgets/widget-registry';
 import { useNowlyRepository } from '../data/RepositoryContext';
 import { useCurrentTime } from './useCurrentTime';
+import { t, useTranslation, getLanguage } from '../i18n';
 
 type WindowMode = 'wallpaper' | 'foreground';
 
-const dateFormatter = new Intl.DateTimeFormat('zh-CN', { dateStyle: 'full' });
-const timeFormatter = new Intl.DateTimeFormat('zh-CN', {
-  hour: '2-digit',
-  minute: '2-digit',
-  hour12: false
-});
+function localeTag() {
+  return getLanguage() === 'en' ? 'en-US' : 'zh-CN';
+}
 
 function localIsoDate(date = new Date()) {
   const year = date.getFullYear();
@@ -43,6 +41,7 @@ function localIsoDate(date = new Date()) {
 }
 
 export function App() {
+  useTranslation();
   const repository = useNowlyRepository();
   const settingsFeature = useSettings();
   const refreshTasksRef = useRef<() => Promise<unknown>>(async () => undefined);
@@ -112,7 +111,7 @@ export function App() {
   const importantTaskCount = tasks.filter(
     (task) => !task.completed && task.quadrant.startsWith('important')
   ).length;
-  const summary = `今天 ${todayEventCount} 个日程 · ${importantTaskCount} 个重要任务 · ${notes.length} 条便签`;
+  const summary = t('app.summary', { events: todayEventCount, tasks: importantTaskCount, notes: notes.length });
 
   const modules: Partial<Record<WidgetId, ReactNode>> = {};
   {
@@ -238,8 +237,8 @@ export function App() {
     <>
       <DesktopShell
         mode={windowMode}
-        time={timeFormatter.format(now)}
-        dateText={dateFormatter.format(now)}
+        time={new Intl.DateTimeFormat(localeTag(), { hour: '2-digit', minute: '2-digit', hour12: false }).format(now)}
+        dateText={new Intl.DateTimeFormat(localeTag(), { dateStyle: 'full' }).format(now)}
         summary={summary}
         modules={modules}
         definitions={definitions}

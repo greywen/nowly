@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNowlyRepository } from '../data/RepositoryContext';
 import { sortTasks } from '../lib/task-draft';
+import { t } from '../i18n';
 import type { MatrixTask, TaskDraft } from './matrix-model';
 
 type TasksResource =
@@ -24,7 +25,7 @@ function messageFrom(error: unknown) {
   ) {
     return error.message;
   }
-  return '无法读取本地任务，请重试。';
+  return t('matrix.readError');
 }
 
 export function useTasks({ onRefreshEvents }: { onRefreshEvents: () => Promise<unknown> }) {

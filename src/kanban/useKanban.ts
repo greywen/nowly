@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNowlyRepository } from '../data/RepositoryContext';
+import { t } from '../i18n';
 import {
   cardsInLane,
   sortSnapshot,
@@ -33,7 +34,7 @@ function messageFrom(error: unknown) {
   ) {
     return error.message;
   }
-  return '无法读取看板数据，请重试。';
+  return t('kanbanWidget.readError');
 }
 
 // Renumber every card in a lane to dense positions after a local mutation so the

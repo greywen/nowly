@@ -1,0 +1,825 @@
+import type { Language } from './store';
+
+// Flat key -> string dictionaries per language. Keys use dot-namespaces by
+// feature for readability. Interpolation uses `{name}` placeholders resolved by
+// the `t()` helper.
+export const translations: Record<Language, Record<string, string>> = {
+  zh: {
+    // Common
+    'common.cancel': '取消',
+    'common.save': '保存',
+    'common.delete': '删除',
+    'common.saving': '正在保存',
+    'common.deleting': '正在删除',
+    'common.discard': '放弃更改',
+    'common.discarding': '正在放弃',
+    'common.discardTitle': '放弃更改？',
+    'common.discardDesc': '未保存的内容将丢失。',
+    'common.permanentDelete': '永久删除',
+    'common.retry': '重试',
+    'common.close': '关闭',
+    'common.deleteUnrecoverable': '删除后无法恢复。',
+    'common.opFailed': '操作失败，请重试。',
+
+    // App summary
+    'app.summary': '今天 {events} 个日程 · {tasks} 个重要任务 · {notes} 条便签',
+    'app.readError': '无法读取本地数据，请重试。',
+
+    // BlurControl
+    'blur.adjust': '调整模糊',
+    'blur.title': '模糊',
+    'blur.hint': '模糊效果仅在调整时预览，并在设为壁纸后生效。',
+
+    // DesktopShell
+    'shell.addModule': '添加模块',
+    'shell.finishEditing': '完成编辑',
+    'shell.editLayout': '编辑布局',
+    'shell.openSettings': '打开设置',
+    'shell.setWallpaper': '设为壁纸',
+
+    // ModuleFrame
+    'moduleFrame.remove': '移除{name}',
+
+    // CalendarSettingsControl
+    'calendarSettings.label': '日历设置',
+    'calendarSettings.weekStart': '每周开始日',
+    'calendarSettings.monday': '周一',
+    'calendarSettings.sunday': '周日',
+    'calendarSettings.dateFormat': '日期格式',
+    'calendarSettings.localized': '本地格式',
+    'calendarSettings.iso': 'ISO 格式',
+    'calendarSettings.showWeekends': '显示周末',
+
+    // CalendarWidget
+    'calendar.weekdays': '日,一,二,三,四,五,六',
+    'calendar.viewMonth': '月',
+    'calendar.viewWeek': '周',
+    'calendar.viewDay': '天',
+    'calendar.viewList': '列表',
+    'calendar.prevMonth': '上一个月',
+    'calendar.nextMonth': '下一个月',
+    'calendar.prevWeek': '上一周',
+    'calendar.nextWeek': '下一周',
+    'calendar.prevDay': '前一天',
+    'calendar.nextDay': '后一天',
+    'calendar.scopeWeek': '本周',
+    'calendar.scopeDay': '当天',
+    'calendar.scopeMonth': '本月',
+    'calendar.loading': '正在读取本地日程',
+    'calendar.summaryCount': '{scope} {count} 个日程',
+    'calendar.summaryEmpty': '{scope}暂无日程',
+    'calendar.allDay': '全天',
+    'calendar.eventLabel': '{time} {title}，{category}',
+    'calendar.overflow': '另有 {count} 个日程',
+    'calendar.dayGrid': '当日日程',
+    'calendar.monthEmpty': '本月暂无日程',
+    'calendar.switchView': '切换视图',
+    'calendar.today': '今天',
+    'calendar.newEvent': '新建日程',
+    'calendar.errorLoad': '无法读取日程。',
+    'calendar.retryLoad': '重试读取日程',
+    'calendar.readError': '无法读取本地日程，请重试。',
+
+    // DateDetailDialog
+    'dateDetail.close': '关闭日期详情',
+    'dateDetail.newTask': '新建任务',
+    'dateDetail.newEvent': '新建日程',
+    'dateDetail.summary': '共 {count} 个日程',
+    'dateDetail.empty': '当天暂无日程',
+    'dateDetail.dayEvents': '当日日程',
+    'dateDetail.linkedTask': '关联任务：{title}',
+
+    // Event categories
+    'category.work': '工作',
+    'category.important': '重要',
+    'category.personal': '个人',
+    'category.learning': '学习',
+
+    // Color labels
+    'color.teal': '青绿',
+    'color.coral': '珊瑚红',
+    'color.green': '草绿',
+    'color.amber': '暖黄',
+    'color.indigo': '靛蓝',
+
+    // ColorPicker
+    'colorPicker.custom': '自定义颜色',
+    'colorPicker.sv': '饱和度和亮度',
+    'colorPicker.svValue': '饱和度 {s}%，亮度 {v}%',
+    'colorPicker.hue': '色相',
+    'colorPicker.hex': '十六进制颜色值',
+    'colorPicker.recent': '最近使用颜色',
+    'colorPicker.recentColor': '历史颜色 {color}',
+    'colorPicker.recentEmpty': '暂无历史颜色',
+    'colorPicker.pickCustom': '选择自定义颜色',
+
+    // DatePicker
+    'datePicker.weekdays': '一,二,三,四,五,六,日',
+    'datePicker.placeholder': '请选择日期',
+    'datePicker.value': '{year} 年 {month} 月 {day} 日',
+    'calendar.dayLabel': '{year}年{month}月{day}日',
+    'datePicker.select': '选择{label}',
+    'datePicker.prevMonth': '上一个月',
+    'datePicker.nextMonth': '下一个月',
+    'datePicker.header': '{year} 年 {month} 月',
+    'datePicker.grid': '{year}年{month}月',
+    'datePicker.clear': '清除日期',
+    'datePicker.clearShort': '清除',
+    'datePicker.today': '今天',
+
+    // Select
+    'select.placeholder': '请选择',
+    'select.search': '搜索{label}',
+    'select.noOptions': '暂无可选项',
+    'select.noMatch': '未找到匹配项',
+
+    // TimePicker
+    'timePicker.placeholder': '请选择时间',
+    'timePicker.select': '选择{label}',
+    'timePicker.hour': '小时',
+    'timePicker.minute': '分钟',
+    'timePicker.increaseHour': '增加小时',
+    'timePicker.decreaseHour': '减少小时',
+    'timePicker.increaseMinute': '增加分钟',
+    'timePicker.decreaseMinute': '减少分钟',
+    'timePicker.clear': '清除时间',
+    'timePicker.clearShort': '清除',
+    'timePicker.now': '现在',
+
+    // KanbanCard
+    'kanbanCard.task': '任务：{title}',
+    'kanbanCard.collaborators': '协作人：{names}',
+
+    // Kanban field manager
+    'kanbanField.errorName': '请输入名称。',
+    'kanbanField.priorities': '优先级',
+    'kanbanField.tags': '标签',
+    'kanbanField.collaborators': '协作人',
+    'kanbanField.title': '管理字段',
+    'kanbanField.close': '关闭',
+    'kanbanField.fieldType': '字段类型',
+    'kanbanField.edit': '编辑{label}',
+    'kanbanField.add': '新增{label}',
+    'kanbanField.color': '颜色',
+    'kanbanField.cancelEdit': '取消编辑',
+    'kanbanField.saveEdit': '保存修改',
+    'kanbanField.addAction': '添加{label}',
+    'kanbanField.list': '{label}列表',
+    'kanbanField.empty': '还没有{label}。',
+    'kanbanField.usage': '{count} 张任务',
+    'kanbanField.moveUp': '上移{name}',
+    'kanbanField.moveDown': '下移{name}',
+    'kanbanField.editItem': '编辑{name}',
+    'kanbanField.deleteItem': '删除{name}',
+    'kanbanField.deletePriorityImpact': '有 {count} 张任务使用该优先级，删除后这些任务的优先级会清空，任务保留。',
+    'kanbanField.deleteTagImpact': '有 {count} 张任务使用该标签，删除后只解除关联，任务保留。',
+    'kanbanField.deleteCollaboratorImpact': '有 {count} 张任务关联该协作人，删除后只解除关联，任务保留。',
+    'kanbanField.deleteTitle': '删除“{name}”？',
+
+    // Kanban lane
+    'kanbanLane.lane': '泳道：{name}',
+    'kanbanLane.count': '{name} {count} 张任务',
+    'kanbanLane.addTask': '在{name}新增任务',
+    'kanbanLane.empty': '暂无任务',
+
+    // Kanban lane dialog
+    'kanbanLaneDialog.errorName': '请输入泳道名称。',
+    'kanbanLaneDialog.createTitle': '新建泳道',
+    'kanbanLaneDialog.editTitle': '编辑泳道',
+    'kanbanLaneDialog.deleteLane': '删除泳道',
+    'kanbanLaneDialog.saveLane': '保存泳道',
+    'kanbanLaneDialog.name': '泳道名称',
+    'kanbanLaneDialog.color': '泳道颜色',
+    'kanbanLaneDialog.deleteTitle': '永久删除泳道“{name}”？',
+    'kanbanLaneDialog.deleteWithCards': '该泳道包含 {count} 张任务，删除后将一并永久删除，无法恢复。',
+    'kanbanLaneDialog.deleteEmpty': '该泳道当前没有任务，删除后无法恢复。',
+
+    // Kanban task dialog
+    'kanbanTask.noPriority': '无优先级',
+    'kanbanTask.stalePriority': '已失效的优先级',
+    'kanbanTask.createTitle': '在“{lane}”新建任务',
+    'kanbanTask.editTitle': '编辑任务',
+    'kanbanTask.deleteTask': '删除任务',
+    'kanbanTask.saveTask': '保存任务',
+    'kanbanTask.title': '任务标题',
+    'kanbanTask.description': '描述',
+    'kanbanTask.dueDate': '截止日期',
+    'kanbanTask.priority': '优先级',
+    'kanbanTask.tags': '标签',
+    'kanbanTask.tagsEmpty': '还没有标签，可在“管理字段”中新增。',
+    'kanbanTask.collaborators': '协作人',
+    'kanbanTask.collaboratorsEmpty': '还没有协作人，可在“管理字段”中新增。',
+    'kanbanTask.deleteTitle': '永久删除“{title}”？',
+
+    // Kanban card draft validation
+    'kanbanDraft.errorTitle': '请输入任务标题。',
+    'kanbanDraft.errorDueDate': '请选择有效截止日期。',
+
+    // Kanban widget
+    'kanbanWidget.manageFields': '管理字段',
+    'kanbanWidget.cardCount': '{count} 张任务',
+    'kanbanWidget.addLane': '添加泳道',
+    'kanbanWidget.boardMenu': '看板更多操作',
+    'kanbanWidget.errorLoad': '无法读取看板数据。',
+    'kanbanWidget.retryLoad': '重试读取看板',
+    'kanbanWidget.dismissDragError': '关闭拖放错误',
+    'kanbanWidget.loading': '正在读取看板数据',
+    'kanbanWidget.empty': '还没有泳道，先添加一个泳道开始使用看板。',
+    'kanbanWidget.readError': '无法读取看板数据，请重试。',
+
+    // Kanban due date
+    'kanbanDue.today': '今天到期',
+    'kanbanDue.monthDay': '{month} 月 {day} 日',
+
+    // Event draft validation
+    'eventDraft.errorTitle': '请输入日程标题。',
+    'eventDraft.errorStartDate': '请选择开始日期。',
+    'eventDraft.errorEndDate': '请选择结束日期。',
+    'eventDraft.errorEndBeforeStart': '结束日期不能早于开始日期。',
+    'eventDraft.errorStartTime': '请选择开始时间。',
+    'eventDraft.errorEndTime': '请选择结束时间。',
+    'eventDraft.errorEndTimeBeforeStart': '结束时间不能早于开始时间。',
+    'eventDraft.errorCategory': '请选择有效分类。',
+    'eventDraft.errorColor': '请选择有效颜色。',
+
+    // Note draft validation
+    'noteDraft.errorTitle': '请输入便签标题。',
+    'noteDraft.errorColor': '请选择有效颜色。',
+
+    // Task draft validation / meta
+    'taskDraft.errorTitle': '请输入任务标题。',
+    'taskDraft.errorDueDate': '请选择有效截止日期。',
+    'taskDraft.noDueDate': '无截止日期',
+    'taskDraft.dueToday': '今天到期',
+    'taskDraft.dueMonthDay': '{month} 月 {day} 日到期',
+    'taskDraft.meta': '{due} · {priority}优先级',
+    'taskDraft.metaCompleted': '{due} · {priority}优先级 · 已完成',
+
+    // Priority labels
+    'priority.high': '高',
+    'priority.medium': '中',
+    'priority.low': '低',
+
+    // Quadrant labels
+    'quadrant.important_urgent': '重要且紧急',
+    'quadrant.important_not_urgent': '重要不紧急',
+    'quadrant.not_important_urgent': '不重要但紧急',
+    'quadrant.not_important_not_urgent': '不重要不紧急',
+
+    // MatrixWidget
+    'matrix.newTask': '新增任务',
+    'matrix.errorLoad': '无法读取任务。',
+    'matrix.retryLoad': '重试读取任务',
+    'matrix.retryCompletion': '重试完成状态',
+    'matrix.dismissError': '关闭错误提示',
+    'matrix.loading': '正在读取本地任务',
+    'matrix.quadrantCount': '{label} {count} 个任务',
+    'matrix.empty': '暂无任务',
+    'matrix.readError': '无法读取本地任务，请重试。',
+
+    // TaskRow
+    'taskRow.markIncomplete': '标记任务为未完成：{title}',
+    'taskRow.complete': '完成任务：{title}',
+    'taskRow.edit': '编辑任务：{title}',
+
+    // EventModal
+    'eventModal.createTitle': '新建日程',
+    'eventModal.editTitle': '编辑日程',
+    'eventModal.deleteEvent': '删除日程',
+    'eventModal.title': '日程标题',
+    'eventModal.allDay': '全天事件',
+    'eventModal.startDate': '开始日期',
+    'eventModal.endDate': '结束日期',
+    'eventModal.startTime': '开始时间',
+    'eventModal.endTime': '结束时间',
+    'eventModal.category': '分类',
+    'eventModal.color': '颜色',
+    'eventModal.linkedTask': '关联任务',
+    'eventModal.noLink': '无关联',
+    'eventModal.note': '备注',
+    'eventModal.save': '保存',
+    'eventModal.deleteTitle': '永久删除“{title}”？',
+    'eventModal.deleteDesc2': '若存在关联，只解除关联，不删除关联任务。',
+
+    // NoteModal
+    'noteModal.createTitle': '新建便签',
+    'noteModal.editTitle': '编辑便签',
+    'noteModal.deleteNote': '删除便签',
+    'noteModal.saveNote': '保存便签',
+    'noteModal.title': '便签标题',
+    'noteModal.content': '便签内容',
+    'noteModal.color': '便签颜色',
+    'noteModal.pinned': '置顶便签',
+    'noteModal.deleteTitle': '永久删除“{title}”？',
+
+    // TaskModal
+    'taskModal.createTitle': '新建任务',
+    'taskModal.editTitle': '编辑任务',
+    'taskModal.deleteTask': '删除任务',
+    'taskModal.saveTask': '保存任务',
+    'taskModal.title': '任务标题',
+    'taskModal.quadrant': '所属象限',
+    'taskModal.dueDate': '截止日期',
+    'taskModal.priority': '优先级',
+    'taskModal.linkedEvent': '关联日程',
+    'taskModal.noLink': '无关联',
+    'taskModal.staleLink': '已关联其他月份日程',
+    'taskModal.completed': '已完成',
+    'taskModal.note': '备注',
+    'taskModal.deleteTitle': '永久删除“{title}”？',
+    'taskModal.deleteDesc2': '若存在关联，只解除关联，不删除关联日程。',
+
+    // NotesManagerDialog
+    'notesManager.title': '全部便签',
+    'notesManager.newNote': '新增便签',
+    'notesManager.empty': '还没有便签',
+    'notesManager.editNote': '编辑便签：{title}',
+    'notesManager.pinned': '已置顶',
+    'notesManager.noContent': '无内容',
+
+    // NotesWidget
+    'notesWidget.viewAll': '查看全部便签',
+    'notesWidget.newNote': '新增便签',
+    'notesWidget.errorLoad': '无法读取便签。',
+    'notesWidget.retryLoad': '重试读取便签',
+    'notesWidget.loading': '正在读取本地便签',
+    'notesWidget.empty': '还没有便签',
+    'notesWidget.createNote': '新建便签',
+    'notesWidget.readError': '无法读取本地便签，请重试。',
+
+    // SettingsDialog
+    'settings.title': '设置',
+    'settings.close': '关闭设置',
+    'settings.saveSettings': '保存设置',
+    'settings.saveError': '设置保存失败，请重试。',
+    'settings.opError': '设置操作失败，请重试。',
+    'settings.interface': '界面',
+    'settings.density': '界面密度',
+    'settings.densityCompact': '紧凑',
+    'settings.densityBalanced': '适中',
+    'settings.densityComfortable': '宽松',
+    'settings.language': '语言',
+    'settings.langZh': '简体中文',
+    'settings.langEn': 'English',
+    'settings.desktopStartup': '桌面与启动',
+    'settings.targetMonitor': '目标显示器',
+    'settings.primaryMonitor': '（主显示器）',
+    'settings.restoreWallpaper': '关闭时恢复壁纸',
+    'settings.launchAtLogin': '开机自动启动',
+
+    // FocusTimer
+    'focusTimer.preset25': '25 分钟',
+    'focusTimer.preset15': '15 分钟',
+    'focusTimer.preset5': '5 分钟',
+    'focusTimer.title': '专注计时',
+    'focusTimer.done': '专注完成，休息一下吧',
+    'focusTimer.keepFocus': '保持专注，减少切换',
+    'focusTimer.selectDuration': '选择专注时长',
+    'focusTimer.pause': '暂停',
+    'focusTimer.start': '开始',
+    'focusTimer.reset': '重置计时',
+    'focusTimer.resetShort': '重置',
+
+    // TemplatePickerDialog
+    'template.remove': '移除{name}',
+    'template.add': '添加{name}',
+    'template.added': '已添加',
+    'template.removeShort': '移除',
+    'template.addShort': '添加',
+    'template.uploadError': '模块上传失败，请重试。',
+    'template.unnamed': '未命名模块',
+    'template.title': '添加模块',
+    'template.close': '关闭',
+    'template.builtin': '内置模块',
+    'template.myModules': '我的模块',
+    'template.upload': '上传模块',
+    'template.uploadHint': '选择一个 JavaScript 文件即可上传并识别模块。模块运行在隔离沙箱中，只能通过受限接口访问自身状态与日期。',
+    'template.deleteModule': '删除模块 {name}',
+
+    // Widget registry
+    'widget.calendar.name': '日历',
+    'widget.calendar.desc': '按月、周查看日程与安排。',
+    'widget.matrix.name': '四象限',
+    'widget.matrix.desc': '用重要 / 紧急四象限管理任务。',
+    'widget.notes.name': '便签',
+    'widget.notes.desc': '记录灵感与待办的轻量便签墙。',
+    'widget.kanban.name': '看板',
+    'widget.kanban.desc': '用泳道管理任务状态的看板。',
+    'widget.focusTimer.name': '专注计时',
+    'widget.focusTimer.desc': '番茄钟式专注计时，帮助保持节奏。',
+
+    // Sandbox protocol
+    'sandbox.noPermission': '扩展未获得「{permission}」权限。',
+    'sandbox.throttled': '请求过于频繁，已被限流。',
+    'sandbox.runError': '扩展运行出错：'
+  },
+  en: {
+    // Common
+    'common.cancel': 'Cancel',
+    'common.save': 'Save',
+    'common.delete': 'Delete',
+    'common.saving': 'Saving',
+    'common.deleting': 'Deleting',
+    'common.discard': 'Discard changes',
+    'common.discarding': 'Discarding',
+    'common.discardTitle': 'Discard changes?',
+    'common.discardDesc': 'Unsaved changes will be lost.',
+    'common.permanentDelete': 'Delete permanently',
+    'common.retry': 'Retry',
+    'common.close': 'Close',
+    'common.deleteUnrecoverable': 'This cannot be undone.',
+    'common.opFailed': 'Something went wrong. Please try again.',
+
+    // App summary
+    'app.summary': 'Today: {events, plural, one {# event} other {# events}} · {tasks, plural, one {# key task} other {# key tasks}} · {notes, plural, one {# note} other {# notes}}',
+    'app.readError': 'Unable to read local data. Please try again.',
+
+    // BlurControl
+    'blur.adjust': 'Adjust blur',
+    'blur.title': 'Blur',
+    'blur.hint': 'Blur is previewed while adjusting and takes effect once you set the wallpaper.',
+
+    // DesktopShell
+    'shell.addModule': 'Add module',
+    'shell.finishEditing': 'Finish editing',
+    'shell.editLayout': 'Edit layout',
+    'shell.openSettings': 'Open settings',
+    'shell.setWallpaper': 'Set as wallpaper',
+
+    // ModuleFrame
+    'moduleFrame.remove': 'Remove {name}',
+
+    // CalendarSettingsControl
+    'calendarSettings.label': 'Calendar settings',
+    'calendarSettings.weekStart': 'Week starts on',
+    'calendarSettings.monday': 'Monday',
+    'calendarSettings.sunday': 'Sunday',
+    'calendarSettings.dateFormat': 'Date format',
+    'calendarSettings.localized': 'Localized',
+    'calendarSettings.iso': 'ISO format',
+    'calendarSettings.showWeekends': 'Show weekends',
+
+    // CalendarWidget
+    'calendar.weekdays': 'Sun,Mon,Tue,Wed,Thu,Fri,Sat',
+    'calendar.viewMonth': 'Month',
+    'calendar.viewWeek': 'Week',
+    'calendar.viewDay': 'Day',
+    'calendar.viewList': 'List',
+    'calendar.prevMonth': 'Previous month',
+    'calendar.nextMonth': 'Next month',
+    'calendar.prevWeek': 'Previous week',
+    'calendar.nextWeek': 'Next week',
+    'calendar.prevDay': 'Previous day',
+    'calendar.nextDay': 'Next day',
+    'calendar.scopeWeek': 'This week',
+    'calendar.scopeDay': 'Today',
+    'calendar.scopeMonth': 'This month',
+    'calendar.loading': 'Loading events…',
+    'calendar.summaryCount': '{scope}: {count, plural, one {# event} other {# events}}',
+    'calendar.summaryEmpty': '{scope}: no events',
+    'calendar.allDay': 'All day',
+    'calendar.eventLabel': '{time} {title}, {category}',
+    'calendar.overflow': '{count, plural, one {# more event} other {# more events}}',
+    'calendar.dayGrid': 'Events for the day',
+    'calendar.monthEmpty': 'No events this month',
+    'calendar.switchView': 'Switch view',
+    'calendar.today': 'Today',
+    'calendar.newEvent': 'New event',
+    'calendar.errorLoad': 'Unable to load events.',
+    'calendar.retryLoad': 'Retry loading events',
+    'calendar.readError': 'Unable to read local events. Please try again.',
+
+    // DateDetailDialog
+    'dateDetail.close': 'Close date details',
+    'dateDetail.newTask': 'New task',
+    'dateDetail.newEvent': 'New event',
+    'dateDetail.summary': '{count, plural, one {# event} other {# events}}',
+    'dateDetail.empty': 'No events on this day',
+    'dateDetail.dayEvents': 'Events for the day',
+    'dateDetail.linkedTask': 'Linked task: {title}',
+
+    // Event categories
+    'category.work': 'Work',
+    'category.important': 'Important',
+    'category.personal': 'Personal',
+    'category.learning': 'Learning',
+
+    // Color labels
+    'color.teal': 'Teal',
+    'color.coral': 'Coral',
+    'color.green': 'Green',
+    'color.amber': 'Amber',
+    'color.indigo': 'Indigo',
+
+    // ColorPicker
+    'colorPicker.custom': 'Custom color',
+    'colorPicker.sv': 'Saturation and brightness',
+    'colorPicker.svValue': 'Saturation {s}%, brightness {v}%',
+    'colorPicker.hue': 'Hue',
+    'colorPicker.hex': 'Hex color value',
+    'colorPicker.recent': 'Recently used colors',
+    'colorPicker.recentColor': 'Recent color {color}',
+    'colorPicker.recentEmpty': 'No recent colors',
+    'colorPicker.pickCustom': 'Pick a custom color',
+
+    // DatePicker
+    'datePicker.weekdays': 'Mon,Tue,Wed,Thu,Fri,Sat,Sun',
+    'datePicker.placeholder': 'Select a date',
+    'datePicker.value': '{month}/{day}/{year}',
+    'calendar.dayLabel': '{month}/{day}/{year}',
+    'datePicker.select': 'Select {label}',
+    'datePicker.prevMonth': 'Previous month',
+    'datePicker.nextMonth': 'Next month',
+    'datePicker.header': '{month}/{year}',
+    'datePicker.grid': '{year}/{month}',
+    'datePicker.clear': 'Clear date',
+    'datePicker.clearShort': 'Clear',
+    'datePicker.today': 'Today',
+
+    // Select
+    'select.placeholder': 'Select',
+    'select.search': 'Search {label}',
+    'select.noOptions': 'No options',
+    'select.noMatch': 'No matches found',
+
+    // TimePicker
+    'timePicker.placeholder': 'Select a time',
+    'timePicker.select': 'Select {label}',
+    'timePicker.hour': 'Hour',
+    'timePicker.minute': 'Minute',
+    'timePicker.increaseHour': 'Increase hour',
+    'timePicker.decreaseHour': 'Decrease hour',
+    'timePicker.increaseMinute': 'Increase minute',
+    'timePicker.decreaseMinute': 'Decrease minute',
+    'timePicker.clear': 'Clear time',
+    'timePicker.clearShort': 'Clear',
+    'timePicker.now': 'Now',
+
+    // KanbanCard
+    'kanbanCard.task': 'Task: {title}',
+    'kanbanCard.collaborators': 'Collaborators: {names}',
+
+    // Kanban field manager
+    'kanbanField.errorName': 'Please enter a name.',
+    'kanbanField.priorities': 'Priorities',
+    'kanbanField.tags': 'Tags',
+    'kanbanField.collaborators': 'Collaborators',
+    'kanbanField.title': 'Manage fields',
+    'kanbanField.close': 'Close',
+    'kanbanField.fieldType': 'Field type',
+    'kanbanField.edit': 'Edit {label}',
+    'kanbanField.add': 'Add {label}',
+    'kanbanField.color': 'Color',
+    'kanbanField.cancelEdit': 'Cancel edit',
+    'kanbanField.saveEdit': 'Save changes',
+    'kanbanField.addAction': 'Add {label}',
+    'kanbanField.list': '{label} list',
+    'kanbanField.empty': 'No {label} yet.',
+    'kanbanField.usage': '{count, plural, one {# task} other {# tasks}}',
+    'kanbanField.moveUp': 'Move {name} up',
+    'kanbanField.moveDown': 'Move {name} down',
+    'kanbanField.editItem': 'Edit {name}',
+    'kanbanField.deleteItem': 'Delete {name}',
+    'kanbanField.deletePriorityImpact': '{count, plural, one {# task uses this priority. Deleting it clears the priority on that task; the task is kept.} other {# tasks use this priority. Deleting it clears the priority on those tasks; the tasks are kept.}}',
+    'kanbanField.deleteTagImpact': '{count, plural, one {# task uses this tag. Deleting it only removes the link; the task is kept.} other {# tasks use this tag. Deleting it only removes the link; the tasks are kept.}}',
+    'kanbanField.deleteCollaboratorImpact': '{count, plural, one {# task references this collaborator. Deleting it only removes the link; the task is kept.} other {# tasks reference this collaborator. Deleting it only removes the link; the tasks are kept.}}',
+    'kanbanField.deleteTitle': 'Delete "{name}"?',
+
+    // Kanban lane
+    'kanbanLane.lane': 'Lane: {name}',
+    'kanbanLane.count': '{name}: {count, plural, one {# task} other {# tasks}}',
+    'kanbanLane.addTask': 'Add task to {name}',
+    'kanbanLane.empty': 'No tasks',
+
+    // Kanban lane dialog
+    'kanbanLaneDialog.errorName': 'Please enter a lane name.',
+    'kanbanLaneDialog.createTitle': 'New lane',
+    'kanbanLaneDialog.editTitle': 'Edit lane',
+    'kanbanLaneDialog.deleteLane': 'Delete lane',
+    'kanbanLaneDialog.saveLane': 'Save lane',
+    'kanbanLaneDialog.name': 'Lane name',
+    'kanbanLaneDialog.color': 'Lane color',
+    'kanbanLaneDialog.deleteTitle': 'Permanently delete lane "{name}"?',
+    'kanbanLaneDialog.deleteWithCards': 'This lane contains {count, plural, one {# task. Deleting it permanently removes it too} other {# tasks. Deleting it permanently removes them too}} and cannot be undone.',
+    'kanbanLaneDialog.deleteEmpty': 'This lane has no tasks. Deleting it cannot be undone.',
+
+    // Kanban task dialog
+    'kanbanTask.noPriority': 'No priority',
+    'kanbanTask.stalePriority': 'Unavailable priority',
+    'kanbanTask.createTitle': 'New task in "{lane}"',
+    'kanbanTask.editTitle': 'Edit task',
+    'kanbanTask.deleteTask': 'Delete task',
+    'kanbanTask.saveTask': 'Save task',
+    'kanbanTask.title': 'Task title',
+    'kanbanTask.description': 'Description',
+    'kanbanTask.dueDate': 'Due date',
+    'kanbanTask.priority': 'Priority',
+    'kanbanTask.tags': 'Tags',
+    'kanbanTask.tagsEmpty': 'No tags yet. Add them in "Manage fields".',
+    'kanbanTask.collaborators': 'Collaborators',
+    'kanbanTask.collaboratorsEmpty': 'No collaborators yet. Add them in "Manage fields".',
+    'kanbanTask.deleteTitle': 'Permanently delete "{title}"?',
+
+    // Kanban card draft validation
+    'kanbanDraft.errorTitle': 'Please enter a task title.',
+    'kanbanDraft.errorDueDate': 'Please choose a valid due date.',
+
+    // Kanban widget
+    'kanbanWidget.manageFields': 'Manage fields',
+    'kanbanWidget.cardCount': '{count, plural, one {# task} other {# tasks}}',
+    'kanbanWidget.addLane': 'Add lane',
+    'kanbanWidget.boardMenu': 'More board actions',
+    'kanbanWidget.errorLoad': 'Unable to load board data.',
+    'kanbanWidget.retryLoad': 'Retry loading board',
+    'kanbanWidget.dismissDragError': 'Dismiss drag error',
+    'kanbanWidget.loading': 'Loading board data…',
+    'kanbanWidget.empty': 'No lanes yet. Add a lane to start using the board.',
+    'kanbanWidget.readError': 'Unable to read board data. Please try again.',
+
+    // Kanban due date
+    'kanbanDue.today': 'Due today',
+    'kanbanDue.monthDay': '{month}/{day}',
+
+    // Event draft validation
+    'eventDraft.errorTitle': 'Please enter an event title.',
+    'eventDraft.errorStartDate': 'Please choose a start date.',
+    'eventDraft.errorEndDate': 'Please choose an end date.',
+    'eventDraft.errorEndBeforeStart': 'The end date cannot be before the start date.',
+    'eventDraft.errorStartTime': 'Please choose a start time.',
+    'eventDraft.errorEndTime': 'Please choose an end time.',
+    'eventDraft.errorEndTimeBeforeStart': 'The end time cannot be before the start time.',
+    'eventDraft.errorCategory': 'Please choose a valid category.',
+    'eventDraft.errorColor': 'Please choose a valid color.',
+
+    // Note draft validation
+    'noteDraft.errorTitle': 'Please enter a note title.',
+    'noteDraft.errorColor': 'Please choose a valid color.',
+
+    // Task draft validation / meta
+    'taskDraft.errorTitle': 'Please enter a task title.',
+    'taskDraft.errorDueDate': 'Please choose a valid due date.',
+    'taskDraft.noDueDate': 'No due date',
+    'taskDraft.dueToday': 'Due today',
+    'taskDraft.dueMonthDay': 'Due {month}/{day}',
+    'taskDraft.meta': '{due} · {priority} priority',
+    'taskDraft.metaCompleted': '{due} · {priority} priority · Done',
+
+    // Priority labels
+    'priority.high': 'High',
+    'priority.medium': 'Medium',
+    'priority.low': 'Low',
+
+    // Quadrant labels
+    'quadrant.important_urgent': 'Important & urgent',
+    'quadrant.important_not_urgent': 'Important, not urgent',
+    'quadrant.not_important_urgent': 'Urgent, not important',
+    'quadrant.not_important_not_urgent': 'Neither urgent nor important',
+
+    // MatrixWidget
+    'matrix.newTask': 'New task',
+    'matrix.errorLoad': 'Unable to load tasks.',
+    'matrix.retryLoad': 'Retry loading tasks',
+    'matrix.retryCompletion': 'Retry status update',
+    'matrix.dismissError': 'Dismiss error',
+    'matrix.loading': 'Loading tasks…',
+    'matrix.quadrantCount': '{label}: {count, plural, one {# task} other {# tasks}}',
+    'matrix.empty': 'No tasks',
+    'matrix.readError': 'Unable to read local tasks. Please try again.',
+
+    // TaskRow
+    'taskRow.markIncomplete': 'Mark task incomplete: {title}',
+    'taskRow.complete': 'Complete task: {title}',
+    'taskRow.edit': 'Edit task: {title}',
+
+    // EventModal
+    'eventModal.createTitle': 'New event',
+    'eventModal.editTitle': 'Edit event',
+    'eventModal.deleteEvent': 'Delete event',
+    'eventModal.title': 'Event title',
+    'eventModal.allDay': 'All-day event',
+    'eventModal.startDate': 'Start date',
+    'eventModal.endDate': 'End date',
+    'eventModal.startTime': 'Start time',
+    'eventModal.endTime': 'End time',
+    'eventModal.category': 'Category',
+    'eventModal.color': 'Color',
+    'eventModal.linkedTask': 'Linked task',
+    'eventModal.noLink': 'None',
+    'eventModal.note': 'Note',
+    'eventModal.save': 'Save',
+    'eventModal.deleteTitle': 'Permanently delete "{title}"?',
+    'eventModal.deleteDesc2': 'If linked, only the link is removed; the linked task is kept.',
+
+    // NoteModal
+    'noteModal.createTitle': 'New note',
+    'noteModal.editTitle': 'Edit note',
+    'noteModal.deleteNote': 'Delete note',
+    'noteModal.saveNote': 'Save note',
+    'noteModal.title': 'Note title',
+    'noteModal.content': 'Note content',
+    'noteModal.color': 'Note color',
+    'noteModal.pinned': 'Pin note',
+    'noteModal.deleteTitle': 'Permanently delete "{title}"?',
+
+    // TaskModal
+    'taskModal.createTitle': 'New task',
+    'taskModal.editTitle': 'Edit task',
+    'taskModal.deleteTask': 'Delete task',
+    'taskModal.saveTask': 'Save task',
+    'taskModal.title': 'Task title',
+    'taskModal.quadrant': 'Quadrant',
+    'taskModal.dueDate': 'Due date',
+    'taskModal.priority': 'Priority',
+    'taskModal.linkedEvent': 'Linked event',
+    'taskModal.noLink': 'None',
+    'taskModal.staleLink': 'Linked to an event in another month',
+    'taskModal.completed': 'Done',
+    'taskModal.note': 'Note',
+    'taskModal.deleteTitle': 'Permanently delete "{title}"?',
+    'taskModal.deleteDesc2': 'If linked, only the link is removed; the linked event is kept.',
+
+    // NotesManagerDialog
+    'notesManager.title': 'All notes',
+    'notesManager.newNote': 'New note',
+    'notesManager.empty': 'No notes yet',
+    'notesManager.editNote': 'Edit note: {title}',
+    'notesManager.pinned': 'Pinned',
+    'notesManager.noContent': 'No content',
+
+    // NotesWidget
+    'notesWidget.viewAll': 'View all notes',
+    'notesWidget.newNote': 'New note',
+    'notesWidget.errorLoad': 'Unable to load notes.',
+    'notesWidget.retryLoad': 'Retry loading notes',
+    'notesWidget.loading': 'Loading notes…',
+    'notesWidget.empty': 'No notes yet',
+    'notesWidget.createNote': 'New note',
+    'notesWidget.readError': 'Unable to read local notes. Please try again.',
+
+    // SettingsDialog
+    'settings.title': 'Settings',
+    'settings.close': 'Close settings',
+    'settings.saveSettings': 'Save settings',
+    'settings.saveError': 'Unable to save settings. Please try again.',
+    'settings.opError': 'Settings operation failed. Please try again.',
+    'settings.interface': 'Interface',
+    'settings.density': 'Interface density',
+    'settings.densityCompact': 'Compact',
+    'settings.densityBalanced': 'Balanced',
+    'settings.densityComfortable': 'Comfortable',
+    'settings.language': 'Language',
+    'settings.langZh': '简体中文',
+    'settings.langEn': 'English',
+    'settings.desktopStartup': 'Desktop & startup',
+    'settings.targetMonitor': 'Target monitor',
+    'settings.primaryMonitor': ' (primary)',
+    'settings.restoreWallpaper': 'Restore wallpaper on close',
+    'settings.launchAtLogin': 'Launch at login',
+
+    // FocusTimer
+    'focusTimer.preset25': '25 min',
+    'focusTimer.preset15': '15 min',
+    'focusTimer.preset5': '5 min',
+    'focusTimer.title': 'Focus timer',
+    'focusTimer.done': 'Focus complete. Take a break.',
+    'focusTimer.keepFocus': 'Stay focused, switch less.',
+    'focusTimer.selectDuration': 'Select focus duration',
+    'focusTimer.pause': 'Pause',
+    'focusTimer.start': 'Start',
+    'focusTimer.reset': 'Reset timer',
+    'focusTimer.resetShort': 'Reset',
+
+    // TemplatePickerDialog
+    'template.remove': 'Remove {name}',
+    'template.add': 'Add {name}',
+    'template.added': 'Added',
+    'template.removeShort': 'Remove',
+    'template.addShort': 'Add',
+    'template.uploadError': 'Module upload failed. Please try again.',
+    'template.unnamed': 'Untitled module',
+    'template.title': 'Add module',
+    'template.close': 'Close',
+    'template.builtin': 'Built-in modules',
+    'template.myModules': 'My modules',
+    'template.upload': 'Upload module',
+    'template.uploadHint': 'Choose a JavaScript file to upload and register a module. Modules run in an isolated sandbox and can only access their own state and the date through a restricted interface.',
+    'template.deleteModule': 'Delete module {name}',
+
+    // Widget registry
+    'widget.calendar.name': 'Calendar',
+    'widget.calendar.desc': 'View events and plans by month or week.',
+    'widget.matrix.name': 'Matrix',
+    'widget.matrix.desc': 'Manage tasks with the important / urgent matrix.',
+    'widget.notes.name': 'Notes',
+    'widget.notes.desc': 'A lightweight wall for ideas and to-dos.',
+    'widget.kanban.name': 'Kanban',
+    'widget.kanban.desc': 'A board that manages task status with lanes.',
+    'widget.focusTimer.name': 'Focus timer',
+    'widget.focusTimer.desc': 'Pomodoro-style focus timer to keep your rhythm.',
+
+    // Sandbox protocol
+    'sandbox.noPermission': 'The extension was not granted the "{permission}" permission.',
+    'sandbox.throttled': 'Too many requests. Please slow down.',
+    'sandbox.runError': 'The extension failed to run:'
+  }
+};

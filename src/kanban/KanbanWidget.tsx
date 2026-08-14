@@ -7,6 +7,7 @@ import { KanbanLaneDialog } from './KanbanLaneDialog';
 import { KanbanTaskDialog } from './KanbanTaskDialog';
 import { KanbanFieldManagerDialog } from './KanbanFieldManagerDialog';
 import { useKanban } from './useKanban';
+import { t } from '../i18n';
 
 // Drag payloads carried in component state (dataTransfer is unreliable in the
 // WebView for structured data, and we keep everything static per the design).
@@ -90,7 +91,7 @@ export function KanbanWidget({ todayIso, recentColors = [], onRememberCustomColo
     onDragEnd();
   }
 
-  const boardMenuItems = [{ label: '管理字段', onSelect: () => setDialog({ type: 'fields' }) }];
+  const boardMenuItems = [{ label: t('kanbanWidget.manageFields'), onSelect: () => setDialog({ type: 'fields' }) }];
 
   // ----- dialog resolution ----------------------------------------------------
   const editingLane =
@@ -108,13 +109,13 @@ export function KanbanWidget({ todayIso, recentColors = [], onRememberCustomColo
     <div className="widget-content kanban-widget">
       <div className="card-header">
         <div className="heading-group">
-          <p>{`${totalCardCount(data)} 张任务`}</p>
+          <p>{t('kanbanWidget.cardCount', { count: totalCardCount(data) })}</p>
         </div>
         <div className="toolbar-actions">
           <button
             type="button"
             className="good-icon-button"
-            aria-label="添加泳道"
+            aria-label={t('kanbanWidget.addLane')}
             onClick={(event) => {
               rememberTrigger(event);
               setDialog({ type: 'lane-create' });
@@ -122,32 +123,32 @@ export function KanbanWidget({ todayIso, recentColors = [], onRememberCustomColo
           >
             <Plus aria-hidden="true" />
           </button>
-          <KanbanMenu label="看板更多操作" items={boardMenuItems} />
+          <KanbanMenu label={t('kanbanWidget.boardMenu')} items={boardMenuItems} />
         </div>
       </div>
 
       <div className="panel-body kanban-body">
         {status === 'error' ? (
           <div className="module-message" role="alert">
-            <span>{errorMessage ?? '无法读取看板数据。'}</span>
-            <button type="button" className="link-btn" aria-label="重试读取看板" onClick={() => void kanban.retry()}>
-              重试
+            <span>{errorMessage ?? t('kanbanWidget.errorLoad')}</span>
+            <button type="button" className="link-btn" aria-label={t('kanbanWidget.retryLoad')} onClick={() => void kanban.retry()}>
+              {t('common.retry')}
             </button>
           </div>
         ) : null}
         {dragError ? (
           <div className="module-message" role="alert">
             <span>{dragError}</span>
-            <button type="button" className="link-btn" aria-label="关闭拖放错误" onClick={kanban.dismissDragError}>
-              关闭
+            <button type="button" className="link-btn" aria-label={t('kanbanWidget.dismissDragError')} onClick={kanban.dismissDragError}>
+              {t('common.close')}
             </button>
           </div>
         ) : null}
-        {status === 'loading' ? <p className="empty-copy">正在读取看板数据</p> : null}
+        {status === 'loading' ? <p className="empty-copy">{t('kanbanWidget.loading')}</p> : null}
 
         {status !== 'loading' && data.lanes.length === 0 ? (
           <div className="empty-state">
-            <p>还没有泳道，先添加一个泳道开始使用看板。</p>
+            <p>{t('kanbanWidget.empty')}</p>
           </div>
         ) : (
           <div className="kanban-scroll" data-testid="kanban-scroll">

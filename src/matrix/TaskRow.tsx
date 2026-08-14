@@ -1,6 +1,7 @@
 import type { CalendarEvent } from '../calendar/calendar-model';
 import { formatTaskMeta } from '../lib/task-draft';
 import type { MatrixTask } from './matrix-model';
+import { t } from '../i18n';
 
 type TaskRowProps = {
   task: MatrixTask;
@@ -21,7 +22,7 @@ export function TaskRow({ task, today, pending, onToggle, onOpen }: TaskRowProps
           type="checkbox"
           checked={task.completed}
           disabled={pending}
-          aria-label={task.completed ? `标记任务为未完成：${task.title}` : `完成任务：${task.title}`}
+          aria-label={task.completed ? t('taskRow.markIncomplete', { title: task.title }) : t('taskRow.complete', { title: task.title })}
           onChange={(event) => onToggle(task, event.target.checked)}
         />
       </label>
@@ -29,7 +30,7 @@ export function TaskRow({ task, today, pending, onToggle, onOpen }: TaskRowProps
         <button
           type="button"
           className="task-row__title"
-          aria-label={`编辑任务：${task.title}`}
+          aria-label={t('taskRow.edit', { title: task.title })}
           onClick={(event) => onOpen(task, event.currentTarget)}
         >
           {task.title}

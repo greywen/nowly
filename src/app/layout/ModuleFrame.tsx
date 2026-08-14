@@ -1,6 +1,7 @@
 import { GripVertical, X } from 'lucide-react';
 import type { CSSProperties, PointerEvent, ReactNode } from 'react';
 import type { WidgetDefinition } from '../../widgets/widget-registry';
+import { t } from '../../i18n';
 
 type ModuleFrameProps = {
   definition: WidgetDefinition;
@@ -51,7 +52,7 @@ export function ModuleFrame({
           <button
             type="button"
             className="good-icon-button module-frame__remove"
-            aria-label={`移除${definition.name}`}
+            aria-label={t('moduleFrame.remove', { name: definition.name })}
             onClick={onRemove}
           >
             <X aria-hidden="true" />

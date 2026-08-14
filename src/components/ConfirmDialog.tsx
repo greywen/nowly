@@ -1,5 +1,6 @@
 import { useId, type ReactNode, type RefObject } from 'react';
 import { Dialog } from './Dialog';
+import { t } from '../i18n';
 
 export type ConfirmDialogProps = {
   title: string;
@@ -41,7 +42,7 @@ export function ConfirmDialog({
       footer={
         <>
           <button type="button" className="good-button" disabled={busy} onClick={onCancel}>
-            取消
+            {t('common.cancel')}
           </button>
           <button
             type="button"

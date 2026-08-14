@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { AppSettings, MonitorInfo } from '../data/nowly-repository';
 import { useNowlyRepository } from '../data/RepositoryContext';
+import { t } from '../i18n';
 
 export type SettingsResource = { status:'loading'|'ready'|'error'; data:AppSettings; message?:string };
 export const defaultSettings: AppSettings = { wallpaperEnabled:false, launchAtLogin:false, targetMonitorId:null, density:'balanced', weekStart:'monday', dateFormat:'localized', showWeekends:true, recentColors:[] };
 
 function message(error:unknown) {
-  return typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string' ? error.message : '设置操作失败，请重试。';
+  return typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string' ? error.message : t('settings.opError');
 }
 
 export function useSettings() {

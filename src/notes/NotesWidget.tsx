@@ -1,6 +1,7 @@
 import { Plus } from 'lucide-react';
 import type { Note } from './notes-model';
 import { colorStyle } from '../lib/color';
+import { t } from '../i18n';
 
 type LoadStatus = 'loading' | 'ready' | 'error';
 
@@ -29,8 +30,8 @@ export function NotesWidget({
     <div className="widget-content">
       <div className="card-header card-header--actions-only">
         <div className="toolbar-actions">
-          <button type="button" className="link-btn" onClick={(event) => onViewAll(event.currentTarget)}>查看全部便签</button>
-          <button type="button" className="btn btn-icon" aria-label="新增便签" onClick={onCreateNote}>
+          <button type="button" className="link-btn" onClick={(event) => onViewAll(event.currentTarget)}>{t('notesWidget.viewAll')}</button>
+          <button type="button" className="btn btn-icon" aria-label={t('notesWidget.newNote')} onClick={onCreateNote}>
             <Plus aria-hidden="true" />
           </button>
         </div>
@@ -38,23 +39,23 @@ export function NotesWidget({
       <div data-testid="notes-scroll" className="panel-body">
         {status === 'error' ? (
           <div className="module-message" role="alert">
-            <span>{errorMessage ?? '无法读取便签。'}</span>
-            <button type="button" className="link-btn" aria-label="重试读取便签" onClick={onRetry}>
-              重试
+            <span>{errorMessage ?? t('notesWidget.errorLoad')}</span>
+            <button type="button" className="link-btn" aria-label={t('notesWidget.retryLoad')} onClick={onRetry}>
+              {t('common.retry')}
             </button>
           </div>
         ) : null}
-        {status === 'loading' ? <p className="empty-copy">正在读取本地便签</p> : null}
+        {status === 'loading' ? <p className="empty-copy">{t('notesWidget.loading')}</p> : null}
         {status === 'ready' && sortedNotes.length === 0 ? (
           <div className="empty-state">
-            <p>还没有便签</p>
+            <p>{t('notesWidget.empty')}</p>
             <button
               type="button"
               className="link-btn"
-              aria-label="新建便签"
+              aria-label={t('notesWidget.createNote')}
               onClick={onCreateNote}
             >
-              新建便签
+              {t('notesWidget.createNote')}
             </button>
           </div>
         ) : null}

@@ -1,18 +1,27 @@
 // Kanban module domain types. Colors are stored as canonical HEX values; lanes
 // represent status, so cards have no independent completion flag.
 import { DESIGN_COLORS, type ColorPreset, type HexColor } from '../lib/color';
+import { t } from '../i18n';
 
 export type KanbanColor = HexColor;
-export const kanbanColorPresets: readonly ColorPreset[] = [
-  { value: DESIGN_COLORS.primary, label: '青绿' },
-  { value: DESIGN_COLORS.success, label: '草绿' },
-  { value: DESIGN_COLORS.info, label: '靛蓝' },
-  { value: DESIGN_COLORS.warning, label: '暖黄' },
-  { value: DESIGN_COLORS.danger, label: '珊瑚红' }
-];
+
+// Static value list (labels omitted) for logic that only needs the colors:
+// preset detection, default selection, type derivation. Kept language-free so
+// it stays a stable module constant.
+const kanbanColorValues = [
+  { value: DESIGN_COLORS.primary, labelKey: 'color.teal' },
+  { value: DESIGN_COLORS.success, labelKey: 'color.green' },
+  { value: DESIGN_COLORS.info, labelKey: 'color.indigo' },
+  { value: DESIGN_COLORS.warning, labelKey: 'color.amber' },
+  { value: DESIGN_COLORS.danger, labelKey: 'color.coral' }
+] as const;
+
+// Language-aware presets. Reads the active language at call time.
+export function kanbanColorPresets(): readonly ColorPreset[] {
+  return kanbanColorValues.map(({ value, labelKey }) => ({ value, label: t(labelKey) }));
+}
 export const DEFAULT_KANBAN_COLOR = DESIGN_COLORS.primary;
-export const kanbanColors = kanbanColorPresets.map(({ value }) => value) as readonly KanbanColor[];
-export const kanbanColorLabels = Object.fromEntries(kanbanColorPresets.map((preset) => [preset.value, preset.label])) as Record<KanbanColor, string>;
+export const kanbanColors = kanbanColorValues.map(({ value }) => value) as readonly KanbanColor[];
 
 export type KanbanLane = {
   id: string;

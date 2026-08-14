@@ -1,6 +1,12 @@
 import type { CalendarDay } from '../calendar/calendar-model';
+import { getLanguage } from '../i18n';
 
 const weekdayNames = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+const weekdayNamesEn = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const monthNamesEn = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+];
 
 export function toIsoDate(date: Date): string {
   const year = date.getFullYear();
@@ -9,7 +15,13 @@ export function toIsoDate(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+// Full, human-friendly date used in dialog titles and date-picker aria labels.
+// Language-aware: Chinese uses the native year/month/day form, English uses a
+// long-form date with weekday.
 export function formatChineseDate(date: Date): string {
+  if (getLanguage() === 'en') {
+    return `${weekdayNamesEn[date.getDay()]}, ${monthNamesEn[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+  }
   return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日 ${weekdayNames[date.getDay()]}`;
 }
 

@@ -22,6 +22,7 @@ import type {
   KanbanTag
 } from './kanban-model';
 import { KanbanMultiSelect } from './KanbanMultiSelect';
+import { t } from '../i18n';
 
 type TaskMode =
   | { type: 'create'; laneId: string; laneName: string }
@@ -42,7 +43,7 @@ type KanbanTaskDialogProps = {
 function errorMessage(error: unknown) {
   return typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string'
     ? error.message
-    : '操作失败，请重试。';
+    : t('common.opFailed');
 }
 
 export function KanbanTaskDialog({
@@ -73,9 +74,9 @@ export function KanbanTaskDialog({
   // Keep a stale priority id selectable so an edited card that references a
   // just-deleted priority does not silently lose it before the user reacts.
   const priorityOptions = [
-    { value: '', label: '无优先级' },
+    { value: '', label: t('kanbanTask.noPriority') },
     ...(form.priorityId && !priorities.some((item) => item.id === form.priorityId)
-      ? [{ value: form.priorityId, label: '已失效的优先级' }]
+      ? [{ value: form.priorityId, label: t('kanbanTask.stalePriority') }]
       : []),
     ...priorities.map((item) => ({ value: item.id, label: item.name }))
   ];
@@ -133,14 +134,14 @@ export function KanbanTaskDialog({
   return (
     <>
       <Dialog
-        title={mode.type === 'create' ? `在“${mode.laneName}”新建任务` : '编辑任务'}
+        title={mode.type === 'create' ? t('kanbanTask.createTitle', { lane: mode.laneName }) : t('kanbanTask.editTitle')}
         ariaLabelledBy={titleId}
         isTopLayer={!confirm && !dateOpen}
         restoreFocusRef={restoreFocusRef}
         onRequestClose={requestClose}
         className="task-dialog"
         headerActions={
-          <button type="button" aria-label="关闭" className="good-icon-button" disabled={busy} onClick={requestClose}>
+          <button type="button" aria-label={t('common.close')} className="good-icon-button" disabled={busy} onClick={requestClose}>
             <X aria-hidden="true" />
           </button>
         }
@@ -149,19 +150,19 @@ export function KanbanTaskDialog({
             {dialogError && !confirm ? <div role="alert" className="dialog-error">{dialogError}</div> : null}
             {mode.type === 'edit' ? (
               <button type="button" className="good-button good-button--danger-ghost" disabled={busy} onClick={() => setConfirm('delete')}>
-                删除任务
+                {t('kanbanTask.deleteTask')}
               </button>
             ) : null}
-            <button type="button" className="good-button" disabled={busy} onClick={requestClose}>取消</button>
+            <button type="button" className="good-button" disabled={busy} onClick={requestClose}>{t('common.cancel')}</button>
             <button type="button" className="good-button good-button--primary" disabled={busy} onClick={() => void save()}>
-              {busy ? '正在保存' : '保存任务'}
+              {busy ? t('common.saving') : t('kanbanTask.saveTask')}
             </button>
           </div>
         }
       >
         <form className="task-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
           <div className="good-field">
-            <label htmlFor="kanban-card-title">任务标题</label>
+            <label htmlFor="kanban-card-title">{t('kanbanTask.title')}</label>
             <input
               id="kanban-card-title" className="good-input" value={form.title} disabled={busy}
               aria-describedby={errors.title ? 'kanban-card-title-error' : undefined}
@@ -171,7 +172,7 @@ export function KanbanTaskDialog({
           </div>
 
           <div className="good-field">
-            <label htmlFor="kanban-card-desc">描述</label>
+            <label htmlFor="kanban-card-desc">{t('kanbanTask.description')}</label>
             <textarea
               id="kanban-card-desc" className="good-input good-textarea" value={form.description} disabled={busy}
               onChange={(event) => update('description', event.target.value)}
@@ -179,7 +180,7 @@ export function KanbanTaskDialog({
           </div>
 
           <DatePicker
-            id="kanban-card-due" label="截止日期" value={form.dueDate}
+            id="kanban-card-due" label={t('kanbanTask.dueDate')} value={form.dueDate}
             errorId={errors.dueDate ? 'kanban-card-due-error' : undefined}
             disabled={busy} open={dateOpen} onOpenChange={setDateOpen}
             onChange={(value) => update('dueDate', value)}
@@ -187,26 +188,26 @@ export function KanbanTaskDialog({
           {errors.dueDate ? <span id="kanban-card-due-error" className="field-error">{errors.dueDate}</span> : null}
 
           <Select
-            id="kanban-card-priority" name="priorityId" label="优先级" options={priorityOptions}
+            id="kanban-card-priority" name="priorityId" label={t('kanbanTask.priority')} options={priorityOptions}
             value={form.priorityId} disabled={busy}
             onChange={(value) => update('priorityId', value)}
           />
 
           <KanbanMultiSelect
-            legend="标签"
+            legend={t('kanbanTask.tags')}
             options={tags.map((tag) => ({ id: tag.id, label: tag.name }))}
             selected={form.tagIds}
             disabled={busy}
-            emptyHint="还没有标签，可在“管理字段”中新增。"
+            emptyHint={t('kanbanTask.tagsEmpty')}
             onToggle={(id, next) => update('tagIds', toggleFrom(form.tagIds, id, next))}
           />
 
           <KanbanMultiSelect
-            legend="协作人"
+            legend={t('kanbanTask.collaborators')}
             options={collaborators.map((person) => ({ id: person.id, label: person.name }))}
             selected={form.collaboratorIds}
             disabled={busy}
-            emptyHint="还没有协作人，可在“管理字段”中新增。"
+            emptyHint={t('kanbanTask.collaboratorsEmpty')}
             onToggle={(id, next) => update('collaboratorIds', toggleFrom(form.collaboratorIds, id, next))}
           />
         </form>
@@ -214,16 +215,16 @@ export function KanbanTaskDialog({
 
       {confirm === 'discard' ? (
         <ConfirmDialog
-          title="放弃更改？" description="未保存的内容将丢失。"
-          confirmLabel="放弃更改" busyLabel="正在放弃"
+          title={t('common.discardTitle')} description={t('common.discardDesc')}
+          confirmLabel={t('common.discard')} busyLabel={t('common.discarding')}
           onCancel={() => setConfirm(null)} onConfirm={onClose}
         />
       ) : null}
       {confirm === 'delete' && mode.type === 'edit' ? (
         <ConfirmDialog
-          title={`永久删除“${mode.card.title}”？`}
-          description="删除后无法恢复。"
-          tone="danger" confirmLabel="永久删除" busyLabel="正在删除" busy={busy}
+          title={t('kanbanTask.deleteTitle', { title: mode.card.title })}
+          description={t('common.deleteUnrecoverable')}
+          tone="danger" confirmLabel={t('common.permanentDelete')} busyLabel={t('common.deleting')} busy={busy}
           errorMessage={dialogError}
           onCancel={() => { setConfirm(null); setDialogError(''); }}
           onConfirm={() => void remove()}

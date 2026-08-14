@@ -1,5 +1,6 @@
 import { Check, ChevronDown } from 'lucide-react';
 import { type KeyboardEvent, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { t } from '../i18n';
 
 export type SelectOption = {
   value: string;
@@ -19,7 +20,8 @@ type SelectProps = {
   errorId?: string;
 };
 
-export function Select({ id, name, label, options, value, onChange, placeholder = '请选择', searchable = false, disabled = false, errorId }: SelectProps) {
+export function Select({ id, name, label, options, value, onChange, placeholder, searchable = false, disabled = false, errorId }: SelectProps) {
+  const resolvedPlaceholder = placeholder ?? t('select.placeholder');
   const listboxId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -137,7 +139,7 @@ export function Select({ id, name, label, options, value, onChange, placeholder 
         onClick={() => open ? close(false) : openList()}
         onKeyDown={handleKeyDown}
       >
-        <span>{selected?.label ?? placeholder}</span>
+        <span>{selected?.label ?? resolvedPlaceholder}</span>
         <ChevronDown aria-hidden="true" />
       </button>
       {open ? (
@@ -147,7 +149,7 @@ export function Select({ id, name, label, options, value, onChange, placeholder 
               className="select-search"
               ref={searchRef}
               type="search"
-              aria-label={`搜索${label}`}
+              aria-label={t('select.search', { label })}
               aria-controls={listboxId}
               aria-activedescendant={activeOption ? `${listboxId}-${activeOption.value || 'empty'}` : undefined}
               value={query}
@@ -172,7 +174,7 @@ export function Select({ id, name, label, options, value, onChange, placeholder 
                 {option.value === value ? <Check aria-hidden="true" /> : null}
               </button>
             ))}
-            {filteredOptions.length === 0 ? <div className="select-empty">{options.length === 0 ? '暂无可选项' : '未找到匹配项'}</div> : null}
+            {filteredOptions.length === 0 ? <div className="select-empty">{options.length === 0 ? t('select.noOptions') : t('select.noMatch')}</div> : null}
           </div>
         </div>
       ) : null}

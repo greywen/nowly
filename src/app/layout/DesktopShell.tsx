@@ -15,6 +15,7 @@ import { TemplatePickerDialog } from '../../widgets/TemplatePickerDialog';
 import { ModuleGrid, type ModuleGridItem } from './ModuleGrid';
 import { BlurControl } from '../BlurControl';
 import { DEFAULT_BLUR, useBlur } from '../useBlur';
+import { t } from '../../i18n';
 
 type DesktopShellProps = {
   mode?: 'foreground' | 'wallpaper';
@@ -102,18 +103,18 @@ export function DesktopShell({
             <button
               type="button"
               className="btn"
-              aria-label="添加模块"
+              aria-label={t('shell.addModule')}
               onClick={() => setPickerOpen(true)}
             >
               <Plus aria-hidden="true" />
-              添加模块
+              {t('shell.addModule')}
             </button>
           ) : null}
           {foreground ? (
             <button
               type="button"
               className={`btn btn-icon${isEditing ? ' is-active' : ''}`}
-              aria-label={isEditing ? '完成编辑' : '编辑布局'}
+              aria-label={isEditing ? t('shell.finishEditing') : t('shell.editLayout')}
               aria-pressed={isEditing}
               onClick={() => setIsEditing((current) => !current)}
             >
@@ -121,7 +122,7 @@ export function DesktopShell({
             </button>
           ) : null}
           {foreground ? (
-            <button type="button" className="btn btn-icon" aria-label="打开设置" onClick={onOpenSettings}>
+            <button type="button" className="btn btn-icon" aria-label={t('shell.openSettings')} onClick={onOpenSettings}>
               <Settings aria-hidden="true" />
             </button>
           ) : null}
@@ -129,7 +130,7 @@ export function DesktopShell({
             <button
               type="button"
               className="btn btn-icon btn-primary"
-              aria-label="设为壁纸"
+              aria-label={t('shell.setWallpaper')}
               disabled={isModeSwitching}
               onClick={onSetWallpaper}
             >

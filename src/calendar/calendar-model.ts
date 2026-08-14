@@ -1,22 +1,23 @@
 import { DESIGN_COLORS, type ColorPreset, type HexColor } from '../lib/color';
+import { t } from '../i18n';
 
 export type EventCategory = 'work' | 'important' | 'personal' | 'learning';
 export type EventColor = HexColor;
 export type CalendarView = 'month' | 'week' | 'day' | 'list';
 
-export const eventCategoryLabels: Record<EventCategory, string> = {
-  work: '工作',
-  important: '重要',
-  personal: '个人',
-  learning: '学习'
-};
+// Language-aware category label. Reads the active language at call time.
+export function eventCategoryLabel(category: EventCategory): string {
+  return t(`category.${category}`);
+}
 
-export const eventColorPresets: readonly ColorPreset[] = [
-  { value: DESIGN_COLORS.primary, label: '青绿' },
-  { value: DESIGN_COLORS.danger, label: '珊瑚红' },
-  { value: DESIGN_COLORS.success, label: '草绿' },
-  { value: DESIGN_COLORS.warning, label: '暖黄' }
-];
+export function eventColorPresets(): readonly ColorPreset[] {
+  return [
+    { value: DESIGN_COLORS.primary, label: t('color.teal') },
+    { value: DESIGN_COLORS.danger, label: t('color.coral') },
+    { value: DESIGN_COLORS.success, label: t('color.green') },
+    { value: DESIGN_COLORS.warning, label: t('color.amber') }
+  ];
+}
 export const DEFAULT_EVENT_COLOR = DESIGN_COLORS.primary;
 
 export type EventDraft = {

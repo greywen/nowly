@@ -1,11 +1,12 @@
 import { Pause, Play, RotateCcw } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useModuleState, type ModuleHost } from './extension-module';
+import { t } from '../i18n';
 
 const PRESETS = [
-  { label: '25 分钟', minutes: 25 },
-  { label: '15 分钟', minutes: 15 },
-  { label: '5 分钟', minutes: 5 }
+  { labelKey: 'focusTimer.preset25', minutes: 25 },
+  { labelKey: 'focusTimer.preset15', minutes: 15 },
+  { labelKey: 'focusTimer.preset5', minutes: 5 }
 ];
 
 function format(totalSeconds: number) {
@@ -68,15 +69,15 @@ export function FocusTimerWidget({ host }: { host: ModuleHost }) {
     <div className="widget-content focus-timer">
       <div className="card-header">
         <div className="heading-group">
-          <h2>专注计时</h2>
+          <h2>{t('focusTimer.title')}</h2>
         </div>
       </div>
       <div className="panel-body focus-timer__body">
         <p className="focus-timer__display" aria-live="polite">
           {format(remaining)}
         </p>
-        <p className="focus-timer__hint">{done ? '专注完成，休息一下吧' : '保持专注，减少切换'}</p>
-        <div className="focus-timer__presets" role="group" aria-label="选择专注时长">
+        <p className="focus-timer__hint">{done ? t('focusTimer.done') : t('focusTimer.keepFocus')}</p>
+        <div className="focus-timer__presets" role="group" aria-label={t('focusTimer.selectDuration')}>
           {PRESETS.map((preset) => (
             <button
               key={preset.minutes}
@@ -85,7 +86,7 @@ export function FocusTimerWidget({ host }: { host: ModuleHost }) {
               aria-pressed={durationMinutes === preset.minutes}
               onClick={() => selectPreset(preset.minutes)}
             >
-              {preset.label}
+              {t(preset.labelKey)}
             </button>
           ))}
         </div>
@@ -93,16 +94,16 @@ export function FocusTimerWidget({ host }: { host: ModuleHost }) {
           <button
             type="button"
             className="btn btn-primary"
-            aria-label={running ? '暂停' : '开始'}
+            aria-label={running ? t('focusTimer.pause') : t('focusTimer.start')}
             disabled={done}
             onClick={() => setRunning((current) => !current)}
           >
             {running ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
-            {running ? '暂停' : '开始'}
+            {running ? t('focusTimer.pause') : t('focusTimer.start')}
           </button>
-          <button type="button" className="btn" aria-label="重置计时" onClick={reset}>
+          <button type="button" className="btn" aria-label={t('focusTimer.reset')} onClick={reset}>
             <RotateCcw aria-hidden="true" />
-            重置
+            {t('focusTimer.resetShort')}
           </button>
         </div>
       </div>

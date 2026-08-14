@@ -1,5 +1,6 @@
 import { DEFAULT_NOTE_COLOR, type Note, type NoteDraft } from '../notes/notes-model';
 import { normalizeHexColor } from './color';
+import { t } from '../i18n';
 
 export type NoteFormDraft = NoteDraft;
 export type NoteFieldErrors = Partial<Record<keyof NoteDraft, string>>;
@@ -13,8 +14,8 @@ export function noteToForm(note: Note): NoteFormDraft {
 }
 
 export function validateNoteForm(form: NoteFormDraft): NoteFieldErrors {
-  if (!form.title.trim()) return { title:'请输入便签标题。' };
-  if (!normalizeHexColor(form.color)) return { color:'请选择有效颜色。' };
+  if (!form.title.trim()) return { title:t('noteDraft.errorTitle') };
+  if (!normalizeHexColor(form.color)) return { color:t('noteDraft.errorColor') };
   return {};
 }
 

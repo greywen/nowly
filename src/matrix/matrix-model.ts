@@ -24,15 +24,20 @@ export const quadrantOrder: Quadrant[] = [
   'not_important_not_urgent'
 ];
 
-export const priorityLabels: Record<TaskPriority, string> = {
-  1: '高',
-  2: '中',
-  3: '低'
+import { t } from '../i18n';
+
+const priorityKeys: Record<TaskPriority, string> = {
+  1: 'priority.high',
+  2: 'priority.medium',
+  3: 'priority.low'
 };
 
-export const quadrantLabels: Record<Quadrant, string> = {
-  important_urgent: '重要且紧急',
-  important_not_urgent: '重要不紧急',
-  not_important_urgent: '不重要但紧急',
-  not_important_not_urgent: '不重要不紧急'
-};
+// Language-aware label lookups. These read the active language at call time so
+// a language switch (which re-renders the tree) produces the new strings.
+export function priorityLabel(priority: TaskPriority): string {
+  return t(priorityKeys[priority]);
+}
+
+export function quadrantLabel(quadrant: Quadrant): string {
+  return t(`quadrant.${quadrant}`);
+}

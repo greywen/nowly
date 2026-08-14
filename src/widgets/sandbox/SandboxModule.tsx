@@ -11,6 +11,7 @@ import {
   type SandboxInit
 } from './sandbox-protocol';
 import { createSandboxUrl } from './sandbox-runtime';
+import { t } from '../../i18n';
 
 // Runs a third-party extension inside an isolated iframe. The extension code
 // never touches this window: it can only post messages back, and the only
@@ -57,6 +58,7 @@ export function SandboxModule({
           kind: 'init',
           moduleId: host.moduleId,
           permissions,
+          errorPrefix: t('sandbox.runError'),
           // Only hand over today's date when the extension declared `today`.
           ...(permissions.includes('today') ? { todayIso: host.todayIso } : {})
         };

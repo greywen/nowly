@@ -1,9 +1,23 @@
 import { buildMonthGrid, toIsoDate, type WeekStart } from '../lib/date';
+import { getLanguage } from '../i18n';
 import type { CalendarDay, CalendarEvent, CalendarView, EventDraft, EventRange } from './calendar-model';
 
 export type DateFormat = 'localized' | 'iso';
 
 const weekdayNames = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+const weekdayNamesEn = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const monthNamesEn = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+];
+const monthShortEn = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+];
+
+function weekdayName(dayIndex: number): string {
+  return getLanguage() === 'en' ? weekdayNamesEn[dayIndex] : weekdayNames[dayIndex];
+}
 
 function pad(value: number) {
   return String(value).padStart(2, '0');
@@ -76,11 +90,15 @@ function formatDate(date: Date, dateFormat: DateFormat) {
   if (dateFormat === 'iso') {
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
   }
+  if (getLanguage() === 'en') {
+    return `${monthShortEn[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+  }
   return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
 }
 
 export function monthTitle(year: number, monthIndex: number, dateFormat: DateFormat = 'localized') {
   if (dateFormat === 'iso') return `${year}-${pad(monthIndex + 1)}`;
+  if (getLanguage() === 'en') return `${monthNamesEn[monthIndex]} ${year}`;
   return `${year}年${monthIndex + 1}月`;
 }
 
@@ -91,7 +109,7 @@ export function weekTitle(anchor: Date, weekStart: WeekStart = 'monday', dateFor
 }
 
 export function dayTitle(anchor: Date, dateFormat: DateFormat = 'localized') {
-  return `${formatDate(anchor, dateFormat)} ${weekdayNames[anchor.getDay()]}`;
+  return `${formatDate(anchor, dateFormat)} ${weekdayName(anchor.getDay())}`;
 }
 
 export function viewTitle(
@@ -499,7 +517,10 @@ export function groupEventsByDate(events: CalendarEvent[]): Array<{ isoDate: str
 export function listDateLabel(isoDate: string, dateFormat: DateFormat = 'localized') {
   const date = localDate(isoDate);
   if (dateFormat === 'iso') {
-    return `${toIsoDate(date)} ${weekdayNames[date.getDay()]}`;
+    return `${toIsoDate(date)} ${weekdayName(date.getDay())}`;
   }
-  return `${date.getMonth() + 1}月${date.getDate()}日 ${weekdayNames[date.getDay()]}`;
+  if (getLanguage() === 'en') {
+    return `${monthShortEn[date.getMonth()]} ${date.getDate()}, ${weekdayName(date.getDay())}`;
+  }
+  return `${date.getMonth() + 1}月${date.getDate()}日 ${weekdayName(date.getDay())}`;
 }

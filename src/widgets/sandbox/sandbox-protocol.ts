@@ -1,4 +1,5 @@
 import type { ModuleHost } from '../extension-module';
+import { t } from '../../i18n';
 
 // The wire protocol between the app (parent) and a sandboxed extension running
 // inside an isolated iframe. The channel marker lets both sides ignore any
@@ -27,6 +28,9 @@ export type SandboxInit = {
   moduleId: string;
   permissions: SandboxPermission[];
   todayIso?: string;
+  // Localized prefix shown before a runtime error message. Passed in from the
+  // host because the sandboxed runtime cannot reach the i18n tables itself.
+  errorPrefix?: string;
 };
 
 // Guest -> parent: an RPC call for one of the allowed host methods. This is the
@@ -122,11 +126,11 @@ export async function handleSandboxRequest(
   // Permission gate: the method's required permission must have been granted.
   const required = METHOD_PERMISSION[request.method];
   if (!grant.permissions.includes(required)) {
-    return reject(`扩展未获得「${required}」权限。`);
+    return reject(t('sandbox.noPermission', { permission: required }));
   }
   // Throttle gate: reject once the window is saturated.
   if (!grant.allow()) {
-    return reject('请求过于频繁，已被限流。');
+    return reject(t('sandbox.throttled'));
   }
 
   try {

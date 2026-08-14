@@ -10,6 +10,7 @@ import {
   type WidgetDefinition,
   type WidgetId
 } from './widget-registry';
+import { t } from '../i18n';
 
 type Props = {
   presentIds: Set<WidgetId>;
@@ -39,7 +40,7 @@ function ModuleCard({
       type="button"
       className={`template-card${added ? ' is-added' : ''}`}
       aria-pressed={added}
-      aria-label={added ? `移除${definition.name}` : `添加${definition.name}`}
+      aria-label={added ? t('template.remove', { name: definition.name }) : t('template.add', { name: definition.name })}
       onClick={onToggle}
     >
       <div className="template-card__meta">
@@ -51,12 +52,12 @@ function ModuleCard({
           <>
             <Check aria-hidden="true" className="template-card__action-added" />
             <Minus aria-hidden="true" className="template-card__action-remove" />
-            <span className="template-card__action-added">已添加</span>
-            <span className="template-card__action-remove">移除</span>
+            <span className="template-card__action-added">{t('template.added')}</span>
+            <span className="template-card__action-remove">{t('template.removeShort')}</span>
           </>
         ) : (
           <>
-            <Plus aria-hidden="true" /> 添加
+            <Plus aria-hidden="true" /> {t('template.addShort')}
           </>
         )}
       </span>
@@ -67,7 +68,7 @@ function ModuleCard({
 function errorMessage(error: unknown) {
   return typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string'
     ? (error.message as string)
-    : '模块上传失败，请重试。';
+    : t('template.uploadError');
 }
 
 export function TemplatePickerDialog({
@@ -94,7 +95,7 @@ export function TemplatePickerDialog({
     setError(null);
     try {
       const source = await file.text();
-      const name = file.name.replace(/\.[^.]+$/, '').trim() || '未命名模块';
+      const name = file.name.replace(/\.[^.]+$/, '').trim() || t('template.unnamed');
       await onInstallExtension({
         name,
         description: '',
@@ -110,19 +111,19 @@ export function TemplatePickerDialog({
 
   return (
     <Dialog
-      title="添加模块"
+      title={t('template.title')}
       ariaLabelledBy="template-picker-title"
       onRequestClose={onClose}
       className="template-picker-dialog"
       headerActions={
-        <button className="good-icon-button" aria-label="关闭" onClick={onClose}>
+        <button className="good-icon-button" aria-label={t('template.close')} onClick={onClose}>
           <X aria-hidden="true" />
         </button>
       }
     >
       <div className="template-picker">
         <section className="template-picker__group">
-          <h3>内置模块</h3>
+          <h3>{t('template.builtin')}</h3>
           <div className="template-grid">
             {builtinModules.map((definition) => (
               <ModuleCard
@@ -137,14 +138,14 @@ export function TemplatePickerDialog({
 
         <section className="template-picker__group">
           <div className="template-picker__group-head">
-            <h3>我的模块</h3>
+            <h3>{t('template.myModules')}</h3>
             <button
               type="button"
               className="good-button"
               onClick={() => fileInputRef.current?.click()}
             >
               <Upload aria-hidden="true" />
-              上传模块
+              {t('template.upload')}
             </button>
             <input
               ref={fileInputRef}
@@ -165,7 +166,7 @@ export function TemplatePickerDialog({
           ) : null}
           {sandboxExtensions.length === 0 ? (
             <p className="template-picker__empty">
-              选择一个 JavaScript 文件即可上传并识别模块。模块运行在隔离沙箱中，只能通过受限接口访问自身状态与日期。
+              {t('template.uploadHint')}
             </p>
           ) : (
             <div className="template-grid">
@@ -179,7 +180,7 @@ export function TemplatePickerDialog({
                       <button
                         type="button"
                         className="good-icon-button"
-                        aria-label={`删除模块 ${extension.name}`}
+                        aria-label={t('template.deleteModule', { name: extension.name })}
                         onClick={() => onUninstallExtension(extension)}
                       >
                         <Trash2 aria-hidden="true" />

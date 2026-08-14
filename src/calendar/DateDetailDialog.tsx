@@ -4,9 +4,10 @@ import { Dialog } from '../components/Dialog';
 import { formatChineseDate } from '../lib/date';
 import type { MatrixTask } from '../matrix/matrix-model';
 import {
-  eventCategoryLabels,
+  eventCategoryLabel,
   type CalendarEvent
 } from './calendar-model';
+import { t } from '../i18n';
 
 type DateDetailDialogProps = {
   isoDate: string;
@@ -35,8 +36,8 @@ function sortEvents(events: CalendarEvent[]) {
 }
 
 function eventAccessibleName(event: CalendarEvent) {
-  const time = event.allDay ? '全天' : event.startAt.slice(11, 16);
-  return `${time} ${event.title}，${eventCategoryLabels[event.category]}`;
+  const time = event.allDay ? t('calendar.allDay') : event.startAt.slice(11, 16);
+  return t('calendar.eventLabel', { time, title: event.title, category: eventCategoryLabel(event.category) });
 }
 
 export function DateDetailDialog({
@@ -64,7 +65,7 @@ export function DateDetailDialog({
       onRequestClose={onClose}
       className="date-detail-dialog"
       headerActions={
-        <button type="button" className="good-icon-button" aria-label="关闭日期详情" onClick={onClose}>
+        <button type="button" className="good-icon-button" aria-label={t('dateDetail.close')} onClick={onClose}>
           <X aria-hidden="true" />
         </button>
       }
@@ -72,20 +73,20 @@ export function DateDetailDialog({
         <>
           {onCreateTask ? (
             <button type="button" className="good-button" onClick={(event) => onCreateTask(isoDate, event.currentTarget)}>
-              新建任务
+              {t('dateDetail.newTask')}
             </button>
           ) : null}
           <button type="button" className="good-button good-button--primary" onClick={() => onCreateEvent(isoDate)}>
-            新建日程
+            {t('dateDetail.newEvent')}
           </button>
         </>
       }
     >
-      <p className="date-detail-dialog__summary">共 {dateEvents.length} 个日程</p>
+      <p className="date-detail-dialog__summary">{t('dateDetail.summary', { count: dateEvents.length })}</p>
       {dateEvents.length === 0 ? (
-        <div className="date-detail-dialog__empty">当天暂无日程</div>
+        <div className="date-detail-dialog__empty">{t('dateDetail.empty')}</div>
       ) : (
-        <ul aria-label="当日日程" className="date-detail-dialog__list">
+        <ul aria-label={t('dateDetail.dayEvents')} className="date-detail-dialog__list">
           {dateEvents.map((event) => {
             const linkedTaskTitle = event.linkedTaskId ? taskTitles.get(event.linkedTaskId) : undefined;
             return (
@@ -96,13 +97,13 @@ export function DateDetailDialog({
                   className="date-detail-dialog__event"
                   onClick={(clickEvent) => onEditEvent(event, clickEvent.currentTarget)}
                 >
-                  <span className="date-detail-dialog__time">{event.allDay ? '全天' : event.startAt.slice(11, 16)}</span>
+                  <span className="date-detail-dialog__time">{event.allDay ? t('calendar.allDay') : event.startAt.slice(11, 16)}</span>
                   <span className="date-detail-dialog__event-copy">
                     <strong>{event.title}</strong>
-                    {linkedTaskTitle ? <small>关联任务：{linkedTaskTitle}</small> : null}
+                    {linkedTaskTitle ? <small>{t('dateDetail.linkedTask', { title: linkedTaskTitle })}</small> : null}
                   </span>
                   <span className={`date-detail-dialog__category date-detail-dialog__category--${event.category}`}>
-                    {eventCategoryLabels[event.category]}
+                    {eventCategoryLabel(event.category)}
                   </span>
                 </button>
               </li>

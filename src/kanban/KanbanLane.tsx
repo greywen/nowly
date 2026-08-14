@@ -4,6 +4,7 @@ import type { DragEvent } from 'react';
 import { cardsInLane, type KanbanLane as KanbanLaneModel, type KanbanSnapshot } from './kanban-model';
 import { resolveCard } from './kanban-view';
 import { KanbanCard } from './KanbanCard';
+import { t } from '../i18n';
 
 type KanbanLaneProps = {
   lane: KanbanLaneModel;
@@ -44,7 +45,7 @@ export function KanbanLane({
   return (
     <section
       className={`kanban-lane${isDropTarget ? ' kanban-lane--drop' : ''}`}
-      aria-label={`泳道：${lane.name}`}
+      aria-label={t('kanbanLane.lane', { name: lane.name })}
       onDragOver={onLaneDragOver}
       onDrop={(event) => onLaneDrop(event, laneCards.length)}
     >
@@ -59,14 +60,14 @@ export function KanbanLane({
         <button type="button" className="kanban-lane__name" onClick={onEditLane}>
           {lane.name}
         </button>
-        <span className="kanban-lane__count" aria-label={`${lane.name} ${laneCards.length} 张任务`}>
+        <span className="kanban-lane__count" aria-label={t('kanbanLane.count', { name: lane.name, count: laneCards.length })}>
           {laneCards.length}
         </span>
         <div className="kanban-lane__actions">
           <button
             type="button"
             className="good-icon-button"
-            aria-label={`在${lane.name}新增任务`}
+            aria-label={t('kanbanLane.addTask', { name: lane.name })}
             onClick={onAddCard}
           >
             <Plus aria-hidden="true" />
@@ -75,7 +76,7 @@ export function KanbanLane({
       </header>
 
       <div className="kanban-lane__cards" data-testid="kanban-lane-cards">
-        {laneCards.length === 0 ? <p className="kanban-lane__empty">暂无任务</p> : null}
+        {laneCards.length === 0 ? <p className="kanban-lane__empty">{t('kanbanLane.empty')}</p> : null}
         {laneCards.map((card, index) => {
           return (
             <div

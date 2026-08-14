@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { Plus } from 'lucide-react';
+import { t } from '../i18n';
 import {
   colorStyle,
   isHexColor,
@@ -271,7 +272,7 @@ export function ColorPicker({ legend, name, value, presets, recentColors, disabl
       ref={popoverRef}
       className="color-picker__popover"
       role="dialog"
-      aria-label="自定义颜色"
+      aria-label={t('colorPicker.custom')}
       style={{ position: 'fixed', left: position.left, top: position.top } as CSSProperties}
     >
       <div className="color-picker__canvas">
@@ -279,11 +280,11 @@ export function ColorPicker({ legend, name, value, presets, recentColors, disabl
           className="color-picker__sv"
           role="slider"
           tabIndex={0}
-          aria-label="饱和度和亮度"
+          aria-label={t('colorPicker.sv')}
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={Math.round(hsv.s)}
-          aria-valuetext={`饱和度 ${Math.round(hsv.s)}%，亮度 ${Math.round(hsv.v)}%`}
+          aria-valuetext={t('colorPicker.svValue', { s: Math.round(hsv.s), v: Math.round(hsv.v) })}
           style={{ '--picker-hue': `hsl(${hsv.h} 100% 50%)` } as CSSProperties}
           onPointerDown={(event) => beginDrag(event, updateSaturationBrightness)}
           onPointerMove={(event) => {
@@ -308,7 +309,7 @@ export function ColorPicker({ legend, name, value, presets, recentColors, disabl
           className="color-picker__hue"
           role="slider"
           tabIndex={0}
-          aria-label="色相"
+          aria-label={t('colorPicker.hue')}
           aria-orientation="vertical"
           aria-valuemin={0}
           aria-valuemax={359}
@@ -335,27 +336,27 @@ export function ColorPicker({ legend, name, value, presets, recentColors, disabl
           inputMode="text"
           spellCheck={false}
           maxLength={7}
-          aria-label="十六进制颜色值"
+          aria-label={t('colorPicker.hex')}
           value={hexInput}
           onChange={(event) => onHexInputChange(event.target.value)}
           onBlur={() => setHexInput(draftHex)}
         />
       </div>
       {history.length > 0 ? (
-        <div className="color-picker__recent" role="group" aria-label="最近使用颜色">
+        <div className="color-picker__recent" role="group" aria-label={t('colorPicker.recent')}>
           {history.map((color) => (
             <button
               key={color}
               type="button"
               className="color-picker__recent-color"
-              aria-label={`历史颜色 ${color}`}
+              aria-label={t('colorPicker.recentColor', { color })}
               style={colorStyle(color)}
               onClick={() => selectHistory(color)}
             />
           ))}
         </div>
       ) : (
-        <p className="color-picker__recent-empty" role="group" aria-label="最近使用颜色">暂无历史颜色</p>
+        <p className="color-picker__recent-empty" role="group" aria-label={t('colorPicker.recent')}>{t('colorPicker.recentEmpty')}</p>
       )}
     </div>,
     document.body
@@ -384,7 +385,7 @@ export function ColorPicker({ legend, name, value, presets, recentColors, disabl
             ref={triggerRef}
             type="button"
             className="color-picker__trigger"
-            aria-label="选择自定义颜色"
+            aria-label={t('colorPicker.pickCustom')}
             aria-expanded={open}
             aria-pressed={isCustom}
             disabled={disabled}

@@ -10,6 +10,7 @@ import { kanbanColorPresets,
   type KanbanLaneDraft
 } from './kanban-model';
 import type { HexColor } from '../lib/color';
+import { t } from '../i18n';
 
 type LaneDialogProps = {
   mode: { type: 'create' } | { type: 'edit'; lane: KanbanLane; cardCount: number };
@@ -25,7 +26,7 @@ type LaneDialogProps = {
 function message(error: unknown) {
   return typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string'
     ? (error.message as string)
-    : '操作失败，请重试。';
+    : t('common.opFailed');
 }
 
 export function KanbanLaneDialog({ mode, restoreFocusRef, onClose, onCreate, onUpdate, onDelete, recentColors = [], onRememberCustomColor }: LaneDialogProps) {
@@ -33,7 +34,7 @@ export function KanbanLaneDialog({ mode, restoreFocusRef, onClose, onCreate, onU
     () =>
       mode.type === 'edit'
         ? { name: mode.lane.name, color: mode.lane.color }
-        : { name: '', color: kanbanColorPresets[0].value as KanbanColor },
+        : { name: '', color: kanbanColorPresets()[0].value as KanbanColor },
     [mode]
   );
   const [name, setName] = useState(initial.name);
@@ -53,7 +54,7 @@ export function KanbanLaneDialog({ mode, restoreFocusRef, onClose, onCreate, onU
 
   async function save() {
     if (!name.trim()) {
-      setError('请输入泳道名称。');
+      setError(t('kanbanLaneDialog.errorName'));
       return;
     }
     setError('');
@@ -63,7 +64,7 @@ export function KanbanLaneDialog({ mode, restoreFocusRef, onClose, onCreate, onU
       const draft: KanbanLaneDraft = { name: name.trim(), color };
       if (mode.type === 'create') await onCreate(draft);
       else await onUpdate(mode.lane, draft);
-      if (onRememberCustomColor && !kanbanColorPresets.some((preset) => preset.value === color)) await onRememberCustomColor(color);
+      if (onRememberCustomColor && !kanbanColorPresets().some((preset) => preset.value === color)) await onRememberCustomColor(color);
       onClose();
     } catch (reason) {
       const repositoryError = reason as RepositoryError;
@@ -95,14 +96,14 @@ export function KanbanLaneDialog({ mode, restoreFocusRef, onClose, onCreate, onU
   return (
     <>
       <Dialog
-        title={mode.type === 'create' ? '新建泳道' : '编辑泳道'}
+        title={mode.type === 'create' ? t('kanbanLaneDialog.createTitle') : t('kanbanLaneDialog.editTitle')}
         ariaLabelledBy={titleId}
         isTopLayer={!confirmDelete}
         restoreFocusRef={restoreFocusRef}
         onRequestClose={requestClose}
         className="kanban-lane-dialog"
         headerActions={
-          <button type="button" aria-label="关闭" className="good-icon-button" disabled={busy} onClick={requestClose}>
+          <button type="button" aria-label={t('common.close')} className="good-icon-button" disabled={busy} onClick={requestClose}>
             <X aria-hidden="true" />
           </button>
         }
@@ -120,11 +121,11 @@ export function KanbanLaneDialog({ mode, restoreFocusRef, onClose, onCreate, onU
                 disabled={busy}
                 onClick={() => setConfirmDelete(true)}
               >
-                删除泳道
+                {t('kanbanLaneDialog.deleteLane')}
               </button>
             ) : null}
             <button type="button" className="good-button" disabled={busy} onClick={requestClose}>
-              取消
+              {t('common.cancel')}
             </button>
             <button
               type="button"
@@ -132,14 +133,14 @@ export function KanbanLaneDialog({ mode, restoreFocusRef, onClose, onCreate, onU
               disabled={busy || (mode.type === 'edit' && !dirty)}
               onClick={() => void save()}
             >
-              {busy ? '正在保存' : '保存泳道'}
+              {busy ? t('common.saving') : t('kanbanLaneDialog.saveLane')}
             </button>
           </div>
         }
       >
         <form className="kanban-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
           <div className="good-field">
-            <label htmlFor="lane-name">泳道名称</label>
+            <label htmlFor="lane-name">{t('kanbanLaneDialog.name')}</label>
             <input
               id="lane-name"
               className="good-input"
@@ -155,21 +156,21 @@ export function KanbanLaneDialog({ mode, restoreFocusRef, onClose, onCreate, onU
             ) : null}
           </div>
 
-          <ColorPicker legend="泳道颜色" name="lane-color" value={color} presets={kanbanColorPresets} recentColors={recentColors} disabled={busy} onChange={setColor} onRememberColor={onRememberCustomColor} />
+          <ColorPicker legend={t('kanbanLaneDialog.color')} name="lane-color" value={color} presets={kanbanColorPresets()} recentColors={recentColors} disabled={busy} onChange={setColor} onRememberColor={onRememberCustomColor} />
         </form>
       </Dialog>
 
       {confirmDelete && mode.type === 'edit' ? (
         <ConfirmDialog
-          title={`永久删除泳道“${mode.lane.name}”？`}
+          title={t('kanbanLaneDialog.deleteTitle', { name: mode.lane.name })}
           description={
             mode.cardCount > 0
-              ? `该泳道包含 ${mode.cardCount} 张任务，删除后将一并永久删除，无法恢复。`
-              : '该泳道当前没有任务，删除后无法恢复。'
+              ? t('kanbanLaneDialog.deleteWithCards', { count: mode.cardCount })
+              : t('kanbanLaneDialog.deleteEmpty')
           }
           tone="danger"
-          confirmLabel="永久删除"
-          busyLabel="正在删除"
+          confirmLabel={t('common.permanentDelete')}
+          busyLabel={t('common.deleting')}
           busy={busy}
           errorMessage={dialogError}
           onCancel={() => {

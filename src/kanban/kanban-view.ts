@@ -7,6 +7,7 @@ import type {
   KanbanTag
 } from './kanban-model';
 import { cardsInLane } from './kanban-model';
+import { t } from '../i18n';
 
 // A card enriched with the resolved global fields it references, so the view
 // can render names / colors without repeatedly looking them up by id.
@@ -44,11 +45,11 @@ export function colorClass(color: string): string {
 
 // Human-friendly due date, e.g. "7 月 23 日" or "今天" when it matches today.
 export function formatDueDate(dueDate: string, todayIso: string): string {
-  if (dueDate === todayIso) return '今天到期';
+  if (dueDate === todayIso) return t('kanbanDue.today');
   const month = Number(dueDate.slice(5, 7));
   const day = Number(dueDate.slice(8, 10));
   if (!month || !day) return dueDate;
-  return `${month} 月 ${day} 日`;
+  return t('kanbanDue.monthDay', { month, day });
 }
 
 // The lane order as ids, used as the base for keyboard "move left / right".

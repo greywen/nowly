@@ -3,6 +3,7 @@ import { useNowlyRepository } from '../data/RepositoryContext';
 import type { WeekStart } from '../lib/date';
 import type { CalendarEvent, CalendarView, EventDraft } from './calendar-model';
 import { monthRange, rangeFor, resizeEventEndToDate, shiftEventToDate, shiftEventToHour } from './calendar-view';
+import { t } from '../i18n';
 
 type EventsResource =
   | { status: 'loading'; data: CalendarEvent[] }
@@ -17,7 +18,7 @@ function messageFrom(error: unknown) {
   if (typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string') {
     return error.message;
   }
-  return '无法读取本地日程，请重试。';
+  return t('calendar.readError');
 }
 
 function pad(value: number) {

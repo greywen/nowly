@@ -6,6 +6,7 @@ import {
   type EventDraft
 } from '../calendar/calendar-model';
 import { normalizeHexColor } from './color';
+import { t } from '../i18n';
 
 export type EventFormDraft = {
   title: string;
@@ -84,17 +85,17 @@ export function toEventDraft(form: EventFormDraft): EventDraft {
 }
 
 export function validateEventForm(form: EventFormDraft): EventFieldErrors {
-  if (!form.title.trim()) return { title: '请输入日程标题。' };
-  if (!form.startDate) return { startAt: '请选择开始日期。' };
-  if (!form.endDate) return { endAt: '请选择结束日期。' };
-  if (form.endDate < form.startDate) return { endAt: '结束日期不能早于开始日期。' };
-  if (!form.allDay && !form.startTime) return { startAt: '请选择开始时间。' };
-  if (!form.allDay && !form.endTime) return { endAt: '请选择结束时间。' };
+  if (!form.title.trim()) return { title: t('eventDraft.errorTitle') };
+  if (!form.startDate) return { startAt: t('eventDraft.errorStartDate') };
+  if (!form.endDate) return { endAt: t('eventDraft.errorEndDate') };
+  if (form.endDate < form.startDate) return { endAt: t('eventDraft.errorEndBeforeStart') };
+  if (!form.allDay && !form.startTime) return { startAt: t('eventDraft.errorStartTime') };
+  if (!form.allDay && !form.endTime) return { endAt: t('eventDraft.errorEndTime') };
   if (!form.allDay && form.startDate === form.endDate && form.endTime < form.startTime) {
-    return { endAt: '结束时间不能早于开始时间。' };
+    return { endAt: t('eventDraft.errorEndTimeBeforeStart') };
   }
-  if (!categories.includes(form.category)) return { category: '请选择有效分类。' };
-  if (!normalizeHexColor(form.color)) return { color: '请选择有效颜色。' };
+  if (!categories.includes(form.category)) return { category: t('eventDraft.errorCategory') };
+  if (!normalizeHexColor(form.color)) return { color: t('eventDraft.errorColor') };
   return {};
 }
 

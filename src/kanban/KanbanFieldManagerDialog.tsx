@@ -7,6 +7,7 @@ import { Dialog } from '../components/Dialog';
 import { colorStyle, isPresetColor } from '../lib/color';
 import { collaboratorUsage, priorityUsage, tagUsage } from './kanban-view';
 import { DEFAULT_KANBAN_COLOR, kanbanColorPresets } from './kanban-model';
+import { t } from '../i18n';
 import type {
   KanbanCollaborator,
   KanbanCollaboratorDraft,
@@ -41,7 +42,7 @@ type KanbanFieldManagerDialogProps = {
 function errorMessage(error: unknown) {
   return typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string'
     ? error.message
-    : '操作失败，请重试。';
+    : t('common.opFailed');
 }
 
 type ColoredItem = { id: string; name: string; color: KanbanColor };
@@ -97,7 +98,7 @@ export function KanbanFieldManagerDialog({
   async function submit() {
     const trimmed = name.trim();
     if (!trimmed) {
-      setFormError('请输入名称。');
+      setFormError(t('kanbanField.errorName'));
       return;
     }
     setBusy(true);
@@ -113,7 +114,7 @@ export function KanbanFieldManagerDialog({
         if (editingId) await updateCollaborator(editingId, { name: trimmed });
         else await createCollaborator({ name: trimmed });
       }
-      if (tab !== 'collaborators' && onRememberCustomColor && !isPresetColor(color, kanbanColorPresets)) await onRememberCustomColor(color);
+      if (tab !== 'collaborators' && onRememberCustomColor && !isPresetColor(color, kanbanColorPresets())) await onRememberCustomColor(color);
       resetForm();
     } catch (error) {
       setFormError(errorMessage(error));
@@ -184,34 +185,34 @@ export function KanbanFieldManagerDialog({
   }, [snapshot, tab]);
 
   const tabLabels: Record<FieldTab, string> = {
-    priorities: '优先级',
-    tags: '标签',
-    collaborators: '协作人'
+    priorities: t('kanbanField.priorities'),
+    tags: t('kanbanField.tags'),
+    collaborators: t('kanbanField.collaborators')
   };
 
   const deleteImpact = (usage: number) =>
     tab === 'priorities'
-      ? `有 ${usage} 张任务使用该优先级，删除后这些任务的优先级会清空，任务保留。`
+      ? t('kanbanField.deletePriorityImpact', { count: usage })
       : tab === 'tags'
-        ? `有 ${usage} 张任务使用该标签，删除后只解除关联，任务保留。`
-        : `有 ${usage} 张任务关联该协作人，删除后只解除关联，任务保留。`;
+        ? t('kanbanField.deleteTagImpact', { count: usage })
+        : t('kanbanField.deleteCollaboratorImpact', { count: usage });
 
   return (
     <>
       <Dialog
-        title="管理字段"
+        title={t('kanbanField.title')}
         ariaLabelledBy={titleId}
         isTopLayer={!confirmDelete}
         restoreFocusRef={restoreFocusRef}
         onRequestClose={busy ? () => undefined : onClose}
         className="kanban-field-dialog"
         headerActions={
-          <button type="button" aria-label="关闭" className="good-icon-button" disabled={busy} onClick={onClose}>
+          <button type="button" aria-label={t('kanbanField.close')} className="good-icon-button" disabled={busy} onClick={onClose}>
             <X aria-hidden="true" />
           </button>
         }
       >
-        <div className="kanban-field" role="tablist" aria-label="字段类型">
+        <div className="kanban-field" role="tablist" aria-label={t('kanbanField.fieldType')}>
           {(['priorities', 'tags', 'collaborators'] as FieldTab[]).map((key) => (
             <button
               key={key}
@@ -234,7 +235,7 @@ export function KanbanFieldManagerDialog({
           }}
         >
           <div className="good-field">
-            <label htmlFor="kanban-field-name">{editingId ? `编辑${tabLabels[tab]}` : `新增${tabLabels[tab]}`}</label>
+            <label htmlFor="kanban-field-name">{editingId ? t('kanbanField.edit', { label: tabLabels[tab] }) : t('kanbanField.add', { label: tabLabels[tab] })}</label>
             <input
               id="kanban-field-name"
               className="good-input"
@@ -244,24 +245,24 @@ export function KanbanFieldManagerDialog({
             />
           </div>
           {hasColor ? (
-            <ColorPicker legend="颜色" name="kanban-field-color" value={color} presets={kanbanColorPresets} recentColors={recentColors} disabled={busy} onChange={setColor} onRememberColor={onRememberCustomColor} />
+            <ColorPicker legend={t('kanbanField.color')} name="kanban-field-color" value={color} presets={kanbanColorPresets()} recentColors={recentColors} disabled={busy} onChange={setColor} onRememberColor={onRememberCustomColor} />
           ) : null}
           {formError ? <div role="alert" className="dialog-error">{formError}</div> : null}
           <div className="kanban-field__form-actions">
             {editingId ? (
               <button type="button" className="good-button" disabled={busy} onClick={resetForm}>
-                取消编辑
+                {t('kanbanField.cancelEdit')}
               </button>
             ) : null}
             <button type="submit" className="good-button good-button--primary" disabled={busy}>
-              {editingId ? '保存修改' : `添加${tabLabels[tab]}`}
+              {editingId ? t('kanbanField.saveEdit') : t('kanbanField.addAction', { label: tabLabels[tab] })}
             </button>
           </div>
         </form>
 
-        <ul className="kanban-field__list" aria-label={`${tabLabels[tab]}列表`}>
+        <ul className="kanban-field__list" aria-label={t('kanbanField.list', { label: tabLabels[tab] })}>
           {rows.length === 0 ? (
-            <li className="kanban-field__empty">还没有{tabLabels[tab]}。</li>
+            <li className="kanban-field__empty">{t('kanbanField.empty', { label: tabLabels[tab] })}</li>
           ) : (
             rows.map((row, index) => (
               <li key={row.id} className="kanban-field__row">
@@ -276,14 +277,14 @@ export function KanbanFieldManagerDialog({
                 ) : (
                   <span className="kanban-field__name">{row.name}</span>
                 )}
-                <span className="kanban-field__usage">{row.usage} 张任务</span>
+                <span className="kanban-field__usage">{t('kanbanField.usage', { count: row.usage })}</span>
                 <span className="kanban-field__tools">
                   {tab === 'priorities' ? (
                     <>
                       <button
                         type="button"
                         className="good-icon-button"
-                        aria-label={`上移${row.name}`}
+                        aria-label={t('kanbanField.moveUp', { name: row.name })}
                         disabled={busy || index === 0}
                         onClick={() => void move(row.id, -1)}
                       >
@@ -292,7 +293,7 @@ export function KanbanFieldManagerDialog({
                       <button
                         type="button"
                         className="good-icon-button"
-                        aria-label={`下移${row.name}`}
+                        aria-label={t('kanbanField.moveDown', { name: row.name })}
                         disabled={busy || index === rows.length - 1}
                         onClick={() => void move(row.id, 1)}
                       >
@@ -303,7 +304,7 @@ export function KanbanFieldManagerDialog({
                   <button
                     type="button"
                     className="good-icon-button"
-                    aria-label={`编辑${row.name}`}
+                    aria-label={t('kanbanField.editItem', { name: row.name })}
                     disabled={busy}
                     onClick={() => beginEdit(row.color ? { id: row.id, name: row.name, color: row.color } : { id: row.id, name: row.name })}
                   >
@@ -312,7 +313,7 @@ export function KanbanFieldManagerDialog({
                   <button
                     type="button"
                     className="good-icon-button"
-                    aria-label={`删除${row.name}`}
+                    aria-label={t('kanbanField.deleteItem', { name: row.name })}
                     disabled={busy}
                     onClick={() => setConfirmDelete({ id: row.id, name: row.name, usage: row.usage })}
                   >
@@ -327,11 +328,11 @@ export function KanbanFieldManagerDialog({
 
       {confirmDelete ? (
         <ConfirmDialog
-          title={`删除“${confirmDelete.name}”？`}
+          title={t('kanbanField.deleteTitle', { name: confirmDelete.name })}
           description={deleteImpact(confirmDelete.usage)}
           tone="danger"
-          confirmLabel="删除"
-          busyLabel="正在删除"
+          confirmLabel={t('common.delete')}
+          busyLabel={t('common.deleting')}
           busy={busy}
           onCancel={() => setConfirmDelete(null)}
           onConfirm={() => void confirmRemoval()}

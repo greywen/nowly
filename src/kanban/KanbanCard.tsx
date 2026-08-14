@@ -3,6 +3,7 @@ import { colorStyle } from '../lib/color';
 import type { DragEvent } from 'react';
 import type { ResolvedCard } from './kanban-view';
 import { formatDueDate } from './kanban-view';
+import { t } from '../i18n';
 
 type KanbanCardProps = {
   resolved: ResolvedCard;
@@ -46,7 +47,7 @@ export function KanbanCard({
       draggable
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
-      aria-label={`任务：${card.title}`}
+      aria-label={t('kanbanCard.task', { title: card.title })}
     >
       {hasTop ? (
         <div className="kanban-card__top">
@@ -77,7 +78,7 @@ export function KanbanCard({
           {collaborators.length > 0 ? (
             <span
               className="kanban-card__people"
-              aria-label={`协作人：${collaborators.map((person) => person.name).join('、')}`}
+              aria-label={t('kanbanCard.collaborators', { names: collaborators.map((person) => person.name).join('、') })}
             >
               {visibleCollaborators.map((person) => (
                 <span key={person.id} className="kanban-avatar" title={person.name} aria-hidden="true">

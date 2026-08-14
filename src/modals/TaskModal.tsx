@@ -11,9 +11,10 @@ import {
   type TaskFieldErrors, type TaskFormDraft
 } from '../lib/task-draft';
 import {
-  priorityLabels, quadrantLabels, quadrantOrder,
+  priorityLabel, quadrantLabel, quadrantOrder,
   type MatrixTask, type Quadrant, type TaskDraft, type TaskPriority
 } from '../matrix/matrix-model';
+import { t } from '../i18n';
 
 type TaskModalProps = {
   mode: { type: 'create'; dueDate: string | null } | { type: 'edit'; task: MatrixTask };
@@ -27,13 +28,9 @@ type TaskModalProps = {
   deleteTask(task: MatrixTask): Promise<void>;
 };
 
-const priorityOptions = ([1, 2, 3] as TaskPriority[]).map((value) => ({
-  value: String(value), label: priorityLabels[value]
-}));
-
 function errorMessage(error: unknown) {
   return typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string'
-    ? error.message : '操作失败，请重试。';
+    ? error.message : t('common.opFailed');
 }
 
 export function TaskModal({
@@ -52,12 +49,15 @@ export function TaskModal({
   const titleId = useId();
 
   const eventOptions = [
-    { value: '', label: '无关联' },
+    { value: '', label: t('taskModal.noLink') },
     ...(form.linkedEventId && !events.some((event) => event.id === form.linkedEventId)
-      ? [{ value: form.linkedEventId, label: '已关联其他月份日程' }]
+      ? [{ value: form.linkedEventId, label: t('taskModal.staleLink') }]
       : []),
     ...events.map((event) => ({ value: event.id, label: event.title }))
   ];
+  const priorityOptions = ([1, 2, 3] as TaskPriority[]).map((value) => ({
+    value: String(value), label: priorityLabel(value)
+  }));
   const update = <K extends keyof TaskFormDraft>(key: K, value: TaskFormDraft[K]) =>
     setForm((current) => ({ ...current, [key]: value }));
 
@@ -110,14 +110,14 @@ export function TaskModal({
 
   return <>
     <Dialog
-      title={mode.type === 'create' ? '新建任务' : '编辑任务'}
+      title={mode.type === 'create' ? t('taskModal.createTitle') : t('taskModal.editTitle')}
       ariaLabelledBy={titleId}
       isTopLayer={!confirm && !dateOpen}
       restoreFocusRef={restoreFocusRef}
       onRequestClose={requestClose}
       className="task-dialog"
       headerActions={
-        <button type="button" aria-label="关闭" className="good-icon-button" disabled={busy} onClick={requestClose}>
+        <button type="button" aria-label={t('common.close')} className="good-icon-button" disabled={busy} onClick={requestClose}>
           <X aria-hidden="true" />
         </button>
       }
@@ -126,19 +126,19 @@ export function TaskModal({
           {dialogError && !confirm ? <div role="alert" className="dialog-error">{dialogError}</div> : null}
           {mode.type === 'edit' ? (
             <button type="button" className="good-button good-button--danger-ghost" disabled={busy} onClick={() => setConfirm('delete')}>
-              删除任务
+              {t('taskModal.deleteTask')}
             </button>
           ) : null}
-          <button type="button" className="good-button" disabled={busy} onClick={requestClose}>取消</button>
+          <button type="button" className="good-button" disabled={busy} onClick={requestClose}>{t('common.cancel')}</button>
           <button type="button" className="good-button good-button--primary" disabled={busy} onClick={() => void save()}>
-            {busy ? '正在保存' : '保存任务'}
+            {busy ? t('common.saving') : t('taskModal.saveTask')}
           </button>
         </div>
       }
     >
       <form className="task-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
         <div className="good-field">
-          <label htmlFor="task-title">任务标题</label>
+          <label htmlFor="task-title">{t('taskModal.title')}</label>
           <input
             id="task-title" className="good-input" value={form.title} disabled={busy}
             aria-describedby={errors.title ? 'task-title-error' : undefined}
@@ -148,7 +148,7 @@ export function TaskModal({
         </div>
 
         <fieldset className="task-quadrants">
-          <legend>所属象限</legend>
+          <legend>{t('taskModal.quadrant')}</legend>
           {quadrantOrder.map((quadrant) => (
             <label key={quadrant} className="form-check form-check-custom form-check-solid">
               <input
@@ -156,14 +156,14 @@ export function TaskModal({
                 checked={form.quadrant === quadrant} disabled={busy}
                 onChange={() => update('quadrant', quadrant as Quadrant)}
               />
-              <span className="form-check-label">{quadrantLabels[quadrant]}</span>
+              <span className="form-check-label">{quadrantLabel(quadrant)}</span>
             </label>
           ))}
         </fieldset>
         {errors.quadrant ? <span className="field-error">{errors.quadrant}</span> : null}
 
         <DatePicker
-          id="task-due-date" label="截止日期" value={form.dueAt}
+          id="task-due-date" label={t('taskModal.dueDate')} value={form.dueAt}
           errorId={errors.dueAt ? 'task-due-date-error' : undefined}
           disabled={busy} open={dateOpen} onOpenChange={setDateOpen}
           onChange={(value) => update('dueAt', value)}
@@ -171,14 +171,14 @@ export function TaskModal({
         {errors.dueAt ? <span id="task-due-date-error" className="field-error">{errors.dueAt}</span> : null}
 
         <Select
-          id="task-priority" name="priority" label="优先级" options={priorityOptions}
+          id="task-priority" name="priority" label={t('taskModal.priority')} options={priorityOptions}
           value={String(form.priority)} disabled={busy}
           onChange={(value) => update('priority', Number(value) as TaskPriority)}
         />
         {errors.priority ? <span className="field-error">{errors.priority}</span> : null}
 
         <Select
-          id="task-linked-event" name="linkedEventId" label="关联日程" options={eventOptions}
+          id="task-linked-event" name="linkedEventId" label={t('taskModal.linkedEvent')} options={eventOptions}
           value={form.linkedEventId} searchable disabled={busy}
           errorId={errors.linkedEventId ? 'task-linked-event-error' : undefined}
           onChange={(value) => update('linkedEventId', value)}
@@ -188,13 +188,13 @@ export function TaskModal({
         <label className="form-check form-check-custom form-check-solid">
           <input
             className="form-check-input" type="checkbox" checked={form.completed} disabled={busy}
-            aria-label="已完成" onChange={(event) => update('completed', event.target.checked)}
+            aria-label={t('taskModal.completed')} onChange={(event) => update('completed', event.target.checked)}
           />
-          <span className="form-check-label">已完成</span>
+          <span className="form-check-label">{t('taskModal.completed')}</span>
         </label>
 
         <div className="good-field">
-          <label htmlFor="task-note">备注</label>
+          <label htmlFor="task-note">{t('taskModal.note')}</label>
           <textarea id="task-note" className="good-input good-textarea" value={form.note} disabled={busy} onChange={(event) => update('note', event.target.value)} />
         </div>
       </form>
@@ -202,16 +202,16 @@ export function TaskModal({
 
     {confirm === 'discard' ? (
       <ConfirmDialog
-        title="放弃更改？" description="未保存的内容将丢失。"
-        confirmLabel="放弃更改" busyLabel="正在放弃"
+        title={t('common.discardTitle')} description={t('common.discardDesc')}
+        confirmLabel={t('common.discard')} busyLabel={t('common.discarding')}
         onCancel={() => setConfirm(null)} onConfirm={onClose}
       />
     ) : null}
     {confirm === 'delete' && mode.type === 'edit' ? (
       <ConfirmDialog
-        title={`永久删除“${mode.task.title}”？`}
-        description={<>删除后无法恢复。<br />若存在关联，只解除关联，不删除关联日程。</>}
-        tone="danger" confirmLabel="永久删除" busyLabel="正在删除" busy={busy}
+        title={t('taskModal.deleteTitle', { title: mode.task.title })}
+        description={<>{t('common.deleteUnrecoverable')}<br />{t('taskModal.deleteDesc2')}</>}
+        tone="danger" confirmLabel={t('common.permanentDelete')} busyLabel={t('common.deleting')} busy={busy}
         errorMessage={dialogError}
         onCancel={() => { setConfirm(null); setDialogError(''); }}
         onConfirm={() => void remove()}

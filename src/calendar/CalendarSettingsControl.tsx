@@ -2,6 +2,7 @@ import { Settings } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Select } from '../components/Select';
 import type { AppSettings } from '../data/nowly-repository';
+import { t } from '../i18n';
 
 export type CalendarSettings = Pick<AppSettings, 'weekStart' | 'dateFormat' | 'showWeekends'>;
 
@@ -39,7 +40,7 @@ export function CalendarSettingsControl({ settings, onChange }: Props) {
       <button
         type="button"
         className={`btn btn-icon${open ? ' is-active' : ''}`}
-        aria-label="日历设置"
+        aria-label={t('calendarSettings.label')}
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
@@ -47,19 +48,19 @@ export function CalendarSettingsControl({ settings, onChange }: Props) {
         <Settings aria-hidden="true" />
       </button>
       {open ? (
-        <div className="calendar-settings-popup" role="dialog" aria-label="日历设置">
+        <div className="calendar-settings-popup" role="dialog" aria-label={t('calendarSettings.label')}>
           <Select
             id="calendar-week-start"
-            label="每周开始日"
+            label={t('calendarSettings.weekStart')}
             value={settings.weekStart}
-            options={[{ value: 'monday', label: '周一' }, { value: 'sunday', label: '周日' }]}
+            options={[{ value: 'monday', label: t('calendarSettings.monday') }, { value: 'sunday', label: t('calendarSettings.sunday') }]}
             onChange={(value) => onChange({ ...settings, weekStart: value as AppSettings['weekStart'] })}
           />
           <Select
             id="calendar-date-format"
-            label="日期格式"
+            label={t('calendarSettings.dateFormat')}
             value={settings.dateFormat}
-            options={[{ value: 'localized', label: '本地格式' }, { value: 'iso', label: 'ISO 格式' }]}
+            options={[{ value: 'localized', label: t('calendarSettings.localized') }, { value: 'iso', label: t('calendarSettings.iso') }]}
             onChange={(value) => onChange({ ...settings, dateFormat: value as AppSettings['dateFormat'] })}
           />
           <label className="form-check form-check-custom form-check-solid">
@@ -69,7 +70,7 @@ export function CalendarSettingsControl({ settings, onChange }: Props) {
               checked={settings.showWeekends}
               onChange={(event) => onChange({ ...settings, showWeekends: event.target.checked })}
             />
-            <span className="form-check-label">显示周末</span>
+            <span className="form-check-label">{t('calendarSettings.showWeekends')}</span>
           </label>
         </div>
       ) : null}

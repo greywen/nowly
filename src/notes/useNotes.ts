@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNowlyRepository } from '../data/RepositoryContext';
 import { sortNotes } from '../lib/note-draft';
+import { t } from '../i18n';
 import type { Note, NoteDraft } from './notes-model';
 
 type NotesResource =
@@ -10,7 +11,7 @@ type NotesResource =
 
 function messageFrom(error: unknown) {
   return typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string'
-    ? error.message : '无法读取本地便签，请重试。';
+    ? error.message : t('notesWidget.readError');
 }
 
 export function useNotes() {

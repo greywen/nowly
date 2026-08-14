@@ -1,6 +1,7 @@
 import { Droplets } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { MAX_BLUR, MIN_BLUR } from './useBlur';
+import { t } from '../i18n';
 
 type Props = {
   blur: number;
@@ -47,7 +48,7 @@ export function BlurControl({ blur, onChange, onOpenChange }: Props) {
       <button
         type="button"
         className={`btn btn-icon${open ? ' is-active' : ''}`}
-        aria-label="调整模糊"
+        aria-label={t('blur.adjust')}
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
@@ -55,9 +56,9 @@ export function BlurControl({ blur, onChange, onOpenChange }: Props) {
         <Droplets aria-hidden="true" />
       </button>
       {open ? (
-        <div className="blur-popup" role="dialog" aria-label="模糊">
+        <div className="blur-popup" role="dialog" aria-label={t('blur.title')}>
           <div className="blur-popup__head">
-            <span className="blur-popup__title">模糊</span>
+            <span className="blur-popup__title">{t('blur.title')}</span>
             <span className="blur-popup__value" aria-live="polite">{percent}%</span>
           </div>
           <input
@@ -67,12 +68,12 @@ export function BlurControl({ blur, onChange, onOpenChange }: Props) {
             max={MAX_BLUR}
             step={1}
             value={blur}
-            aria-label="模糊"
+            aria-label={t('blur.title')}
             aria-valuetext={`${percent}%`}
             onChange={(event) => onChange(Number(event.target.value))}
           />
           <p className="blur-popup__hint">
-            模糊效果仅在调整时预览，并在设为壁纸后生效。
+            {t('blur.hint')}
           </p>
         </div>
       ) : null}

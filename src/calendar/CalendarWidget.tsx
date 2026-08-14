@@ -14,16 +14,19 @@ import {
   type EventSegment
 } from './calendar-view';
 import {
-  eventCategoryLabels,
+  eventCategoryLabel,
   type CalendarDay,
   type CalendarEvent,
   type CalendarView,
 } from './calendar-model';
 import { colorStyle } from '../lib/color';
+import { t } from '../i18n';
 
 // Indexed by day-of-week (0 = Sunday … 6 = Saturday) so a column's label can be
 // looked up directly from its weekday regardless of the week-start setting.
-const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
+function weekdayLabelsList() {
+  return t('calendar.weekdays').split(',');
+}
 const hours = Array.from({ length: 24 }, (_, index) => index);
 
 function pad(value: number) {
@@ -52,19 +55,25 @@ const LANE_HEIGHT_PX = 24;
 // How many single-day events a month cell shows before collapsing to "+N".
 const MONTH_MAX_SINGLES = 3;
 
-const viewOptions: Array<{ view: CalendarView; label: string }> = [
-  { view: 'month', label: '月' },
-  { view: 'week', label: '周' },
-  { view: 'day', label: '天' },
-  { view: 'list', label: '列表' }
-];
+function viewOptionsList(): Array<{ view: CalendarView; label: string }> {
+  return [
+    { view: 'month', label: t('calendar.viewMonth') },
+    { view: 'week', label: t('calendar.viewWeek') },
+    { view: 'day', label: t('calendar.viewDay') },
+    { view: 'list', label: t('calendar.viewList') }
+  ];
+}
 
-const navLabels: Record<CalendarView, { previous: string; next: string }> = {
-  month: { previous: '上一个月', next: '下一个月' },
-  week: { previous: '上一周', next: '下一周' },
-  day: { previous: '前一天', next: '后一天' },
-  list: { previous: '上一个月', next: '下一个月' }
-};
+function navLabelsFor(view: CalendarView): { previous: string; next: string } {
+  switch (view) {
+    case 'week':
+      return { previous: t('calendar.prevWeek'), next: t('calendar.nextWeek') };
+    case 'day':
+      return { previous: t('calendar.prevDay'), next: t('calendar.nextDay') };
+    default:
+      return { previous: t('calendar.prevMonth'), next: t('calendar.nextMonth') };
+  }
+}
 
 type LoadStatus = 'loading' | 'ready' | 'error';
 
@@ -94,19 +103,19 @@ type CalendarWidgetProps = {
 };
 
 function summaryFor(status: LoadStatus, count: number, view: CalendarView) {
-  const scope = view === 'week' ? '本周' : view === 'day' ? '当天' : '本月';
-  if (status === 'loading') return '正在读取本地日程';
-  return count ? `${scope} ${count} 个日程` : `${scope}暂无日程`;
+  const scope = view === 'week' ? t('calendar.scopeWeek') : view === 'day' ? t('calendar.scopeDay') : t('calendar.scopeMonth');
+  if (status === 'loading') return t('calendar.loading');
+  return count ? t('calendar.summaryCount', { scope, count }) : t('calendar.summaryEmpty', { scope });
 }
 
 function dateLabel(isoDate: string) {
   const [year, month, day] = isoDate.split('-').map(Number);
-  return `${year}年${month}月${day}日`;
+  return t('calendar.dayLabel', { year, month, day });
 }
 
 function eventLabel(event: CalendarEvent) {
-  const time = event.allDay ? '全天' : event.startAt.slice(11, 16);
-  return `${time} ${event.title}，${eventCategoryLabels[event.category]}`;
+  const time = event.allDay ? t('calendar.allDay') : event.startAt.slice(11, 16);
+  return t('calendar.eventLabel', { time, title: event.title, category: eventCategoryLabel(event.category) });
 }
 
 export function CalendarWidget({
@@ -146,7 +155,10 @@ export function CalendarWidget({
   // and weekend hiding all derive from the same source of truth.
   const startDow = weekStart === 'sunday' ? 0 : 1;
   const columnDows = Array.from({ length: 7 }, (_, col) => (startDow + col) % 7);
+  const weekdays = weekdayLabelsList();
   const weekdayLabels = columnDows.map((dow) => weekdays[dow]);
+  const viewOptions = viewOptionsList();
+  const navLabels = navLabelsFor(view);
   // Logical columns (0-6) that are actually rendered. When weekends are hidden
   // the Saturday/Sunday columns drop out, leaving five visible columns.
   const visibleCols = columnDows
@@ -562,7 +574,7 @@ export function CalendarWidget({
                   <button
                     type="button"
                     className="event-overflow-dots"
-                    aria-label={`另有 ${overflowByCol[col].length} 个日程`}
+                    aria-label={t('calendar.overflow', { count: overflowByCol[col].length })}
                     onClick={() => {
                       cancelDateClick();
                       onOpenDate(day.isoDate);
@@ -703,7 +715,7 @@ export function CalendarWidget({
             ))}
           </div>
         ) : null}
-        <div className={`day-grid day-grid--full-day${pointerActive ? ' is-dragging' : ''}`} aria-label="当日日程">
+        <div className={`day-grid day-grid--full-day${pointerActive ? ' is-dragging' : ''}`} aria-label={t('calendar.dayGrid')}>
           {hours.map((hour) => {
             const hourEvents = sortEvents(eventsByHour.get(hour) ?? []);
             return (
@@ -744,7 +756,7 @@ export function CalendarWidget({
     return (
       <div className="calendar-list-view calendar-scroll-region">
         {groups.length === 0 ? (
-          <div className="calendar-empty">本月暂无日程</div>
+          <div className="calendar-empty">{t('calendar.monthEmpty')}</div>
         ) : (
           groups.map((group) => (
             <section key={group.isoDate} className="calendar-list-group">
@@ -759,11 +771,11 @@ export function CalendarWidget({
                       className="calendar-list-item"
                     >
                       <span className="calendar-list-item__time">
-                        {event.allDay ? '全天' : event.startAt.slice(11, 16)}
+                        {event.allDay ? t('calendar.allDay') : event.startAt.slice(11, 16)}
                       </span>
                       <span className="calendar-list-item__title">{event.title}</span>
                       <span className={`calendar-list-item__category date-detail-dialog__category--${event.category}`}>
-                        {eventCategoryLabels[event.category]}
+                        {eventCategoryLabel(event.category)}
                       </span>
                     </button>
                   </li>
@@ -785,7 +797,7 @@ export function CalendarWidget({
         </div>
         <div className="toolbar-actions">
           {onSetView ? (
-            <div className="view-switch" role="group" aria-label="切换视图">
+            <div className="view-switch" role="group" aria-label={t('calendar.switchView')}>
               {viewOptions.map((option) => (
                 <button
                   key={option.view}
@@ -799,17 +811,17 @@ export function CalendarWidget({
               ))}
             </div>
           ) : null}
-          <button type="button" className="btn btn-icon" aria-label={navLabels[view].previous} onClick={onPreviousMonth}>
+          <button type="button" className="btn btn-icon" aria-label={navLabels.previous} onClick={onPreviousMonth}>
             <ChevronLeft aria-hidden="true" />
           </button>
-          <button type="button" className="btn" onClick={onToday}>今天</button>
-          <button type="button" className="btn btn-icon" aria-label={navLabels[view].next} onClick={onNextMonth}>
+          <button type="button" className="btn" onClick={onToday}>{t('calendar.today')}</button>
+          <button type="button" className="btn btn-icon" aria-label={navLabels.next} onClick={onNextMonth}>
             <ChevronRight aria-hidden="true" />
           </button>
           {calendarSettings && onChangeCalendarSettings ? (
             <CalendarSettingsControl settings={calendarSettings} onChange={onChangeCalendarSettings} />
           ) : null}
-          <button type="button" className="btn btn-icon btn-primary" aria-label="新建日程" onClick={onCreateEvent}>
+          <button type="button" className="btn btn-icon btn-primary" aria-label={t('calendar.newEvent')} onClick={onCreateEvent}>
             <Plus aria-hidden="true" />
           </button>
         </div>
@@ -817,9 +829,9 @@ export function CalendarWidget({
       <div className="calendar-body">
         {status === 'error' ? (
           <div className="module-message" role="alert">
-            <span>{errorMessage ?? '无法读取日程。'}</span>
-            <button type="button" className="link-btn" aria-label="重试读取日程" onClick={onRetry}>
-              重试
+            <span>{errorMessage ?? t('calendar.errorLoad')}</span>
+            <button type="button" className="link-btn" aria-label={t('calendar.retryLoad')} onClick={onRetry}>
+              {t('common.retry')}
             </button>
           </div>
         ) : null}

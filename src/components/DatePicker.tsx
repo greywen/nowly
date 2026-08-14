@@ -1,8 +1,11 @@
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { buildMonthGrid, formatChineseDate, toIsoDate } from '../lib/date';
+import { t } from '../i18n';
 
-const weekdayHeadings = ['一', '二', '三', '四', '五', '六', '日'];
+function weekdayHeadingsList() {
+  return t('datePicker.weekdays').split(',');
+}
 
 export type DatePickerProps = {
   id: string;
@@ -24,8 +27,8 @@ function parseIsoDate(value: string, fallback: Date) {
 
 function displayDate(value: string) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!match) return '请选择日期';
-  return `${Number(match[1])} 年 ${Number(match[2])} 月 ${Number(match[3])} 日`;
+  if (!match) return t('datePicker.placeholder');
+  return t('datePicker.value', { year: Number(match[1]), month: Number(match[2]), day: Number(match[3]) });
 }
 
 export function DatePicker({
@@ -149,15 +152,15 @@ export function DatePicker({
         <CalendarDays aria-hidden="true" />
       </button>
       {open ? (
-        <div id={dialogId} role="dialog" aria-label={`选择${label}`} className="date-picker__popup">
+        <div id={dialogId} role="dialog" aria-label={t('datePicker.select', { label })} className="date-picker__popup">
           <div className="date-picker__header">
-            <button type="button" aria-label="上一个月" onClick={() => changeVisibleMonth(-1)}><ChevronLeft aria-hidden="true" /></button>
-            <strong>{visibleMonth.year} 年 {visibleMonth.monthIndex + 1} 月</strong>
-            <button type="button" aria-label="下一个月" onClick={() => changeVisibleMonth(1)}><ChevronRight aria-hidden="true" /></button>
+            <button type="button" aria-label={t('datePicker.prevMonth')} onClick={() => changeVisibleMonth(-1)}><ChevronLeft aria-hidden="true" /></button>
+            <strong>{t('datePicker.header', { year: visibleMonth.year, month: visibleMonth.monthIndex + 1 })}</strong>
+            <button type="button" aria-label={t('datePicker.nextMonth')} onClick={() => changeVisibleMonth(1)}><ChevronRight aria-hidden="true" /></button>
           </div>
-          <div role="grid" aria-label={`${visibleMonth.year}年${visibleMonth.monthIndex + 1}月`} className="date-picker__calendar">
+          <div role="grid" aria-label={t('datePicker.grid', { year: visibleMonth.year, month: visibleMonth.monthIndex + 1 })} className="date-picker__calendar">
             <div role="row" className="date-picker__weekdays">
-              {weekdayHeadings.map((heading) => <span role="columnheader" key={heading}>{heading}</span>)}
+              {weekdayHeadingsList().map((heading) => <span role="columnheader" key={heading}>{heading}</span>)}
             </div>
             <div role="rowgroup" className="date-picker__days">
               {days.map((day) => {
@@ -185,8 +188,8 @@ export function DatePicker({
             </div>
           </div>
           <div className="date-picker__footer">
-            <button type="button" aria-label="清除日期" onClick={() => { onChange(''); close(true); }}>清除</button>
-            <button type="button" onClick={() => choose(today)}>今天</button>
+            <button type="button" aria-label={t('datePicker.clear')} onClick={() => { onChange(''); close(true); }}>{t('datePicker.clearShort')}</button>
+            <button type="button" onClick={() => choose(today)}>{t('datePicker.today')}</button>
           </div>
         </div>
       ) : null}

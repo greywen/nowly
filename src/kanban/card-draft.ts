@@ -1,4 +1,5 @@
 import type { KanbanCard, KanbanCardDraft } from './kanban-model';
+import { t } from '../i18n';
 
 // The editable form shape for a card. Uses '' for the empty date / priority so
 // native controls stay controlled; converted back to null on submit.
@@ -52,8 +53,8 @@ function validDate(value: string) {
 }
 
 export function validateCardForm(form: CardFormDraft): CardFieldErrors {
-  if (!form.title.trim()) return { title: '请输入任务标题。' };
-  if (form.dueDate && !validDate(form.dueDate)) return { dueDate: '请选择有效截止日期。' };
+  if (!form.title.trim()) return { title: t('kanbanDraft.errorTitle') };
+  if (form.dueDate && !validDate(form.dueDate)) return { dueDate: t('kanbanDraft.errorDueDate') };
   return {};
 }
 

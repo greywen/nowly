@@ -20,6 +20,7 @@ export const SANDBOX_RUNTIME = `(() => {
   var pending = {};
   var nextId = 1;
   var userModule = null;
+  var errorPrefix = 'Extension error: ';
 
   function call(method, args) {
     return new Promise(function (resolve, reject) {
@@ -63,14 +64,15 @@ export const SANDBOX_RUNTIME = `(() => {
 
     if (data.kind === 'init') {
       if (typeof userModule !== 'function') return;
+      if (typeof data.errorPrefix === 'string') errorPrefix = data.errorPrefix;
       var host = makeHost(data);
       var root = document.getElementById('root');
       try {
         Promise.resolve(userModule({ host: host, root: root })).catch(function (error) {
-          root.textContent = '扩展运行出错：' + (error && error.message ? error.message : error);
+          root.textContent = errorPrefix + (error && error.message ? error.message : error);
         });
       } catch (error) {
-        root.textContent = '扩展运行出错：' + (error && error.message ? error.message : error);
+        root.textContent = errorPrefix + (error && error.message ? error.message : error);
       }
     }
   });

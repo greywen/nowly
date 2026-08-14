@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { AppSettings } from '../data/nowly-repository';
 import { useNowlyRepository } from '../data/RepositoryContext';
+import { t } from '../i18n';
 
 type Resource<T> =
   | { status: 'loading'; data: T }
@@ -27,7 +28,7 @@ function messageFrom(error: unknown) {
   ) {
     return error.message;
   }
-  return '无法读取本地数据，请重试。';
+  return t('app.readError');
 }
 
 export function useAppBootstrap() {
