@@ -31,6 +31,7 @@ type DesktopShellProps = {
   onSetWallpaper?: () => void;
   onWallpaperDoubleClick?: () => void;
   onOpenSettings?: () => void;
+  overlay?: ReactNode;
 };
 
 // The wallpaper layer sits behind the app content. It stays hidden until a
@@ -52,7 +53,8 @@ export function DesktopShell({
   isModeSwitching = false,
   onSetWallpaper,
   onWallpaperDoubleClick,
-  onOpenSettings
+  onOpenSettings,
+  overlay
 }: DesktopShellProps) {
   const foreground = mode === 'foreground';
   const { layout, move, resize, addWidget, removeWidget, presentIds } =
@@ -149,6 +151,8 @@ export function DesktopShell({
           onRemove={removeWidget}
         />
       </main>
+
+      {overlay}
 
       {foreground && pickerOpen ? (
         <TemplatePickerDialog

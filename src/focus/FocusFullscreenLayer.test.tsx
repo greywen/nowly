@@ -1,0 +1,3 @@
+import{render,screen}from'@testing-library/react';import userEvent from'@testing-library/user-event';import{expect,it,vi}from'vitest';import{FocusFullscreenLayer}from'./FocusFullscreenLayer';
+const api=vi.hoisted(()=>({state:{status:'running',fullscreen:true,plannedSeconds:1500},remainingSeconds:1490,pause:vi.fn(),resume:vi.fn(),interrupt:vi.fn(),exitFullscreen:vi.fn(),start:vi.fn()}));vi.mock('./FocusTimerContext',()=>({useFocusTimer:()=>api}));
+it('exits fullscreen with Escape without interrupting the session',async()=>{const user=userEvent.setup();render(<FocusFullscreenLayer/>);expect(screen.getByRole('timer')).toHaveTextContent('24:50');await user.keyboard('{Escape}');expect(api.exitFullscreen).toHaveBeenCalled();expect(api.interrupt).not.toHaveBeenCalled()});

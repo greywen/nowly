@@ -1016,3 +1016,21 @@ button:disabled { cursor: default; opacity: .65; }
 .kanban-field__tools .good-icon-button:hover:not(:disabled) { color: var(--color-primary); border-color: var(--color-primary); }
 .kanban-field__tools .good-icon-button svg { width: 16px; height: 16px; }
 .kanban-field__empty { padding: 16px; color: var(--text-muted); font-size: 13.6px; text-align: center; border: 1px dashed var(--border-default); border-radius: var(--radius-default); }
+
+/* Focus timer and reports — all state changes are immediate per design.md. */
+.focus-timer { container-type: size; }
+.focus-timer__body { min-height:0; padding:20px 24px 24px; display:flex; flex-direction:column; align-items:center; gap:12px; }
+.focus-timer__display { margin:0; color:var(--text-primary); font-size:clamp(48px,10cqw,80px); font-weight:300; line-height:1; font-variant-numeric:tabular-nums; }
+.focus-timer__hint { margin:0; color:var(--text-muted); font-size:13.6px; }
+.focus-timer__presets,.focus-timer__actions { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; }
+.focus-timer__preset.is-active { color:var(--color-primary-active); background:var(--color-primary-light); }
+.focus-timer__trend { width:100%; margin-top:auto; padding:12px 0 0; display:grid; grid-template-columns:auto minmax(0,1fr); align-items:center; gap:16px; border:0; border-top:1px dashed var(--border-default); color:var(--text-secondary); background:transparent; text-align:left; }
+.focus-timer__trend strong,.focus-timer__trend small { display:block; }.focus-timer__trend strong{color:var(--text-primary);font-size:20px}.focus-timer__trend small{font-size:13.6px;color:var(--text-muted)}
+.focus-chart svg { width:100%; height:70px; overflow:visible; }.focus-chart line{stroke:var(--border-default)}.focus-chart polyline{fill:none;stroke:var(--color-primary);stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+@container (max-width:420px){.focus-timer__trend-chart{display:none}.focus-timer__trend{grid-template-columns:1fr}.focus-timer__body{padding:16px;gap:8px}}
+@container (max-height:390px){.focus-timer__trend-chart{display:none}.focus-timer__trend{grid-template-columns:1fr}.focus-timer__body{padding:16px;gap:8px}}
+.focus-statistics-dialog{width:min(760px,calc(100vw - 32px))}.focus-statistics__intro{margin:0 0 16px;color:var(--text-muted)}.focus-statistics__periods{display:flex;gap:8px;flex-wrap:wrap}.focus-statistics__periods [aria-pressed="true"]{color:var(--color-primary-active);background:var(--color-primary-light)}
+.focus-statistics__summaries{margin:20px 0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.focus-statistics__summaries div{padding:16px;border-radius:var(--radius-default);background:var(--bg-subtle)}.focus-statistics__summaries strong,.focus-statistics__summaries span{display:block}.focus-statistics__summaries strong{color:var(--text-primary);font-size:18.4px}.focus-statistics__summaries span,.focus-statistics__legend{color:var(--text-muted);font-size:13.6px}.focus-statistics__legend{display:flex;gap:20px;flex-wrap:wrap}
+.focus-fullscreen{position:absolute;inset:0;z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:32px;color:#fff;background:transparent;text-shadow:0 2px 14px rgba(0,0,0,.55)}.focus-fullscreen__brand{align-self:flex-start;font-size:13.6px;font-weight:600}.focus-fullscreen__center{text-align:center}.focus-fullscreen__center p{margin:0;font-size:clamp(80px,14vw,220px);font-weight:300;line-height:1;font-variant-numeric:tabular-nums}.focus-fullscreen__center span{display:block;margin-top:16px;font-size:17.2px}.focus-fullscreen__controls{display:flex;gap:8px;text-shadow:none}.focus-fullscreen__controls[hidden]{display:none}.focus-fullscreen__end{color:var(--color-danger-active);background:var(--color-danger-light)}
+@media(max-width:700px){.focus-statistics__summaries{grid-template-columns:repeat(2,1fr)}}

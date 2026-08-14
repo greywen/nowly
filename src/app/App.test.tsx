@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RepositoryProvider } from '../data/RepositoryContext';
 import type { AppSettings, NowlyRepository } from '../data/nowly-repository';
 import { App } from './App';
+import { FocusTimerProvider } from '../focus/FocusTimerContext';
 
 const invokeMock = vi.hoisted(() => vi.fn());
 const listenMock = vi.hoisted(() => vi.fn());
@@ -68,7 +69,9 @@ function createRepository(overrides: Partial<NowlyRepository> = {}): NowlyReposi
 function renderApp(repository = createRepository()) {
   return render(
     <RepositoryProvider repository={repository}>
-      <App />
+      <FocusTimerProvider>
+        <App />
+      </FocusTimerProvider>
     </RepositoryProvider>
   );
 }
