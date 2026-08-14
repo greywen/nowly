@@ -59,6 +59,8 @@ export function DesktopShell({
   const { blurRadius, setBlurRadius } = useBlurRadius();
   const [isEditing, setIsEditing] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [blurControlOpen, setBlurControlOpen] = useState(false);
+  const contentBlurRadius = !foreground || blurControlOpen ? blurRadius : 0;
 
   const items: ModuleGridItem[] = layout
     .filter(
@@ -75,9 +77,12 @@ export function DesktopShell({
       data-testid="desktop-root"
       onDoubleClickCapture={foreground ? undefined : onWallpaperDoubleClick}
       className="app-shell"
-      style={{ '--app-blur-radius': `${blurRadius}px` } as CSSProperties}
     >
       <WallpaperLayer />
+      <div
+        className="app-content-layer"
+        style={{ '--app-blur-radius': `${contentBlurRadius}px`, filter: `blur(${contentBlurRadius}px)` } as CSSProperties}
+      >
       <header className="topbar">
         <div className="date-copy">
           <strong>{dateText}</strong>
@@ -85,7 +90,11 @@ export function DesktopShell({
         </div>
         <div className="top-actions">
           {foreground ? (
-            <TransparencyControl blurRadius={blurRadius} onChange={setBlurRadius} />
+            <TransparencyControl
+              blurRadius={blurRadius}
+              onChange={setBlurRadius}
+              onOpenChange={setBlurControlOpen}
+            />
           ) : null}
           {foreground && isEditing ? (
             <button
@@ -137,6 +146,7 @@ export function DesktopShell({
           onRemove={removeWidget}
         />
       </main>
+      </div>
 
       {foreground && pickerOpen ? (
         <TemplatePickerDialog
