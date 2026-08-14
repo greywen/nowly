@@ -115,8 +115,8 @@ describe('DesktopShell', () => {
     expect(onWallpaperDoubleClick).toHaveBeenCalledOnce();
   });
 
-  it('applies the persisted blur radius to the complete shell in every mode', () => {
-    localStorage.setItem('nowly:page-blur-radius', '8');
+  it('fades the whole app content only while running as the wallpaper', () => {
+    localStorage.setItem('nowly:page-opacity', '0.4');
     const { rerender } = render(
       <DesktopShell
         mode="foreground"
@@ -127,7 +127,7 @@ describe('DesktopShell', () => {
       />
     );
 
-    expect(screen.getByTestId('desktop-root').style.getPropertyValue('--app-blur-radius')).toBe('8px');
+    // Foreground only records the preference; content stays fully opaque.
     expect(screen.getByRole('banner').style.opacity).toBe('');
     expect(screen.getByRole('main').style.opacity).toBe('');
 
@@ -141,13 +141,13 @@ describe('DesktopShell', () => {
       />
     );
 
-    expect(screen.getByTestId('desktop-root').style.getPropertyValue('--app-blur-radius')).toBe('8px');
-    expect(screen.getByRole('banner').style.opacity).toBe('');
-    expect(screen.getByRole('main').style.opacity).toBe('');
+    // Wallpaper mode fades the topbar and workspace together.
+    expect(screen.getByRole('banner').style.opacity).toBe('0.4');
+    expect(screen.getByRole('main').style.opacity).toBe('0.4');
   });
 
-  it('keeps the whole shell blurred while the slider is open', () => {
-    localStorage.setItem('nowly:page-blur-radius', '8');
+  it('previews the fade live on the workspace while the slider is open in foreground', () => {
+    localStorage.setItem('nowly:page-opacity', '0.4');
     render(
       <DesktopShell
         mode="foreground"
@@ -158,9 +158,10 @@ describe('DesktopShell', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: '调整高斯模糊' }));
-    expect(screen.getByTestId('desktop-root').style.getPropertyValue('--app-blur-radius')).toBe('8px');
-    expect(screen.getByRole('main').style.opacity).toBe('');
+    // Opening the slider previews the fade on the workspace, but the topbar
+    // stays opaque so the control itself remains usable.
+    fireEvent.click(screen.getByRole('button', { name: '调整透明度' }));
+    expect(screen.getByRole('main').style.opacity).toBe('0.4');
     expect(screen.getByRole('banner').style.opacity).toBe('');
   });
 

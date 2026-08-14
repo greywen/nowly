@@ -1,5 +1,5 @@
 import { Check, LayoutGrid, MonitorDown, Plus, Settings } from 'lucide-react';
-import { useState, type CSSProperties, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
   builtinDefinitions,
   getWidgetDefinition,
@@ -14,7 +14,7 @@ import { useModuleLayout } from '../../widgets/useModuleLayout';
 import { TemplatePickerDialog } from '../../widgets/TemplatePickerDialog';
 import { ModuleGrid, type ModuleGridItem } from './ModuleGrid';
 import { TransparencyControl } from '../TransparencyControl';
-import { useBlurRadius } from '../useTransparency';
+import { DEFAULT_OPACITY, useTransparency } from '../useTransparency';
 
 type DesktopShellProps = {
   mode?: 'foreground' | 'wallpaper';
@@ -56,9 +56,20 @@ export function DesktopShell({
   const foreground = mode === 'foreground';
   const { layout, move, resize, addWidget, removeWidget, presentIds } =
     useModuleLayout(definitions);
-  const { blurRadius, setBlurRadius } = useBlurRadius();
+  const { opacity, setOpacity } = useTransparency();
   const [isEditing, setIsEditing] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [previewingTransparency, setPreviewingTransparency] = useState(false);
+
+  // Transparency persists as a wallpaper-only look. As the wallpaper it fades
+  // the whole app content, topbar included, so the wallpaper shows through
+  // everything. While the slider popover is open we also preview the fade live
+  // in foreground, but only on the workspace — leaving the topbar (and the
+  // slider itself) fully usable so you never lose the control you're dragging.
+  const faded = opacity < DEFAULT_OPACITY;
+  const topbarStyle = !foreground && faded ? { opacity } : undefined;
+  const workspaceStyle =
+    (!foreground || previewingTransparency) && faded ? { opacity } : undefined;
 
   const items: ModuleGridItem[] = layout
     .filter(
@@ -75,17 +86,16 @@ export function DesktopShell({
       data-testid="desktop-root"
       onDoubleClickCapture={foreground ? undefined : onWallpaperDoubleClick}
       className="app-shell"
-      style={{ '--app-blur-radius': `${blurRadius}px` } as CSSProperties}
     >
       <WallpaperLayer />
-      <header className="topbar">
+      <header className="topbar" style={topbarStyle}>
         <div className="date-copy">
           <strong>{dateText}</strong>
           <p>{summary}</p>
         </div>
         <div className="top-actions">
           {foreground ? (
-            <TransparencyControl blurRadius={blurRadius} onChange={setBlurRadius} />
+            <TransparencyControl opacity={opacity} onChange={setOpacity} onOpenChange={setPreviewingTransparency} />
           ) : null}
           {foreground && isEditing ? (
             <button
@@ -127,7 +137,7 @@ export function DesktopShell({
           ) : null}
         </div>
       </header>
-      <main className="workspace">
+      <main className="workspace" style={workspaceStyle}>
         <ModuleGrid
           items={items}
           editing={foreground && isEditing}
