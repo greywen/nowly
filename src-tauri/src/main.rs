@@ -5,6 +5,7 @@ mod error;
 mod events;
 mod extensions;
 mod focus;
+mod focus_timer;
 mod kanban;
 mod layout;
 mod models;
@@ -21,6 +22,7 @@ use std::sync::Mutex;
 use tauri::menu::MenuBuilder;
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
+use tauri_plugin_notification::NotificationExt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TrayClickKind {
@@ -68,6 +70,7 @@ fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main_window(app)))
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_autostart::Builder::new()
             .args(["--background"])
             .build())
@@ -81,6 +84,28 @@ fn main() {
                 .expect("failed to open database");
             app.manage(AppDb(Mutex::new(connection)));
             app.manage(Mutex::new(window_lifecycle::WindowLifecycle::default()));
+            app.manage(Mutex::new(focus_timer::FocusTimerCoordinator::default()));
+            let timer_handle = app.handle().clone();
+            std::thread::spawn(move || loop {
+                std::thread::sleep(std::time::Duration::from_millis(250));
+                let completed = timer_handle
+                    .state::<focus_timer::ManagedFocusTimer>()
+                    .lock()
+                    .ok()
+                    .and_then(|mut timer| timer.poll(std::time::Instant::now()));
+                if let Some(snapshot) = completed {
+                    if let Err(error) = timer_handle.notification().builder()
+                        .title(&snapshot.notification_title)
+                        .body(&snapshot.notification_body)
+                        .show()
+                    {
+                        eprintln!("failed to send focus completion notification: {error}");
+                    }
+                    if let Err(error) = timer_handle.emit("focus-session-completed", snapshot) {
+                        eprintln!("failed to emit focus completion: {error}");
+                    }
+                }
+            });
 
             #[cfg(target_os = "windows")]
             {
@@ -143,7 +168,12 @@ fn main() {
                             }
                         }
                     }
-                    "quit" => app.exit(0),
+                    "quit" => {
+                        if let Ok(mut timer) = app.state::<focus_timer::ManagedFocusTimer>().lock() {
+                            timer.cancel();
+                        }
+                        app.exit(0);
+                    },
                     _ => {}
                 })
                 .build(app)?;
@@ -237,6 +267,12 @@ fn main() {
             focus::create_focus_session,
             focus::list_focus_sessions,
             focus::get_focus_statistics,
+            focus_timer::start_focus_timer,
+            focus_timer::pause_focus_timer,
+            focus_timer::resume_focus_timer,
+            focus_timer::cancel_focus_timer,
+            focus_timer::get_pending_focus_completion,
+            focus_timer::acknowledge_focus_completion,
             events::list_events_in_range,
             events::create_event,
             events::update_event,

@@ -29,4 +29,5 @@ windows = { version = "0.61", features = [
 ] }
 tauri-plugin-autostart = "2.5.1"
 tauri-plugin-single-instance = "2.4.3"
+tauri-plugin-notification = "2"
 webview2-com = "0.38"
