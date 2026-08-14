@@ -13,10 +13,18 @@ export function formatChineseDate(date: Date): string {
   return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日 ${weekdayNames[date.getDay()]}`;
 }
 
-export function buildMonthGrid(year: number, monthIndex: number, today = new Date()): CalendarDay[] {
+export type WeekStart = 'monday' | 'sunday';
+
+export function buildMonthGrid(
+  year: number,
+  monthIndex: number,
+  today = new Date(),
+  weekStart: WeekStart = 'monday'
+): CalendarDay[] {
   const first = new Date(year, monthIndex, 1);
-  const mondayOffset = (first.getDay() + 6) % 7;
-  const start = new Date(year, monthIndex, 1 - mondayOffset);
+  const startDow = weekStart === 'sunday' ? 0 : 1;
+  const offset = (first.getDay() - startDow + 7) % 7;
+  const start = new Date(year, monthIndex, 1 - offset);
   const result: CalendarDay[] = [];
   const todayIso = toIsoDate(today);
 

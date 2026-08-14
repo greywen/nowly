@@ -1,5 +1,7 @@
-import { buildMonthGrid, toIsoDate } from '../lib/date';
+import { buildMonthGrid, toIsoDate, type WeekStart } from '../lib/date';
 import type { CalendarDay, CalendarEvent, CalendarView, EventDraft, EventRange } from './calendar-model';
+
+export type DateFormat = 'localized' | 'iso';
 
 const weekdayNames = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
 
@@ -24,14 +26,15 @@ export function monthRange(year: number, monthIndex: number): EventRange {
   };
 }
 
-/** Monday-based start of the week that contains the given date. */
-export function startOfWeek(date: Date): Date {
-  const mondayOffset = (date.getDay() + 6) % 7;
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate() - mondayOffset);
+/** Start of the week that contains the given date, honoring the week-start setting. */
+export function startOfWeek(date: Date, weekStart: WeekStart = 'monday'): Date {
+  const startDow = weekStart === 'sunday' ? 0 : 1;
+  const offset = (date.getDay() - startDow + 7) % 7;
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() - offset);
 }
 
-export function weekRange(anchor: Date): EventRange {
-  const start = startOfWeek(anchor);
+export function weekRange(anchor: Date, weekStart: WeekStart = 'monday'): EventRange {
+  const start = startOfWeek(anchor, weekStart);
   const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 7);
   return { startAt: midnightIso(start), endAtExclusive: midnightIso(end) };
 }
@@ -42,14 +45,14 @@ export function dayRange(anchor: Date): EventRange {
   return { startAt: midnightIso(start), endAtExclusive: midnightIso(end) };
 }
 
-export function rangeFor(view: CalendarView, anchor: Date): EventRange {
-  if (view === 'week') return weekRange(anchor);
+export function rangeFor(view: CalendarView, anchor: Date, weekStart: WeekStart = 'monday'): EventRange {
+  if (view === 'week') return weekRange(anchor, weekStart);
   if (view === 'day') return dayRange(anchor);
   return monthRange(anchor.getFullYear(), anchor.getMonth());
 }
 
-export function buildWeekDays(anchor: Date, today = new Date()): CalendarDay[] {
-  const start = startOfWeek(anchor);
+export function buildWeekDays(anchor: Date, today = new Date(), weekStart: WeekStart = 'monday'): CalendarDay[] {
+  const start = startOfWeek(anchor, weekStart);
   const todayIso = toIsoDate(today);
   const anchorMonth = anchor.getMonth();
   const result: CalendarDay[] = [];
@@ -68,26 +71,40 @@ export function buildWeekDays(anchor: Date, today = new Date()): CalendarDay[] {
 
 export { buildMonthGrid };
 
-export function monthTitle(year: number, monthIndex: number) {
+/** Format a Date as a plain calendar date honoring the date-format setting. */
+function formatDate(date: Date, dateFormat: DateFormat) {
+  if (dateFormat === 'iso') {
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  }
+  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
+}
+
+export function monthTitle(year: number, monthIndex: number, dateFormat: DateFormat = 'localized') {
+  if (dateFormat === 'iso') return `${year}-${pad(monthIndex + 1)}`;
   return `${year}年${monthIndex + 1}月`;
 }
 
-export function weekTitle(anchor: Date) {
-  const start = startOfWeek(anchor);
+export function weekTitle(anchor: Date, weekStart: WeekStart = 'monday', dateFormat: DateFormat = 'localized') {
+  const start = startOfWeek(anchor, weekStart);
   const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6);
-  const startPart = `${start.getFullYear()}年${start.getMonth() + 1}月${start.getDate()}日`;
-  const endPart = `${end.getFullYear()}年${end.getMonth() + 1}月${end.getDate()}日`;
-  return `${startPart} - ${endPart}`;
+  return `${formatDate(start, dateFormat)} - ${formatDate(end, dateFormat)}`;
 }
 
-export function dayTitle(anchor: Date) {
-  return `${anchor.getFullYear()}年${anchor.getMonth() + 1}月${anchor.getDate()}日 ${weekdayNames[anchor.getDay()]}`;
+export function dayTitle(anchor: Date, dateFormat: DateFormat = 'localized') {
+  return `${formatDate(anchor, dateFormat)} ${weekdayNames[anchor.getDay()]}`;
 }
 
-export function viewTitle(view: CalendarView, year: number, monthIndex: number, anchor: Date) {
-  if (view === 'week') return weekTitle(anchor);
-  if (view === 'day') return dayTitle(anchor);
-  return monthTitle(year, monthIndex);
+export function viewTitle(
+  view: CalendarView,
+  year: number,
+  monthIndex: number,
+  anchor: Date,
+  weekStart: WeekStart = 'monday',
+  dateFormat: DateFormat = 'localized'
+) {
+  if (view === 'week') return weekTitle(anchor, weekStart, dateFormat);
+  if (view === 'day') return dayTitle(anchor, dateFormat);
+  return monthTitle(year, monthIndex, dateFormat);
 }
 
 function dayDiff(fromIso: string, toIso: string) {
@@ -479,7 +496,10 @@ export function groupEventsByDate(events: CalendarEvent[]): Array<{ isoDate: str
     .map((isoDate) => ({ isoDate, events: sortEvents(map.get(isoDate) ?? []) }));
 }
 
-export function listDateLabel(isoDate: string) {
+export function listDateLabel(isoDate: string, dateFormat: DateFormat = 'localized') {
   const date = localDate(isoDate);
+  if (dateFormat === 'iso') {
+    return `${toIsoDate(date)} ${weekdayNames[date.getDay()]}`;
+  }
   return `${date.getMonth() + 1}月${date.getDate()}日 ${weekdayNames[date.getDay()]}`;
 }

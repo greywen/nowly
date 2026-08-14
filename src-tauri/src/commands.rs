@@ -29,12 +29,21 @@ pub fn update_app_settings(
         rusqlite::Error::InvalidParameterName(field) => CommandError::validation(&field, "设置值无效。"),
         other => CommandError::database(other),
     })?;
-    if settings.launch_at_login {
-        app.autolaunch().enable().map_err(CommandError::system)?;
-    } else {
-        app.autolaunch().disable().map_err(CommandError::system)?;
-    }
     let mut connection = db.0.lock().map_err(CommandError::database)?;
+    // Only touch the OS autostart registration when the preference actually
+    // changes. Toggling it on every save let an autostart-plugin failure (which
+    // is common in dev and on some platforms) reject unrelated settings writes
+    // — e.g. changing a calendar preference — and roll the value back in the UI.
+    let previous_launch_at_login = read_app_settings(&connection)
+        .map(|current| current.launch_at_login)
+        .unwrap_or(!settings.launch_at_login);
+    if settings.launch_at_login != previous_launch_at_login {
+        if settings.launch_at_login {
+            app.autolaunch().enable().map_err(CommandError::system)?;
+        } else {
+            app.autolaunch().disable().map_err(CommandError::system)?;
+        }
+    }
     write_app_settings(&mut connection, &settings).map_err(|error| match error {
         rusqlite::Error::InvalidParameterName(field) => {
             CommandError::validation(&field, "设置值无效。")

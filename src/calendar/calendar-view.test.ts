@@ -7,6 +7,7 @@ import {
   groupEventsByDate,
   layoutWeekRows,
   layoutWeekSegments,
+  listDateLabel,
   rangeFor,
   resizeEventEndToDate,
   shiftEventToDate,
@@ -64,6 +65,22 @@ describe('calendar-view ranges', () => {
     expect(days.find((day) => day.isToday)?.isoDate).toBe('2026-07-23');
     expect(days.every((day) => day.isCurrentMonth)).toBe(true);
   });
+
+  it('anchors weeks to Sunday when the week starts on Sunday', () => {
+    const sunday = startOfWeek(new Date(2026, 6, 23), 'sunday');
+    expect(sunday.getDay()).toBe(0);
+    expect(sunday.getDate()).toBe(19);
+    expect(weekRange(new Date(2026, 6, 23), 'sunday')).toEqual({
+      startAt: '2026-07-19T00:00',
+      endAtExclusive: '2026-07-26T00:00'
+    });
+    const days = buildWeekDays(new Date(2026, 6, 23), new Date(2026, 6, 23), 'sunday');
+    expect(days[0].isoDate).toBe('2026-07-19');
+    expect(rangeFor('week', new Date(2026, 6, 23), 'sunday')).toEqual({
+      startAt: '2026-07-19T00:00',
+      endAtExclusive: '2026-07-26T00:00'
+    });
+  });
 });
 
 describe('calendar-view titles and grouping', () => {
@@ -72,6 +89,18 @@ describe('calendar-view titles and grouping', () => {
     expect(viewTitle('month', 2026, 6, anchor)).toBe('2026年7月');
     expect(viewTitle('week', 2026, 6, anchor)).toBe('2026年7月20日 - 2026年7月26日');
     expect(viewTitle('day', 2026, 6, anchor)).toBe('2026年7月23日 星期四');
+  });
+
+  it('renders ISO-formatted titles when the date format is iso', () => {
+    const anchor = new Date(2026, 6, 23);
+    expect(viewTitle('month', 2026, 6, anchor, 'monday', 'iso')).toBe('2026-07');
+    expect(viewTitle('week', 2026, 6, anchor, 'monday', 'iso')).toBe('2026-07-20 - 2026-07-26');
+    expect(viewTitle('day', 2026, 6, anchor, 'monday', 'iso')).toBe('2026-07-23 星期四');
+  });
+
+  it('formats list date labels per date format', () => {
+    expect(listDateLabel('2026-07-23')).toBe('7月23日 星期四');
+    expect(listDateLabel('2026-07-23', 'iso')).toBe('2026-07-23 星期四');
   });
 
   it('groups events by date and sorts all-day first then by start time', () => {

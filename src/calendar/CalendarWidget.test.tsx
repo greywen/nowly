@@ -65,6 +65,56 @@ describe('CalendarWidget', () => {
     expect(onNextMonth).toHaveBeenCalledOnce();
   });
 
+  it('reorders weekday labels and drops weekend columns per calendar settings', () => {
+    const { container, rerender } = render(
+      <CalendarWidget
+        {...baseProps}
+        calendarSettings={{ weekStart: 'monday', dateFormat: 'localized', showWeekends: true }}
+        onChangeCalendarSettings={vi.fn()}
+      />
+    );
+    // Monday-first, weekends shown: 7 columns, first label is 一.
+    let weekdayCells = container.querySelectorAll('.weekdays span');
+    expect(weekdayCells).toHaveLength(7);
+    expect(weekdayCells[0]).toHaveTextContent('一');
+    expect(container.querySelectorAll('.calendar-grid [data-calendar-day]')).toHaveLength(42);
+
+    // Sunday-first: first label becomes 日.
+    rerender(
+      <CalendarWidget
+        {...baseProps}
+        calendarSettings={{ weekStart: 'sunday', dateFormat: 'localized', showWeekends: true }}
+        onChangeCalendarSettings={vi.fn()}
+      />
+    );
+    weekdayCells = container.querySelectorAll('.weekdays span');
+    expect(weekdayCells[0]).toHaveTextContent('日');
+
+    // Weekends hidden: five weekday columns and 30 rendered day cells (6 rows × 5).
+    rerender(
+      <CalendarWidget
+        {...baseProps}
+        calendarSettings={{ weekStart: 'monday', dateFormat: 'localized', showWeekends: false }}
+        onChangeCalendarSettings={vi.fn()}
+      />
+    );
+    weekdayCells = container.querySelectorAll('.weekdays span');
+    expect(weekdayCells).toHaveLength(5);
+    expect([...weekdayCells].map((cell) => cell.textContent)).toEqual(['一', '二', '三', '四', '五']);
+    expect(container.querySelectorAll('.calendar-grid [data-calendar-day]')).toHaveLength(30);
+  });
+
+  it('renders an ISO-formatted title when the date format is iso', () => {
+    render(
+      <CalendarWidget
+        {...baseProps}
+        calendarSettings={{ weekStart: 'monday', dateFormat: 'iso', showWeekends: true }}
+        onChangeCalendarSettings={vi.fn()}
+      />
+    );
+    expect(screen.getByRole('heading', { name: '2026-07' })).toBeInTheDocument();
+  });
+
   it('opens date detail about 250 ms after a single day click', () => {
     vi.useFakeTimers();
     const onOpenDate = vi.fn();

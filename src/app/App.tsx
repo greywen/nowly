@@ -49,7 +49,7 @@ export function App() {
   const refreshEventsRef = useRef<() => Promise<unknown>>(async () => undefined);
   const refreshTasks = useCallback(() => refreshTasksRef.current(), []);
   const refreshEvents = useCallback(() => refreshEventsRef.current(), []);
-  const eventsFeature = useEvents({ onRefreshTasks: refreshTasks });
+  const eventsFeature = useEvents({ onRefreshTasks: refreshTasks, weekStart: settingsFeature.settings.data.weekStart });
   const tasksFeature = useTasks({ onRefreshEvents: refreshEvents });
   const notesFeature = useNotes();
   const extensionsFeature = useExtensions();

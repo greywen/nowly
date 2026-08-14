@@ -21,7 +21,9 @@ import {
 } from './calendar-model';
 import { colorStyle } from '../lib/color';
 
-const weekdays = ['一', '二', '三', '四', '五', '六', '日'];
+// Indexed by day-of-week (0 = Sunday … 6 = Saturday) so a column's label can be
+// looked up directly from its weekday regardless of the week-start setting.
+const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
 const hours = Array.from({ length: 24 }, (_, index) => index);
 
 function pad(value: number) {
@@ -134,7 +136,27 @@ export function CalendarWidget({
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const anchor = anchorIso ? new Date(`${anchorIso}T00:00:00`) : new Date(year, monthIndex, 1);
   const today = new Date(`${todayIso}T00:00:00`);
-  const title = viewTitle(view, year, monthIndex, anchor);
+  const weekStart = calendarSettings?.weekStart ?? 'monday';
+  const dateFormat = calendarSettings?.dateFormat ?? 'localized';
+  const showWeekends = calendarSettings?.showWeekends ?? true;
+  const title = viewTitle(view, year, monthIndex, anchor, weekStart, dateFormat);
+
+  // Grid columns follow the week-start setting. Each column maps to a fixed
+  // day-of-week (0 = Sunday … 6 = Saturday) so weekday labels, weekend shading,
+  // and weekend hiding all derive from the same source of truth.
+  const startDow = weekStart === 'sunday' ? 0 : 1;
+  const columnDows = Array.from({ length: 7 }, (_, col) => (startDow + col) % 7);
+  const weekdayLabels = columnDows.map((dow) => weekdays[dow]);
+  // Logical columns (0-6) that are actually rendered. When weekends are hidden
+  // the Saturday/Sunday columns drop out, leaving five visible columns.
+  const visibleCols = columnDows
+    .map((dow, col) => (showWeekends || (dow !== 0 && dow !== 6) ? col : -1))
+    .filter((col) => col >= 0);
+  const visibleCount = visibleCols.length;
+  const visibleIndexOf = new Array(7).fill(-1);
+  visibleCols.forEach((col, index) => {
+    visibleIndexOf[col] = index;
+  });
 
   function cancelDateClick() {
     if (clickTimerRef.current !== null) {
@@ -401,10 +423,21 @@ export function CalendarWidget({
   // and column so it stays one connected bar across the days it covers.
   function renderSegmentBar(segment: EventSegment) {
     const { event, startCol, endCol, lane, continuesBefore, continuesAfter } = segment;
-    // Position the bar across the columns it spans. Percentages map columns to
-    // the 7-column week row so a multi-day event is one continuous bar.
-    const left = (startCol / 7) * 100;
-    const width = ((endCol - startCol + 1) / 7) * 100;
+    // Clamp the bar to the visible columns. When weekends are hidden a bar that
+    // starts/ends on a hidden day is trimmed to the nearest visible column; a
+    // bar that falls entirely on hidden days drops out of this row.
+    let firstVisible = -1;
+    let lastVisible = -1;
+    for (let col = startCol; col <= endCol; col += 1) {
+      if (visibleIndexOf[col] < 0) continue;
+      if (firstVisible < 0) firstVisible = visibleIndexOf[col];
+      lastVisible = visibleIndexOf[col];
+    }
+    if (firstVisible < 0) return null;
+    // Position the bar across the visible columns it spans. Percentages map to
+    // the visible-column week row so a multi-day event is one continuous bar.
+    const left = (firstVisible / visibleCount) * 100;
+    const width = ((lastVisible - firstVisible + 1) / visibleCount) * 100;
     // A bar that runs off the right edge of the week keeps that side square and
     // hides the resize handle there (you resize from the true end segment).
     const resizableHere = resizeEnabled && !continuesAfter;
@@ -500,14 +533,14 @@ export function CalendarWidget({
     );
     return (
       <div className="calendar-week-row" key={week[0].isoDate}>
-        <div className="calendar-week-row__cells">
-          {week.map((day, col) => (
+        <div className="calendar-week-row__cells" style={{ gridTemplateColumns: `repeat(${visibleCount}, minmax(0, 1fr))` }}>
+          {week.map((day, col) => visibleIndexOf[col] < 0 ? null : (
             <div
               key={day.isoDate}
               data-calendar-day
               data-iso-date={day.isoDate}
               aria-current={day.isToday ? 'date' : undefined}
-              className={`day${day.isCurrentMonth ? '' : ' outside'}${day.isToday ? ' today' : ''}`}
+              className={`day${day.isCurrentMonth ? '' : ' outside'}${day.isToday ? ' today' : ''}${columnDows[col] === 0 || columnDows[col] === 6 ? ' is-weekend' : ''}`}
             >
               <button
                 type="button"
@@ -558,11 +591,11 @@ export function CalendarWidget({
   }
 
   function renderMonth() {
-    const weeks = splitIntoWeeks(buildMonthGrid(year, monthIndex, today));
+    const weeks = splitIntoWeeks(buildMonthGrid(year, monthIndex, today, weekStart));
     return (
       <>
-        <div className="weekdays">
-          {weekdays.map((weekday) => <span key={weekday}>{weekday}</span>)}
+        <div className="weekdays" style={{ gridTemplateColumns: `repeat(${visibleCount}, minmax(0, 1fr))` }}>
+          {visibleCols.map((col) => <span key={col}>{weekdayLabels[col]}</span>)}
         </div>
         <div className="calendar-grid calendar-scroll-region">
           {weeks.map((week) => renderMonthWeek(week))}
@@ -572,7 +605,7 @@ export function CalendarWidget({
   }
 
   function renderWeek() {
-    const weekDays = buildWeekDays(anchor, today);
+    const weekDays = buildWeekDays(anchor, today, weekStart);
     // Same split as month view: multi-day events stay connected in a top zone,
     // single-day events center per column. The tall week body has room for many
     // single events, so no per-column cap.
@@ -588,8 +621,9 @@ export function CalendarWidget({
     }
     return (
       <div className={`calendar-week calendar-scroll-region${pointerActive ? ' is-dragging' : ''}`}>
-        <div className="calendar-week__heads">
-          {weekDays.map((day, index) => (
+        <div className="calendar-week__heads" style={{ gridTemplateColumns: `repeat(${visibleCount}, minmax(0, 1fr))` }}>
+          {weekDays.map((day, index) =>
+            visibleIndexOf[index] < 0 ? null : (
             <button
               key={day.isoDate}
               type="button"
@@ -598,14 +632,15 @@ export function CalendarWidget({
               onClick={() => scheduleDateOpen(day.isoDate)}
               onDoubleClick={() => createForDate(day.isoDate)}
             >
-              <span className="week-column__weekday">{weekdays[index]}</span>
+              <span className="week-column__weekday">{weekdayLabels[index]}</span>
               <span className="week-column__date">{day.dayOfMonth}</span>
             </button>
           ))}
         </div>
         <div className="calendar-week__body">
-          <div className="calendar-week__cells">
-            {weekDays.map((day, col) => (
+          <div className="calendar-week__cells" style={{ gridTemplateColumns: `repeat(${visibleCount}, minmax(0, 1fr))` }}>
+            {weekDays.map((day, col) =>
+              visibleIndexOf[col] < 0 ? null : (
               <div
                 key={day.isoDate}
                 data-calendar-day
@@ -713,7 +748,7 @@ export function CalendarWidget({
         ) : (
           groups.map((group) => (
             <section key={group.isoDate} className="calendar-list-group">
-              <h3 className="calendar-list-group__date">{listDateLabel(group.isoDate).replace('月', ' 月 ').replace('日', ' 日')}</h3>
+              <h3 className="calendar-list-group__date">{dateFormat === 'iso' ? listDateLabel(group.isoDate, dateFormat) : listDateLabel(group.isoDate).replace('月', ' 月 ').replace('日', ' 日')}</h3>
               <ul className="calendar-list-group__items">
                 {group.events.map((event) => (
                   <li key={event.id}>

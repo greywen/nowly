@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNowlyRepository } from '../data/RepositoryContext';
+import type { WeekStart } from '../lib/date';
 import type { CalendarEvent, CalendarView, EventDraft } from './calendar-model';
 import { monthRange, rangeFor, resizeEventEndToDate, shiftEventToDate, shiftEventToHour } from './calendar-view';
 
@@ -29,10 +30,12 @@ function isoOf(date: Date) {
 
 export function useEvents({
   now = () => new Date(),
-  onRefreshTasks
+  onRefreshTasks,
+  weekStart = 'monday'
 }: {
   now?: () => Date;
   onRefreshTasks: () => Promise<unknown>;
+  weekStart?: WeekStart;
 }) {
   const repository = useNowlyRepository();
   const initialDateRef = useRef(now());
@@ -54,7 +57,7 @@ export function useEvents({
       // shared summary, matrix, and calendar do not flash empty and shift.
       if (!silent) setEvents({ status: 'loading', data: [] });
       try {
-        const data = await repository.listEventsInRange(rangeFor(target.view, target.anchor));
+        const data = await repository.listEventsInRange(rangeFor(target.view, target.anchor, weekStart));
         if (requestId === requestIdRef.current) setEvents({ status: 'ready', data });
       } catch (error) {
         if (requestId === requestIdRef.current) {
@@ -62,7 +65,7 @@ export function useEvents({
         }
       }
     },
-    [repository, state]
+    [repository, state, weekStart]
   );
 
   useEffect(() => {
