@@ -241,7 +241,6 @@ mod platform {
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Mutex, OnceLock};
     use std::time::Duration;
-    use tauri::{Runtime, Window};
     use windows::core::{w, BOOL};
     use windows::Win32::Foundation::{CloseHandle, COLORREF, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
     use windows::Win32::Graphics::Gdi::{
@@ -322,12 +321,6 @@ mod platform {
             Some(value) => format!("{:?}", value),
             None => "None".to_string(),
         }
-    }
-
-    pub fn hwnd_for_window<R: Runtime>(window: &Window<R>) -> Result<HWND, String> {
-        window
-            .hwnd()
-            .map_err(|error| format!("failed to get window handle: {error}"))
     }
 
     fn monitor_bounds_for_hwnd(hwnd: HWND) -> Result<MonitorBounds, String> {
@@ -1335,12 +1328,66 @@ mod platform {
     }
 }
 
+// Pin the WebView2 rasterization scale to a specific monitor scale factor.
+//
+// WebView2 auto-detects its rasterization scale from the DPI of the monitor the
+// window sits on, but it only re-detects on `WM_DPICHANGED`. Once the window is
+// reparented under WorkerW for wallpaper mode it becomes a child window and no
+// longer receives that message, so the scale stays frozen at whatever monitor
+// the app launched on. If wallpaper mode then targets a monitor with a
+// different scale, the content renders at the wrong scale and looks zoomed.
+//
+// We therefore set the scale explicitly to the target monitor and turn off
+// automatic detection while in wallpaper mode; on foreground restore we set it
+// back to the current monitor and re-enable detection so normal DPI tracking
+// resumes. Failures here are logged, not fatal: a wrong scale should never stop
+// a mode switch.
+#[cfg(target_os = "windows")]
+fn pin_webview_scale<R: tauri::Runtime>(
+    window: &tauri::WebviewWindow<R>,
+    scale: f64,
+    detect_changes: bool,
+) {
+    use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Controller3;
+    use windows::core::Interface;
+
+    let result = window.with_webview(move |webview| unsafe {
+        let controller = webview.controller();
+        if let Ok(controller) = controller.cast::<ICoreWebView2Controller3>() {
+            if let Err(error) = controller.SetRasterizationScale(scale) {
+                eprintln!("failed to set webview rasterization scale: {error}");
+            }
+            if let Err(error) =
+                controller.SetShouldDetectMonitorScaleChanges(detect_changes)
+            {
+                eprintln!("failed to set webview scale detection: {error}");
+            }
+        }
+    });
+    if let Err(error) = result {
+        eprintln!("failed to access webview for scale pinning: {error}");
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn current_scale_factor<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) -> f64 {
+    window
+        .current_monitor()
+        .ok()
+        .flatten()
+        .map(|monitor| monitor.scale_factor())
+        .unwrap_or(1.0)
+}
+
 #[cfg(target_os = "windows")]
 pub fn enter_wallpaper_webview<R: tauri::Runtime>(
     window: &tauri::WebviewWindow<R>,
 ) -> Result<String, String> {
     let hwnd = window.hwnd().map_err(|error| format!("failed to get webview window handle: {error}"))?;
+    // Capture the target monitor's scale before reparenting freezes detection.
+    let scale = current_scale_factor(window);
     let message = platform::enter_wallpaper(hwnd)?;
+    pin_webview_scale(window, scale, false);
     println!("{message}");
     Ok(message)
 }
@@ -1353,6 +1400,9 @@ pub fn enter_foreground_webview<R: tauri::Runtime>(
         .hwnd()
         .map_err(|error| format!("failed to get webview window handle: {error}"))?;
     let message = platform::enter_foreground(hwnd)?;
+    // Now top-level again: re-align the scale to the current monitor and let
+    // WebView2 resume its own DPI tracking.
+    pin_webview_scale(window, current_scale_factor(window), true);
     println!("{message}");
     Ok(message)
 }
@@ -1397,11 +1447,13 @@ pub fn enter_wallpaper_mode(
 ) -> Result<String, crate::error::CommandError> {
     #[cfg(target_os = "windows")]
     {
+        use tauri::Manager;
         let target_monitor_id = db.0.lock().map_err(crate::error::CommandError::database)
             .and_then(|connection| crate::settings::read_app_settings(&connection).map_err(crate::error::CommandError::database))?.target_monitor_id;
         crate::monitors::position_target(&window, target_monitor_id.as_deref())?;
-        let hwnd = platform::hwnd_for_window(&window).map_err(crate::error::CommandError::system)?;
-        let message = platform::enter_wallpaper(hwnd).map_err(crate::error::CommandError::system)?;
+        let webview = window.get_webview_window("main")
+            .ok_or_else(|| crate::error::CommandError::system("main window not found"))?;
+        let message = enter_wallpaper_webview(&webview).map_err(crate::error::CommandError::system)?;
         {
             let mut connection = db.0.lock().map_err(crate::error::CommandError::database)?;
             let mut settings = crate::settings::read_app_settings(&connection)
@@ -1432,8 +1484,10 @@ pub fn enter_foreground_mode(
 ) -> Result<String, crate::error::CommandError> {
     #[cfg(target_os = "windows")]
     {
-        let hwnd = platform::hwnd_for_window(&window).map_err(crate::error::CommandError::system)?;
-        let message = platform::enter_foreground(hwnd).map_err(crate::error::CommandError::system)?;
+        use tauri::Manager;
+        let webview = window.get_webview_window("main")
+            .ok_or_else(|| crate::error::CommandError::system("main window not found"))?;
+        let message = enter_foreground_webview(&webview).map_err(crate::error::CommandError::system)?;
         lifecycle.lock().map_err(crate::error::CommandError::system)?.enter_foreground();
         window.emit("window-mode-changed", crate::window_lifecycle::WindowMode::Foreground)
             .map_err(crate::error::CommandError::system)?;

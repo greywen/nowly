@@ -2106,6 +2106,7 @@ dependencies = [
  "tauri-plugin-autostart",
  "tauri-plugin-single-instance",
  "uuid",
+ "webview2-com",
  "windows",
 ]
 
