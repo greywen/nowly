@@ -17,6 +17,7 @@ const MIGRATIONS: &[(i64, Migration)] = &[
     (8, migration_8_extensions),
     (9, migration_9_kanban),
     (10, migration_10_hex_colors_and_recent_colors),
+    (11, migration_11_focus_sessions),
 ];
 
 pub fn open_database(path: PathBuf) -> Result<Connection> {
@@ -376,6 +377,22 @@ fn migration_9_kanban(transaction: &Transaction<'_>) -> Result<()> {
     Ok(())
 }
 
+fn migration_11_focus_sessions(transaction: &Transaction<'_>) -> Result<()> {
+    transaction.execute_batch(
+        "CREATE TABLE IF NOT EXISTS focus_sessions (
+            id TEXT PRIMARY KEY,
+            planned_seconds INTEGER NOT NULL CHECK (planned_seconds > 0),
+            focused_seconds INTEGER NOT NULL CHECK (focused_seconds > 0),
+            status TEXT NOT NULL CHECK (status IN ('completed', 'interrupted')),
+            started_at TEXT NOT NULL,
+            ended_at TEXT NOT NULL,
+            created_at TEXT NOT NULL
+         );
+         CREATE INDEX IF NOT EXISTS idx_focus_sessions_ended_at
+            ON focus_sessions(ended_at);",
+    )
+}
+
 fn migration_10_hex_colors_and_recent_colors(transaction: &Transaction<'_>) -> Result<()> {
     transaction.execute_batch(
         "UPDATE events SET color = CASE lower(color)
@@ -488,11 +505,10 @@ fn migration_5_event_task_foreign_keys(transaction: &Transaction<'_>) -> Result<
          CREATE UNIQUE INDEX idx_tasks_linked_event
             ON tasks(linked_event_id) WHERE linked_event_id IS NOT NULL;",
     )?;
-    let violations: i64 = transaction.query_row(
-        "SELECT COUNT(*) FROM pragma_foreign_key_check",
-        [],
-        |row| row.get(0),
-    )?;
+    let violations: i64 =
+        transaction.query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| {
+            row.get(0)
+        })?;
     if violations != 0 {
         return Err(rusqlite::Error::ExecuteReturnedResults);
     }
@@ -541,7 +557,9 @@ mod tests {
     #[test]
     fn migration_5_rebuilds_event_task_links_with_foreign_keys() {
         let mut connection = Connection::open_in_memory().unwrap();
-        connection.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        connection
+            .execute_batch("PRAGMA foreign_keys = ON;")
+            .unwrap();
         migrate(&mut connection).unwrap();
 
         let versions: Vec<i64> = connection
@@ -551,7 +569,7 @@ mod tests {
             .unwrap()
             .collect::<Result<_, _>>()
             .unwrap();
-        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
 
         let event_fks: Vec<(String, String, String)> = connection
             .prepare("PRAGMA foreign_key_list(events)")
@@ -560,11 +578,7 @@ mod tests {
             .unwrap()
             .collect::<Result<_, _>>()
             .unwrap();
-        assert!(event_fks.contains(&(
-            "tasks".into(),
-            "linked_task_id".into(),
-            "SET NULL".into()
-        )));
+        assert!(event_fks.contains(&("tasks".into(), "linked_task_id".into(), "SET NULL".into())));
 
         let task_fks: Vec<(String, String, String)> = connection
             .prepare("PRAGMA foreign_key_list(tasks)")
@@ -573,11 +587,7 @@ mod tests {
             .unwrap()
             .collect::<Result<_, _>>()
             .unwrap();
-        assert!(task_fks.contains(&(
-            "events".into(),
-            "linked_event_id".into(),
-            "SET NULL".into()
-        )));
+        assert!(task_fks.contains(&("events".into(), "linked_event_id".into(), "SET NULL".into())));
         let violations: i64 = connection
             .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| {
                 row.get(0)
@@ -619,7 +629,8 @@ mod tests {
         assert_eq!(task_link, None);
         assert_eq!(
             connection
-                .query_row("SELECT COUNT(*) FROM events", [], |row| row.get::<_, i64>(0))
+                .query_row("SELECT COUNT(*) FROM events", [], |row| row
+                    .get::<_, i64>(0))
                 .unwrap(),
             1
         );
@@ -645,31 +656,76 @@ mod tests {
             .collect::<Result<_, _>>()
             .expect("versions collect");
 
-        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
-        for table in ["events", "tasks", "notes", "settings", "widgets", "module_layout", "custom_templates", "module_state", "extensions", "kanban_lanes", "kanban_cards", "kanban_priorities", "kanban_tags", "kanban_collaborators", "kanban_card_tags", "kanban_card_collaborators"] {
+        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+        for table in [
+            "events",
+            "tasks",
+            "notes",
+            "settings",
+            "widgets",
+            "module_layout",
+            "custom_templates",
+            "module_state",
+            "extensions",
+            "kanban_lanes",
+            "kanban_cards",
+            "kanban_priorities",
+            "kanban_tags",
+            "kanban_collaborators",
+            "kanban_card_tags",
+            "kanban_card_collaborators",
+            "focus_sessions",
+        ] {
             assert!(table_exists(&connection, table), "missing table {table}");
         }
+        connection.execute_batch(
+            "INSERT INTO focus_sessions(id, planned_seconds, focused_seconds, status, started_at, ended_at, created_at)
+             VALUES ('valid', 1500, 1200, 'completed', '2026-08-14T09:00:00Z', '2026-08-14T09:20:00Z', '2026-08-14T09:20:00Z');"
+        ).expect("valid focus session inserts");
+        assert!(connection.execute_batch(
+            "INSERT INTO focus_sessions(id, planned_seconds, focused_seconds, status, started_at, ended_at, created_at)
+             VALUES ('invalid', 1500, 0, 'unknown', '2026-08-14T09:00:00Z', '2026-08-14T09:20:00Z', '2026-08-14T09:20:00Z');"
+        ).is_err());
     }
 
     #[test]
     fn migration_9_seeds_three_default_lanes_once_and_never_recreates_them() {
         let mut connection = Connection::open_in_memory().unwrap();
-        connection.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        connection
+            .execute_batch("PRAGMA foreign_keys = ON;")
+            .unwrap();
         migrate(&mut connection).unwrap();
 
         let lanes: Vec<(String, String, String, i64)> = connection
             .prepare("SELECT id, name, color, position FROM kanban_lanes ORDER BY position")
             .unwrap()
-            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))
+            .query_map([], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+            })
             .unwrap()
             .collect::<Result<_, _>>()
             .unwrap();
         assert_eq!(
             lanes,
             vec![
-                ("kanban-lane-todo".into(), "待处理".into(), "#4FC9DA".into(), 0),
-                ("kanban-lane-doing".into(), "进行中".into(), "#E8C444".into(), 1),
-                ("kanban-lane-done".into(), "已完成".into(), "#B8D935".into(), 2),
+                (
+                    "kanban-lane-todo".into(),
+                    "待处理".into(),
+                    "#4FC9DA".into(),
+                    0
+                ),
+                (
+                    "kanban-lane-doing".into(),
+                    "进行中".into(),
+                    "#E8C444".into(),
+                    1
+                ),
+                (
+                    "kanban-lane-done".into(),
+                    "已完成".into(),
+                    "#B8D935".into(),
+                    2
+                ),
             ]
         );
 

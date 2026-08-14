@@ -56,7 +56,7 @@ function createRepository(overrides: Partial<NowlyRepository> = {}): NowlyReposi
     listModuleLayout: vi.fn().mockResolvedValue([]),
     saveModuleLayout: vi.fn().mockImplementation((layout) => Promise.resolve(layout)),
     getModuleState: vi.fn().mockResolvedValue(null),
-    setModuleState: vi.fn().mockResolvedValue(undefined),
+    setModuleState: vi.fn().mockResolvedValue(undefined), createFocusSession:vi.fn().mockImplementation((session)=>Promise.resolve(session)), listFocusSessions:vi.fn().mockResolvedValue([]), getFocusStatistics:vi.fn().mockResolvedValue({totalFocusedSeconds:0,completedCount:0,interruptedCount:0,completionRate:0,points:[]}),
     listExtensions: vi.fn().mockResolvedValue([]),
     installExtension: vi.fn(),
     uninstallExtension: vi.fn(),

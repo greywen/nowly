@@ -4,6 +4,7 @@ mod db;
 mod error;
 mod events;
 mod extensions;
+mod focus;
 mod kanban;
 mod layout;
 mod models;
@@ -233,6 +234,9 @@ fn main() {
             extensions::list_extensions,
             extensions::install_extension,
             extensions::uninstall_extension,
+            focus::create_focus_session,
+            focus::list_focus_sessions,
+            focus::get_focus_statistics,
             events::list_events_in_range,
             events::create_event,
             events::update_event,

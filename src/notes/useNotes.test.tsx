@@ -13,7 +13,7 @@ function repository(overrides: Partial<NowlyRepository> = {}): NowlyRepository {
     listNotes:vi.fn().mockResolvedValue([note]), createNote:vi.fn().mockResolvedValue(note), updateNote:vi.fn().mockResolvedValue(note), deleteNote:vi.fn().mockResolvedValue(undefined),
     getSettings:vi.fn(), updateSettings:vi.fn(), listMonitors:vi.fn(),
     listModuleLayout:vi.fn().mockResolvedValue([]), saveModuleLayout:vi.fn().mockImplementation((l)=>Promise.resolve(l)),
-    getModuleState:vi.fn().mockResolvedValue(null), setModuleState:vi.fn().mockResolvedValue(undefined), listExtensions:vi.fn().mockResolvedValue([]), installExtension:vi.fn(), uninstallExtension:vi.fn(),
+    getModuleState:vi.fn().mockResolvedValue(null), setModuleState:vi.fn().mockResolvedValue(undefined), createFocusSession:vi.fn().mockImplementation((session)=>Promise.resolve(session)), listFocusSessions:vi.fn().mockResolvedValue([]), getFocusStatistics:vi.fn().mockResolvedValue({totalFocusedSeconds:0,completedCount:0,interruptedCount:0,completionRate:0,points:[]}), listExtensions:vi.fn().mockResolvedValue([]), installExtension:vi.fn(), uninstallExtension:vi.fn(),
     getKanbanSnapshot:vi.fn().mockResolvedValue({ lanes:[], cards:[], priorities:[], tags:[], collaborators:[] }),
     createKanbanLane:vi.fn(), updateKanbanLane:vi.fn(), deleteKanbanLane:vi.fn(), reorderKanbanLanes:vi.fn(),
     createKanbanCard:vi.fn(), updateKanbanCard:vi.fn(), deleteKanbanCard:vi.fn(), moveKanbanCard:vi.fn(),

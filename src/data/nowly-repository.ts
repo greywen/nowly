@@ -29,6 +29,32 @@ export type AppSettings = {
 
 export type ModuleLayoutEntry = { id: string; x: number; y: number; w: number; h: number };
 
+export type FocusSession = {
+  id: string;
+  plannedSeconds: number;
+  focusedSeconds: number;
+  status: 'completed' | 'interrupted';
+  startedAt: string;
+  endedAt: string;
+  createdAt: string;
+};
+
+export type FocusRange = { startAt: string; endAtExclusive: string };
+export type FocusPeriodBoundary = FocusRange & { period: string };
+export type FocusStatisticsPoint = {
+  period: string;
+  focusedSeconds: number;
+  completedCount: number;
+  interruptedCount: number;
+};
+export type FocusStatistics = {
+  totalFocusedSeconds: number;
+  completedCount: number;
+  interruptedCount: number;
+  completionRate: number;
+  points: FocusStatisticsPoint[];
+};
+
 // A permission a sandbox extension may declare. Kept in lockstep with the
 // backend allow-list so the installer and host agree on the capability surface.
 export type SandboxPermission = 'state' | 'today';
@@ -85,6 +111,9 @@ export type NowlyRepository = {
   saveModuleLayout(layout: ModuleLayoutEntry[]): Promise<ModuleLayoutEntry[]>;
   getModuleState(moduleId: string): Promise<string | null>;
   setModuleState(moduleId: string, state: string): Promise<void>;
+  createFocusSession(session: FocusSession): Promise<FocusSession>;
+  listFocusSessions(range: FocusRange): Promise<FocusSession[]>;
+  getFocusStatistics(boundaries: FocusPeriodBoundary[]): Promise<FocusStatistics>;
   listExtensions(): Promise<SandboxExtension[]>;
   installExtension(draft: SandboxExtensionDraft): Promise<SandboxExtension>;
   uninstallExtension(id: string): Promise<void>;
