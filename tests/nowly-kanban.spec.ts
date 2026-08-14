@@ -296,9 +296,10 @@ test('deleting a lane confirms the task count and cascades', async ({ page }) =>
   await expect(page.getByRole('region', { name: '泳道：待处理' })).toHaveCount(0);
 });
 
-test('uses a single bidirectional scroll container for the board', async ({ page }) => {
+test('uses a single vertical scroll container so the board never scrolls horizontally', async ({ page }) => {
   await addKanbanModule(page);
   const scroll = page.getByTestId('kanban-scroll');
   await expect(scroll).toHaveCount(1);
-  await expect(scroll).toHaveCSS('overflow', 'auto');
+  await expect(scroll).toHaveCSS('overflow-x', 'hidden');
+  await expect(scroll).toHaveCSS('overflow-y', 'auto');
 });

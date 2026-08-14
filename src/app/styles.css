@@ -877,13 +877,14 @@ button:disabled { cursor: default; opacity: .65; }
 .color-picker__hue-thumb { position: absolute; left: -2px; right: -2px; height: 5px; border: 1px solid #222; background: #fff; box-shadow: 0 0 0 1px rgba(255, 255, 255, .8); transform: translateY(-50%); pointer-events: none; }
 
 /* ------------------------------------------------------------------ Kanban */
-/* One board with fixed-width lanes. A single scroll viewport in the body
-   scrolls both axes; lanes never shrink. All states switch instantly. */
+/* One board with fluid lanes. Lanes share the available width and shrink to
+   fit, so the board never scrolls horizontally. Overflowing cards scroll
+   vertically within the board. All states switch instantly. */
 .kanban-widget { min-height: 0; }
 .kanban-body { min-height: 0; flex: 1; padding: 16px 24px 24px; display: flex; flex-direction: column; overflow: hidden; }
-.kanban-scroll { min-height: 0; flex: 1; overflow: auto; }
+.kanban-scroll { min-height: 0; flex: 1; overflow-x: hidden; overflow-y: auto; }
 .kanban-lanes { min-height: 100%; display: flex; align-items: flex-start; gap: 16px; }
-.kanban-lane { box-sizing: border-box; flex: 1 0 280px; min-width: 280px; max-height: 100%; display: flex; flex-direction: column; border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-subtle); }
+.kanban-lane { box-sizing: border-box; flex: 1 1 0; min-width: 0; max-height: 100%; display: flex; flex-direction: column; border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-subtle); }
 .kanban-lane--drop { border-color: var(--color-primary); background: var(--color-primary-light); }
 .kanban-lane__head { min-height: 48px; padding: 8px 12px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--border-default); border-radius: var(--radius-default) var(--radius-default) 0 0; color: var(--selected-color-fg); background: var(--selected-color-bg); cursor: grab; }
 .kanban-lane__head:active { cursor: grabbing; }

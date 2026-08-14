@@ -21,7 +21,7 @@ type KanbanLaneProps = {
   onCardDragEnd: () => void;
 };
 
-// One fixed-width lane: a draggable header carrying colour, an editable name
+// One fluid lane that shares board width: a draggable header carrying colour, an editable name
 // button and a card count, an add-card button, and the vertical list of task
 // cards. The lane is also a drop target for cards.
 export function KanbanLane({
