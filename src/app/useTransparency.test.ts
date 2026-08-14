@@ -1,50 +1,47 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
-  DEFAULT_OPACITY,
-  MAX_OPACITY,
-  MIN_OPACITY,
-  TRANSPARENCY_STORAGE_KEY,
-  clampOpacity,
-  useTransparency
+  BLUR_STORAGE_KEY,
+  DEFAULT_BLUR_RADIUS,
+  MAX_BLUR_RADIUS,
+  MIN_BLUR_RADIUS,
+  clampBlurRadius,
+  useBlurRadius
 } from './useTransparency';
 
-describe('clampOpacity', () => {
-  it('keeps values within the readable range', () => {
-    expect(clampOpacity(0)).toBe(MIN_OPACITY);
-    expect(clampOpacity(2)).toBe(MAX_OPACITY);
-    expect(clampOpacity(0.5)).toBe(0.5);
+describe('clampBlurRadius', () => {
+  it('keeps values within the 0–24px range', () => {
+    expect(clampBlurRadius(MIN_BLUR_RADIUS)).toBe(0);
+    expect(clampBlurRadius(MAX_BLUR_RADIUS + 10)).toBe(MAX_BLUR_RADIUS);
+    expect(clampBlurRadius(-4)).toBe(MIN_BLUR_RADIUS);
+    expect(clampBlurRadius(8)).toBe(8);
   });
 
   it('falls back to the default for non-numbers', () => {
-    expect(clampOpacity(Number.NaN)).toBe(DEFAULT_OPACITY);
+    expect(clampBlurRadius(Number.NaN)).toBe(DEFAULT_BLUR_RADIUS);
   });
 });
 
-describe('useTransparency', () => {
-  beforeEach(() => {
-    localStorage.clear();
+describe('useBlurRadius', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('starts clear when nothing is stored', () => {
+    const { result } = renderHook(() => useBlurRadius());
+    expect(result.current.blurRadius).toBe(DEFAULT_BLUR_RADIUS);
   });
 
-  it('starts fully opaque when nothing is stored', () => {
-    const { result } = renderHook(() => useTransparency());
-    expect(result.current.opacity).toBe(DEFAULT_OPACITY);
+  it('persists and clamps a new blur radius', () => {
+    const { result } = renderHook(() => useBlurRadius());
+    act(() => result.current.setBlurRadius(12));
+    expect(result.current.blurRadius).toBe(12);
+    expect(localStorage.getItem(BLUR_STORAGE_KEY)).toBe('12');
+    act(() => result.current.setBlurRadius(30));
+    expect(result.current.blurRadius).toBe(MAX_BLUR_RADIUS);
   });
 
-  it('persists and clamps a new opacity', () => {
-    const { result } = renderHook(() => useTransparency());
-
-    act(() => result.current.setOpacity(0.6));
-    expect(result.current.opacity).toBe(0.6);
-    expect(localStorage.getItem(TRANSPARENCY_STORAGE_KEY)).toBe('0.6');
-
-    act(() => result.current.setOpacity(0));
-    expect(result.current.opacity).toBe(MIN_OPACITY);
-  });
-
-  it('restores a stored opacity on mount', () => {
-    localStorage.setItem(TRANSPARENCY_STORAGE_KEY, '0.4');
-    const { result } = renderHook(() => useTransparency());
-    expect(result.current.opacity).toBe(0.4);
+  it('restores a stored blur radius on mount', () => {
+    localStorage.setItem(BLUR_STORAGE_KEY, '6');
+    const { result } = renderHook(() => useBlurRadius());
+    expect(result.current.blurRadius).toBe(6);
   });
 });

@@ -3,63 +3,40 @@ import { describe, expect, it, vi } from 'vitest';
 import { TransparencyControl } from './TransparencyControl';
 
 describe('TransparencyControl', () => {
-  it('opens the slider popover and shows transparency as a percentage', () => {
-    render(<TransparencyControl opacity={1} onChange={() => undefined} />);
+  it('opens the Gaussian blur slider popover', () => {
+    render(<TransparencyControl blurRadius={0} onChange={() => undefined} />);
 
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '调整透明度' }));
+    fireEvent.click(screen.getByRole('button', { name: '调整高斯模糊' }));
 
-    expect(screen.getByRole('dialog', { name: '透明度' })).toBeInTheDocument();
-    // Fully opaque content reads as 0% transparency.
-    expect(screen.getByText('0%')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: '高斯模糊' })).toBeInTheDocument();
+    expect(screen.getByText('0px')).toBeInTheDocument();
     expect(screen.getByRole('slider')).toHaveValue('0');
+    expect(screen.getByRole('slider')).toHaveAttribute('min', '0');
+    expect(screen.getByRole('slider')).toHaveAttribute('max', '24');
   });
 
-  it('reflects the current opacity as its transparency complement', () => {
-    render(<TransparencyControl opacity={0.6} onChange={() => undefined} />);
+  it('reflects the current blur radius', () => {
+    render(<TransparencyControl blurRadius={8} onChange={() => undefined} />);
 
-    fireEvent.click(screen.getByRole('button', { name: '调整透明度' }));
-    expect(screen.getByText('40%')).toBeInTheDocument();
-    expect(screen.getByRole('slider')).toHaveValue('40');
+    fireEvent.click(screen.getByRole('button', { name: '调整高斯模糊' }));
+    expect(screen.getByText('8px')).toBeInTheDocument();
+    expect(screen.getByRole('slider')).toHaveValue('8');
   });
 
-  it('reports a lower opacity as the slider moves toward more transparent', () => {
+  it('reports the blur radius as the slider moves', () => {
     const onChange = vi.fn();
-    render(<TransparencyControl opacity={1} onChange={onChange} />);
+    render(<TransparencyControl blurRadius={0} onChange={onChange} />);
 
-    fireEvent.click(screen.getByRole('button', { name: '调整透明度' }));
-    fireEvent.change(screen.getByRole('slider'), { target: { value: '30' } });
+    fireEvent.click(screen.getByRole('button', { name: '调整高斯模糊' }));
+    fireEvent.change(screen.getByRole('slider'), { target: { value: '12' } });
 
-    // 30% transparency -> 0.7 opacity.
-    expect(onChange).toHaveBeenCalledWith(0.7);
-  });
-
-  it('shows 100% transparency for fully faded content', () => {
-    render(<TransparencyControl opacity={0} onChange={() => undefined} />);
-
-    fireEvent.click(screen.getByRole('button', { name: '调整透明度' }));
-    // 0 opacity reads as 100% transparency.
-    expect(screen.getByText('100%')).toBeInTheDocument();
-    expect(screen.getByRole('slider')).toHaveValue('100');
-  });
-
-  it('allows dragging all the way to fully transparent', () => {
-    const onChange = vi.fn();
-    render(<TransparencyControl opacity={1} onChange={onChange} />);
-
-    fireEvent.click(screen.getByRole('button', { name: '调整透明度' }));
-    fireEvent.change(screen.getByRole('slider'), { target: { value: '100' } });
-
-    // 100% transparency -> 0 opacity.
-    expect(onChange).toHaveBeenCalledWith(0);
+    expect(onChange).toHaveBeenCalledWith(12);
   });
 
   it('closes on Escape', () => {
-    render(<TransparencyControl opacity={1} onChange={() => undefined} />);
+    render(<TransparencyControl blurRadius={0} onChange={() => undefined} />);
 
-    fireEvent.click(screen.getByRole('button', { name: '调整透明度' }));
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
-
+    fireEvent.click(screen.getByRole('button', { name: '调整高斯模糊' }));
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });

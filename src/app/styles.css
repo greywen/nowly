@@ -94,7 +94,7 @@ button { cursor: pointer; }
 button:disabled { cursor: default; opacity: .65; }
 :where(button, input, textarea, select):focus-visible { outline: 0; }
 
-.app-shell { position: relative; width: 100vw; height: 100vh; display: grid; grid-template-rows: 70px minmax(0, 1fr); overflow: hidden; background: var(--bg-subtle); }
+.app-shell { position: relative; width: 100vw; height: 100vh; display: grid; grid-template-rows: 70px minmax(0, 1fr); overflow: hidden; background: var(--bg-subtle); filter: blur(var(--app-blur-radius, 0px)); }
 /* Wallpaper layer sits behind the app content. Hidden until a wallpaper is
    configured; it only anchors the stacking order for now. */
 .wallpaper-layer { position: absolute; inset: 0; z-index: 0; background-size: cover; background-position: center; pointer-events: none; }
