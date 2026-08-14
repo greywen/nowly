@@ -115,8 +115,8 @@ describe('DesktopShell', () => {
     expect(onWallpaperDoubleClick).toHaveBeenCalledOnce();
   });
 
-  it('fades the whole app content only while running as the wallpaper', () => {
-    localStorage.setItem('nowly:page-opacity', '0.4');
+  it('blurs the whole app content only while running as the wallpaper', () => {
+    localStorage.setItem('nowly:page-blur', '8');
     const { rerender } = render(
       <DesktopShell
         mode="foreground"
@@ -127,9 +127,9 @@ describe('DesktopShell', () => {
       />
     );
 
-    // Foreground only records the preference; content stays fully opaque.
-    expect(screen.getByRole('banner').style.opacity).toBe('');
-    expect(screen.getByRole('main').style.opacity).toBe('');
+    // Foreground only records the preference; content stays crisp.
+    expect(screen.getByRole('banner').style.filter).toBe('');
+    expect(screen.getByRole('main').style.filter).toBe('');
 
     rerender(
       <DesktopShell
@@ -141,13 +141,13 @@ describe('DesktopShell', () => {
       />
     );
 
-    // Wallpaper mode fades the topbar and workspace together.
-    expect(screen.getByRole('banner').style.opacity).toBe('0.4');
-    expect(screen.getByRole('main').style.opacity).toBe('0.4');
+    // Wallpaper mode blurs the topbar and workspace together.
+    expect(screen.getByRole('banner').style.filter).toBe('blur(8px)');
+    expect(screen.getByRole('main').style.filter).toBe('blur(8px)');
   });
 
-  it('previews the fade live on the workspace while the slider is open in foreground', () => {
-    localStorage.setItem('nowly:page-opacity', '0.4');
+  it('previews the blur live on the workspace while the slider is open in foreground', () => {
+    localStorage.setItem('nowly:page-blur', '8');
     render(
       <DesktopShell
         mode="foreground"
@@ -158,11 +158,11 @@ describe('DesktopShell', () => {
       />
     );
 
-    // Opening the slider previews the fade on the workspace, but the topbar
-    // stays opaque so the control itself remains usable.
-    fireEvent.click(screen.getByRole('button', { name: '调整透明度' }));
-    expect(screen.getByRole('main').style.opacity).toBe('0.4');
-    expect(screen.getByRole('banner').style.opacity).toBe('');
+    // Opening the slider previews the blur on the workspace, but the topbar
+    // stays crisp so the control itself remains usable.
+    fireEvent.click(screen.getByRole('button', { name: '调整模糊' }));
+    expect(screen.getByRole('main').style.filter).toBe('blur(8px)');
+    expect(screen.getByRole('banner').style.filter).toBe('');
   });
 
   it('does not inset the root from viewport edges', () => {

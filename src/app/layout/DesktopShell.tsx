@@ -13,8 +13,8 @@ import type {
 import { useModuleLayout } from '../../widgets/useModuleLayout';
 import { TemplatePickerDialog } from '../../widgets/TemplatePickerDialog';
 import { ModuleGrid, type ModuleGridItem } from './ModuleGrid';
-import { TransparencyControl } from '../TransparencyControl';
-import { DEFAULT_OPACITY, useTransparency } from '../useTransparency';
+import { BlurControl } from '../BlurControl';
+import { DEFAULT_BLUR, useBlur } from '../useBlur';
 
 type DesktopShellProps = {
   mode?: 'foreground' | 'wallpaper';
@@ -34,7 +34,7 @@ type DesktopShellProps = {
 
 // The wallpaper layer sits behind the app content. It stays hidden until a
 // wallpaper source is configured; for now it only anchors the stacking order
-// so the transparency layer can reveal the shell background beneath modules.
+// so the blur filter can soften the modules over the desktop wallpaper.
 function WallpaperLayer() {
   return <div className="wallpaper-layer" data-testid="wallpaper-layer" aria-hidden="true" hidden />;
 }
@@ -56,20 +56,21 @@ export function DesktopShell({
   const foreground = mode === 'foreground';
   const { layout, move, resize, addWidget, removeWidget, presentIds } =
     useModuleLayout(definitions);
-  const { opacity, setOpacity } = useTransparency();
+  const { blur, setBlur } = useBlur();
   const [isEditing, setIsEditing] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [previewingTransparency, setPreviewingTransparency] = useState(false);
+  const [previewingBlur, setPreviewingBlur] = useState(false);
 
-  // Transparency persists as a wallpaper-only look. As the wallpaper it fades
-  // the whole app content, topbar included, so the wallpaper shows through
-  // everything. While the slider popover is open we also preview the fade live
-  // in foreground, but only on the workspace — leaving the topbar (and the
-  // slider itself) fully usable so you never lose the control you're dragging.
-  const faded = opacity < DEFAULT_OPACITY;
-  const topbarStyle = !foreground && faded ? { opacity } : undefined;
+  // Blur persists as a wallpaper-only look. As the wallpaper it softens the
+  // whole app content, topbar included, so the modules read as a frosted layer
+  // over the desktop. While the slider popover is open we also preview the blur
+  // live in foreground, but only on the workspace — leaving the topbar (and the
+  // slider itself) crisp so you never lose the control you're dragging.
+  const blurred = blur > DEFAULT_BLUR;
+  const blurFilter = `blur(${blur}px)`;
+  const topbarStyle = !foreground && blurred ? { filter: blurFilter } : undefined;
   const workspaceStyle =
-    (!foreground || previewingTransparency) && faded ? { opacity } : undefined;
+    (!foreground || previewingBlur) && blurred ? { filter: blurFilter } : undefined;
 
   const items: ModuleGridItem[] = layout
     .filter(
@@ -95,7 +96,7 @@ export function DesktopShell({
         </div>
         <div className="top-actions">
           {foreground ? (
-            <TransparencyControl opacity={opacity} onChange={setOpacity} onOpenChange={setPreviewingTransparency} />
+            <BlurControl blur={blur} onChange={setBlur} onOpenChange={setPreviewingBlur} />
           ) : null}
           {foreground && isEditing ? (
             <button
