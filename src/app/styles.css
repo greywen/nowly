@@ -786,15 +786,6 @@ button:disabled { cursor: default; opacity: .65; }
 .module-frame__remove:hover { color: var(--color-danger); background: var(--color-danger-light); }
 .module-frame__remove svg { width: 16px; height: 16px; }
 
-/* Focus timer widget */
-.focus-timer__body { align-items: center; justify-content: center; gap: 16px; text-align: center; }
-.focus-timer__display { margin: 0; color: var(--text-primary); font-size: 28px; font-weight: 700; line-height: 1.25; font-variant-numeric: tabular-nums; }
-.focus-timer__hint { margin: 0; color: var(--text-muted); font-size: 13.6px; font-weight: 500; }
-.focus-timer__presets { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
-.focus-timer__preset { min-height: 40px; padding: 8.8px 16px; font-size: 15.2px; }
-.focus-timer__preset.is-active { color: var(--color-primary); background: var(--color-primary-light); border-color: var(--color-primary); }
-.focus-timer__actions { display: flex; justify-content: center; gap: 8px; }
-
 /* News word cloud widget */
 .word-cloud__body { align-content: flex-start; }
 .word-cloud__list { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
@@ -1020,18 +1011,37 @@ button:disabled { cursor: default; opacity: .65; }
 /* Focus timer and reports — all state changes are immediate per design.md. */
 .focus-timer { container-type: size; }
 .focus-timer__header { justify-content:flex-end; }
-.focus-timer__body { min-height:0; padding:20px 24px 24px; display:flex; flex-direction:column; align-items:center; gap:12px; }
-.focus-timer__display { margin:0; color:var(--text-primary); font-size:clamp(48px,10cqw,80px); font-weight:300; line-height:1; font-variant-numeric:tabular-nums; }
+.focus-timer__body { min-height:0; padding:20px 24px 24px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; }
+.focus-timer__display { margin:0; color:var(--text-primary); font-family:"Segoe UI",Inter,Helvetica,Arial,sans-serif; font-size:clamp(48px,10cqw,80px); font-weight:300; line-height:1; font-variant-numeric:tabular-nums; font-feature-settings:"tnum" 1,"lnum" 1; text-align:center; }
 .focus-timer__hint { margin:0; color:var(--text-muted); font-size:13.6px; }
+.focus-timer__clock { display:flex; flex-direction:column; align-items:center; gap:4px; }
+.focus-timer__controls { width:100%; display:flex; flex-direction:column; align-items:center; gap:12px; }
 .focus-timer__presets,.focus-timer__actions { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; }
-.focus-timer__preset.is-active { color:var(--color-primary-active); background:var(--color-primary-light); }
-.focus-timer__trend { width:100%; margin-top:auto; padding:12px 0 0; border:0; border-top:1px dashed var(--border-default); color:var(--text-secondary); background:transparent; text-align:left; }
-.focus-timer__trend strong,.focus-timer__trend small { display:block; }.focus-timer__trend strong{color:var(--text-primary);font-size:20px}.focus-timer__trend small{font-size:13.6px;color:var(--text-muted)}
+.focus-timer__preset { min-height:40px; padding:8px 16px; font-size:15.2px; }
+.focus-timer__preset.is-active { color:var(--color-primary-active); background:var(--color-primary-light); border-color:var(--color-primary); }
+.focus-timer__auto { display:flex; align-items:center; gap:8px; color:var(--text-secondary); font-size:13.6px; cursor:pointer; }
+.focus-timer__auto input { width:16px; height:16px; margin:0; accent-color:var(--color-primary); cursor:pointer; }
 .focus-timer--wallpaper .focus-timer__body { box-sizing:border-box; height:100%; justify-content:center; padding:24px; }
 .focus-timer--wallpaper .focus-timer__hint { color:var(--text-secondary); font-size:15.2px; text-align:center; }
-@container (max-width:420px){.focus-timer__body{padding:16px;gap:8px}}
-@container (max-height:390px){.focus-timer__body{padding:16px;gap:8px}}
+/* Fullscreen countdown shown while running as the wallpaper. No animation per design.md. */
+.focus-fullscreen { position:absolute; inset:0; z-index:50; overflow:hidden; display:flex; align-items:center; justify-content:center; padding:32px; color:var(--text-primary); background:var(--bg-subtle); }
+.focus-fullscreen__background { position:absolute; inset:0; z-index:0; overflow:hidden; pointer-events:none; }
+.focus-fullscreen__shape { position:absolute; display:block; border-radius:50%; pointer-events:none; }
+.focus-fullscreen__shape--cyan { width:min(38vw,540px); height:min(38vw,540px); right:max(-12vw,-180px); top:max(-18vw,-250px); background:var(--color-primary-light); }
+.focus-fullscreen__shape--ring { width:min(28vw,400px); height:min(28vw,400px); left:max(-9vw,-130px); bottom:max(-15vw,-210px); border:1px solid var(--color-primary-border-subtle); background:transparent; }
+.focus-fullscreen__shape--amber { width:min(9vw,128px); height:min(9vw,128px); left:16%; top:18%; background:var(--color-warning-light); }
+.focus-fullscreen__center { position:relative; z-index:1; text-align:center; display:flex; flex-direction:column; align-items:center; gap:16px; }
+/* Breathing glow behind the countdown. The only motion allowed here; the digits
+   themselves stay still so the reading never jitters. */
+.focus-fullscreen__glow { position:absolute; left:50%; top:50%; z-index:-1; width:min(60vw,520px); height:min(60vw,520px); transform:translate(-50%,-50%); border-radius:50%; pointer-events:none; background:radial-gradient(circle, rgba(var(--focus-glow-rgb,79,201,218),0.28) 0%, rgba(var(--focus-glow-rgb,79,201,218),0.10) 40%, rgba(var(--focus-glow-rgb,79,201,218),0) 70%); animation:focus-breathe var(--focus-glow-duration,6s) ease-in-out infinite; }
+@keyframes focus-breathe { 0%,100% { transform:translate(-50%,-50%) scale(var(--focus-glow-scale-min,0.9)); opacity:var(--focus-glow-opacity-min,.65); } 50% { transform:translate(-50%,-50%) scale(var(--focus-glow-scale-max,1.12)); opacity:1; } }
+@media (prefers-reduced-motion: reduce) { .focus-fullscreen__glow { animation:none; } }
+.focus-fullscreen__display { margin:0; font-family:"Segoe UI",Inter,Helvetica,Arial,sans-serif; color:var(--text-primary); font-size:clamp(80px,14vw,220px); font-weight:300; line-height:1; font-variant-numeric:tabular-nums; font-feature-settings:"tnum" 1,"lnum" 1; }
+.focus-fullscreen__status { margin:0; color:var(--text-secondary); font-size:17.2px; }
+.focus-fullscreen__hint { margin:0; color:var(--text-muted); font-size:15.2px; }
+@container (max-width:420px){.focus-timer__body{padding:16px;gap:12px}}
+@container (max-height:390px){.focus-timer__body{padding:16px;gap:12px}.focus-timer__controls{gap:8px}}
 .focus-statistics-dialog{width:min(760px,calc(100vw - 32px))}.focus-statistics__intro{margin:0 0 16px;color:var(--text-muted)}.focus-statistics__periods{display:flex;gap:8px;flex-wrap:wrap}.focus-statistics__periods [aria-pressed="true"]{color:var(--color-primary-active);background:var(--color-primary-light)}
 .focus-statistics__summaries{margin:20px 0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.focus-statistics__summaries div{padding:16px;border-radius:var(--radius-default);background:var(--bg-subtle)}.focus-statistics__summaries strong,.focus-statistics__summaries span{display:block}.focus-statistics__summaries strong{color:var(--text-primary);font-size:18.4px}.focus-statistics__summaries span{color:var(--text-muted);font-size:13.6px}
 @media(max-width:700px){.focus-statistics__summaries{grid-template-columns:repeat(2,1fr)}}
-.focus-timer__custom{width:100%;display:grid;grid-template-columns:auto minmax(80px,1fr) auto;align-items:center;gap:8px}.focus-timer__custom label{font-size:13.6px;color:var(--text-secondary)}.focus-timer__custom-input{box-sizing:border-box;height:40px;min-width:0;padding:8px 16px;border:1px solid var(--border-default);border-radius:var(--radius-default);color:var(--text-secondary);background:var(--bg-subtle)}.focus-timer__custom-input:focus{border-color:var(--color-primary);box-shadow:0 0 0 4px var(--focus-ring)}.focus-timer__custom [role="alert"]{grid-column:1/-1;color:var(--color-danger);font-size:13.6px}
+.focus-timer__custom{width:100%;display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px}.focus-timer__custom label{grid-column:1/-1;font-size:13.6px;color:var(--text-secondary)}.focus-timer__custom-input{box-sizing:border-box;height:40px;min-width:0;padding:8px 16px;border:1px solid var(--border-default);border-radius:var(--radius-default);color:var(--text-secondary);background:var(--bg-subtle)}.focus-timer__custom-input:focus{border-color:var(--color-primary);box-shadow:0 0 0 4px var(--focus-ring)}.focus-timer__custom [role="alert"]{grid-column:1/-1;color:var(--color-danger);font-size:13.6px}

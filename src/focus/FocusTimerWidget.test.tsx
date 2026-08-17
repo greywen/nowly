@@ -19,7 +19,7 @@ describe('FocusTimerWidget',()=>{
     expect(screen.getByRole('button',{name:'查看统计'})).toHaveTextContent('');
     expect(screen.getByRole('button',{name:'重置计时'})).toHaveTextContent('');
     expect(screen.queryByRole('button',{name:'全屏专注'})).not.toBeInTheDocument();
-    expect(screen.getByText('60')).toBeInTheDocument();
+    expect(screen.queryByText('近 7 天分钟')).not.toBeInTheDocument();
   });
 
   it('starts the selected preset and opens statistics',async()=>{

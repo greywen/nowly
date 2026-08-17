@@ -28,6 +28,7 @@ import { useCurrentTime } from './useCurrentTime';
 import { t, useTranslation, getLanguage } from '../i18n';
 import { FocusTimerWidget } from '../focus/FocusTimerWidget';
 import { FocusStatisticsDialog } from '../focus/FocusStatisticsDialog';
+import { FocusWallpaperOverlay } from '../focus/FocusWallpaperOverlay';
 
 type WindowMode = 'wallpaper' | 'foreground';
 
@@ -181,7 +182,7 @@ export function App() {
     );
   }
   modules.kanban = <KanbanWidget todayIso={todayIso} recentColors={recentColors} onRememberCustomColor={rememberCustomColor} />;
-  modules.focusTimer = <FocusTimerWidget mode={windowMode} onOpenStatistics={() => setFocusStatisticsOpen(true)} />;
+  modules.focusTimer = <FocusTimerWidget mode={windowMode} onOpenStatistics={() => setFocusStatisticsOpen(true)} onEnterWallpaper={() => void runWindowModeSwitch(switchToWallpaper)} />;
   // Installed user modules run their uploaded source in an isolated
   // iframe, gated by the permissions they declared at install time.
   for (const extension of extensionsFeature.extensions) {
@@ -253,6 +254,7 @@ export function App() {
         onSetWallpaper={() => void runWindowModeSwitch(switchToWallpaper)}
         onWallpaperDoubleClick={() => void runWindowModeSwitch(switchToForeground)}
         onOpenSettings={() => setModal({type:'settings',trigger:null})}
+        overlay={windowMode === 'wallpaper' ? <FocusWallpaperOverlay /> : null}
       />
       {focusStatisticsOpen ? <FocusStatisticsDialog onClose={() => setFocusStatisticsOpen(false)} /> : null}
       <ModalRoot

@@ -391,6 +391,8 @@ export const translations: Record<Language, Record<string, string>> = {
     'focusTimer.resume': '继续',
     'focusTimer.weekMinutes': '近 7 天分钟',
     'focusTimer.wallpaperHint': '双击返回前台以操作专注计时',
+    'focusTimer.autoWallpaper': '开始后自动进入壁纸专注',
+    'focusTimer.fullscreen': '全屏专注',
     'focusTimer.notificationTitle': '专注完成',
     'focusTimer.notificationBody': '你已完成 {minutes} 分钟专注，休息一下吧。',
 
@@ -829,6 +831,8 @@ export const translations: Record<Language, Record<string, string>> = {
     'focusTimer.resume': 'Resume',
     'focusTimer.weekMinutes': 'Minutes in the last 7 days',
     'focusTimer.wallpaperHint': 'Double-click to return to the app and control the focus timer',
+    'focusTimer.autoWallpaper': 'Enter wallpaper focus after starting',
+    'focusTimer.fullscreen': 'Fullscreen focus',
     'focusTimer.notificationTitle': 'Focus complete',
     'focusTimer.notificationBody': 'You completed a {minutes}-minute focus session. Take a break.',
 
