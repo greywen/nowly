@@ -31,6 +31,9 @@ test('starts focus and automatically presents the wallpaper fullscreen timer',as
   const fullscreen=page.getByRole('region',{name:'全屏专注'});
   await expect(fullscreen).toBeVisible();
   await expect(fullscreen.getByRole('timer')).toContainText(/24:5\d|25:00/);
+  const background=await fullscreen.evaluate(element=>{const style=getComputedStyle(element);return{color:style.backgroundColor,image:style.backgroundImage}});
+  expect(background).toEqual({color:'rgb(248, 246, 242)',image:'none'});
+  await expect(fullscreen.locator('.focus-fullscreen__shape')).toHaveCount(3);
   await page.keyboard.press('Escape');
   await expect(page.getByRole('region',{name:'全屏专注'})).toHaveCount(0);
 });
