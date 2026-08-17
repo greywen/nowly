@@ -17,8 +17,6 @@ export type FocusState = {
   accumulatedMs: number;
   runStartedMonoMs: number | null;
   startedAt: string | null;
-  fullscreen: boolean;
-  fullscreenDismissed: boolean;
 };
 
 type StartFocusInput = {
@@ -39,9 +37,7 @@ export function initialFocusState(minutes: number): FocusState {
     plannedSeconds: minutes * 60,
     accumulatedMs: 0,
     runStartedMonoMs: null,
-    startedAt: null,
-    fullscreen: false,
-    fullscreenDismissed: false
+    startedAt: null
   };
 }
 
@@ -53,9 +49,7 @@ export function startFocus(state: FocusState, input: StartFocusInput): FocusStat
     sessionId: input.id,
     accumulatedMs: 0,
     runStartedMonoMs: input.nowMonoMs,
-    startedAt: new Date(input.nowWallMs).toISOString(),
-    fullscreen: false,
-    fullscreenDismissed: false
+    startedAt: new Date(input.nowWallMs).toISOString()
   };
 }
 
@@ -122,14 +116,4 @@ export function interruptFocus(
   const focusedSeconds = Math.floor(focusedMilliseconds(state, nowMonoMs) / 1_000);
   const record = focusedSeconds > 0 ? snapshotFocus(state, nowMonoMs, endedWallMs) : null;
   return { state: initialFocusState(state.plannedSeconds / 60), record };
-}
-
-export function requestFullscreen(state: FocusState): FocusState {
-  if (state.status !== 'running' && state.status !== 'paused' && state.status !== 'completed') return state;
-  return { ...state, fullscreen: true, fullscreenDismissed: false };
-}
-
-export function dismissFullscreen(state: FocusState): FocusState {
-  if (!state.fullscreen) return state;
-  return { ...state, fullscreen: false, fullscreenDismissed: true };
 }

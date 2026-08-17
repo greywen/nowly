@@ -28,8 +28,6 @@ import { useCurrentTime } from './useCurrentTime';
 import { t, useTranslation, getLanguage } from '../i18n';
 import { FocusTimerWidget } from '../focus/FocusTimerWidget';
 import { FocusStatisticsDialog } from '../focus/FocusStatisticsDialog';
-import { FocusFullscreenLayer } from '../focus/FocusFullscreenLayer';
-import { useFocusTimer } from '../focus/FocusTimerContext';
 
 type WindowMode = 'wallpaper' | 'foreground';
 
@@ -63,7 +61,6 @@ export function App() {
   const notes = notesFeature.notes.data;
   const [modal, setModal] = useState<ModalState>(null);
   const [focusStatisticsOpen, setFocusStatisticsOpen] = useState(false);
-  const focusTimer = useFocusTimer();
   const [windowMode, setWindowMode] = useState<WindowMode>('foreground');
   const [isSwitchingWindowMode, setIsSwitchingWindowMode] = useState(false);
   const isSwitchingWindowModeRef = useRef(false);
@@ -184,7 +181,7 @@ export function App() {
     );
   }
   modules.kanban = <KanbanWidget todayIso={todayIso} recentColors={recentColors} onRememberCustomColor={rememberCustomColor} />;
-  modules.focusTimer = <FocusTimerWidget onOpenStatistics={() => setFocusStatisticsOpen(true)} />;
+  modules.focusTimer = <FocusTimerWidget mode={windowMode} onOpenStatistics={() => setFocusStatisticsOpen(true)} />;
   // Installed user modules run their uploaded source in an isolated
   // iframe, gated by the permissions they declared at install time.
   for (const extension of extensionsFeature.extensions) {
@@ -199,11 +196,6 @@ export function App() {
     );
   }
 
-  useEffect(() => {
-    if (windowMode === 'wallpaper' && focusTimer.state.status === 'running' && !focusTimer.state.fullscreenDismissed) {
-      focusTimer.enterFullscreen();
-    }
-  }, [windowMode, focusTimer.state.status, focusTimer.state.fullscreenDismissed]);
 
   useEffect(() => {
     const removers: Array<() => void> = [];
@@ -261,7 +253,6 @@ export function App() {
         onSetWallpaper={() => void runWindowModeSwitch(switchToWallpaper)}
         onWallpaperDoubleClick={() => void runWindowModeSwitch(switchToForeground)}
         onOpenSettings={() => setModal({type:'settings',trigger:null})}
-        overlay={<FocusFullscreenLayer />}
       />
       {focusStatisticsOpen ? <FocusStatisticsDialog onClose={() => setFocusStatisticsOpen(false)} /> : null}
       <ModalRoot

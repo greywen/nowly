@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RepositoryProvider } from '../data/RepositoryContext';
 import type { NowlyRepository } from '../data/nowly-repository';
+import { setLanguage } from '../i18n';
 import { FocusTimerProvider, useFocusTimer } from './FocusTimerContext';
 
 const invoke = vi.hoisted(() => vi.fn());
@@ -24,7 +25,7 @@ function wrapper(repo: NowlyRepository) {
 }
 
 describe('FocusTimerProvider', () => {
-  beforeEach(() => { invoke.mockReset().mockResolvedValue(null); listen.mockReset().mockResolvedValue(()=>undefined); });
+  beforeEach(() => { setLanguage('zh'); invoke.mockReset().mockResolvedValue(null); listen.mockReset().mockResolvedValue(()=>undefined); });
 
   it('shares start pause and resume state with the native coordinator', async () => {
     const {result} = renderHook(useFocusTimer,{wrapper:wrapper(repository())});
@@ -35,6 +36,19 @@ describe('FocusTimerProvider', () => {
     expect(result.current.state.status).toBe('paused');
     await act(result.current.resume);
     expect(result.current.state.status).toBe('running');
+  });
+
+  it('sends a Chinese completion notification to the native timer', async () => {
+    const {result} = renderHook(useFocusTimer,{wrapper:wrapper(repository())});
+    await act(async()=>result.current.start(25));
+    expect(invoke).toHaveBeenCalledWith('start_focus_timer',expect.objectContaining({snapshot:expect.objectContaining({notificationTitle:'专注完成',notificationBody:'你已完成 25 分钟专注，休息一下吧。'})}));
+  });
+
+  it('sends an English completion notification to the native timer', async () => {
+    setLanguage('en');
+    const {result} = renderHook(useFocusTimer,{wrapper:wrapper(repository())});
+    await act(async()=>result.current.start(25));
+    expect(invoke).toHaveBeenCalledWith('start_focus_timer',expect.objectContaining({snapshot:expect.objectContaining({notificationTitle:'Focus complete',notificationBody:'You completed a 25-minute focus session. Take a break.'})}));
   });
 
   it('records an effective interrupted session', async () => {

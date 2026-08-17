@@ -1,14 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   completeFocus,
-  dismissFullscreen,
   focusedMilliseconds,
   initialFocusState,
   interruptFocus,
   isValidFocusMinutes,
   pauseFocus,
   remainingSeconds,
-  requestFullscreen,
   resumeFocus,
   snapshotFocus,
   startFocus
@@ -100,18 +98,14 @@ describe('focus timer state machine', () => {
     expect(interrupted.state.status).toBe('idle');
   });
 
-  it('tracks manual fullscreen dismissal within the current session', () => {
-    const running = startFocus(initialFocusState(25), {
-      id: 'session-1',
-      nowWallMs: 1_000,
-      nowMonoMs: 10
+  it('keeps focus state independent from presentation modes', () => {
+    expect(initialFocusState(25)).toEqual({
+      status: 'idle',
+      sessionId: null,
+      plannedSeconds: 1500,
+      accumulatedMs: 0,
+      runStartedMonoMs: null,
+      startedAt: null
     });
-    const fullscreen = requestFullscreen(running);
-    const dismissed = dismissFullscreen(fullscreen);
-
-    expect(fullscreen.fullscreen).toBe(true);
-    expect(dismissed.fullscreen).toBe(false);
-    expect(dismissed.fullscreenDismissed).toBe(true);
-    expect(requestFullscreen(dismissed).fullscreen).toBe(true);
   });
 });
