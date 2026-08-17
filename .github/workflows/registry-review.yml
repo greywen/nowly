@@ -1,0 +1,21 @@
+name: Registry Review
+
+# Runs on any PR that touches the module registry. It validates the index
+# against the schema, checks manifests, verifies published sha256 hashes match
+# the hosted/committed source, and scans for dangerous patterns. A human
+# maintainer still makes the final trust decision before merging.
+on:
+  pull_request:
+    paths:
+      - 'registry/**'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Validate registry
+        run: node registry/validate.mjs

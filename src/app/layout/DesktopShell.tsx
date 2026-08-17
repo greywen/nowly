@@ -1,4 +1,4 @@
-import { Check, LayoutGrid, MonitorDown, Plus, Settings } from 'lucide-react';
+import { Check, LayoutGrid, MonitorDown, Plus, Settings, Store } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import {
   builtinDefinitions,
@@ -12,6 +12,7 @@ import type {
 } from '../../data/nowly-repository';
 import { useModuleLayout } from '../../widgets/useModuleLayout';
 import { TemplatePickerDialog } from '../../widgets/TemplatePickerDialog';
+import { ModuleMarketDialog } from '../../widgets/ModuleMarketDialog';
 import { ModuleGrid, type ModuleGridItem } from './ModuleGrid';
 import { BlurControl } from '../BlurControl';
 import { DEFAULT_BLUR, useBlur } from '../useBlur';
@@ -27,6 +28,7 @@ type DesktopShellProps = {
   sandboxExtensions?: SandboxExtension[];
   onInstallExtension?: (draft: SandboxExtensionDraft) => Promise<unknown>;
   onUninstallExtension?: (id: string) => Promise<unknown>;
+  onReloadExtensions?: () => void;
   isModeSwitching?: boolean;
   onSetWallpaper?: () => void;
   onWallpaperDoubleClick?: () => void;
@@ -50,6 +52,7 @@ export function DesktopShell({
   sandboxExtensions = [],
   onInstallExtension,
   onUninstallExtension,
+  onReloadExtensions,
   isModeSwitching = false,
   onSetWallpaper,
   onWallpaperDoubleClick,
@@ -62,6 +65,7 @@ export function DesktopShell({
   const { blur, setBlur } = useBlur();
   const [isEditing, setIsEditing] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [marketOpen, setMarketOpen] = useState(false);
   const [previewingBlur, setPreviewingBlur] = useState(false);
 
   // Blur persists as a wallpaper-only look. As the wallpaper it softens the
@@ -110,6 +114,17 @@ export function DesktopShell({
             >
               <Plus aria-hidden="true" />
               {t('shell.addModule')}
+            </button>
+          ) : null}
+          {foreground && isEditing ? (
+            <button
+              type="button"
+              className="btn"
+              aria-label={t('market.title')}
+              onClick={() => setMarketOpen(true)}
+            >
+              <Store aria-hidden="true" />
+              {t('market.title')}
             </button>
           ) : null}
           {foreground ? (
@@ -163,6 +178,14 @@ export function DesktopShell({
           onRemove={(id) => removeWidget(id)}
           onInstallExtension={(draft) => onInstallExtension?.(draft) ?? Promise.resolve()}
           onUninstallExtension={(extension) => void onUninstallExtension?.(extension.id)}
+        />
+      ) : null}
+
+      {foreground && marketOpen ? (
+        <ModuleMarketDialog
+          installedIds={new Set(sandboxExtensions.map((extension) => extension.id))}
+          onClose={() => setMarketOpen(false)}
+          onInstalled={() => onReloadExtensions?.()}
         />
       ) : null}
     </div>

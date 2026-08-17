@@ -10,6 +10,8 @@ import {
   type WidgetDefinition,
   type WidgetId
 } from './widget-registry';
+import { parseModuleManifest, manifestToDraft, ManifestError } from './module-manifest';
+import { InstallRiskDialog, type InstallRiskInfo } from './InstallRiskDialog';
 import { t } from '../i18n';
 
 type Props = {
@@ -66,6 +68,9 @@ function ModuleCard({
 }
 
 function errorMessage(error: unknown) {
+  if (error instanceof ManifestError) {
+    return t(`manifest.${error.message}` as Parameters<typeof t>[0]);
+  }
   return typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string'
     ? (error.message as string)
     : t('template.uploadError');
@@ -83,27 +88,50 @@ export function TemplatePickerDialog({
   const builtinModules = [...builtinDefinitions, kanbanDefinition, ...extensionDefinitions];
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
+  // A pending network-module install waiting on the risk dialog confirmation.
+  const [pendingRisk, setPendingRisk] = useState<
+    { info: InstallRiskInfo; draft: SandboxExtensionDraft } | null
+  >(null);
 
   function toggle(id: WidgetId) {
     if (presentIds.has(id)) onRemove(id);
     else onAdd(id);
   }
 
-  // Directly upload a module file: read its source, derive the name from the
-  // file name, and install it with sensible defaults. No extra form needed.
+  // Upload a module file: read its source, parse the manifest header for its
+  // metadata and permissions, then install. Modules that declare `network` are
+  // routed through the risk dialog so granting network is always deliberate.
   async function uploadFile(file: File) {
     setError(null);
     try {
       const source = await file.text();
-      const name = file.name.replace(/\.[^.]+$/, '').trim() || t('template.unnamed');
-      await onInstallExtension({
-        name,
-        description: '',
-        source,
-        permissions: ['state', 'today'],
-        defaultW: 4,
-        defaultH: 4
-      });
+      const manifest = parseModuleManifest(source);
+      const draft = manifestToDraft(manifest, source);
+      if (manifest.permissions.includes('network')) {
+        setPendingRisk({
+          draft,
+          info: {
+            name: manifest.name,
+            author: manifest.author,
+            source: file.name,
+            permissions: manifest.permissions,
+            allowedHosts: manifest.network
+          }
+        });
+        return;
+      }
+      await onInstallExtension(draft);
+    } catch (reason) {
+      setError(errorMessage(reason));
+    }
+  }
+
+  async function confirmRiskInstall() {
+    if (!pendingRisk) return;
+    const { draft } = pendingRisk;
+    setPendingRisk(null);
+    try {
+      await onInstallExtension(draft);
     } catch (reason) {
       setError(errorMessage(reason));
     }
@@ -193,6 +221,14 @@ export function TemplatePickerDialog({
           )}
         </section>
       </div>
+
+      {pendingRisk ? (
+        <InstallRiskDialog
+          info={pendingRisk.info}
+          onConfirm={() => void confirmRiskInstall()}
+          onCancel={() => setPendingRisk(null)}
+        />
+      ) : null}
     </Dialog>
   );
 }

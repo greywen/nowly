@@ -27,6 +27,7 @@ import { useNowlyRepository } from '../data/RepositoryContext';
 import { useCurrentTime } from './useCurrentTime';
 import { t, useTranslation, getLanguage } from '../i18n';
 import { FocusTimerWidget } from '../focus/FocusTimerWidget';
+import { useFocusTimer } from '../focus/FocusTimerContext';
 import { FocusStatisticsDialog } from '../focus/FocusStatisticsDialog';
 import { FocusWallpaperOverlay } from '../focus/FocusWallpaperOverlay';
 
@@ -65,6 +66,8 @@ export function App() {
   const [windowMode, setWindowMode] = useState<WindowMode>('foreground');
   const [isSwitchingWindowMode, setIsSwitchingWindowMode] = useState(false);
   const isSwitchingWindowModeRef = useRef(false);
+  const focusTimer = useFocusTimer();
+  const focusStatus = focusTimer.state.status;
 
   const now = useCurrentTime();
   const todayIso = localIsoDate(now);
@@ -83,6 +86,17 @@ export function App() {
     };
   }, [density]);
 
+  // When a focus session finishes while the app is running as the fullscreen
+  // wallpaper, briefly show the "done" state and then return to the foreground
+  // on its own, so the desktop is never left stuck behind the overlay.
+  useEffect(() => {
+    if (focusStatus !== 'completed' || windowMode !== 'wallpaper') return;
+    const id = window.setTimeout(() => {
+      void runWindowModeSwitch(switchToForeground);
+    }, 2500);
+    return () => window.clearTimeout(id);
+  }, [focusStatus, windowMode]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // The full set of placeable modules: built-ins, extensions, and installed
   // user modules.
   const definitions = buildDefinitions(extensionsFeature.extensions);
@@ -96,10 +110,10 @@ export function App() {
     hostDayRef.current = todayIso;
     hostCache.current.clear();
   }
-  const hostFor = (id: string) => {
+  const hostFor = (id: string, allowedHosts: string[] = []) => {
     let host = hostCache.current.get(id);
     if (!host) {
-      host = createModuleHost(repository, id, todayIso);
+      host = createModuleHost(repository, id, todayIso, allowedHosts);
       hostCache.current.set(id, host);
     }
     return host;
@@ -189,10 +203,11 @@ export function App() {
     const id = `${SANDBOX_ID_PREFIX}${extension.id}`;
     modules[id] = (
       <SandboxModule
-        host={hostFor(id)}
+        host={hostFor(id, extension.allowedHosts)}
         source={extension.source}
         title={extension.name}
         permissions={extension.permissions}
+        allowedHosts={extension.allowedHosts}
       />
     );
   }
@@ -250,6 +265,7 @@ export function App() {
         sandboxExtensions={extensionsFeature.extensions}
         onInstallExtension={extensionsFeature.install}
         onUninstallExtension={extensionsFeature.uninstall}
+        onReloadExtensions={() => void extensionsFeature.reload()}
         isModeSwitching={isSwitchingWindowMode}
         onSetWallpaper={() => void runWindowModeSwitch(switchToWallpaper)}
         onWallpaperDoubleClick={() => void runWindowModeSwitch(switchToForeground)}

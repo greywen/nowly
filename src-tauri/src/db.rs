@@ -18,6 +18,7 @@ const MIGRATIONS: &[(i64, Migration)] = &[
     (9, migration_9_kanban),
     (10, migration_10_hex_colors_and_recent_colors),
     (11, migration_11_focus_sessions),
+    (12, migration_12_extension_allowed_hosts),
 ];
 
 pub fn open_database(path: PathBuf) -> Result<Connection> {
@@ -393,6 +394,18 @@ fn migration_11_focus_sessions(transaction: &Transaction<'_>) -> Result<()> {
     )
 }
 
+fn migration_12_extension_allowed_hosts(transaction: &Transaction<'_>) -> Result<()> {
+    // Network-capable modules declare the exact hosts they may reach. Stored as a
+    // JSON string array; empty means "no network", which is the safe default for
+    // every existing extension.
+    if !column_exists(transaction, "extensions", "allowed_hosts")? {
+        transaction.execute_batch(
+            "ALTER TABLE extensions ADD COLUMN allowed_hosts TEXT NOT NULL DEFAULT '[]';",
+        )?;
+    }
+    Ok(())
+}
+
 fn migration_10_hex_colors_and_recent_colors(transaction: &Transaction<'_>) -> Result<()> {
     transaction.execute_batch(
         "UPDATE events SET color = CASE lower(color)
@@ -569,7 +582,7 @@ mod tests {
             .unwrap()
             .collect::<Result<_, _>>()
             .unwrap();
-        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
 
         let event_fks: Vec<(String, String, String)> = connection
             .prepare("PRAGMA foreign_key_list(events)")
@@ -656,7 +669,7 @@ mod tests {
             .collect::<Result<_, _>>()
             .expect("versions collect");
 
-        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
         for table in [
             "events",
             "tasks",

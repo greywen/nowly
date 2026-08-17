@@ -27,6 +27,7 @@ function extension(overrides: Partial<SandboxExtension> = {}): SandboxExtension 
     description: '示例模块',
     source: 'Nowly.defineModule(() => {});',
     permissions: ['state', 'today'],
+    allowedHosts: [],
     minW: 3,
     minH: 3,
     defaultW: 4,

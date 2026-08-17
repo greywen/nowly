@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "modules": [
+    {
+      "id": "hello-clock",
+      "name": "今日时钟",
+      "version": "1.0.0",
+      "author": "nowly",
+      "description": "显示今天的日期与一个本地走动的时钟，演示无联网的纯展示模块",
+      "permissions": ["today"],
+      "network": [],
+      "minW": 3,
+      "minH": 2,
+      "defaultW": 4,
+      "defaultH": 3,
+      "sourceUrl": "https://raw.githubusercontent.com/greywen/nowly/main/registry/modules/hello-clock.js",
+      "sha256": "da40c435fa081a777f0749e72b97283e98b8edabc64d5494ed1d9beeb87d9bab"
+    }
+  ]
+}

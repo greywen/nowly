@@ -35,14 +35,25 @@ export const SANDBOX_RUNTIME = `(() => {
 
   // The host handle handed to the extension. This is its entire world; fields
   // absent from init (e.g. todayIso without the 'today' permission) stay
-  // undefined.
+  // undefined, and fetch is attached only when 'network' was granted.
   function makeHost(init) {
-    return {
+    var host = {
       moduleId: init.moduleId,
       todayIso: init.todayIso,
       loadState: function () { return call('loadState', []); },
       saveState: function (value) { return call('saveState', [value]); }
     };
+    if (init.permissions && init.permissions.indexOf('network') !== -1) {
+      host.fetch = function (url, options) {
+        options = options || {};
+        return call('fetch', [url, {
+          method: options.method,
+          headers: options.headers,
+          body: options.body
+        }]);
+      };
+    }
+    return host;
   }
 
   window.Nowly = {

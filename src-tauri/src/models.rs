@@ -227,6 +227,8 @@ pub struct SandboxExtension {
     pub description: String,
     pub source: String,
     pub permissions: Vec<String>,
+    #[serde(default)]
+    pub allowed_hosts: Vec<String>,
     pub min_w: i64,
     pub min_h: i64,
     pub default_w: i64,
@@ -244,6 +246,8 @@ pub struct SandboxExtensionDraft {
     pub source: String,
     #[serde(default)]
     pub permissions: Vec<String>,
+    #[serde(default)]
+    pub allowed_hosts: Vec<String>,
     pub default_w: i64,
     pub default_h: i64,
 }

@@ -60,7 +60,7 @@ describe('tauriNowlyRepository', () => {
     await tauriNowlyRepository.saveModuleLayout([layoutEntry]);
     await tauriNowlyRepository.getModuleState('focusTimer');
     await tauriNowlyRepository.setModuleState('focusTimer', '{"durationMinutes":15}');
-    const extensionDraft = { name: '计数器', description: '', source: 'Nowly.defineModule(()=>{});', permissions: ['state' as const], defaultW: 4, defaultH: 4 };
+    const extensionDraft = { name: '计数器', description: '', source: 'Nowly.defineModule(()=>{});', permissions: ['state' as const], allowedHosts: [], defaultW: 4, defaultH: 4 };
     await tauriNowlyRepository.listExtensions();
     await tauriNowlyRepository.installExtension(extensionDraft);
     await tauriNowlyRepository.uninstallExtension('x1');

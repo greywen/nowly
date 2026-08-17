@@ -10,6 +10,7 @@ mod kanban;
 mod layout;
 mod models;
 mod module_state;
+mod net;
 mod monitors;
 mod notes;
 mod settings;
@@ -264,6 +265,12 @@ fn main() {
             extensions::list_extensions,
             extensions::install_extension,
             extensions::uninstall_extension,
+            net::proxy_fetch,
+            net::fetch_registry,
+            net::download_module,
+            net::proxy_fetch,
+            net::fetch_registry,
+            net::download_module,
             focus::create_focus_session,
             focus::list_focus_sessions,
             focus::get_focus_statistics,

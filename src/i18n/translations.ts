@@ -424,8 +424,49 @@ export const translations: Record<Language, Record<string, string>> = {
     'template.builtin': '内置模块',
     'template.myModules': '我的模块',
     'template.upload': '上传模块',
-    'template.uploadHint': '选择一个 JavaScript 文件即可上传并识别模块。模块运行在隔离沙箱中，只能通过受限接口访问自身状态与日期。',
+    'template.uploadHint': '选择一个 JavaScript 文件即可上传并识别模块。模块运行在隔离沙箱中，只能通过受限接口访问自身状态、日期与声明的联网域名。',
     'template.deleteModule': '删除模块 {name}',
+    'template.market': '模块市场',
+
+    // Module manifest errors
+    'manifest.missing-header': '模块缺少清单头注释。请在文件顶部添加 /** @nowly-module 1 ... */。',
+    'manifest.bad-version-tag': '清单版本无效，@nowly-module 当前必须为 1。',
+    'manifest.bad-id': '@id 无效，只能包含小写字母、数字和连字符。',
+    'manifest.missing-name': '清单缺少 @name。',
+    'manifest.missing-version': '清单缺少 @version。',
+    'manifest.unknown-permission': '声明了未知权限，仅支持 state、today、network。',
+    'manifest.network-without-hosts': '声明了 network 权限但未提供 @network 域名。',
+    'manifest.hosts-without-network': '提供了 @network 域名但未声明 network 权限。',
+
+    // Module market
+    'market.title': '模块市场',
+    'market.close': '关闭',
+    'market.loading': '正在加载模块列表…',
+    'market.loadError': '无法加载模块市场，请稍后重试。',
+    'market.retry': '重试',
+    'market.empty': '模块市场暂时没有可用模块。',
+    'market.search': '搜索模块',
+    'market.install': '安装',
+    'market.installed': '已安装',
+    'market.update': '更新',
+    'market.installing': '安装中…',
+    'market.installError': '模块安装失败，请重试。',
+    'market.integrityError': '模块文件校验失败，可能已被篡改，已阻止安装。',
+    'market.by': '作者：{author}',
+    'market.network': '联网',
+
+    // Install risk dialog
+    'risk.title': '此模块会联网',
+    'risk.warning': '模块可以向以下地址收发数据。请只安装你信任的来源。',
+    'risk.hosts': '可访问域名',
+    'risk.permissions': '申请的权限',
+    'risk.source': '来源',
+    'risk.author': '作者',
+    'risk.permission.state': '保存自身数据',
+    'risk.permission.today': '读取今天的日期',
+    'risk.permission.network': '联网收发数据',
+    'risk.confirm': '我信任此来源，安装',
+    'risk.cancel': '取消',
 
     // Widget registry
     'widget.calendar.name': '日历',
@@ -442,6 +483,7 @@ export const translations: Record<Language, Record<string, string>> = {
     // Sandbox protocol
     'sandbox.noPermission': '扩展未获得「{permission}」权限。',
     'sandbox.throttled': '请求过于频繁，已被限流。',
+    'sandbox.hostNotAllowed': '请求域名不在该模块声明的白名单内。',
     'sandbox.runError': '扩展运行出错：'
   },
   en: {
@@ -864,8 +906,49 @@ export const translations: Record<Language, Record<string, string>> = {
     'template.builtin': 'Built-in modules',
     'template.myModules': 'My modules',
     'template.upload': 'Upload module',
-    'template.uploadHint': 'Choose a JavaScript file to upload and register a module. Modules run in an isolated sandbox and can only access their own state and the date through a restricted interface.',
+    'template.uploadHint': 'Choose a JavaScript file to upload and register a module. Modules run in an isolated sandbox and can only access their own state, the date, and the network hosts they declare through a restricted interface.',
     'template.deleteModule': 'Delete module {name}',
+    'template.market': 'Module market',
+
+    // Module manifest errors
+    'manifest.missing-header': 'The module is missing its manifest header. Add /** @nowly-module 1 ... */ at the top of the file.',
+    'manifest.bad-version-tag': 'Invalid manifest version; @nowly-module must currently be 1.',
+    'manifest.bad-id': 'Invalid @id; use lowercase letters, digits, and hyphens only.',
+    'manifest.missing-name': 'The manifest is missing @name.',
+    'manifest.missing-version': 'The manifest is missing @version.',
+    'manifest.unknown-permission': 'Unknown permission declared; only state, today, and network are supported.',
+    'manifest.network-without-hosts': 'The network permission was declared without any @network hosts.',
+    'manifest.hosts-without-network': '@network hosts were provided without declaring the network permission.',
+
+    // Module market
+    'market.title': 'Module market',
+    'market.close': 'Close',
+    'market.loading': 'Loading modules…',
+    'market.loadError': 'Could not load the module market. Please try again later.',
+    'market.retry': 'Retry',
+    'market.empty': 'No modules are available in the market yet.',
+    'market.search': 'Search modules',
+    'market.install': 'Install',
+    'market.installed': 'Installed',
+    'market.update': 'Update',
+    'market.installing': 'Installing…',
+    'market.installError': 'Module installation failed. Please try again.',
+    'market.integrityError': 'Module integrity check failed; the file may have been tampered with. Installation blocked.',
+    'market.by': 'By {author}',
+    'market.network': 'Network',
+
+    // Install risk dialog
+    'risk.title': 'This module accesses the network',
+    'risk.warning': 'The module can send and receive data with the addresses below. Only install sources you trust.',
+    'risk.hosts': 'Reachable hosts',
+    'risk.permissions': 'Requested permissions',
+    'risk.source': 'Source',
+    'risk.author': 'Author',
+    'risk.permission.state': 'Store its own data',
+    'risk.permission.today': 'Read today\u2019s date',
+    'risk.permission.network': 'Send and receive data online',
+    'risk.confirm': 'I trust this source, install',
+    'risk.cancel': 'Cancel',
 
     // Widget registry
     'widget.calendar.name': 'Calendar',
@@ -882,6 +965,7 @@ export const translations: Record<Language, Record<string, string>> = {
     // Sandbox protocol
     'sandbox.noPermission': 'The extension was not granted the "{permission}" permission.',
     'sandbox.throttled': 'Too many requests. Please slow down.',
+    'sandbox.hostNotAllowed': 'The requested host is not in the module\u2019s declared allow-list.',
     'sandbox.runError': 'The extension failed to run:'
   }
 };

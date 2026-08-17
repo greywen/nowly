@@ -57,7 +57,7 @@ export type FocusStatistics = {
 
 // A permission a sandbox extension may declare. Kept in lockstep with the
 // backend allow-list so the installer and host agree on the capability surface.
-export type SandboxPermission = 'state' | 'today';
+export type SandboxPermission = 'state' | 'today' | 'network';
 
 export type SandboxExtension = {
   id: string;
@@ -65,6 +65,9 @@ export type SandboxExtension = {
   description: string;
   source: string;
   permissions: SandboxPermission[];
+  // Hosts the module may reach through `host.fetch`. Non-empty only when the
+  // `network` permission was granted.
+  allowedHosts: string[];
   minW: number;
   minH: number;
   defaultW: number;
@@ -78,8 +81,27 @@ export type SandboxExtensionDraft = {
   description: string;
   source: string;
   permissions: SandboxPermission[];
+  allowedHosts: string[];
   defaultW: number;
   defaultH: number;
+};
+
+// A single proxied network request made on behalf of a sandboxed module. The
+// `allowedHosts` list is forwarded so the Rust proxy can re-check it as the
+// real trust boundary.
+export type ProxyFetchRequest = {
+  url: string;
+  method?: 'GET' | 'POST';
+  headers?: [string, string][];
+  body?: string;
+  allowedHosts: string[];
+};
+
+export type ProxyFetchResponse = {
+  ok: boolean;
+  status: number;
+  headers: [string, string][];
+  text: string;
 };
 
 export type MonitorInfo = { id:string; name:string; isPrimary:boolean; positionX:number; positionY:number; width:number; height:number; scaleFactor:number };
@@ -117,6 +139,12 @@ export type NowlyRepository = {
   listExtensions(): Promise<SandboxExtension[]>;
   installExtension(draft: SandboxExtensionDraft): Promise<SandboxExtension>;
   uninstallExtension(id: string): Promise<void>;
+  // Proxy a module network request through the trusted backend.
+  proxyFetch(request: ProxyFetchRequest): Promise<ProxyFetchResponse>;
+  // Fetch the raw text of the module market registry index.
+  fetchRegistry(url: string): Promise<string>;
+  // Download the raw source of a single module from the market.
+  downloadModule(url: string): Promise<string>;
   getKanbanSnapshot(): Promise<KanbanSnapshot>;
   createKanbanLane(draft: KanbanLaneDraft): Promise<KanbanLane>;
   updateKanbanLane(id: string, draft: KanbanLaneDraft): Promise<KanbanLane>;

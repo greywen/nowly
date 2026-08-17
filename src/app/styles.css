@@ -8,11 +8,13 @@
   --color-primary-hover: #69d1e0;
   --color-primary-light: #ddf8fc;
   --color-success: #b8d935;
+  --color-success-active: #9fbe22;
   --color-success-light: #f4fbdb;
   --color-info: #4f55da;
   --color-info-active: #383ebc;
   --color-info-light: #eff0ff;
   --color-warning: #e8c444;
+  --color-warning-active: #cfab2a;
   --color-warning-light: #fdf4d6;
   --color-danger: #f06445;
   --color-danger-active: #db5437;
@@ -130,7 +132,7 @@ button:disabled { cursor: default; opacity: .65; }
 .card { min-width: 0; min-height: 0; overflow: hidden; border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-surface); box-shadow: none; }
 .calendar-card, .priority-card, .notes-card { min-height: 0; display: flex; flex-direction: column; }
 .module-frame { position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
-.module-frame__body { position: relative; min-height: 0; flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.module-frame__body { position: relative; min-height: 0; flex: 1; display: flex; flex-direction: column; overflow: hidden; container: module / size; }
 .module-frame.is-editing { user-select: none; }
 .module-frame.is-dragging { z-index: 5; border-color: var(--color-primary); }
 .module-frame.is-invalid { border-color: var(--color-danger); }
@@ -842,6 +844,43 @@ button:disabled { cursor: default; opacity: .65; }
 .template-card.is-added:hover .template-card__action-remove { display: inline-flex; }
 .template-card.is-added:hover .template-card__action { color: var(--color-danger); }
 
+/* Module market dialog */
+.module-market-dialog { width: min(760px, calc(100vw - 32px)); }
+.module-market { display: grid; gap: 16px; }
+.module-market__search { display: flex; align-items: center; gap: 8px; padding: 0 16px; height: 44px; border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-subtle); }
+.module-market__search:focus-within { border-color: var(--color-primary); box-shadow: var(--shadow-focus); background: var(--bg-secondary); }
+.module-market__search svg { width: 18px; height: 18px; flex: none; color: var(--text-tertiary); }
+.module-market__search input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--text-strong); font-size: 16px; line-height: 1.5; outline: none; }
+.module-market__search input::placeholder { color: var(--text-muted); }
+.module-market__hint { margin: 0; padding: 24px 0; color: var(--text-muted); font-size: 15.2px; line-height: 1.5; text-align: center; }
+.module-market__error { display: grid; gap: 12px; justify-items: center; padding: 12px 0; }
+.module-market__list { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.module-market__item { display: flex; align-items: center; gap: 16px; padding: 16px; border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-surface); }
+.module-market__item:hover { border-color: var(--color-primary); }
+.module-market__meta { flex: 1; min-width: 0; display: grid; gap: 4px; }
+.module-market__heading { display: flex; align-items: center; gap: 8px; }
+.module-market__name { color: var(--text-primary); font-size: 15.2px; font-weight: 600; }
+.module-market__badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: var(--radius-sm); background: var(--color-warning-light); color: var(--color-warning-active); font-size: 13.6px; font-weight: 600; line-height: 1.5; }
+.module-market__desc { color: var(--text-secondary); font-size: 13.6px; line-height: 1.5; }
+.module-market__author { color: var(--text-muted); font-size: 13.6px; line-height: 1.5; }
+.module-market__action { flex: none; }
+.module-market__installed { display: inline-flex; align-items: center; gap: 4px; color: var(--color-success-active); font-size: 13.6px; font-weight: 600; }
+.module-market__installed svg { width: 16px; height: 16px; }
+
+/* Install risk dialog */
+.install-risk-dialog { width: min(520px, calc(100vw - 32px)); }
+.install-risk { display: grid; gap: 20px; }
+.install-risk__warning { display: flex; align-items: flex-start; gap: 12px; padding: 12px 16px; border: 1px solid var(--color-danger); border-radius: var(--radius-default); background: var(--color-danger-light); }
+.install-risk__warning svg { width: 20px; height: 20px; flex: none; color: var(--color-danger-active); }
+.install-risk__warning p { margin: 0; color: var(--color-danger-active); font-size: 15.2px; font-weight: 500; line-height: 1.5; }
+.install-risk__meta { display: grid; gap: 16px; margin: 0; }
+.install-risk__row { display: grid; grid-template-columns: 96px 1fr; gap: 16px; align-items: start; }
+.install-risk__row dt { color: var(--text-muted); font-size: 13.6px; font-weight: 500; line-height: 1.5; }
+.install-risk__row dd { margin: 0; color: var(--text-strong); font-size: 15.2px; line-height: 1.5; word-break: break-all; }
+.install-risk__permissions, .install-risk__hosts { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.install-risk__host-tag { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: var(--radius-sm); background: var(--bg-secondary); color: var(--text-strong); font-size: 13.6px; line-height: 1.5; }
+.install-risk__actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+
 /* Template editor dialog */
 .template-editor-dialog { width: min(720px, calc(100vw - 32px)); }
 .template-editor { display: grid; gap: 20px; }
@@ -940,7 +979,7 @@ button:disabled { cursor: default; opacity: .65; }
 .kanban-card__people .kanban-avatar + .kanban-avatar { margin-left: -8px; }
 .kanban-avatar { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; flex: none; border-radius: var(--radius-pill); background: var(--color-primary-light); color: var(--color-primary-active); font-size: 13.6px; font-weight: 600; }
 .kanban-avatar--more { background: var(--bg-secondary); color: var(--text-secondary); }
-.kanban-card__tags { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 8px; min-width: 0; }
+.kanban-card__tags { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 8px; min-width: 0; margin-left: auto; }
 .kanban-tag { display: inline-flex; align-items: center; gap: 2px; font-size: 13.6px; font-weight: 500; white-space: nowrap; }
 .kanban-tag__hash { color: inherit; opacity: 0.7; }
 
@@ -1019,8 +1058,7 @@ button:disabled { cursor: default; opacity: .65; }
 .focus-timer__presets,.focus-timer__actions { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; }
 .focus-timer__preset { min-height:40px; padding:8px 16px; font-size:15.2px; }
 .focus-timer__preset.is-active { color:var(--color-primary-active); background:var(--color-primary-light); border-color:var(--color-primary); }
-.focus-timer__auto { display:flex; align-items:center; gap:8px; color:var(--text-secondary); font-size:13.6px; cursor:pointer; }
-.focus-timer__auto input { width:16px; height:16px; margin:0; accent-color:var(--color-primary); cursor:pointer; }
+.focus-timer__auto { color:var(--text-secondary); font-size:13.6px; cursor:pointer; }
 .focus-timer--wallpaper .focus-timer__body { box-sizing:border-box; height:100%; justify-content:center; padding:24px; }
 .focus-timer--wallpaper .focus-timer__hint { color:var(--text-secondary); font-size:15.2px; text-align:center; }
 /* Fullscreen countdown shown while running as the wallpaper. No animation per design.md. */
@@ -1041,7 +1079,19 @@ button:disabled { cursor: default; opacity: .65; }
 .focus-fullscreen__hint { margin:0; color:var(--text-muted); font-size:15.2px; }
 @container (max-width:420px){.focus-timer__body{padding:16px;gap:12px}}
 @container (max-height:390px){.focus-timer__body{padding:16px;gap:12px}.focus-timer__controls{gap:8px}}
+/* Focus timer: shed non-essential chrome as the module shrinks so the clock and
+   its core actions stay usable. At the smallest size only the time, custom and
+   start remain. Instant show/hide, no animation. */
+@container (max-height:360px){.focus-timer__hint{display:none}.focus-timer__auto{display:none}}
+@container (max-height:300px){.focus-timer__header{display:none}.focus-timer__preset:not(:last-child){display:none}}
+@container (max-width:300px){.focus-timer__hint{display:none}.focus-timer__auto{display:none}}
+/* Calendar: in a small module the truncated title and month summary carry no
+   information, and the fixed weekday header row costs space a short grid can't
+   spare. Hide them progressively so the grid and toolbar stay legible. */
+@container module (max-width:620px){.calendar-card-content .heading-group p{display:none}}
+@container module (max-width:520px){.calendar-card-content .heading-group{display:none}.calendar-card-content .card-header{justify-content:flex-end}}
+@container module (max-height:300px){.calendar-card-content .weekdays{display:none}}
 .focus-statistics-dialog{width:min(760px,calc(100vw - 32px))}.focus-statistics__intro{margin:0 0 16px;color:var(--text-muted)}.focus-statistics__periods{display:flex;gap:8px;flex-wrap:wrap}.focus-statistics__periods [aria-pressed="true"]{color:var(--color-primary-active);background:var(--color-primary-light)}
 .focus-statistics__summaries{margin:20px 0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.focus-statistics__summaries div{padding:16px;border-radius:var(--radius-default);background:var(--bg-subtle)}.focus-statistics__summaries strong,.focus-statistics__summaries span{display:block}.focus-statistics__summaries strong{color:var(--text-primary);font-size:18.4px}.focus-statistics__summaries span{color:var(--text-muted);font-size:13.6px}
 @media(max-width:700px){.focus-statistics__summaries{grid-template-columns:repeat(2,1fr)}}
-.focus-timer__custom{width:100%;display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px}.focus-timer__custom label{grid-column:1/-1;font-size:13.6px;color:var(--text-secondary)}.focus-timer__custom-input{box-sizing:border-box;height:40px;min-width:0;padding:8px 16px;border:1px solid var(--border-default);border-radius:var(--radius-default);color:var(--text-secondary);background:var(--bg-subtle)}.focus-timer__custom-input:focus{border-color:var(--color-primary);box-shadow:0 0 0 4px var(--focus-ring)}.focus-timer__custom [role="alert"]{grid-column:1/-1;color:var(--color-danger);font-size:13.6px}
+.focus-timer__custom{width:100%;display:flex;flex-wrap:wrap;align-items:center;gap:8px}.focus-timer__custom label{flex:1 0 100%;font-size:13.6px;color:var(--text-secondary)}.focus-timer__custom-input{box-sizing:border-box;height:40px;flex:1 1 0;min-width:0;padding:8px 16px;border:1px solid var(--border-default);border-radius:var(--radius-default);color:var(--text-secondary);background:var(--bg-subtle)}.focus-timer__custom-input:focus{border-color:var(--color-primary);box-shadow:0 0 0 4px var(--focus-ring)}.focus-timer__custom-apply{flex:0 0 auto}.focus-timer__custom [role="alert"]{flex:1 0 100%;color:var(--color-danger);font-size:13.6px}

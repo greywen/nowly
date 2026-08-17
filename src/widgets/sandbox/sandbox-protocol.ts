@@ -10,13 +10,17 @@ export const SANDBOX_CHANNEL = 'nowly-module-v1';
 // The capabilities an extension may hold. Declared at install time, granted at
 // init, and enforced per request — an extension can never reach a method it did
 // not declare.
-export type SandboxPermission = 'state' | 'today';
+export type SandboxPermission = 'state' | 'today' | 'network';
+
+// The RPC methods a guest may invoke on the host.
+export type SandboxMethod = 'loadState' | 'saveState' | 'fetch';
 
 // Which host methods each permission unlocks. `today` is not a method gate; it
 // controls whether `todayIso` is handed over at init (see below).
-const METHOD_PERMISSION: Record<'loadState' | 'saveState', SandboxPermission> = {
+const METHOD_PERMISSION: Record<SandboxMethod, SandboxPermission> = {
   loadState: 'state',
-  saveState: 'state'
+  saveState: 'state',
+  fetch: 'network'
 };
 
 // Parent -> guest: sent once the guest reports ready. Carries the only ambient
@@ -28,6 +32,9 @@ export type SandboxInit = {
   moduleId: string;
   permissions: SandboxPermission[];
   todayIso?: string;
+  // Hosts the guest may reach via `host.fetch`. Present only when the `network`
+  // permission was granted; the runtime exposes `fetch` based on `permissions`.
+  allowedHosts?: string[];
   // Localized prefix shown before a runtime error message. Passed in from the
   // host because the sandboxed runtime cannot reach the i18n tables itself.
   errorPrefix?: string;
@@ -39,7 +46,7 @@ export type SandboxRequest = {
   channel: typeof SANDBOX_CHANNEL;
   kind: 'request';
   id: number;
-  method: 'loadState' | 'saveState';
+  method: SandboxMethod;
   args: unknown[];
 };
 
@@ -69,7 +76,9 @@ export function isSandboxRequest(data: unknown): data is SandboxRequest {
     message.channel === SANDBOX_CHANNEL &&
     message.kind === 'request' &&
     typeof message.id === 'number' &&
-    (message.method === 'loadState' || message.method === 'saveState') &&
+    (message.method === 'loadState' ||
+      message.method === 'saveState' ||
+      message.method === 'fetch') &&
     Array.isArray(message.args)
   );
 }
@@ -93,18 +102,34 @@ export function createRateLimiter(limit: number, windowMs: number): () => boolea
   };
 }
 
-// How the host decides whether a request may run: the granted permission set and
-// a throttle predicate. Defaults are permissive on permissions (state granted)
-// but always throttled, so existing call sites keep working.
+// How the host decides whether a request may run: the granted permission set, a
+// throttle predicate, and the network allow-list. Defaults are permissive on
+// permissions (state/today granted) but always throttled, so existing call sites
+// keep working.
 export type SandboxGrant = {
   permissions: SandboxPermission[];
   allow: () => boolean;
+  // Hosts the guest may reach via `host.fetch`. Empty means no network egress
+  // even if the `network` permission was somehow granted.
+  allowedHosts?: string[];
 };
 
 const defaultGrant: SandboxGrant = {
   permissions: ['state', 'today'],
-  allow: () => true
+  allow: () => true,
+  allowedHosts: []
 };
+
+// Extract the lowercased host from a URL string, or null when it cannot be
+// parsed. Used to check a fetch target against the allow-list before proxying.
+function hostOf(url: unknown): string | null {
+  if (typeof url !== 'string') return null;
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
 
 // The heart of the host side: turn one validated request into a response by
 // dispatching to the (already narrowed) host API, after checking the grant.
@@ -136,6 +161,25 @@ export async function handleSandboxRequest(
   try {
     if (request.method === 'loadState') {
       const result = await host.loadState();
+      return { channel: SANDBOX_CHANNEL, kind: 'response', id: request.id, ok: true, result };
+    }
+    if (request.method === 'fetch') {
+      if (!host.fetch) {
+        return reject(t('sandbox.noPermission', { permission: 'network' }));
+      }
+      // Allow-list gate: the target host must be one the module declared. This
+      // is a fast local reject; the Rust proxy re-checks as the real boundary.
+      const targetHost = hostOf(request.args[0]);
+      const allowed = grant.allowedHosts ?? [];
+      if (!targetHost || !allowed.some((entry) => entry.toLowerCase() === targetHost)) {
+        return reject(t('sandbox.hostNotAllowed'));
+      }
+      const options = (request.args[1] ?? {}) as {
+        method?: 'GET' | 'POST';
+        headers?: [string, string][];
+        body?: string;
+      };
+      const result = await host.fetch(request.args[0] as string, options);
       return { channel: SANDBOX_CHANNEL, kind: 'response', id: request.id, ok: true, result };
     }
     // saveState

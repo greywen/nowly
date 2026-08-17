@@ -9,7 +9,25 @@ use uuid::Uuid;
 // The permissions an extension may declare. Anything outside this set is
 // rejected at install time, so the host never has to reason about unknown
 // capabilities at runtime.
-const PERMISSIONS: &[&str] = &["state", "today"];
+const PERMISSIONS: &[&str] = &["state", "today", "network"];
+
+// A conservative hostname check: non-empty, no scheme, no path, no port, no
+// wildcard. The proxy layer (net.rs) is the real trust boundary, but rejecting
+// malformed hosts at install time keeps the stored allow-list clean.
+fn is_valid_host(host: &str) -> bool {
+    if host.is_empty() || host.len() > 253 {
+        return false;
+    }
+    if host.contains(['/', ':', ' ', '*', '?', '#', '@']) {
+        return false;
+    }
+    host.split('.').all(|label| {
+        !label.is_empty()
+            && label
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-')
+    })
+}
 
 fn timestamp() -> String {
     Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true)
@@ -24,12 +42,17 @@ fn read_extension(row: &Row<'_>) -> rusqlite::Result<SandboxExtension> {
     let permissions: Vec<String> = serde_json::from_str(&permissions_json).map_err(|error| {
         rusqlite::Error::FromSqlConversionFailure(4, rusqlite::types::Type::Text, Box::new(error))
     })?;
+    let allowed_hosts_json: String = row.get(11)?;
+    let allowed_hosts: Vec<String> = serde_json::from_str(&allowed_hosts_json).map_err(|error| {
+        rusqlite::Error::FromSqlConversionFailure(11, rusqlite::types::Type::Text, Box::new(error))
+    })?;
     Ok(SandboxExtension {
         id: row.get(0)?,
         name: row.get(1)?,
         description: row.get(2)?,
         source: row.get(3)?,
         permissions,
+        allowed_hosts,
         min_w: row.get(5)?,
         min_h: row.get(6)?,
         default_w: row.get(7)?,
@@ -61,6 +84,32 @@ pub fn validate_and_normalize(
         }
     }
     draft.permissions = seen;
+    // Network access requires a non-empty, well-formed host allow-list. Dedupe
+    // and normalize to lowercase so matching in the proxy is case-insensitive.
+    let mut hosts: Vec<String> = Vec::new();
+    for host in &draft.allowed_hosts {
+        let host = host.trim().to_ascii_lowercase();
+        if host.is_empty() {
+            continue;
+        }
+        if !is_valid_host(&host) {
+            return Err(CommandError::validation("allowedHosts", "声明了无效的联网域名。"));
+        }
+        if !hosts.contains(&host) {
+            hosts.push(host);
+        }
+    }
+    if draft.permissions.iter().any(|p| p == "network") && hosts.is_empty() {
+        return Err(CommandError::validation(
+            "allowedHosts",
+            "联网权限需要至少声明一个域名。",
+        ));
+    }
+    if !draft.permissions.iter().any(|p| p == "network") {
+        // Drop any stray hosts when network was not requested.
+        hosts.clear();
+    }
+    draft.allowed_hosts = hosts;
     draft.default_w = clamp(draft.default_w, 2, 12);
     draft.default_h = clamp(draft.default_h, 2, 8);
     Ok(draft)
@@ -69,7 +118,7 @@ pub fn validate_and_normalize(
 pub fn list(connection: &Connection) -> Result<Vec<SandboxExtension>, CommandError> {
     let mut statement = connection
         .prepare(
-            "SELECT id,name,description,source,permissions,min_w,min_h,default_w,default_h,created_at,updated_at
+            "SELECT id,name,description,source,permissions,min_w,min_h,default_w,default_h,created_at,updated_at,allowed_hosts
              FROM extensions ORDER BY created_at ASC, id ASC",
         )
         .map_err(CommandError::database)?;
@@ -83,7 +132,7 @@ pub fn list(connection: &Connection) -> Result<Vec<SandboxExtension>, CommandErr
 fn by_id(connection: &Connection, id: &str) -> Result<Option<SandboxExtension>, CommandError> {
     connection
         .query_row(
-            "SELECT id,name,description,source,permissions,min_w,min_h,default_w,default_h,created_at,updated_at
+            "SELECT id,name,description,source,permissions,min_w,min_h,default_w,default_h,created_at,updated_at,allowed_hosts
              FROM extensions WHERE id=?1",
             [id],
             read_extension,
@@ -102,14 +151,17 @@ pub fn install(
     let permissions = serde_json::to_string(&draft.permissions).map_err(|error| {
         CommandError::database(rusqlite::Error::ToSqlConversionFailure(Box::new(error)))
     })?;
+    let allowed_hosts = serde_json::to_string(&draft.allowed_hosts).map_err(|error| {
+        CommandError::database(rusqlite::Error::ToSqlConversionFailure(Box::new(error)))
+    })?;
     let transaction = connection
         .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(CommandError::database)?;
     transaction
         .execute(
-            "INSERT INTO extensions(id,name,description,source,permissions,min_w,min_h,default_w,default_h,created_at,updated_at)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?10)",
-            params![id, draft.name, draft.description, draft.source, permissions, 3i64, 3i64, draft.default_w, draft.default_h, now],
+            "INSERT INTO extensions(id,name,description,source,permissions,min_w,min_h,default_w,default_h,created_at,updated_at,allowed_hosts)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?10,?11)",
+            params![id, draft.name, draft.description, draft.source, permissions, 3i64, 3i64, draft.default_w, draft.default_h, now, allowed_hosts],
         )
         .map_err(CommandError::database)?;
     let extension = by_id(&transaction, &id)?
@@ -179,6 +231,7 @@ mod tests {
             description: "  说明  ".into(),
             source: "Nowly.defineModule(function () {});".into(),
             permissions: vec!["state".into(), "state".into(), "today".into()],
+            allowed_hosts: vec![],
             default_w: 4,
             default_h: 3,
         }
@@ -217,7 +270,7 @@ mod tests {
         );
         assert_eq!(
             validate_and_normalize(SandboxExtensionDraft {
-                permissions: vec!["network".into()],
+                permissions: vec!["bogus".into()],
                 ..draft()
             })
             .unwrap_err()
@@ -225,6 +278,53 @@ mod tests {
             .as_deref(),
             Some("permissions")
         );
+    }
+
+    #[test]
+    fn network_permission_requires_allowed_hosts() {
+        // Declaring network without any host is rejected.
+        assert_eq!(
+            validate_and_normalize(SandboxExtensionDraft {
+                permissions: vec!["network".into()],
+                allowed_hosts: vec![],
+                ..draft()
+            })
+            .unwrap_err()
+            .field
+            .as_deref(),
+            Some("allowedHosts")
+        );
+        // Malformed host is rejected.
+        assert_eq!(
+            validate_and_normalize(SandboxExtensionDraft {
+                permissions: vec!["network".into()],
+                allowed_hosts: vec!["http://evil.com/path".into()],
+                ..draft()
+            })
+            .unwrap_err()
+            .field
+            .as_deref(),
+            Some("allowedHosts")
+        );
+        // Valid network module normalizes hosts to lowercase and dedupes.
+        let valid = validate_and_normalize(SandboxExtensionDraft {
+            permissions: vec!["network".into()],
+            allowed_hosts: vec!["API.Example.com".into(), "api.example.com".into()],
+            ..draft()
+        })
+        .unwrap();
+        assert_eq!(valid.allowed_hosts, vec!["api.example.com"]);
+    }
+
+    #[test]
+    fn hosts_are_dropped_without_network_permission() {
+        let valid = validate_and_normalize(SandboxExtensionDraft {
+            permissions: vec!["state".into()],
+            allowed_hosts: vec!["api.example.com".into()],
+            ..draft()
+        })
+        .unwrap();
+        assert!(valid.allowed_hosts.is_empty());
     }
 
     #[test]

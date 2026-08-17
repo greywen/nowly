@@ -30,6 +30,7 @@ describe('isSandboxRequest', () => {
   it('accepts a well-formed request on the channel', () => {
     expect(isSandboxRequest(request())).toBe(true);
     expect(isSandboxRequest(request({ method: 'saveState', args: [{ n: 1 }] }))).toBe(true);
+    expect(isSandboxRequest(request({ method: 'fetch', args: ['https://api.example.com'] }))).toBe(true);
   });
 
   it('rejects foreign, malformed, or off-channel messages', () => {
@@ -96,6 +97,51 @@ describe('handleSandboxRequest', () => {
     });
     expect(response.ok).toBe(false);
     expect(response.error).toContain('限流');
+  });
+
+  it('proxies a fetch to an allowed host and returns the result', async () => {
+    const fetchFn = vi.fn().mockResolvedValue({ ok: true, status: 200, headers: [], text: '{}', json: {} });
+    const response = await handleSandboxRequest(
+      host({ fetch: fetchFn }),
+      request({ id: 11, method: 'fetch', args: ['https://api.example.com/data', {}] }),
+      { permissions: ['network'], allow: () => true, allowedHosts: ['api.example.com'] }
+    );
+    expect(fetchFn).toHaveBeenCalledWith('https://api.example.com/data', {});
+    expect(response.ok).toBe(true);
+  });
+
+  it('denies fetch without the network permission', async () => {
+    const fetchFn = vi.fn();
+    const response = await handleSandboxRequest(
+      host({ fetch: fetchFn }),
+      request({ id: 12, method: 'fetch', args: ['https://api.example.com/x'] }),
+      { permissions: ['state'], allow: () => true, allowedHosts: ['api.example.com'] }
+    );
+    expect(fetchFn).not.toHaveBeenCalled();
+    expect(response.ok).toBe(false);
+    expect(response.error).toContain('network');
+  });
+
+  it('rejects a fetch to a host outside the allow-list', async () => {
+    const fetchFn = vi.fn();
+    const response = await handleSandboxRequest(
+      host({ fetch: fetchFn }),
+      request({ id: 13, method: 'fetch', args: ['https://evil.com/x'] }),
+      { permissions: ['network'], allow: () => true, allowedHosts: ['api.example.com'] }
+    );
+    expect(fetchFn).not.toHaveBeenCalled();
+    expect(response.ok).toBe(false);
+  });
+
+  it('rejects a fetch with an unparseable url', async () => {
+    const fetchFn = vi.fn();
+    const response = await handleSandboxRequest(
+      host({ fetch: fetchFn }),
+      request({ id: 14, method: 'fetch', args: ['not-a-url'] }),
+      { permissions: ['network'], allow: () => true, allowedHosts: ['api.example.com'] }
+    );
+    expect(fetchFn).not.toHaveBeenCalled();
+    expect(response.ok).toBe(false);
   });
 });
 

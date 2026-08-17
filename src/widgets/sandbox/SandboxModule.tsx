@@ -24,12 +24,16 @@ export function SandboxModule({
   host,
   source,
   title,
-  permissions
+  permissions,
+  allowedHosts = []
 }: {
   host: ModuleHost;
   source: string;
   title: string;
   permissions: SandboxPermission[];
+  // Hosts the module may reach through `host.fetch`. Forwarded into the grant
+  // so the parent enforces the allow-list before proxying, and again in Rust.
+  allowedHosts?: string[];
 }) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   // A fresh Blob URL per source. Revoked on unmount / source change so we don't
@@ -43,7 +47,7 @@ export function SandboxModule({
 
     // One rate limiter per mounted frame: at most 30 host calls per second.
     const allow = createRateLimiter(30, 1000);
-    const grant: SandboxGrant = { permissions, allow };
+    const grant: SandboxGrant = { permissions, allow, allowedHosts };
 
     async function onMessage(event: MessageEvent) {
       // Only trust messages from *this* iframe. Because the frame is sandboxed
@@ -60,7 +64,10 @@ export function SandboxModule({
           permissions,
           errorPrefix: t('sandbox.runError'),
           // Only hand over today's date when the extension declared `today`.
-          ...(permissions.includes('today') ? { todayIso: host.todayIso } : {})
+          ...(permissions.includes('today') ? { todayIso: host.todayIso } : {}),
+          // Hand the allow-list to the guest runtime so it can expose `fetch`
+          // only when network was granted.
+          ...(permissions.includes('network') ? { allowedHosts } : {})
         };
         iframe?.contentWindow?.postMessage(init, '*');
         return;
