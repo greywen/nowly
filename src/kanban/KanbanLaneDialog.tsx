@@ -144,6 +144,7 @@ export function KanbanLaneDialog({ mode, restoreFocusRef, onClose, onCreate, onU
             <input
               id="lane-name"
               className="good-input"
+              autoComplete="off"
               value={name}
               disabled={busy}
               aria-describedby={error ? 'lane-name-error' : undefined}

@@ -17,6 +17,9 @@ export function FocusTimerWidget({ mode, onOpenStatistics, onEnterWallpaper }: P
   const [minutes, setMinutes] = useState(timer.state.plannedSeconds / 60);
   const [customOpen, setCustomOpen] = useState(false);
   const [custom, setCustom] = useState('');
+  // Remember the most recent custom duration so it stays available as a preset
+  // chip, sparing the user from reopening the input to reuse it.
+  const [lastCustom, setLastCustom] = useState<number | null>(null);
   const [autoWallpaper, setAutoWallpaper] = useState(false);
 
   const customValue = Number(custom);
@@ -24,7 +27,10 @@ export function FocusTimerWidget({ mode, onOpenStatistics, onEnterWallpaper }: P
   const running = timer.state.status === 'running';
   const paused = timer.state.status === 'paused';
   const active = running || paused;
-  const isCustomDuration = !PRESETS.includes(minutes);
+  // The remembered custom value only earns a chip when it is not already one of
+  // the fixed presets, so the row never shows duplicates.
+  const customChip = lastCustom !== null && !PRESETS.includes(lastCustom) ? lastCustom : null;
+  const isCustomDuration = !PRESETS.includes(minutes) && minutes !== customChip;
   const unit = t('focusTimer.preset25').replace('25 ', '');
   // While a session is active the display counts down; when idle it previews the
   // currently selected duration so presets and custom values give real feedback.
@@ -44,6 +50,8 @@ export function FocusTimerWidget({ mode, onOpenStatistics, onEnterWallpaper }: P
   function applyCustom() {
     if (!customValid) return;
     setMinutes(customValue);
+    if (!PRESETS.includes(customValue)) setLastCustom(customValue);
+    setCustom('');
     setCustomOpen(false);
   }
 
@@ -81,6 +89,13 @@ export function FocusTimerWidget({ mode, onOpenStatistics, onEnterWallpaper }: P
                   >{value} {unit}</button>
                 );
               })}
+              {customChip !== null && (
+                <button
+                  className={`btn focus-timer__preset${minutes === customChip ? ' is-active' : ''}`}
+                  aria-pressed={minutes === customChip}
+                  onClick={() => { setMinutes(customChip); setCustomOpen(false); }}
+                >{customChip} {unit}</button>
+              )}
               <button
                 className={`btn focus-timer__preset${isCustomDuration || customOpen ? ' is-active' : ''}`}
                 aria-pressed={isCustomDuration || customOpen}
@@ -95,6 +110,7 @@ export function FocusTimerWidget({ mode, onOpenStatistics, onEnterWallpaper }: P
                   id="focus-custom-minutes"
                   className="focus-timer__custom-input"
                   inputMode="numeric"
+                  autoComplete="off"
                   value={custom}
                   placeholder={String(minutes)}
                   onChange={event => setCustom(event.target.value)}
@@ -126,9 +142,9 @@ export function FocusTimerWidget({ mode, onOpenStatistics, onEnterWallpaper }: P
         </div>
 
         {!active && (
-          <label className="focus-timer__auto">
-            <input type="checkbox" checked={autoWallpaper} onChange={event => setAutoWallpaper(event.target.checked)} />
-            {t('focusTimer.autoWallpaper')}
+          <label className="focus-timer__auto form-check form-check-custom form-check-solid">
+            <input className="form-check-input" type="checkbox" checked={autoWallpaper} onChange={event => setAutoWallpaper(event.target.checked)} />
+            <span className="form-check-label">{t('focusTimer.autoWallpaper')}</span>
           </label>
         )}
       </div>

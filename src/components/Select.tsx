@@ -149,6 +149,7 @@ export function Select({ id, name, label, options, value, onChange, placeholder,
               className="select-search"
               ref={searchRef}
               type="search"
+              autoComplete="off"
               aria-label={t('select.search', { label })}
               aria-controls={listboxId}
               aria-activedescendant={activeOption ? `${listboxId}-${activeOption.value || 'empty'}` : undefined}

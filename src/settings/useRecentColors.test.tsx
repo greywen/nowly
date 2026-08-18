@@ -1,27 +1,24 @@
 import { act, renderHook } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { useRecentColors } from './useRecentColors';
 
-const STORAGE_KEY = 'nowly.recentColors';
-
 describe('useRecentColors', () => {
-  beforeEach(() => {
-    globalThis.localStorage.clear();
-  });
-
-  it('starts empty and persists a remembered color to localStorage', () => {
+  it('starts empty and remembers a color in memory', () => {
     const { result } = renderHook(() => useRecentColors());
     expect(result.current.recentColors).toEqual([]);
 
     act(() => result.current.rememberColor('#7c5cfc'));
     expect(result.current.recentColors).toEqual(['#7C5CFC']);
-    expect(JSON.parse(globalThis.localStorage.getItem(STORAGE_KEY) ?? '[]')).toEqual(['#7C5CFC']);
   });
 
-  it('hydrates from localStorage on mount', () => {
-    globalThis.localStorage.setItem(STORAGE_KEY, JSON.stringify(['#123456', '#ABCDEF']));
-    const { result } = renderHook(() => useRecentColors());
-    expect(result.current.recentColors).toEqual(['#123456', '#ABCDEF']);
+  it('does not persist colors across fresh mounts (no caching)', () => {
+    const first = renderHook(() => useRecentColors());
+    act(() => first.result.current.rememberColor('#123456'));
+    expect(first.result.current.recentColors).toEqual(['#123456']);
+
+    // A brand-new hook instance starts empty; nothing is restored from storage.
+    const second = renderHook(() => useRecentColors());
+    expect(second.result.current.recentColors).toEqual([]);
   });
 
   it('moves a repeated color to the front and caps the list at five', () => {

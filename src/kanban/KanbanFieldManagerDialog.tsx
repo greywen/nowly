@@ -239,6 +239,7 @@ export function KanbanFieldManagerDialog({
             <input
               id="kanban-field-name"
               className="good-input"
+              autoComplete="off"
               value={name}
               disabled={busy}
               onChange={(event) => setName(event.target.value)}

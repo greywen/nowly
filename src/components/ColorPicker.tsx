@@ -334,6 +334,7 @@ export function ColorPicker({ legend, name, value, presets, recentColors, disabl
           className="color-picker__hex"
           type="text"
           inputMode="text"
+          autoComplete="off"
           spellCheck={false}
           maxLength={7}
           aria-label={t('colorPicker.hex')}

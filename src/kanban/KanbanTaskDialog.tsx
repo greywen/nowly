@@ -164,7 +164,7 @@ export function KanbanTaskDialog({
           <div className="good-field">
             <label htmlFor="kanban-card-title">{t('kanbanTask.title')}</label>
             <input
-              id="kanban-card-title" className="good-input" value={form.title} disabled={busy}
+              id="kanban-card-title" className="good-input" autoComplete="off" value={form.title} disabled={busy}
               aria-describedby={errors.title ? 'kanban-card-title-error' : undefined}
               onChange={(event) => update('title', event.target.value)}
             />
@@ -174,7 +174,7 @@ export function KanbanTaskDialog({
           <div className="good-field">
             <label htmlFor="kanban-card-desc">{t('kanbanTask.description')}</label>
             <textarea
-              id="kanban-card-desc" className="good-input good-textarea" value={form.description} disabled={busy}
+              id="kanban-card-desc" className="good-input good-textarea" autoComplete="off" value={form.description} disabled={busy}
               onChange={(event) => update('description', event.target.value)}
             />
           </div>

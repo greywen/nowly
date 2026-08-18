@@ -140,7 +140,7 @@ export function TaskModal({
         <div className="good-field">
           <label htmlFor="task-title">{t('taskModal.title')}</label>
           <input
-            id="task-title" className="good-input" value={form.title} disabled={busy}
+            id="task-title" className="good-input" autoComplete="off" value={form.title} disabled={busy}
             aria-describedby={errors.title ? 'task-title-error' : undefined}
             onChange={(event) => update('title', event.target.value)}
           />
@@ -195,7 +195,7 @@ export function TaskModal({
 
         <div className="good-field">
           <label htmlFor="task-note">{t('taskModal.note')}</label>
-          <textarea id="task-note" className="good-input good-textarea" value={form.note} disabled={busy} onChange={(event) => update('note', event.target.value)} />
+          <textarea id="task-note" className="good-input good-textarea" autoComplete="off" value={form.note} disabled={busy} onChange={(event) => update('note', event.target.value)} />
         </div>
       </form>
     </Dialog>
