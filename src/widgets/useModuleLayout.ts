@@ -104,15 +104,19 @@ export function useModuleLayout(definitions: WidgetDefinition[]) {
     [definitions, persist]
   );
 
-  // Add a module to the layout at the first free slot that fits its default
-  // size. No-op if it is already present or the grid has no room.
+  // Add a module to the layout at the first free slot that fits. Tries the
+  // module's default (largest) size first, then falls back to its minimum size
+  // so a module still gets placed when only the smallest variant fits. No-op if
+  // it is already present or even the minimum size has no room.
   const addWidget = useCallback(
     (id: WidgetId) => {
       setLayout((current) => {
         if (current.some((entry) => entry.id === id)) return current;
         const definition = getWidgetDefinition(id, definitions);
         if (!definition) return current;
-        const slot = findFreeSlot(current, definition.default.w, definition.default.h);
+        const slot =
+          findFreeSlot(current, definition.default.w, definition.default.h) ??
+          findFreeSlot(current, definition.minW, definition.minH);
         if (!slot) return current;
         const next = [...current, { id, ...slot }];
         persist(next);
