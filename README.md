@@ -1,25 +1,98 @@
 # Nowly
 
-Nowly is a local-first Windows 10/11 desktop productivity panel combining a monthly calendar, Eisenhower task matrix, and notes. Data is stored locally in SQLite.
+Nowly is a local-first productivity panel for Windows 10/11. It brings a monthly
+calendar, an Eisenhower task matrix, a kanban board, notes, and a focus timer
+together on a single desktop surface, and can live either as a normal window or
+embedded directly into your wallpaper. All data stays on your machine in a local
+SQLite database.
 
-## Use
+English | [简体中文](./README.zh.md)
 
-- Use the top-right button to set Nowly as wallpaper.
-- Double-click the wallpaper or click the tray icon to return to foreground mode.
-- Open **Settings** to control wallpaper close behavior, login startup, calendar formatting, density, and module visibility.
-- Closing the foreground window restores wallpaper when wallpaper preference is enabled; otherwise it hides to the tray.
-- **Exit Nowly** in the tray menu is the only action that terminates the process.
+## Features
+
+- **Monthly calendar** — schedule events with times, colors, and per-day detail
+  views.
+- **Eisenhower matrix** — sort tasks across the urgent/important quadrants to
+  focus on what matters.
+- **Kanban board** — customizable lanes, cards, and fields for lightweight
+  project tracking.
+- **Notes** — quick capture with a dedicated manager for organizing entries.
+- **Focus timer** — countdown sessions with a fullscreen mode and session
+  statistics.
+- **Wallpaper mode** — embed Nowly behind your desktop icons with taskbar-aware
+  positioning, or run it as a regular window.
+- **Flexible layout** — arrange every module on a 12x8 grid; toggle modules on
+  or off and resize them freely.
+- **Custom modules** — install sandboxed `.js` extensions from a local file or
+  the built-in module market, each running in an isolated iframe.
+- **Personalization** — Gaussian blur, a global color picker, calendar
+  formatting, density controls, and login-on-startup.
+- **Localization** — English and Simplified Chinese, following your system
+  language on startup.
+
+## Usage
+
+- Use the top-right button to set Nowly as your wallpaper.
+- Double-click the wallpaper or click the tray icon to return to foreground
+  mode.
+- Open **Settings** to control wallpaper close behavior, login startup, calendar
+  formatting, density, and module visibility.
+- Closing the foreground window restores the wallpaper when the wallpaper
+  preference is enabled; otherwise it hides to the tray.
+- **Exit Nowly** in the tray menu is the only action that terminates the
+  process.
+
+## Tech Stack
+
+- **Frontend** — React + TypeScript, built with Vite and styled with
+  Tailwind CSS.
+- **Desktop shell** — Tauri 2 with a Rust backend.
+- **Storage** — local SQLite via `rusqlite` (bundled).
+- **Testing** — Vitest for unit/component tests, Playwright for end-to-end,
+  and `cargo test` for the Rust layer.
 
 ## Development
 
+Requirements: Node.js, Rust toolchain, and the Tauri prerequisites for Windows.
+
 ```bash
-npm install
-npm test
-npm run build
-cargo test --manifest-path src-tauri/Cargo.toml
-npx playwright test
-npm run tauri build
+npm install                                        # install dependencies
+npm run dev                                         # Vite dev server (127.0.0.1:1420)
+npm test                                            # Vitest unit/component tests
+npm run build                                       # tsc + vite build
+npx playwright test                                 # end-to-end tests
+cargo test --manifest-path src-tauri/Cargo.toml     # Rust tests
+npm run tauri build                                 # build the Windows executable
 ```
+
+## Project Structure
+
+```text
+src/                 React frontend
+  app/               App shell, layout grid, bootstrap hooks
+  calendar/          Monthly calendar and events
+  matrix/            Eisenhower task matrix
+  kanban/            Kanban board
+  notes/             Notes
+  focus/             Focus timer and statistics
+  widgets/           Extension/custom-module system and sandbox
+  components/        Shared UI (Dialog, Select, DatePicker, ...)
+  data/              Repository interface and Tauri implementation
+  i18n/              Localization (en/zh)
+src-tauri/           Rust backend (Tauri commands, SQLite, wallpaper, tray)
+registry/            Custom-module registry and examples
+docs/                Design specs, plans, and release verification
+```
+
+## Custom Modules
+
+Custom modules are self-describing `.js` files that run in an isolated iframe
+sandbox (`allow-scripts`, null origin, strict CSP). They cannot import packages,
+touch the parent DOM, or reach the network directly — the host exposes a small
+`host` API (`state`, `today`, and a permissioned `host.fetch`) plus a `root`
+element to render into. Once installed, a module becomes a freely placed widget
+on the 12x8 grid alongside the built-in modules. See
+`docs/custom-modules/SKILL.md` for the full module format and runtime contract.
 
 ## Release
 
@@ -47,6 +120,10 @@ if `LLM_API_KEY` is absent):
 
 ## Troubleshooting
 
-If wallpaper embedding or Explorer recovery fails, open Nowly from its tray icon and retry setting wallpaper. User data remains in the Tauri application data directory as `nowly.sqlite`; back up that file before manual recovery operations.
+If wallpaper embedding or Explorer recovery fails, open Nowly from its tray icon
+and retry setting the wallpaper. User data remains in the Tauri application data
+directory as `nowly.sqlite`; back up that file before manual recovery
+operations.
 
-See `docs/release/windows-verification.md` for the Windows verification matrix and known limitations.
+See `docs/release/windows-verification.md` for the Windows verification matrix
+and known limitations.
