@@ -98,6 +98,21 @@ describe('useModuleLayout', () => {
     expect(rectOf(saved(), 'focusTimer')).toBeDefined();
   });
 
+  it('falls back to the minimum size when the default size does not fit', async () => {
+    // Fill the grid so only a small pocket of free cells remains: a 3x3 hole
+    // at the bottom-right. focusTimer's default is 4x4 (too big) but its
+    // minimum is 3x3 (fits), so it should still be placed at its smallest size.
+    const packed: LayoutState = [
+      { id: 'calendar', x: 0, y: 0, w: 12, h: 5 },
+      { id: 'matrix', x: 0, y: 5, w: 9, h: 3 }
+    ];
+    const { result, saved } = await mountLoaded(packed);
+    act(() => result.current.addWidget('focusTimer'));
+    const placed = rectOf(result.current.layout, 'focusTimer');
+    expect(placed).toMatchObject({ w: 3, h: 3 });
+    expect(rectOf(saved(), 'focusTimer')).toMatchObject({ w: 3, h: 3 });
+  });
+
   it('ignores adding a module that is already present', async () => {
     const { result } = await mountLoaded(sparse);
     act(() => result.current.addWidget('calendar'));
