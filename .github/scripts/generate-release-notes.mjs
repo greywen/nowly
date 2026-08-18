@@ -126,21 +126,41 @@ async function llmNotes(commits) {
 
   const userPrompt = `本次发布版本：v${VERSION}\n对比范围：${PREV_TAG || '首次发布'}\n\n提交记录：\n${commitList}`;
 
-  const res = await fetch(`${LLM_BASE_URL}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${LLM_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: LLM_MODEL,
-      temperature: 0.3,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-    }),
-  });
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: userPrompt },
+  ];
+
+  async function call(includeTemperature) {
+    const body = { model: LLM_MODEL, messages };
+    // Some newer models (e.g. GPT-5 family) only accept the default
+    // temperature and reject a custom value with a 400. We try with it
+    // first, then retry without it if that's the complaint.
+    if (includeTemperature) body.temperature = 0.3;
+
+    return fetch(`${LLM_BASE_URL}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        // Send both header styles so the same script works against OpenAI
+        // (Authorization: Bearer) and Azure AI (api-key).
+        Authorization: `Bearer ${LLM_API_KEY}`,
+        'api-key': LLM_API_KEY,
+      },
+      body: JSON.stringify(body),
+    });
+  }
+
+  let res = await call(true);
+  if (res.status === 400) {
+    const errText = await res.text();
+    if (/temperature/i.test(errText)) {
+      console.log('模型不支持自定义 temperature，去掉该参数后重试。');
+      res = await call(false);
+    } else {
+      throw new Error(`LLM request failed: 400 ${errText}`);
+    }
+  }
 
   if (!res.ok) {
     const text = await res.text();
