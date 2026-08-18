@@ -176,13 +176,16 @@ export function App() {
         status={tasksFeature.tasks.status}
         errorMessage={tasksFeature.tasks.status === 'error' ? tasksFeature.tasks.message : undefined}
         completionError={tasksFeature.failedCompletion?.message ?? null}
+        dragError={tasksFeature.dragError}
         pendingTaskIds={tasksFeature.pendingTaskIds}
         onRetry={() => void tasksFeature.retryTasks()}
         onCreateTask={() => openModalInForeground({ type:'task-create', dueDate:null, trigger:null })}
         onOpenTask={(task, trigger) => openModalInForeground({ type:'task-edit', task, trigger })}
         onToggleTask={(task, completed) => void tasksFeature.setTaskCompleted(task, completed)}
+        onMoveTask={(task, quadrant) => void tasksFeature.moveTask(task, quadrant)}
         onRetryCompletion={() => void tasksFeature.retryFailedCompletion()}
         onDismissCompletionError={tasksFeature.dismissTaskError}
+        onDismissDragError={tasksFeature.dismissDragError}
       />
     );
   }

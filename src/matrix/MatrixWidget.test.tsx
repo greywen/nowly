@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { sampleEvents, sampleTasks } from '../lib/sample-data';
@@ -13,10 +13,13 @@ function props(overrides: Partial<Parameters<typeof MatrixWidget>[0]> = {}): Par
     onCreateTask: vi.fn(),
     onOpenTask: vi.fn(),
     onToggleTask: vi.fn(),
+    onMoveTask: vi.fn(),
     pendingTaskIds: new Set(),
     completionError: null,
+    dragError: null,
     onRetryCompletion: vi.fn(),
     onDismissCompletionError: vi.fn(),
+    onDismissDragError: vi.fn(),
     ...overrides
   };
 }
@@ -96,5 +99,43 @@ describe('MatrixWidget', () => {
   it('shows a static loading message without spinners', () => {
     render(<MatrixWidget {...props({ tasks: [], events: [], status: 'loading' })} />);
     expect(screen.getByText('正在读取本地任务')).toBeInTheDocument();
+  });
+
+  it('moves a task to another quadrant on drag and drop', () => {
+    const move = vi.fn();
+    render(<MatrixWidget {...props({ onMoveTask: move })} />);
+
+    const row = screen.getByRole('button', { name: '编辑任务：发布 v0.1' }).closest('.task-row') as HTMLElement;
+    const target = screen.getByRole('region', { name: '重要不紧急' });
+
+    fireEvent.dragStart(row);
+    fireEvent.dragOver(target);
+    fireEvent.drop(target);
+
+    expect(move).toHaveBeenCalledWith(sampleTasks[0], 'important_not_urgent');
+  });
+
+  it('does not move a task dropped on its own quadrant', () => {
+    const move = vi.fn();
+    render(<MatrixWidget {...props({ onMoveTask: move })} />);
+
+    const row = screen.getByRole('button', { name: '编辑任务：发布 v0.1' }).closest('.task-row') as HTMLElement;
+    const sameQuadrant = screen.getByRole('region', { name: '重要且紧急' });
+
+    fireEvent.dragStart(row);
+    fireEvent.dragOver(sameQuadrant);
+    fireEvent.drop(sameQuadrant);
+
+    expect(move).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a drag error with a dismiss control', async () => {
+    const user = userEvent.setup();
+    const dismiss = vi.fn();
+    render(<MatrixWidget {...props({ dragError: '移动任务失败', onDismissDragError: dismiss })} />);
+
+    expect(screen.getByRole('alert')).toHaveTextContent('移动任务失败');
+    await user.click(screen.getByRole('button', { name: '关闭错误提示' }));
+    expect(dismiss).toHaveBeenCalledOnce();
   });
 });

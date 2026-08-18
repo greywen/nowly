@@ -287,7 +287,8 @@ button:disabled { cursor: default; opacity: .65; }
 .panel-body { min-height: 0; flex: 1; padding: 20px 24px 24px; overflow: auto; }
 .matrix-body { display: flex; flex-direction: column; }
 .quadrant-grid { min-height: 0; flex: 1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.quadrant { min-width: 0; min-height: 0; padding: 16px; display: flex; flex-direction: column; border-radius: var(--radius-default); overflow: hidden; }
+.quadrant { min-width: 0; min-height: 0; padding: 16px; display: flex; flex-direction: column; border-radius: var(--radius-default); border: 1px solid transparent; overflow: hidden; transition: border-color .12s ease, background-color .12s ease; }
+.quadrant--drop { border-color: var(--color-primary); box-shadow: inset 0 0 0 1px var(--color-primary); }
 .q-danger { background: var(--color-danger-light); }
 .q-primary { background: var(--color-primary-light); }
 .q-warning { background: var(--color-warning-light); }
@@ -296,7 +297,10 @@ button:disabled { cursor: default; opacity: .65; }
 .quadrant h3 { margin: 0; min-width: 0; color: var(--text-primary); font-size: 15.2px; font-weight: 600; }
 .quadrant-count { min-width: 24px; padding: 2px 8px; border-radius: var(--radius-pill); color: var(--text-secondary); background: rgba(255, 255, 255, .72); font-size: 13.6px; font-weight: 600; text-align: center; }
 .quadrant-tasks { min-width: 0; min-height: 0; flex: 1; overflow: auto; }
-.task-row { min-width: 0; padding: 8px; display: flex; align-items: center; gap: 12px; border-radius: var(--radius-sm); background: var(--bg-surface); }
+.task-row { min-width: 0; padding: 8px; display: flex; align-items: center; gap: 12px; border-radius: var(--radius-sm); background: var(--bg-surface); cursor: grab; }
+.task-row[draggable="true"]:active { cursor: grabbing; }
+.task-row--dragging { opacity: .5; }
+.task-row__check, .task-row__title { cursor: auto; }
 .task-row + .task-row { margin-top: 8px; }
 .task-row__check { flex: none; }
 .task-row__copy { position: relative; min-width: 0; flex: 1; display: grid; gap: 0; }

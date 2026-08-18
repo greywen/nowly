@@ -1,3 +1,4 @@
+import type { DragEvent } from 'react';
 import type { CalendarEvent } from '../calendar/calendar-model';
 import { formatTaskMeta } from '../lib/task-draft';
 import type { MatrixTask } from './matrix-model';
@@ -8,14 +9,24 @@ type TaskRowProps = {
   events: CalendarEvent[];
   today?: Date;
   pending: boolean;
+  dragging?: boolean;
   onToggle(task: MatrixTask, completed: boolean): void;
   onOpen(task: MatrixTask, trigger: HTMLElement): void;
+  onDragStart?(event: DragEvent<HTMLElement>, task: MatrixTask): void;
+  onDragEnd?(): void;
 };
 
-export function TaskRow({ task, today, pending, onToggle, onOpen }: TaskRowProps) {
+export function TaskRow({ task, today, pending, dragging = false, onToggle, onOpen, onDragStart, onDragEnd }: TaskRowProps) {
+  const draggable = Boolean(onDragStart);
 
   return (
-    <div className={`task-row${task.completed ? ' task-row--completed' : ''}`}>
+    <div
+      className={`task-row${task.completed ? ' task-row--completed' : ''}${dragging ? ' task-row--dragging' : ''}`}
+      draggable={draggable}
+      aria-grabbed={draggable ? dragging : undefined}
+      onDragStart={onDragStart ? (event) => onDragStart(event, task) : undefined}
+      onDragEnd={onDragEnd}
+    >
       <label className="form-check form-check-custom form-check-solid task-row__check">
         <input
           className="form-check-input"
