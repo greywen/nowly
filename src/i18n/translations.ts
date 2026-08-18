@@ -37,6 +37,27 @@ export const translations: Record<Language, Record<string, string>> = {
     'shell.openSettings': '打开设置',
     'shell.setWallpaper': '设为壁纸',
 
+    // Onboarding guided tour
+    'onboarding.ariaLabel': '使用引导',
+    'onboarding.close': '关闭引导',
+    'onboarding.stepCount': '第 {current} / {total} 步',
+    'onboarding.skip': '跳过',
+    'onboarding.back': '上一步',
+    'onboarding.next': '下一步',
+    'onboarding.start': '开始使用',
+    'onboarding.welcome.title': '欢迎使用 Nowly',
+    'onboarding.welcome.body': 'Nowly 是你的桌面效率助手，集日历、任务、看板、便签和专注计时于一体。花一分钟了解如何使用。',
+    'onboarding.workspace.title': '你的工作区',
+    'onboarding.workspace.body': '所有模块都在这里：日历安排日程、四象限梳理任务优先级、看板跟踪进度、便签速记想法、专注计时帮你保持专注。',
+    'onboarding.editLayout.title': '编辑布局',
+    'onboarding.editLayout.body': '点击这里进入编辑模式，可拖动和缩放模块。编辑时顶栏还会出现“添加模块”和“模块市场”，用来增删或安装更多模块。',
+    'onboarding.settings.title': '设置',
+    'onboarding.settings.body': '在这里调整语言、界面密度、每周开始日、日期格式和开机启动等偏好。',
+    'onboarding.wallpaper.title': '设为壁纸',
+    'onboarding.wallpaper.body': '点击可将 Nowly 铺满桌面作为动态壁纸，让日程和任务常驻眼前。在壁纸模式下双击空白处即可退回前台。',
+    'onboarding.done.title': '一切就绪',
+    'onboarding.done.body': '你已经了解了基础用法。随时可以开始安排你的一天。',
+
     // ModuleFrame
     'moduleFrame.remove': '移除{name}',
 
@@ -518,6 +539,27 @@ export const translations: Record<Language, Record<string, string>> = {
     'shell.editLayout': 'Edit layout',
     'shell.openSettings': 'Open settings',
     'shell.setWallpaper': 'Set as wallpaper',
+
+    // Onboarding guided tour
+    'onboarding.ariaLabel': 'Getting started tour',
+    'onboarding.close': 'Close tour',
+    'onboarding.stepCount': 'Step {current} of {total}',
+    'onboarding.skip': 'Skip',
+    'onboarding.back': 'Back',
+    'onboarding.next': 'Next',
+    'onboarding.start': 'Start using',
+    'onboarding.welcome.title': 'Welcome to Nowly',
+    'onboarding.welcome.body': 'Nowly is your desktop productivity companion, bringing calendar, tasks, kanban, notes, and a focus timer together in one place. Take a minute to see how it works.',
+    'onboarding.workspace.title': 'Your workspace',
+    'onboarding.workspace.body': 'Every module lives here: the calendar for scheduling, the matrix for prioritizing tasks, the kanban board for tracking progress, notes for quick capture, and the focus timer to stay on task.',
+    'onboarding.editLayout.title': 'Edit layout',
+    'onboarding.editLayout.body': 'Click here to enter edit mode, where you can drag and resize modules. Editing also reveals “Add module” and “Module market” in the top bar for adding, removing, or installing more modules.',
+    'onboarding.settings.title': 'Settings',
+    'onboarding.settings.body': 'Adjust preferences here: language, interface density, week start day, date format, and launch at login.',
+    'onboarding.wallpaper.title': 'Set as wallpaper',
+    'onboarding.wallpaper.body': 'Click to spread Nowly across your desktop as a live wallpaper so your schedule and tasks stay in view. In wallpaper mode, double-click an empty area to return to the foreground.',
+    'onboarding.done.title': 'You’re all set',
+    'onboarding.done.body': 'You now know the basics. Jump in whenever you’re ready to plan your day.',
 
     // ModuleFrame
     'moduleFrame.remove': 'Remove {name}',
