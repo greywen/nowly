@@ -130,6 +130,7 @@ export function DesktopShell({
           {foreground ? (
             <button
               type="button"
+              data-guide="edit-layout"
               className={`btn btn-icon${isEditing ? ' is-active' : ''}`}
               aria-label={isEditing ? t('shell.finishEditing') : t('shell.editLayout')}
               aria-pressed={isEditing}
@@ -139,13 +140,14 @@ export function DesktopShell({
             </button>
           ) : null}
           {foreground ? (
-            <button type="button" className="btn btn-icon" aria-label={t('shell.openSettings')} onClick={onOpenSettings}>
+            <button type="button" data-guide="settings" className="btn btn-icon" aria-label={t('shell.openSettings')} onClick={onOpenSettings}>
               <Settings aria-hidden="true" />
             </button>
           ) : null}
           {foreground ? (
             <button
               type="button"
+              data-guide="wallpaper"
               className="btn btn-icon btn-primary"
               aria-label={t('shell.setWallpaper')}
               disabled={isModeSwitching}
@@ -156,7 +158,7 @@ export function DesktopShell({
           ) : null}
         </div>
       </header>
-      <main className="workspace" style={workspaceStyle}>
+      <main className="workspace" data-guide="workspace" style={workspaceStyle}>
         <ModuleGrid
           items={items}
           editing={foreground && isEditing}

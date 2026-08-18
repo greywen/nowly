@@ -1095,3 +1095,24 @@ button:disabled { cursor: default; opacity: .65; }
 .focus-statistics__summaries{margin:20px 0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.focus-statistics__summaries div{padding:16px;border-radius:var(--radius-default);background:var(--bg-subtle)}.focus-statistics__summaries strong,.focus-statistics__summaries span{display:block}.focus-statistics__summaries strong{color:var(--text-primary);font-size:18.4px}.focus-statistics__summaries span{color:var(--text-muted);font-size:13.6px}
 @media(max-width:700px){.focus-statistics__summaries{grid-template-columns:repeat(2,1fr)}}
 .focus-timer__custom{width:100%;display:flex;flex-wrap:wrap;align-items:center;gap:8px}.focus-timer__custom label{flex:1 0 100%;font-size:13.6px;color:var(--text-secondary)}.focus-timer__custom-input{box-sizing:border-box;height:40px;flex:1 1 0;min-width:0;padding:8px 16px;border:1px solid var(--border-default);border-radius:var(--radius-default);color:var(--text-secondary);background:var(--bg-subtle)}.focus-timer__custom-input:focus{border-color:var(--color-primary);box-shadow:0 0 0 4px var(--focus-ring)}.focus-timer__custom-apply{flex:0 0 auto}.focus-timer__custom [role="alert"]{flex:1 0 100%;color:var(--color-danger);font-size:13.6px}
+
+/* First-run guided tour (coach-mark spotlight). No animation per design.md:
+   the spotlight and card jump between steps instantly. The scrim is a warm
+   neutral dim (stronger than the modal token) so the highlighted element reads
+   clearly; steps without a target dim the whole screen. */
+.onboarding { position: fixed; inset: 0; z-index: 200; }
+.onboarding__scrim { position: absolute; inset: 0; }
+.onboarding__spot { position: absolute; pointer-events: none; border-radius: var(--radius-default); box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45); outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.onboarding__card { position: absolute; box-sizing: border-box; padding: 24px; color: var(--text-secondary); border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-surface); box-shadow: var(--shadow-lg); }
+.onboarding__card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.onboarding__step-count { color: var(--color-primary-active); font-size: 13.6px; font-weight: 600; line-height: 1.5; }
+.onboarding__close { flex: none; }
+.onboarding__title { margin: 12px 0 0; color: var(--text-primary); font-size: 20px; font-weight: 600; line-height: 1.4; }
+.onboarding__body { margin: 8px 0 0; color: var(--text-secondary); font-size: 16px; line-height: 1.5; white-space: pre-wrap; }
+.onboarding__dots { margin-top: 20px; display: flex; align-items: center; gap: 6px; }
+.onboarding__dot { width: 6px; height: 6px; border-radius: var(--radius-pill); background: #dad3c3; }
+.onboarding__dot.is-active { width: 20px; background: var(--color-primary); }
+.onboarding__actions { margin-top: 20px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.onboarding__skip { color: var(--text-muted); font-size: 15.2px; font-weight: 500; line-height: 1.5; background: transparent; border: 0; cursor: pointer; padding: 0; }
+.onboarding__skip:hover { color: var(--text-secondary); }
+.onboarding__nav { display: flex; align-items: center; gap: 8px; }

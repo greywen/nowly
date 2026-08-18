@@ -30,6 +30,8 @@ import { FocusTimerWidget } from '../focus/FocusTimerWidget';
 import { useFocusTimer } from '../focus/FocusTimerContext';
 import { FocusStatisticsDialog } from '../focus/FocusStatisticsDialog';
 import { FocusWallpaperOverlay } from '../focus/FocusWallpaperOverlay';
+import { OnboardingGuide, type GuideStep } from './onboarding/OnboardingGuide';
+import { useOnboarding } from './onboarding/useOnboarding';
 
 type WindowMode = 'wallpaper' | 'foreground';
 
@@ -68,6 +70,8 @@ export function App() {
   const isSwitchingWindowModeRef = useRef(false);
   const focusTimer = useFocusTimer();
   const focusStatus = focusTimer.state.status;
+
+  const onboarding = useOnboarding();
 
   const now = useCurrentTime();
   const todayIso = localIsoDate(now);
@@ -253,6 +257,15 @@ export function App() {
     }).catch(() => undefined);
   }
 
+  const onboardingSteps: GuideStep[] = [
+    { title: t('onboarding.welcome.title'), body: t('onboarding.welcome.body') },
+    { target: 'workspace', title: t('onboarding.workspace.title'), body: t('onboarding.workspace.body') },
+    { target: 'edit-layout', title: t('onboarding.editLayout.title'), body: t('onboarding.editLayout.body') },
+    { target: 'settings', title: t('onboarding.settings.title'), body: t('onboarding.settings.body') },
+    { target: 'wallpaper', title: t('onboarding.wallpaper.title'), body: t('onboarding.wallpaper.body') },
+    { title: t('onboarding.done.title'), body: t('onboarding.done.body') }
+  ];
+
   return (
     <>
       <DesktopShell
@@ -273,6 +286,11 @@ export function App() {
         overlay={windowMode === 'wallpaper' ? <FocusWallpaperOverlay /> : null}
       />
       {focusStatisticsOpen ? <FocusStatisticsDialog onClose={() => setFocusStatisticsOpen(false)} /> : null}
+      <OnboardingGuide
+        open={onboarding.shouldShow && windowMode === 'foreground'}
+        steps={onboardingSteps}
+        onClose={onboarding.dismiss}
+      />
       <ModalRoot
         modal={modal}
         events={events}
