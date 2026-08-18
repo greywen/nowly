@@ -45,12 +45,12 @@ function collectCommits() {
 }
 
 const TYPE_SECTIONS = [
-  { key: 'feature', title: '✨ 新功能', match: /^(feat|feature)(\(.*\))?:/i },
-  { key: 'fix', title: '🐛 问题修复', match: /^fix(\(.*\))?:/i },
-  { key: 'refactor', title: '♻️ 重构优化', match: /^(refactor|perf|style)(\(.*\))?:/i },
-  { key: 'docs', title: '📝 文档', match: /^docs(\(.*\))?:/i },
-  { key: 'test', title: '✅ 测试', match: /^test(\(.*\))?:/i },
-  { key: 'chore', title: '🔧 其他', match: /^(chore|build|ci)(\(.*\))?:/i },
+  { key: 'feature', title: '✨ New Features', match: /^(feat|feature)(\(.*\))?:/i },
+  { key: 'fix', title: '🐛 Bug Fixes', match: /^fix(\(.*\))?:/i },
+  { key: 'refactor', title: '♻️ Improvements', match: /^(refactor|perf|style)(\(.*\))?:/i },
+  { key: 'docs', title: '📝 Documentation', match: /^docs(\(.*\))?:/i },
+  { key: 'test', title: '✅ Tests', match: /^test(\(.*\))?:/i },
+  { key: 'chore', title: '🔧 Chores', match: /^(chore|build|ci)(\(.*\))?:/i },
 ];
 
 function stripType(subject) {
@@ -82,7 +82,7 @@ function fallbackNotes(commits) {
     }
   }
   if (other.length) {
-    lines.push('### 📦 其他变更', '');
+    lines.push('### 📦 Other Changes', '');
     for (const c of other) {
       lines.push(`- ${c.subject} (${c.hash})`);
     }
@@ -97,34 +97,34 @@ async function llmNotes(commits) {
     .join('\n');
 
   const systemPrompt = [
-    '你是一名资深的发布经理，负责为桌面应用 "Nowly" 编写面向用户的发布说明（Release Notes）。',
-    '请阅读提供的 Git 提交记录，分析本次发布真正带来的变化，并用简体中文整理成结构化的发布日志。',
+    'You are a senior release manager writing user-facing release notes for the desktop app "Nowly".',
+    'Read the provided Git commits, analyse what this release actually changes, and produce a structured changelog in clear, professional English.',
     '',
-    '严格遵循以下 Markdown 输出格式（没有内容的分区请直接省略，不要保留空标题）：',
+    'Strictly follow this Markdown output format (omit any section that has no content; do not keep empty headings):',
     '',
     `## Nowly v${VERSION}`,
     '',
-    '> 一句话概述本次发布的核心亮点。',
+    '> A one-line summary of the key highlight of this release.',
     '',
-    '### ✨ 新功能',
-    '- 用清晰、面向用户的语言描述新增能力（不要照抄提交信息）',
+    '### ✨ New Features',
+    '- Describe new capabilities in clear, user-facing language (do not copy commit messages verbatim)',
     '',
-    '### 🐛 问题修复',
-    '- 描述修复的问题及其对用户的影响',
+    '### 🐛 Bug Fixes',
+    '- Describe the fixed issues and their impact on users',
     '',
-    '### ♻️ 优化改进',
-    '- 描述性能、体验或内部结构的改进',
+    '### ♻️ Improvements',
+    '- Describe performance, UX, or internal improvements',
     '',
-    '### 📝 其他',
-    '- 文档、测试、构建等其他值得一提的变更',
+    '### 📝 Other',
+    '- Documentation, tests, build, and other noteworthy changes',
     '',
-    '要求：',
-    '1. 面向最终用户，语言简洁、专业、易懂，避免技术黑话。',
-    '2. 归纳合并相关提交，不要逐条罗列，不要暴露 commit hash。',
-    '3. 只输出 Markdown，不要额外解释。',
+    'Requirements:',
+    '1. Write for end users: concise, professional, and easy to understand; avoid technical jargon.',
+    '2. Group and merge related commits; do not list them one by one and do not expose commit hashes.',
+    '3. Output Markdown only, with no extra explanation.',
   ].join('\n');
 
-  const userPrompt = `本次发布版本：v${VERSION}\n对比范围：${PREV_TAG || '首次发布'}\n\n提交记录：\n${commitList}`;
+  const userPrompt = `Release version: v${VERSION}\nCompare range: ${PREV_TAG || 'first release'}\n\nCommits:\n${commitList}`;
 
   const messages = [
     { role: 'system', content: systemPrompt },
@@ -155,7 +155,7 @@ async function llmNotes(commits) {
   if (res.status === 400) {
     const errText = await res.text();
     if (/temperature/i.test(errText)) {
-      console.log('模型不支持自定义 temperature，去掉该参数后重试。');
+      console.log('Model rejects a custom temperature; retrying without it.');
       res = await call(false);
     } else {
       throw new Error(`LLM request failed: 400 ${errText}`);
@@ -188,7 +188,7 @@ function writeNotes(notes) {
 async function main() {
   const commits = collectCommits();
   if (!commits.length) {
-    writeNotes(`## Nowly v${VERSION}\n\n本次发布无代码变更记录。`);
+    writeNotes(`## Nowly v${VERSION}\n\nNo code changes in this release.`);
     return;
   }
 
@@ -198,10 +198,10 @@ async function main() {
       writeNotes(notes);
       return;
     } catch (err) {
-      console.error(`LLM 生成失败，回退到默认变更日志: ${err.message}`);
+      console.error(`LLM generation failed, falling back to the default changelog: ${err.message}`);
     }
   } else {
-    console.log('未配置 LLM_API_KEY，使用默认变更日志。');
+    console.log('LLM_API_KEY is not configured; using the default changelog.');
   }
 
   writeNotes(fallbackNotes(commits));
