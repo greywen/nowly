@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNowlyRepository } from '../data/RepositoryContext';
 import { sortTasks } from '../lib/task-draft';
 import { t } from '../i18n';
-import type { MatrixTask, TaskDraft } from './matrix-model';
+import type { MatrixTask, Quadrant, TaskDraft } from './matrix-model';
 
 type TasksResource =
   | { status: 'loading'; data: MatrixTask[] }
@@ -33,6 +33,7 @@ export function useTasks({ onRefreshEvents }: { onRefreshEvents: () => Promise<u
   const [tasks, setTasks] = useState<TasksResource>({ status: 'loading', data: [] });
   const [pendingTaskIds, setPendingTaskIds] = useState<Set<string>>(new Set());
   const [failedCompletion, setFailedCompletion] = useState<FailedCompletion | null>(null);
+  const [dragError, setDragError] = useState<string | null>(null);
   const requestIdRef = useRef(0);
   const tasksRef = useRef<MatrixTask[]>([]);
   const revisionsRef = useRef(new Map<string, number>());
@@ -156,7 +157,47 @@ export function useTasks({ onRefreshEvents }: { onRefreshEvents: () => Promise<u
     await setTaskCompleted(current, failed.targetCompleted);
   }, [failedCompletion, loadTasks, setTaskCompleted]);
 
+  // Moving a task between quadrants optimistically rewrites its `quadrant`
+  // locally for instant feedback, then persists through the normal update. On
+  // failure the pre-drag task is restored and a drag error surfaces. Revisions
+  // guard against races with completion toggles on the same task.
+  const moveTask = useCallback(
+    async (task: MatrixTask, targetQuadrant: Quadrant) => {
+      if (task.quadrant === targetQuadrant) return;
+      const revision = nextRevision(task.id);
+      const original = tasksRef.current.find((item) => item.id === task.id) ?? task;
+      setDragError(null);
+      replaceTasks(
+        tasksRef.current.map((item) =>
+          item.id === task.id ? { ...item, quadrant: targetQuadrant } : item
+        )
+      );
+      const draft: TaskDraft = {
+        title: original.title,
+        quadrant: targetQuadrant,
+        dueAt: original.dueAt,
+        priority: original.priority,
+        completed: original.completed,
+        linkedEventId: original.linkedEventId,
+        note: original.note
+      };
+      try {
+        const saved = await repository.updateTask(task.id, draft);
+        if (revisionsRef.current.get(task.id) === revision) {
+          replaceTasks(tasksRef.current.map((item) => (item.id === task.id ? saved : item)));
+        }
+      } catch (error) {
+        if (revisionsRef.current.get(task.id) === revision) {
+          replaceTasks(tasksRef.current.map((item) => (item.id === task.id ? original : item)));
+          setDragError(messageFrom(error));
+        }
+      }
+    },
+    [nextRevision, replaceTasks, repository]
+  );
+
   const dismissTaskError = useCallback(() => setFailedCompletion(null), []);
+  const dismissDragError = useCallback(() => setDragError(null), []);
 
   return {
     tasks,
@@ -165,9 +206,12 @@ export function useTasks({ onRefreshEvents }: { onRefreshEvents: () => Promise<u
     updateTask,
     deleteTask,
     setTaskCompleted,
+    moveTask,
     retryFailedCompletion,
     dismissTaskError,
+    dismissDragError,
     pendingTaskIds,
-    failedCompletion
+    failedCompletion,
+    dragError
   };
 }
