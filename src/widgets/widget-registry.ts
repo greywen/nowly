@@ -83,8 +83,8 @@ export const extensionDefinitions: WidgetDefinition[] = [
     get name() { return t('widget.focusTimer.name'); },
     get description() { return t('widget.focusTimer.desc'); },
     category: 'extension',
-    minW: 3,
-    minH: 3,
+    minW: 2,
+    minH: 2,
     default: { x: 0, y: 0, w: 4, h: 4 }
   }
 ];
