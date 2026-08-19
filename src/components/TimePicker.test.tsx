@@ -115,6 +115,37 @@ describe('TimePicker', () => {
     expect(screen.getByRole('button', { name: '开始时间' })).toHaveFocus();
   });
 
+  it('commits stepper adjustments when the popup is closed', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<Harness initiallyOpen onChange={onChange} />);
+    await user.click(screen.getByRole('button', { name: '增加小时' }));
+    await user.click(screen.getByRole('button', { name: '增加分钟' }));
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.pointerDown(document.body);
+    expect(onChange).toHaveBeenLastCalledWith('10:35');
+
+    onChange.mockClear();
+    await user.click(screen.getByRole('button', { name: '开始时间' }));
+    await user.click(screen.getByRole('button', { name: '减少小时' }));
+    await user.keyboard('{Escape}');
+    expect(onChange).toHaveBeenLastCalledWith('09:35');
+
+    onChange.mockClear();
+    await user.click(screen.getByRole('button', { name: '开始时间' }));
+    await user.click(screen.getByRole('button', { name: '增加分钟' }));
+    await user.click(screen.getByRole('button', { name: '开始时间' }));
+    expect(onChange).toHaveBeenLastCalledWith('09:40');
+  });
+
+  it('does not emit when the popup closes without adjustments', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<Harness initiallyOpen onChange={onChange} />);
+    await user.keyboard('{Escape}');
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it('closes on Escape and outside pointer input with focus restoration', async () => {
     const user = userEvent.setup();
     const onOpenChange = vi.fn();
