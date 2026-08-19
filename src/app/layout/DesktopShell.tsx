@@ -1,4 +1,4 @@
-import { Check, LayoutGrid, MonitorDown, Plus, Settings, Store } from 'lucide-react';
+import { Check, LayoutGrid, MessageSquarePlus, MonitorDown, Plus, Settings, Store } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import {
   builtinDefinitions,
@@ -13,6 +13,7 @@ import type {
 import { useModuleLayout } from '../../widgets/useModuleLayout';
 import { TemplatePickerDialog } from '../../widgets/TemplatePickerDialog';
 import { ModuleMarketDialog } from '../../widgets/ModuleMarketDialog';
+import { FeedbackDialog } from '../../settings/FeedbackDialog';
 import { ModuleGrid, type ModuleGridItem } from './ModuleGrid';
 import { BlurControl } from '../BlurControl';
 import { DEFAULT_BLUR, useBlur } from '../useBlur';
@@ -66,6 +67,7 @@ export function DesktopShell({
   const [isEditing, setIsEditing] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [marketOpen, setMarketOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [previewingBlur, setPreviewingBlur] = useState(false);
 
   // Blur persists as a wallpaper-only look. As the wallpaper it softens the
@@ -116,17 +118,7 @@ export function DesktopShell({
               {t('shell.addModule')}
             </button>
           ) : null}
-          {foreground && isEditing ? (
-            <button
-              type="button"
-              className="btn"
-              aria-label={t('market.title')}
-              onClick={() => setMarketOpen(true)}
-            >
-              <Store aria-hidden="true" />
-              {t('market.title')}
-            </button>
-          ) : null}
+          {/* 模块市场功能暂时隐藏 */}
           {foreground ? (
             <button
               type="button"
@@ -137,6 +129,16 @@ export function DesktopShell({
               onClick={() => setIsEditing((current) => !current)}
             >
               {isEditing ? <Check aria-hidden="true" /> : <LayoutGrid aria-hidden="true" />}
+            </button>
+          ) : null}
+          {foreground ? (
+            <button
+              type="button"
+              className="btn btn-icon"
+              aria-label={t('feedback.open')}
+              onClick={() => setFeedbackOpen(true)}
+            >
+              <MessageSquarePlus aria-hidden="true" />
             </button>
           ) : null}
           {foreground ? (
@@ -189,6 +191,10 @@ export function DesktopShell({
           onClose={() => setMarketOpen(false)}
           onInstalled={() => onReloadExtensions?.()}
         />
+      ) : null}
+
+      {foreground && feedbackOpen ? (
+        <FeedbackDialog onClose={() => setFeedbackOpen(false)} />
       ) : null}
     </div>
   );

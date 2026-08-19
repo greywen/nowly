@@ -7,6 +7,7 @@ mod db;
 mod error;
 mod events;
 mod extensions;
+mod feedback;
 mod focus;
 mod focus_timer;
 mod kanban;
@@ -365,6 +366,7 @@ fn main() {
             notes::delete_note,
             commands::get_app_settings,
             commands::update_app_settings,
+            feedback::open_external,
             layout::list_module_layout,
             layout::save_module_layout,
             module_state::get_module_state,
