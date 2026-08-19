@@ -1052,37 +1052,57 @@ button:disabled { cursor: default; opacity: .65; }
 .kanban-field__empty { padding: 16px; color: var(--text-muted); font-size: 13.6px; text-align: center; border: 1px dashed var(--border-default); border-radius: var(--radius-default); }
 
 /* Focus timer and reports — all state changes are immediate per design.md.
-   Layout follows the circular-ring reference: a progress ring wraps the clock,
-   with a status pill inside and the start/reset row plus duration presets
-   below. Colors and states stay within the design system (cyan-green primary,
-   warm surfaces) and there is no transition or animation anywhere. */
-.focus-timer { container-type: size; }
+   Layout follows the circular-ring reference: a progress ring wraps the clock
+   with a status pill inside, a pill start button plus a round reset sit below,
+   and the durations live in a segmented bar pinned to the card foot. Colors and
+   states stay within the design system (cyan-green primary, warm surfaces) and
+   there is no transition or animation anywhere. */
+.focus-timer { container: focus / size; }
 .focus-timer__header { justify-content:flex-end; }
 .focus-timer__body { min-height:0; overflow:hidden; padding:20px 24px 24px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; }
 /* Ring + clock stack. The ring scales with the smaller module dimension so it
-   never overflows; the center content is absolutely centered over it. */
-.focus-timer__ring-wrap { position:relative; flex:1 1 0; min-height:0; width:100%; display:flex; align-items:center; justify-content:center; }
-.focus-timer__ring { display:block; height:100%; max-height:min(100%,240px); max-width:100%; aspect-ratio:1; }
+   never overflows; the centre content is absolutely positioned inside the
+   circle's inscribed square, so the label, digits and status pill always keep
+   an even margin from the ring instead of spilling past it. */
+.focus-timer__ring-wrap { flex:1 1 0; min-height:0; width:100%; display:flex; align-items:center; justify-content:center; }
+.focus-timer__ring-box { position:relative; height:100%; max-height:min(100%,240px); max-width:100%; aspect-ratio:1; container: focusring / size; }
+.focus-timer__ring { display:block; width:100%; height:100%; }
 .focus-timer__ring-track { fill:none; stroke:var(--bg-secondary); stroke-width:6; }
 .focus-timer__ring-progress { fill:none; stroke:var(--color-primary); stroke-width:6; stroke-linecap:round; }
 .focus-timer__ring-progress.is-paused { stroke:var(--color-warning); }
 .focus-timer__ring-progress.is-done { stroke:var(--color-success); }
-/* Center content lives inside the circle's inscribed square (~70% of the
-   diameter), so the label, digits and hint always keep an even margin from the
-   ring instead of crowding it. The digits are deliberately about half the ring
-   height — the ring carries the scale, the number stays calm and legible. */
-.focus-timer__ring-center { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); z-index:1; width:70%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; text-align:center; }
-.focus-timer__label { margin:0; color:var(--color-primary-active); font-size:clamp(10px,3cqmin,13.6px); font-weight:600; letter-spacing:0.04em; text-transform:uppercase; }
+/* The digits are deliberately about half the ring height — the ring carries the
+   scale, the number stays calm and legible. */
+.focus-timer__ring-center { position:absolute; inset:16%; z-index:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; text-align:center; }
+.focus-timer__label { margin:0; color:var(--color-primary-active); font-size:clamp(9px,6cqw,13.6px); font-weight:600; letter-spacing:0.04em; text-transform:uppercase; white-space:nowrap; }
 .focus-timer__label.is-paused { color:var(--color-warning-active); }
 .focus-timer__label.is-done { color:var(--color-success-active); }
-.focus-timer__display { margin:0; color:var(--text-primary); font-family:Inter,"Microsoft YaHei","PingFang SC",Helvetica,Arial,sans-serif; font-size:clamp(28px,11cqmin,46px); font-weight:300; line-height:1.1; font-variant-numeric:tabular-nums; font-feature-settings:"tnum" 1,"lnum" 1; text-align:center; }
+.focus-timer__display { margin:0; color:var(--text-primary); font-family:Inter,"Microsoft YaHei","PingFang SC",Helvetica,Arial,sans-serif; font-size:clamp(18px,22cqw,46px); font-weight:300; line-height:1.1; font-variant-numeric:tabular-nums; font-feature-settings:"tnum" 1,"lnum" 1; text-align:center; }
 .focus-timer__hint { margin:0; max-width:100%; overflow:hidden; color:var(--text-muted); font-size:clamp(10px,2.8cqmin,13.6px); line-height:1.3; text-overflow:ellipsis; white-space:nowrap; }
-.focus-timer__actions { flex:none; display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:8px; }
-.focus-timer__start { min-width:160px; }
-.focus-timer__presets { flex:none; display:flex; flex-wrap:wrap; justify-content:center; gap:8px; }
-.focus-timer__preset { min-height:40px; padding:8px 16px; font-size:15.2px; }
-.focus-timer__preset svg { width:16px; height:16px; }
-.focus-timer__preset.is-active { color:var(--color-primary-active); background:var(--color-primary-light); border-color:var(--color-primary); }
+/* Status pill under the digits: a bordered chip that names the current state,
+   mirroring the reference layout. Colour follows the ring tone. */
+.focus-timer__status { box-sizing:border-box; margin:6px 0 0; max-width:100%; padding:4px 10px; display:inline-flex; align-items:center; gap:6px; color:var(--text-muted); font-size:clamp(9px,5.5cqw,13.6px); line-height:1.3; border:1px solid var(--border-default); border-radius:var(--radius-pill); background:var(--bg-subtle); }
+.focus-timer__status span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.focus-timer__status svg { flex:none; width:14px; height:14px; }
+.focus-timer__status.is-paused { color:var(--color-warning-active); border-color:var(--color-warning); background:var(--color-warning-light); }
+.focus-timer__status.is-done { color:var(--color-success-active); border-color:var(--color-success); background:var(--color-success-light); }
+.focus-timer__actions { flex:none; display:flex; flex-wrap:nowrap; align-items:center; justify-content:center; gap:12px; }
+.focus-timer__start { min-width:160px; height:48px; min-height:48px; border-radius:var(--radius-pill); font-weight:600; letter-spacing:0.02em; }
+.focus-timer__reset { width:48px; min-width:48px; height:48px; min-height:48px; border-radius:50%; border-color:var(--border-default); background:transparent; }
+.focus-timer__reset:hover:not(:disabled) { color:var(--color-primary); border-color:var(--color-primary); background:var(--bg-secondary); }
+/* Duration bar pinned to the card foot, like the reference's segmented strip:
+   equal-width segments split by hairlines, the selected one filled with the
+   light primary tint. */
+.focus-timer__footer { flex:none; display:flex; align-items:stretch; border-top:1px solid var(--border-default); background:var(--bg-subtle); }
+.focus-timer__duration { box-sizing:border-box; flex:1 1 0; min-width:0; min-height:52px; padding:8px 6px; display:flex; align-items:center; justify-content:center; gap:6px; color:var(--text-secondary); font-size:14px; font-weight:600; background:transparent; border:0; border-left:1px solid var(--border-default); }
+.focus-timer__duration:first-child { border-left:0; }
+.focus-timer__duration span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.focus-timer__duration svg { flex:none; width:16px; height:16px; color:var(--text-muted); }
+.focus-timer__duration:hover { color:var(--color-primary-active); background:var(--bg-secondary); }
+.focus-timer__duration:hover svg { color:var(--color-primary-active); }
+.focus-timer__duration:focus-visible { outline:0; box-shadow:inset 0 0 0 4px var(--focus-ring); }
+.focus-timer__duration.is-active { color:var(--color-primary-active); background:var(--color-primary-light); }
+.focus-timer__duration.is-active svg { color:var(--color-primary-active); }
 .focus-timer__auto { flex:none; color:var(--text-secondary); font-size:13.6px; cursor:pointer; }
 .focus-timer--wallpaper .focus-timer__body { box-sizing:border-box; height:100%; justify-content:center; padding:24px; }
 .focus-timer--wallpaper .focus-timer__display { font-size:clamp(64px,12vw,160px); }
@@ -1103,21 +1123,34 @@ button:disabled { cursor: default; opacity: .65; }
 .focus-fullscreen__display { margin:0; font-family:"Segoe UI",Inter,Helvetica,Arial,sans-serif; color:var(--text-primary); font-size:clamp(80px,14vw,220px); font-weight:300; line-height:1; font-variant-numeric:tabular-nums; font-feature-settings:"tnum" 1,"lnum" 1; }
 .focus-fullscreen__status { margin:0; color:var(--text-secondary); font-size:17.2px; }
 .focus-fullscreen__hint { margin:0; color:var(--text-muted); font-size:15.2px; }
-@container (max-width:420px){.focus-timer__body{padding:16px;gap:12px}}
-@container (max-height:390px){.focus-timer__body{padding:16px;gap:12px}}
+@container focus (max-width:420px){.focus-timer__body{padding:16px;gap:12px}}
+@container focus (max-height:390px){.focus-timer__body{padding:16px;gap:12px}}
 /* Focus timer: shed non-essential chrome as the module shrinks so the ring,
-   clock and core actions stay usable. The statistics entry and the custom
-   duration control are always kept. Least essential parts give way first: the
-   status pill and auto-wallpaper, then the fixed presets (25/15/5), leaving the
-   custom entry as the sole duration control. Instant show/hide, no animation. */
-@container (max-height:360px){.focus-timer__hint{display:none}.focus-timer__auto{display:none}}
-@container (max-height:300px){.focus-timer__preset:not(:last-child){display:none}}
-@container (max-width:300px){.focus-timer__hint{display:none}.focus-timer__auto{display:none}.focus-timer__preset:not(:last-child){display:none}.focus-timer__start{min-width:0}}
+   clock and core actions stay usable. The statistics entry, the start/pause
+   button and the custom duration segment are always kept. Least essential
+   parts give way first: the auto-wallpaper option, then the ring caption and
+   status pill, then the segment icons, and finally every preset except the
+   selected one — the custom segment remains the escape hatch for any other
+   duration. Instant show/hide, no animation. */
+@container focus (max-height:400px){.focus-timer__auto{display:none}}
+@container focus (max-width:340px){.focus-timer__auto{display:none}}
+/* The caption and pill are measured against the ring itself, not the module:
+   the ring shrinks whenever the body has to make room for other rows, and text
+   that no longer fits the circle is dropped rather than clipped. */
+@container focusring (max-width:170px){.focus-timer__status{display:none}}
+@container focusring (max-width:120px){.focus-timer__label{display:none}}
+/* Below this height the ring would be smaller than the digits it frames, so the
+   compact mode drops the circle (and its nested container) and lets the
+   countdown fill the card width. */
+@container focus (max-height:320px){.focus-timer__ring{display:none}.focus-timer__ring-box{width:100%;height:auto;max-height:none;aspect-ratio:auto;container-type:normal}.focus-timer__ring-center{position:static;inset:auto}.focus-timer__display{font-size:clamp(24px,9cqw,40px)}.focus-timer__label,.focus-timer__status{display:none}}
+@container focus (max-width:300px){.focus-timer__start{min-width:0}}
+@container focus (max-height:300px){.focus-timer__duration{min-height:44px;font-size:13.6px}.focus-timer__duration svg{display:none}}
+@container focus (max-width:320px){.focus-timer__duration{min-height:44px;font-size:13.6px;padding:8px 4px}.focus-timer__duration svg{display:none}}
 /* At the 2x2 minimum the module is only ~200px each way: keep the ring, clock,
-   statistics, custom entry and the start/reset row, but tighten spacing and
-   drop the fixed presets so nothing overflows. */
-@container (max-height:260px){.focus-timer__preset:not(:last-child){display:none}.focus-timer__body{padding:12px;gap:10px}.focus-timer__start{min-width:0}}
-@container (max-width:260px){.focus-timer__preset:not(:last-child){display:none}.focus-timer__body{padding:12px;gap:10px}.focus-timer__start{min-width:0}}
+   statistics, start/reset and the custom entry, but tighten spacing and drop
+   every unselected preset so nothing overflows. */
+@container focus (max-height:260px){.focus-timer__duration:not(.is-active):not(.focus-timer__duration--custom){display:none}.focus-timer__body{padding:12px;gap:10px}.focus-timer__start{min-width:0}.focus-timer__start,.focus-timer__reset{height:40px;min-height:40px}.focus-timer__reset{width:40px;min-width:40px}}
+@container focus (max-width:260px){.focus-timer__duration:not(.is-active):not(.focus-timer__duration--custom){display:none}.focus-timer__body{padding:12px;gap:10px}.focus-timer__start{min-width:0}.focus-timer__start,.focus-timer__reset{height:40px;min-height:40px}.focus-timer__reset{width:40px;min-width:40px}}
 /* Calendar: in a small module the truncated title and month summary carry no
    information, and the fixed weekday header row costs space a short grid can't
    spare. Hide them progressively so the grid and toolbar stay legible. */
@@ -1127,7 +1160,7 @@ button:disabled { cursor: default; opacity: .65; }
 .focus-statistics-dialog{width:min(760px,calc(100vw - 32px))}.focus-statistics__intro{margin:0 0 16px;color:var(--text-muted)}.focus-statistics__periods{display:flex;gap:8px;flex-wrap:wrap}.focus-statistics__periods [aria-pressed="true"]{color:var(--color-primary-active);background:var(--color-primary-light)}
 .focus-statistics__summaries{margin:20px 0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.focus-statistics__summaries div{padding:16px;border-radius:var(--radius-default);background:var(--bg-subtle)}.focus-statistics__summaries strong,.focus-statistics__summaries span{display:block}.focus-statistics__summaries strong{color:var(--text-primary);font-size:18.4px}.focus-statistics__summaries span{color:var(--text-muted);font-size:13.6px}
 @media(max-width:700px){.focus-statistics__summaries{grid-template-columns:repeat(2,1fr)}}
-.focus-timer__custom{flex:none;width:100%;display:flex;flex-wrap:wrap;align-items:center;gap:8px}.focus-timer__custom label{flex:1 0 100%;font-size:13.6px;color:var(--text-secondary)}.focus-timer__custom-input{box-sizing:border-box;height:40px;flex:1 1 0;min-width:0;padding:8px 16px;border:1px solid var(--border-default);border-radius:var(--radius-default);color:var(--text-secondary);background:var(--bg-subtle)}.focus-timer__custom-input:focus{border-color:var(--color-primary);box-shadow:0 0 0 4px var(--focus-ring)}.focus-timer__custom-apply{flex:0 0 auto}.focus-timer__custom [role="alert"]{flex:1 0 100%;color:var(--color-danger);font-size:13.6px}
+.focus-timer__custom{flex:none;width:100%;display:flex;flex-wrap:wrap;align-items:center;gap:8px}.focus-timer__custom-input{box-sizing:border-box;height:40px;flex:1 1 0;min-width:0;padding:8px 16px;border:1px solid var(--border-default);border-radius:var(--radius-default);color:var(--text-secondary);background:var(--bg-subtle)}.focus-timer__custom-input:focus{border-color:var(--color-primary);box-shadow:0 0 0 4px var(--focus-ring)}.focus-timer__custom-apply{flex:0 0 auto;padding:8px 16px;font-size:15.2px}.focus-timer__custom [role="alert"]{flex:1 0 100%;color:var(--color-danger);font-size:13.6px}
 
 /* First-run guided tour (coach-mark spotlight). No animation per design.md:
    the spotlight and card jump between steps instantly. The scrim is a warm

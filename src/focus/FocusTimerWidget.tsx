@@ -1,4 +1,4 @@
-import { BarChart3, Pause, Pencil, Play, RotateCcw, Timer } from 'lucide-react';
+import { BarChart3, Bell, Pause, Pencil, Play, RotateCcw, Timer } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from '../i18n';
 import { useFocusTimer } from './FocusTimerContext';
@@ -25,19 +25,21 @@ function FocusRing({ fraction, tone, children }: { fraction: number; tone: Tone;
   const toneClass = tone === 'paused' ? ' is-paused' : tone === 'done' ? ' is-done' : '';
   return (
     <div className="focus-timer__ring-wrap">
-      <svg className="focus-timer__ring" viewBox="0 0 120 120" aria-hidden="true">
-        <circle className="focus-timer__ring-track" cx={center} cy={center} r={radius} />
-        <circle
-          className={`focus-timer__ring-progress${toneClass}`}
-          cx={center}
-          cy={center}
-          r={radius}
-          strokeDasharray={circumference}
-          strokeDashoffset={offset}
-          transform={`rotate(-90 ${center} ${center})`}
-        />
-      </svg>
-      <div className="focus-timer__ring-center">{children}</div>
+      <div className="focus-timer__ring-box">
+        <svg className="focus-timer__ring" viewBox="0 0 120 120" aria-hidden="true">
+          <circle className="focus-timer__ring-track" cx={center} cy={center} r={radius} />
+          <circle
+            className={`focus-timer__ring-progress${toneClass}`}
+            cx={center}
+            cy={center}
+            r={radius}
+            strokeDasharray={circumference}
+            strokeDashoffset={offset}
+            transform={`rotate(-90 ${center} ${center})`}
+          />
+        </svg>
+        <div className="focus-timer__ring-center">{children}</div>
+      </div>
     </div>
   );
 }
@@ -64,6 +66,7 @@ export function FocusTimerWidget({ mode, onOpenStatistics, onEnterWallpaper }: P
   // The remembered custom value only earns a chip when it is not already one of
   // the fixed presets, so the row never shows duplicates.
   const customChip = lastCustom !== null && !PRESETS.includes(lastCustom) ? lastCustom : null;
+  const durations = customChip === null ? PRESETS : [...PRESETS, customChip];
   const isCustomDuration = !PRESETS.includes(minutes) && minutes !== customChip;
   const unit = t('focusTimer.preset25').replace('25 ', '');
   // While a session is active the display counts down; when idle it previews the
@@ -116,7 +119,7 @@ export function FocusTimerWidget({ mode, onOpenStatistics, onEnterWallpaper }: P
         <FocusRing fraction={fraction} tone={tone}>
           <p className={`focus-timer__label${labelTone}`}>{t('focusTimer.title')}</p>
           <p className="focus-timer__display" role="timer">{format(displaySeconds)}</p>
-          <p className="focus-timer__hint">{hintText}</p>
+          <p className={`focus-timer__status${labelTone}`}><Bell aria-hidden="true" /><span>{hintText}</span></p>
         </FocusRing>
 
         <div className="focus-timer__actions">
@@ -130,66 +133,58 @@ export function FocusTimerWidget({ mode, onOpenStatistics, onEnterWallpaper }: P
               {running ? t('focusTimer.pause') : t('focusTimer.resume')}
             </button>
           )}
-          <button className="btn btn-icon" aria-label={t('focusTimer.reset')} disabled={!active} onClick={() => void timer.interrupt()}>
+          <button className="btn btn-icon focus-timer__reset" aria-label={t('focusTimer.reset')} disabled={!active} onClick={() => void timer.interrupt()}>
             <RotateCcw aria-hidden="true" />
           </button>
         </div>
 
+        {!active && customOpen && (
+          <div className="focus-timer__custom">
+            <input
+              className="focus-timer__custom-input"
+              inputMode="numeric"
+              autoComplete="off"
+              aria-label={t('focusTimer.customMinutes')}
+              value={custom}
+              placeholder={String(minutes)}
+              onChange={event => setCustom(event.target.value)}
+              onKeyDown={event => { if (event.key === 'Enter') applyCustom(); }}
+            />
+            <button className="btn btn-primary focus-timer__custom-apply" disabled={!customValid} onClick={applyCustom}>
+              {t('focusTimer.useDuration')}
+            </button>
+            {custom && !customValid ? <span role="alert">{t('focusTimer.customError')}</span> : null}
+          </div>
+        )}
+
         {!active && (
-          <>
-            <div className="focus-timer__presets" role="group" aria-label={t('focusTimer.selectDuration')}>
-              {PRESETS.map(value => {
-                const selected = !isCustomDuration && minutes === value;
-                return (
-                  <button
-                    key={value}
-                    className={`btn focus-timer__preset${selected ? ' is-active' : ''}`}
-                    aria-pressed={selected}
-                    onClick={() => { setMinutes(value); setCustomOpen(false); }}
-                  ><Timer aria-hidden="true" />{value} {unit}</button>
-                );
-              })}
-              {customChip !== null && (
-                <button
-                  className={`btn focus-timer__preset${minutes === customChip ? ' is-active' : ''}`}
-                  aria-pressed={minutes === customChip}
-                  onClick={() => { setMinutes(customChip); setCustomOpen(false); }}
-                ><Timer aria-hidden="true" />{customChip} {unit}</button>
-              )}
-              <button
-                className={`btn focus-timer__preset${isCustomDuration || customOpen ? ' is-active' : ''}`}
-                aria-pressed={isCustomDuration || customOpen}
-                onClick={() => setCustomOpen(open => !open)}
-              ><Pencil aria-hidden="true" />{t('focusTimer.custom')}</button>
-            </div>
-
-            {customOpen && (
-              <div className="focus-timer__custom">
-                <label htmlFor="focus-custom-minutes">{t('focusTimer.customMinutes')}</label>
-                <input
-                  id="focus-custom-minutes"
-                  className="focus-timer__custom-input"
-                  inputMode="numeric"
-                  autoComplete="off"
-                  value={custom}
-                  placeholder={String(minutes)}
-                  onChange={event => setCustom(event.target.value)}
-                  onKeyDown={event => { if (event.key === 'Enter') applyCustom(); }}
-                />
-                <button className="btn btn-primary focus-timer__custom-apply" disabled={!customValid} onClick={applyCustom}>
-                  {t('focusTimer.useDuration')}
-                </button>
-                {custom && !customValid ? <span role="alert">{t('focusTimer.customError')}</span> : null}
-              </div>
-            )}
-
-            <label className="focus-timer__auto form-check form-check-custom form-check-solid">
-              <input className="form-check-input" type="checkbox" checked={autoWallpaper} onChange={event => setAutoWallpaper(event.target.checked)} />
-              <span className="form-check-label">{t('focusTimer.autoWallpaper')}</span>
-            </label>
-          </>
+          <label className="focus-timer__auto form-check form-check-custom form-check-solid">
+            <input className="form-check-input" type="checkbox" checked={autoWallpaper} onChange={event => setAutoWallpaper(event.target.checked)} />
+            <span className="form-check-label">{t('focusTimer.autoWallpaper')}</span>
+          </label>
         )}
       </div>
+
+      {!active && (
+        <div className="focus-timer__footer" role="group" aria-label={t('focusTimer.selectDuration')}>
+          {durations.map(value => {
+            const selected = !isCustomDuration && minutes === value;
+            return (
+              <button
+                key={value}
+                className={`focus-timer__duration${selected ? ' is-active' : ''}`}
+                aria-pressed={selected}
+                onClick={() => { setMinutes(value); setCustomOpen(false); }}
+              ><Timer aria-hidden="true" /><span>{value} {unit}</span></button>
+            );
+          })}
+          <button
+            className={`focus-timer__duration focus-timer__duration--custom${isCustomDuration || customOpen ? ' is-active' : ''}`}
+            aria-pressed={isCustomDuration || customOpen}
+            onClick={() => setCustomOpen(open => !open)}
+          ><Pencil aria-hidden="true" /><span>{t('focusTimer.custom')}</span></button>
+        </div>
+      )}
     </div>
   );
 }

@@ -58,6 +58,7 @@ export function TimePicker({
   const initial = parseTime(value, now());
   const [time, setTime] = useState(initial);
   const timeRef = useRef(initial);
+  const dirtyRef = useRef(false);
   const shouldRestoreFocusRef = useRef(false);
   const dialogId = `${id}-dialog`;
 
@@ -65,6 +66,7 @@ export function TimePicker({
     if (!open) return;
     const selected = parseTime(value, now());
     timeRef.current = selected;
+    dirtyRef.current = false;
     setTime(selected);
     requestAnimationFrame(() => rootRef.current?.querySelector<HTMLElement>('[role="spinbutton"]')?.focus());
 
@@ -93,11 +95,16 @@ export function TimePicker({
   }, [open]);
 
   function close(restoreFocus: boolean) {
+    if (dirtyRef.current) {
+      dirtyRef.current = false;
+      onChange(formatTime(timeRef.current));
+    }
     shouldRestoreFocusRef.current = restoreFocus;
     onOpenChange(false);
   }
 
   function change(next: TimeValue) {
+    dirtyRef.current = true;
     timeRef.current = next;
     setTime(next);
   }
@@ -111,6 +118,7 @@ export function TimePicker({
   }
 
   function choose(next: TimeValue) {
+    dirtyRef.current = false;
     onChange(formatTime(next));
     close(true);
   }
@@ -153,7 +161,7 @@ export function TimePicker({
         aria-expanded={open}
         aria-describedby={errorId}
         disabled={disabled}
-        onClick={() => onOpenChange(!open)}
+        onClick={() => (open ? close(true) : onOpenChange(true))}
       >
         <span>{value || t('timePicker.placeholder')}</span>
         <Clock3 aria-hidden="true" />
@@ -201,7 +209,7 @@ export function TimePicker({
             ))}
           </div>
           <div className="time-picker__footer">
-            <button type="button" aria-label={t('timePicker.clear')} onClick={() => { onChange(''); close(true); }}>{t('timePicker.clearShort')}</button>
+            <button type="button" aria-label={t('timePicker.clear')} onClick={() => { dirtyRef.current = false; onChange(''); close(true); }}>{t('timePicker.clearShort')}</button>
             <button type="button" onClick={() => choose(parseTime('', now()))}>{t('timePicker.now')}</button>
           </div>
         </div>
