@@ -90,13 +90,16 @@ export function App() {
     };
   }, [density]);
 
-  // When a focus session finishes while the app is running as the fullscreen
-  // wallpaper, briefly show the "done" state and then return to the foreground
-  // on its own, so the desktop is never left stuck behind the overlay.
+  // When a focus session finishes, briefly show the "done" state and then
+  // clear it back to idle. Completion only surfaces a system notification; it
+  // must never pull Nowly from wallpaper to the foreground. Resetting is what
+  // clears the overlay: the fullscreen countdown only renders while the
+  // session is running/paused/completed, so returning to idle removes it and
+  // leaves the wallpaper clean without any window-mode switch.
   useEffect(() => {
-    if (focusStatus !== 'completed' || windowMode !== 'wallpaper') return;
+    if (focusStatus !== 'completed') return;
     const id = window.setTimeout(() => {
-      void runWindowModeSwitch(switchToForeground);
+      focusTimer.reset();
     }, 2500);
     return () => window.clearTimeout(id);
   }, [focusStatus, windowMode]); // eslint-disable-line react-hooks/exhaustive-deps
