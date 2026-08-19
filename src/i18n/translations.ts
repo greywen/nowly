@@ -37,6 +37,20 @@ export const translations: Record<Language, Record<string, string>> = {
     'shell.openSettings': '打开设置',
     'shell.setWallpaper': '设为壁纸',
 
+    // Feedback / wishlist
+    'feedback.open': '问题反馈与心愿单',
+    'feedback.title': '问题反馈与心愿单',
+    'feedback.intro': '欢迎反馈问题或提交心愿单。可通过以下任一渠道联系我们，点击即可打开。',
+    'feedback.githubLabel': 'GitHub 项目地址',
+    'feedback.emailLabel': '邮件反馈',
+    'feedback.mailSubject': 'Nowly 问题反馈 / 心愿单',
+    'feedback.formatTitle': '反馈格式建议',
+    'feedback.formatType': '类型：问题反馈 或 心愿单',
+    'feedback.formatTitleField': '标题：一句话概括你的问题或想法',
+    'feedback.formatDesc': '描述：详细说明遇到的问题或期望的功能',
+    'feedback.formatSteps': '复现步骤：如为问题，请按顺序列出操作步骤',
+    'feedback.formatEnv': '环境：系统版本、Nowly 版本（如有）',
+
     // Onboarding guided tour
     'onboarding.ariaLabel': '使用引导',
     'onboarding.close': '关闭引导',
@@ -445,6 +459,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'template.builtin': '内置模块',
     'template.myModules': '我的模块',
     'template.upload': '上传模块',
+    'template.uploadComingSoon': '功能开发中，敬请期待',
     'template.uploadHint': '选择一个 JavaScript 文件即可上传并识别模块。模块运行在隔离沙箱中，只能通过受限接口访问自身状态、日期与声明的联网域名。',
     'template.deleteModule': '删除模块 {name}',
     'template.market': '模块市场',
@@ -539,6 +554,20 @@ export const translations: Record<Language, Record<string, string>> = {
     'shell.editLayout': 'Edit layout',
     'shell.openSettings': 'Open settings',
     'shell.setWallpaper': 'Set as wallpaper',
+
+    // Feedback / wishlist
+    'feedback.open': 'Feedback & wishlist',
+    'feedback.title': 'Feedback & wishlist',
+    'feedback.intro': 'We welcome bug reports and wishlist ideas. Reach us through any channel below — click to open.',
+    'feedback.githubLabel': 'GitHub repository',
+    'feedback.emailLabel': 'Email',
+    'feedback.mailSubject': 'Nowly feedback / wishlist',
+    'feedback.formatTitle': 'Suggested format',
+    'feedback.formatType': 'Type: bug report or wishlist',
+    'feedback.formatTitleField': 'Title: sum up your issue or idea in one line',
+    'feedback.formatDesc': 'Description: detail the problem or the feature you want',
+    'feedback.formatSteps': 'Steps to reproduce: for bugs, list the actions in order',
+    'feedback.formatEnv': 'Environment: OS version, Nowly version (if known)',
 
     // Onboarding guided tour
     'onboarding.ariaLabel': 'Getting started tour',
@@ -948,6 +977,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'template.builtin': 'Built-in modules',
     'template.myModules': 'My modules',
     'template.upload': 'Upload module',
+    'template.uploadComingSoon': 'This feature is under development. Coming soon.',
     'template.uploadHint': 'Choose a JavaScript file to upload and register a module. Modules run in an isolated sandbox and can only access their own state, the date, and the network hosts they declare through a restricted interface.',
     'template.deleteModule': 'Delete module {name}',
     'template.market': 'Module market',

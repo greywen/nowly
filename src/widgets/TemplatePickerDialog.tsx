@@ -167,36 +167,9 @@ export function TemplatePickerDialog({
         <section className="template-picker__group">
           <div className="template-picker__group-head">
             <h3>{t('template.myModules')}</h3>
-            <button
-              type="button"
-              className="good-button"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Upload aria-hidden="true" />
-              {t('template.upload')}
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".js,text/javascript,application/javascript"
-              hidden
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) void uploadFile(file);
-                event.target.value = '';
-              }}
-            />
           </div>
-          {error ? (
-            <div className="dialog-error" role="alert">
-              {error}
-            </div>
-          ) : null}
-          {sandboxExtensions.length === 0 ? (
-            <p className="template-picker__empty">
-              {t('template.uploadHint')}
-            </p>
-          ) : (
+          <p className="template-picker__empty">{t('template.uploadComingSoon')}</p>
+          {sandboxExtensions.length === 0 ? null : (
             <div className="template-grid">
               {sandboxExtensions.map((extension) => {
                 const definition = sandboxExtensionToDefinition(extension);
