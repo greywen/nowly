@@ -7,7 +7,7 @@ import { t, useTranslation } from '../i18n';
 import { completeFocus, focusedMilliseconds, initialFocusState, interruptFocus, pauseFocus, remainingSeconds as deriveRemaining, resumeFocus, snapshotFocus, startFocus, type FocusState } from './focus-model';
 
 type StatisticsResource={status:'loading'|'ready'|'error';data:FocusStatistics;message?:string};
-type FocusApi={state:FocusState;remainingSeconds:number;focusedSeconds:number;statistics:StatisticsResource;start(minutes?:number):Promise<void>;pause():Promise<void>;resume():Promise<void>;interrupt():Promise<void>;loadStatistics(boundaries?:FocusPeriodBoundary[]):Promise<void>};
+type FocusApi={state:FocusState;remainingSeconds:number;focusedSeconds:number;statistics:StatisticsResource;start(minutes?:number):Promise<void>;pause():Promise<void>;resume():Promise<void>;interrupt():Promise<void>;reset():void;loadStatistics(boundaries?:FocusPeriodBoundary[]):Promise<void>};
 const empty:FocusStatistics={totalFocusedSeconds:0,completedCount:0,interruptedCount:0,completionRate:0,points:[]};
 const Context=createContext<FocusApi|null>(null);
 
@@ -37,7 +37,12 @@ export function FocusTimerProvider({children}:{children:ReactNode}){
   async function pause(){const next=pauseFocus(stateRef.current,performance.now());setState(next);if(next!==stateRef.current)await invoke('pause_focus_timer')}
   async function resume(){const next=resumeFocus(stateRef.current,performance.now());setState(next);if(next!==stateRef.current)await invoke('resume_focus_timer')}
   async function interrupt(){const result=interruptFocus(stateRef.current,performance.now(),Date.now());setState(result.state);await invoke('cancel_focus_timer');if(result.record){await repository.createFocusSession(result.record as FocusSession);await loadStatistics()}}
-  const value=useMemo<FocusApi>(()=>({state,remainingSeconds:deriveRemaining(state,nowMono),focusedSeconds:Math.floor(focusedMilliseconds(state,nowMono)/1000),statistics,start,pause,resume,interrupt,loadStatistics}),[state,nowMono,statistics]);
+  // Return a finished session to the idle preview. Only a completed session is
+  // cleared so this can never cut short a running or paused timer. Keeping the
+  // planned duration means the next session and the wallpaper countdown start
+  // clean instead of showing a stale 00:00.
+  function reset(){setState(current=>current.status==='completed'?initialFocusState(current.plannedSeconds/60):current)}
+  const value=useMemo<FocusApi>(()=>({state,remainingSeconds:deriveRemaining(state,nowMono),focusedSeconds:Math.floor(focusedMilliseconds(state,nowMono)/1000),statistics,start,pause,resume,interrupt,reset,loadStatistics}),[state,nowMono,statistics]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 export function useFocusTimer(){const value=useContext(Context);if(!value)throw new Error('useFocusTimer must be used inside FocusTimerProvider');return value}

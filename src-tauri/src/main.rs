@@ -26,7 +26,6 @@ use std::sync::Mutex;
 use tauri::menu::MenuBuilder;
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
-use tauri_plugin_notification::NotificationExt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TrayClickKind {
@@ -71,7 +70,114 @@ fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
+/// The AppUserModelID (AUMID) used for Windows toast notifications. It must
+/// match the notification identifier the plugin uses, which is the app's
+/// bundle identifier from tauri.conf.json (`com.nowly.app`).
+#[cfg(target_os = "windows")]
+const APP_USER_MODEL_ID: &str = "com.nowly.app";
+
+/// Registers the app's AUMID with Windows so toast notifications are delivered
+/// and attributed to Nowly.
+///
+/// On Windows the notification plugin sets the toast's AppUserModelID to the
+/// bundle identifier in installed builds. Windows silently drops a toast whose
+/// AUMID is not registered, which is why the installed app shows no
+/// notification at all. Registering a DisplayName under
+/// HKCU\Software\Classes\AppUserModelId\{AUMID} makes the AUMID valid and gives
+/// the toast the correct "Nowly" attribution. Calling
+/// SetCurrentProcessExplicitAppUserModelID keeps the running process aligned
+/// with that identity regardless of how it was launched (installed shortcut,
+/// autostart, etc.).
+#[cfg(target_os = "windows")]
+fn set_app_user_model_id() {
+    use windows::core::{w, PCWSTR};
+    use windows::Win32::Foundation::ERROR_SUCCESS;
+    use windows::Win32::System::Registry::{
+        RegCloseKey, RegCreateKeyExW, RegSetValueExW, HKEY, HKEY_CURRENT_USER, KEY_WRITE,
+        REG_OPTION_NON_VOLATILE, REG_SZ,
+    };
+    use windows::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID;
+
+    let subkey: Vec<u16> = format!("Software\\Classes\\AppUserModelId\\{APP_USER_MODEL_ID}")
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+
+    let mut key = HKEY::default();
+    let status = unsafe {
+        RegCreateKeyExW(
+            HKEY_CURRENT_USER,
+            PCWSTR(subkey.as_ptr()),
+            Some(0),
+            PCWSTR::null(),
+            REG_OPTION_NON_VOLATILE,
+            KEY_WRITE,
+            None,
+            &mut key,
+            None,
+        )
+    };
+    if status == ERROR_SUCCESS {
+        let display_name: Vec<u16> = "Nowly".encode_utf16().chain(std::iter::once(0)).collect();
+        let display_bytes = unsafe {
+            std::slice::from_raw_parts(
+                display_name.as_ptr() as *const u8,
+                display_name.len() * std::mem::size_of::<u16>(),
+            )
+        };
+        let status = unsafe {
+            RegSetValueExW(key, w!("DisplayName"), Some(0), REG_SZ, Some(display_bytes))
+        };
+        if status != ERROR_SUCCESS {
+            eprintln!("failed to set AppUserModelId DisplayName: {status:?}");
+        }
+        unsafe {
+            let _ = RegCloseKey(key);
+        }
+    } else {
+        eprintln!("failed to open AppUserModelId registry key: {status:?}");
+    }
+
+    if let Err(error) = unsafe { SetCurrentProcessExplicitAppUserModelID(w!("com.nowly.app")) } {
+        eprintln!("failed to set AppUserModelID: {error}");
+    }
+}
+
+/// Sends the focus completion toast.
+///
+/// On Windows we build the toast directly with `tauri-winrt-notification` and
+/// pass our registered AUMID as the app_id. This bypasses the notification
+/// plugin, which refuses to set an app_id when the executable runs from a
+/// `target\debug` or `target\release` directory and therefore lets the toast
+/// fall back to the PowerShell AUMID ("Windows PowerShell"). Because the AUMID
+/// is registered in `set_app_user_model_id`, the toast is delivered and
+/// attributed to Nowly across dev, release, and installed builds.
+#[cfg(target_os = "windows")]
+fn send_focus_completion_notification<R: Runtime>(_app: &AppHandle<R>, title: &str, body: &str) {
+    use tauri_winrt_notification::Toast;
+
+    if let Err(error) = Toast::new(APP_USER_MODEL_ID)
+        .title(title)
+        .text1(body)
+        .show()
+    {
+        eprintln!("failed to send focus completion notification: {error}");
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn send_focus_completion_notification<R: Runtime>(app: &AppHandle<R>, title: &str, body: &str) {
+    use tauri_plugin_notification::NotificationExt;
+
+    if let Err(error) = app.notification().builder().title(title).body(body).show() {
+        eprintln!("failed to send focus completion notification: {error}");
+    }
+}
+
 fn main() {
+    #[cfg(target_os = "windows")]
+    set_app_user_model_id();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main_window(app)))
         .plugin(tauri_plugin_notification::init())
@@ -98,13 +204,11 @@ fn main() {
                     .ok()
                     .and_then(|mut timer| timer.poll(std::time::Instant::now()));
                 if let Some(snapshot) = completed {
-                    if let Err(error) = timer_handle.notification().builder()
-                        .title(&snapshot.notification_title)
-                        .body(&snapshot.notification_body)
-                        .show()
-                    {
-                        eprintln!("failed to send focus completion notification: {error}");
-                    }
+                    send_focus_completion_notification(
+                        &timer_handle,
+                        &snapshot.notification_title,
+                        &snapshot.notification_body,
+                    );
                     if let Err(error) = timer_handle.emit("focus-session-completed", snapshot) {
                         eprintln!("failed to emit focus completion: {error}");
                     }
