@@ -569,11 +569,51 @@ pub fn update(
     transaction.commit().map_err(sql_write_error)
 }
 
-pub fn delete(connection: &mut Connection, id: &str) -> Result<(), CommandError> {
-    let now = timestamp();
-    let transaction = connection
-        .transaction_with_behavior(TransactionBehavior::Immediate)
-        .map_err(CommandError::database)?;
+/// 把结束条件截断到该槽位之前。本规则模型下每个日期至多产生一个槽位，
+/// 因此日期粒度的 `until` 足以精确切在该次之前。
+fn truncate_before(
+    transaction: &Transaction<'_>,
+    existing: &Event,
+    slot: NaiveDateTime,
+    now: &str,
+) -> Result<(), CommandError> {
+    let Some(rule) = existing.recurrence.as_ref() else {
+        return Err(CommandError::validation(
+            "occurrenceStartAt",
+            "该日程不是重复日程。",
+        ));
+    };
+    let until = (slot.date() - Duration::days(1))
+        .format("%Y-%m-%d")
+        .to_string();
+    let truncated = Recurrence {
+        end: recurrence::RecurrenceEnd::Until {
+            date: until.clone(),
+        },
+        ..rule.clone()
+    };
+    let dtstart = parse_local(&existing.start_at, "startAt")?;
+    let normalized = recurrence::normalize(&truncated, dtstart)?;
+    // 跨列一致性 CHECK 在 UPDATE 时重新求值整行，三个结束条件列必须一次写成一致状态。
+    transaction
+        .execute(
+            "UPDATE events SET recurrence_until=?2,recurrence_count=NULL,recurrence_final_at=?3,
+             updated_at=?4 WHERE id=?1",
+            params![
+                existing.id,
+                until,
+                normalized
+                    .final_at
+                    .map(|value| value.format(LOCAL_MINUTE_FORMAT).to_string()),
+                now
+            ],
+        )
+        .map_err(sql_write_error)?;
+    Ok(())
+}
+
+/// 删除整行日程并解除与任务的双向关联。例外行由外键 CASCADE 清理。
+fn delete_series(transaction: &Transaction<'_>, id: &str, now: &str) -> Result<(), CommandError> {
     let linked_task_id: Option<Option<String>> = transaction
         .query_row(
             "SELECT linked_task_id FROM events WHERE id=?1",
@@ -597,6 +637,54 @@ pub fn delete(connection: &mut Connection, id: &str) -> Result<(), CommandError>
     if affected != 1 {
         return Err(CommandError::not_found("未找到该日程。"));
     }
+    Ok(())
+}
+
+pub fn delete(
+    connection: &mut Connection,
+    target: &EventTarget,
+    scope: EditScope,
+) -> Result<(), CommandError> {
+    if target.occurrence_start_at.is_none() && scope != EditScope::All {
+        return Err(CommandError::validation("scope", "单次日程只能整体删除。"));
+    }
+    let now = timestamp();
+    let transaction = connection
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(CommandError::database)?;
+
+    // 槽位校验先于任何写入：非法槽位既不得写出孤儿例外行，也不得截断系列。
+    let occurrence = match target.occurrence_start_at.as_deref() {
+        Some(slot_text) => {
+            let existing = event_by_id(&transaction, &target.id)?
+                .ok_or_else(|| CommandError::not_found("未找到该日程。"))?;
+            let slot = require_slot(&existing, slot_text)?;
+            Some((existing, slot_text, slot))
+        }
+        None => None,
+    };
+
+    match (scope, occurrence) {
+        (EditScope::All, _) => delete_series(&transaction, &target.id, &now)?,
+        (EditScope::Occurrence, Some((_, slot_text, _))) => {
+            event_exceptions::upsert_excluded(&transaction, &target.id, slot_text, &now)?;
+        }
+        (EditScope::ThisAndFollowing, Some((existing, slot_text, slot))) => {
+            if slot == parse_local(&existing.start_at, "startAt")? {
+                // 目标是首个实例，等价于整体删除，否则会留下永远展开不出实例的空系列。
+                delete_series(&transaction, &target.id, &now)?;
+            } else {
+                truncate_before(&transaction, &existing, slot, &now)?;
+                // 截断后落在该次及之后的例外行再也匹配不到真实槽位，留存即为幽灵实例。
+                event_exceptions::delete_from(&transaction, &target.id, slot_text)?;
+            }
+        }
+        // 顶部守卫已排除「无实例目标 + 非 All」的组合。
+        (EditScope::Occurrence | EditScope::ThisAndFollowing, None) => {
+            return Err(CommandError::validation("scope", "单次日程只能整体删除。"));
+        }
+    }
+
     transaction.commit().map_err(sql_write_error)
 }
 
@@ -634,7 +722,12 @@ pub fn update_event(
 #[tauri::command]
 pub fn delete_event(db: State<'_, AppDb>, id: String) -> Result<(), CommandError> {
     let mut connection = db.0.lock().map_err(CommandError::database)?;
-    delete(&mut connection, &id)
+    // 命令契约的三选一改造属于 Task 12，此处先按整体删除转发，保持前端行为不变。
+    let target = EventTarget {
+        id,
+        occurrence_start_at: None,
+    };
+    delete(&mut connection, &target, EditScope::All)
 }
 
 #[cfg(test)]
@@ -712,9 +805,9 @@ mod tests {
         assert_eq!(updated.created_at, created.created_at);
         assert!(updated.updated_at >= created.updated_at);
 
-        delete(&mut connection, &created.id).unwrap();
+        delete(&mut connection, &whole(&created.id), EditScope::All).unwrap();
         assert_eq!(update(&mut connection, &whole(&created.id), draft(), EditScope::All).unwrap_err().code, "not_found");
-        assert_eq!(delete(&mut connection, &created.id).unwrap_err().code, "not_found");
+        assert_eq!(delete(&mut connection, &whole(&created.id), EditScope::All).unwrap_err().code, "not_found");
     }
 
     #[test]
@@ -731,7 +824,7 @@ mod tests {
         assert_eq!(task_link(&connection, "t1").as_deref(), Some(second.id.as_str()));
         assert_eq!(task_link(&connection, "t2"), None);
 
-        delete(&mut connection, &second.id).unwrap();
+        delete(&mut connection, &whole(&second.id), EditScope::All).unwrap();
         assert_eq!(task_link(&connection, "t1"), None);
         assert_eq!(connection.query_row("SELECT COUNT(*) FROM tasks", [], |row| row.get::<_, i64>(0)).unwrap(), 2);
     }
@@ -1644,5 +1737,412 @@ mod tests {
             (None, 1, String::new(), None, None, None)
         );
         assert_eq!(task_link(&connection, "t1").as_deref(), Some(created.id.as_str()));
+    }
+
+    fn window(connection: &Connection, start: &str, end_exclusive: &str) -> Vec<Event> {
+        list_in_range(
+            connection,
+            &EventRange {
+                start_at: start.into(),
+                end_at_exclusive: end_exclusive.into(),
+            },
+        )
+        .expect("range query runs")
+    }
+
+    /// 例外行的槽位与类型，按槽位升序。用于区分「实例不见了」与「库里真的干净」。
+    fn exception_rows(connection: &Connection, series_id: &str) -> Vec<(String, String)> {
+        let mut statement = connection
+            .prepare(
+                "SELECT occurrence_start_at,kind FROM event_exceptions
+                 WHERE series_id=?1 ORDER BY occurrence_start_at",
+            )
+            .expect("statement prepares");
+        let rows = statement
+            .query_map([series_id], |row| Ok((row.get(0)?, row.get(1)?)))
+            .expect("query runs");
+        rows.map(|row| row.expect("row reads")).collect()
+    }
+
+    fn event_row_count(connection: &Connection, id: &str) -> i64 {
+        connection
+            .query_row("SELECT COUNT(*) FROM events WHERE id=?1", [id], |row| {
+                row.get(0)
+            })
+            .expect("count runs")
+    }
+
+    fn stored_updated_at(connection: &Connection, id: &str) -> String {
+        connection
+            .query_row("SELECT updated_at FROM events WHERE id=?1", [id], |row| {
+                row.get(0)
+            })
+            .expect("updated_at reads")
+    }
+
+    fn task_updated_at(connection: &Connection, id: &str) -> String {
+        connection
+            .query_row("SELECT updated_at FROM tasks WHERE id=?1", [id], |row| {
+                row.get(0)
+            })
+            .expect("updated_at reads")
+    }
+
+    fn weekly_columns() -> RecurrenceColumns {
+        (
+            Some("weekly".to_string()),
+            1,
+            "MO".to_string(),
+            None,
+            None,
+            None,
+        )
+    }
+
+    #[test]
+    fn deleting_one_occurrence_only_adds_an_exclusion() {
+        let mut connection = seeded();
+        delete(
+            &mut connection,
+            &at("s1", "2026-08-10T10:00"),
+            EditScope::Occurrence,
+        )
+        .expect("delete runs");
+        assert_eq!(
+            starts(&august(&connection)),
+            vec![
+                "2026-08-03T10:00",
+                "2026-08-17T10:00",
+                "2026-08-24T10:00",
+                "2026-08-31T10:00"
+            ]
+        );
+        assert_eq!(
+            exception_rows(&connection, "s1"),
+            vec![("2026-08-10T10:00".to_string(), "excluded".to_string())]
+        );
+        // 「仅此次」只写例外，系列行必须原封不动
+        assert_eq!(recurrence_columns_of(&connection, "s1"), weekly_columns());
+        assert_eq!(
+            stored_bounds(&connection, "s1"),
+            (
+                "2026-08-03T10:00".to_string(),
+                "2026-08-03T11:00".to_string()
+            )
+        );
+        assert_eq!(stored_title(&connection, "s1"), "周会");
+        assert_eq!(stored_updated_at(&connection, "s1"), "t");
+    }
+
+    #[test]
+    fn deleting_one_occurrence_replaces_an_existing_override() {
+        let mut connection = seeded();
+        upsert_overridden(
+            &connection,
+            "s1",
+            "2026-08-10T10:00",
+            &override_fields("改期", "2026-08-11T14:00", "2026-08-11T15:00"),
+            "t",
+        )
+        .expect("override");
+        delete(
+            &mut connection,
+            &at("s1", "2026-08-10T10:00"),
+            EditScope::Occurrence,
+        )
+        .expect("delete runs");
+        let events = august(&connection);
+        assert_eq!(
+            starts(&events),
+            vec![
+                "2026-08-03T10:00",
+                "2026-08-17T10:00",
+                "2026-08-24T10:00",
+                "2026-08-31T10:00"
+            ]
+        );
+        // 覆盖行必须被就地改写，否则被挪走的那次仍会显示
+        assert!(events.iter().all(|event| event.title != "改期"));
+        assert_eq!(
+            exception_rows(&connection, "s1"),
+            vec![("2026-08-10T10:00".to_string(), "excluded".to_string())]
+        );
+    }
+
+    #[test]
+    fn deleting_this_and_following_truncates_the_end_condition() {
+        let mut connection = seeded();
+        delete(
+            &mut connection,
+            &at("s1", "2026-08-17T10:00"),
+            EditScope::ThisAndFollowing,
+        )
+        .expect("delete runs");
+        assert_eq!(
+            starts(&august(&connection)),
+            vec!["2026-08-03T10:00", "2026-08-10T10:00"]
+        );
+        let (freq, interval, by_day, until, count, final_at) =
+            recurrence_columns_of(&connection, "s1");
+        assert_eq!(freq.as_deref(), Some("weekly"));
+        assert_eq!(interval, 1);
+        assert_eq!(by_day, "MO");
+        assert_eq!(until.as_deref(), Some("2026-08-16"));
+        assert_eq!(count, None);
+        assert_eq!(final_at.as_deref(), Some("2026-08-10T10:00"));
+        // 截断后的系列不得在任何更远的窗口里复活
+        assert!(window(&connection, "2026-09-01T00:00", "2027-09-01T00:00").is_empty());
+        assert_ne!(stored_updated_at(&connection, "s1"), "t");
+    }
+
+    #[test]
+    fn deleting_this_and_following_clears_exceptions_at_or_after_the_cut() {
+        let mut connection = seeded();
+        upsert_overridden(
+            &connection,
+            "s1",
+            "2026-08-10T10:00",
+            &override_fields("保留", "2026-08-12T09:00", "2026-08-12T10:00"),
+            "t",
+        )
+        .expect("override before the cut");
+        upsert_excluded(&connection, "s1", "2026-08-17T10:00", "t").expect("exclude at the cut");
+        upsert_overridden(
+            &connection,
+            "s1",
+            "2026-08-24T10:00",
+            &override_fields("近幽灵", "2026-08-25T09:00", "2026-08-25T10:00"),
+            "t",
+        )
+        .expect("override after the cut");
+        upsert_overridden(
+            &connection,
+            "s1",
+            "2026-08-31T10:00",
+            &override_fields("远幽灵", "2026-12-05T09:00", "2026-12-05T10:00"),
+            "t",
+        )
+        .expect("override moving out of august");
+
+        delete(
+            &mut connection,
+            &at("s1", "2026-08-17T10:00"),
+            EditScope::ThisAndFollowing,
+        )
+        .expect("delete runs");
+
+        // 截断点之前的覆盖仍然有效；之后的覆盖不得作为幽灵实例残留
+        assert_eq!(
+            starts(&august(&connection)),
+            vec!["2026-08-03T10:00", "2026-08-12T09:00"]
+        );
+        assert!(window(&connection, "2026-12-01T00:00", "2027-01-01T00:00").is_empty());
+        assert_eq!(
+            exception_rows(&connection, "s1"),
+            vec![("2026-08-10T10:00".to_string(), "overridden".to_string())]
+        );
+    }
+
+    #[test]
+    fn deleting_this_and_following_cuts_a_daily_series_at_the_previous_day() {
+        let mut connection = database();
+        let created = create(
+            &mut connection,
+            draft_with(
+                "站会",
+                "2026-08-03T09:00",
+                "2026-08-03T09:15",
+                Some(Recurrence {
+                    freq: Freq::Daily,
+                    interval: 1,
+                    by_day: Vec::new(),
+                    end: RecurrenceEnd::Until {
+                        date: "2026-08-07".into(),
+                    },
+                }),
+            ),
+        )
+        .expect("create runs");
+        assert_eq!(august(&connection).len(), 5);
+
+        // 相邻槽位是「少减一天」最容易露馅的地方
+        delete(
+            &mut connection,
+            &at(&created.id, "2026-08-05T09:00"),
+            EditScope::ThisAndFollowing,
+        )
+        .expect("delete runs");
+        let (_, _, _, until, count, final_at) = recurrence_columns_of(&connection, &created.id);
+        assert_eq!(until.as_deref(), Some("2026-08-04"));
+        assert_eq!(count, None);
+        assert_eq!(final_at.as_deref(), Some("2026-08-04T09:00"));
+        assert_eq!(
+            starts(&august(&connection)),
+            vec!["2026-08-03T09:00", "2026-08-04T09:00"]
+        );
+    }
+
+    #[test]
+    fn deleting_this_and_following_clears_a_counted_end_condition() {
+        let mut connection = database();
+        let created = create(
+            &mut connection,
+            draft_with(
+                "复盘",
+                "2026-08-03T19:00",
+                "2026-08-03T20:00",
+                Some(weekly(&["MO"], RecurrenceEnd::Count { count: 3 })),
+            ),
+        )
+        .expect("create runs");
+        // 删的是最后一次：count 必须与 until 在同一条 UPDATE 里清空，否则跨列 CHECK 会拒绝
+        delete(
+            &mut connection,
+            &at(&created.id, "2026-08-17T19:00"),
+            EditScope::ThisAndFollowing,
+        )
+        .expect("delete runs");
+        let (_, _, _, until, count, final_at) = recurrence_columns_of(&connection, &created.id);
+        assert_eq!(until.as_deref(), Some("2026-08-16"));
+        assert_eq!(count, None);
+        assert_eq!(final_at.as_deref(), Some("2026-08-10T19:00"));
+        assert_eq!(
+            starts(&august(&connection)),
+            vec!["2026-08-03T19:00", "2026-08-10T19:00"]
+        );
+    }
+
+    #[test]
+    fn deleting_this_and_following_at_the_first_slot_removes_the_series() {
+        let mut connection = seeded();
+        upsert_excluded(&connection, "s1", "2026-08-10T10:00", "t").expect("exclude");
+        delete(
+            &mut connection,
+            &at("s1", "2026-08-03T10:00"),
+            EditScope::ThisAndFollowing,
+        )
+        .expect("delete runs");
+        // 首次的「此后所有」等价于「全部」，不得留下展开不出实例的空系列
+        assert!(august(&connection).is_empty());
+        assert_eq!(event_row_count(&connection, "s1"), 0);
+        assert_eq!(exception_count(&connection, "s1"), 0);
+    }
+
+    #[test]
+    fn deleting_all_removes_the_series_and_its_exceptions() {
+        let mut connection = seeded();
+        upsert_excluded(&connection, "s1", "2026-08-10T10:00", "t").expect("exclude");
+        upsert_overridden(
+            &connection,
+            "s1",
+            "2026-08-17T10:00",
+            &override_fields("改期", "2026-08-18T09:00", "2026-08-18T10:00"),
+            "t",
+        )
+        .expect("override");
+        delete(
+            &mut connection,
+            &at("s1", "2026-08-10T10:00"),
+            EditScope::All,
+        )
+        .expect("delete runs");
+        assert!(august(&connection).is_empty());
+        assert_eq!(event_row_count(&connection, "s1"), 0);
+        assert_eq!(exception_count(&connection, "s1"), 0);
+        assert_eq!(
+            delete(&mut connection, &whole("s1"), EditScope::All)
+                .expect_err("second delete fails")
+                .code,
+            "not_found"
+        );
+    }
+
+    #[test]
+    fn deleting_all_unlinks_the_task_from_a_series() {
+        let mut connection = database();
+        insert_task(&connection, "t1");
+        let created = create(
+            &mut connection,
+            EventDraft {
+                linked_task_id: Some("t1".into()),
+                ..draft_with(
+                    "周会",
+                    "2026-08-03T10:00",
+                    "2026-08-03T11:00",
+                    Some(weekly(&["MO"], RecurrenceEnd::Never)),
+                )
+            },
+        )
+        .expect("create runs");
+        upsert_excluded(&connection, &created.id, "2026-08-10T10:00", "t").expect("exclude");
+        // tasks.linked_event_id 的外键是 ON DELETE SET NULL，它会替显式解除兜底置空，
+        // 因此只有 updated_at 能区分「真的写了」与「靠外键蓙到的」。
+        connection
+            .execute("UPDATE tasks SET updated_at='sentinel' WHERE id='t1'", [])
+            .expect("sentinel writes");
+        delete(
+            &mut connection,
+            &at(&created.id, "2026-08-10T10:00"),
+            EditScope::All,
+        )
+        .expect("delete runs");
+        assert_eq!(task_link(&connection, "t1"), None);
+        assert_ne!(task_updated_at(&connection, "t1"), "sentinel");
+        assert_eq!(exception_count(&connection, &created.id), 0);
+        assert_eq!(
+            connection
+                .query_row("SELECT COUNT(*) FROM tasks", [], |row| row.get::<_, i64>(0))
+                .expect("count runs"),
+            1
+        );
+    }
+
+    #[test]
+    fn deleting_rejects_a_slot_the_series_never_produces() {
+        let mut connection = seeded();
+        upsert_excluded(&connection, "s1", "2026-08-10T10:00", "t").expect("exclude");
+        // 8/4 是周二；8/3T11:00 是对的日子、错的时刻；7/27 是周一但早于系列开始
+        for scope in [
+            EditScope::Occurrence,
+            EditScope::ThisAndFollowing,
+            EditScope::All,
+        ] {
+            for slot in ["2026-08-04T10:00", "2026-08-03T11:00", "2026-07-27T10:00"] {
+                let error = delete(&mut connection, &at("s1", slot), scope)
+                    .expect_err("slot must be rejected");
+                assert_eq!(error.code, "validation_error");
+                assert_eq!(error.field.as_deref(), Some("occurrenceStartAt"));
+            }
+        }
+        // 拒绝路径不得留下脏数据
+        assert_eq!(
+            exception_rows(&connection, "s1"),
+            vec![("2026-08-10T10:00".to_string(), "excluded".to_string())]
+        );
+        assert_eq!(recurrence_columns_of(&connection, "s1"), weekly_columns());
+        assert_eq!(event_row_count(&connection, "s1"), 1);
+        assert_eq!(august(&connection).len(), 4);
+    }
+
+    #[test]
+    fn deleting_rejects_an_occurrence_scope_without_an_occurrence() {
+        let mut connection = database();
+        let created = create(&mut connection, draft()).expect("create runs");
+        for scope in [EditScope::Occurrence, EditScope::ThisAndFollowing] {
+            let error = delete(&mut connection, &whole(&created.id), scope)
+                .expect_err("scope must be rejected");
+            assert_eq!(error.code, "validation_error");
+            assert_eq!(error.field.as_deref(), Some("scope"));
+        }
+        // 单次日程带实例目标同样非法
+        let error = delete(
+            &mut connection,
+            &at(&created.id, "2026-07-23T14:00"),
+            EditScope::All,
+        )
+        .expect_err("target must be rejected");
+        assert_eq!(error.code, "validation_error");
+        assert_eq!(error.field.as_deref(), Some("occurrenceStartAt"));
+        assert_eq!(event_row_count(&connection, &created.id), 1);
     }
 }
