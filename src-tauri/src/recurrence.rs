@@ -10,6 +10,13 @@ pub const MAX_SERIES_OCCURRENCES: usize = 10_000;
 /// 该上限仅用于防御超大窗口导致的内存耗尽。
 pub const MAX_WINDOW_OCCURRENCES: usize = 1_000;
 
+/// 重复间隔上限。此上限是必需的而非保守取值：游标推进日频率槽位时调用
+/// `Duration::days(period * interval)`，间隔无界时该调用会越过 `TimeDelta`
+/// 的表示范围直接 panic（间隔取 `u32::MAX` 时约在第 25 个周期）。
+/// 999 覆盖任何真实用法，且在此上限内 R2 溢出跳过的最长连续段远低于
+/// `MAX_CONSECUTIVE_SKIPS`，两者的关系由测试锁住。
+pub const MAX_RECURRENCE_INTERVAL: u32 = 999;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Freq {
@@ -314,6 +321,139 @@ pub fn expand(
         }
     }
     out
+}
+
+/// 归一化结果。`shift_days` 供调用方同步平移 `end_at`，保持实例时长不变。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NormalizedRecurrence {
+    pub rule: Recurrence,
+    pub dtstart: NaiveDateTime,
+    pub shift_days: i64,
+    pub final_at: Option<NaiveDateTime>,
+}
+
+/// 校验并归一化重复规则，同时算出该系列最后一次实例的时刻。
+///
+/// 这是构造 `Series` 的唯一合法入口：间隔有界、`weekly` 的 `by_day` 非空且包含
+/// `dtstart` 的星期（R1）、`final_at` 与结束条件一致，这些不变量都在此建立。
+pub fn normalize(
+    rule: &Recurrence,
+    dtstart: NaiveDateTime,
+) -> Result<NormalizedRecurrence, CommandError> {
+    if rule.interval < 1 {
+        return Err(CommandError::validation("recurrence", "重复间隔至少为 1。"));
+    }
+    if rule.interval > MAX_RECURRENCE_INTERVAL {
+        return Err(CommandError::validation(
+            "recurrence",
+            format!("重复间隔最多为 {MAX_RECURRENCE_INTERVAL}。"),
+        ));
+    }
+    if let RecurrenceEnd::Count { count } = rule.end {
+        if count < 1 {
+            return Err(CommandError::validation("recurrence", "重复次数至少为 1。"));
+        }
+    }
+
+    let mut days: Vec<Weekday> = rule
+        .by_day
+        .iter()
+        .map(|code| weekday_from_code(code))
+        .collect::<Result<_, _>>()?;
+
+    let mut shifted = dtstart;
+    if matches!(rule.freq, Freq::Weekly) {
+        if days.is_empty() {
+            days.push(dtstart.date().weekday());
+        }
+        if !days.contains(&dtstart.date().weekday()) {
+            // R1：把开始日顺延到规则内的第一个匹配日，使每个槽位都满足规则。
+            let base = weekday_offset(dtstart.date().weekday());
+            let ahead = days
+                .iter()
+                .map(|day| (weekday_offset(*day) - base).rem_euclid(7))
+                .min()
+                .unwrap_or(0);
+            shifted = dtstart + Duration::days(ahead);
+        }
+    } else {
+        days.clear();
+    }
+    // 排序与去重只走 format/parse 这一条路径，避免出现绕过归一化的第二种写法。
+    let days = parse_by_day(&format_by_day(&days))?;
+
+    let normalized_rule = Recurrence {
+        freq: rule.freq,
+        interval: rule.interval,
+        by_day: days
+            .iter()
+            .map(|day| weekday_to_code(*day).to_string())
+            .collect(),
+        end: rule.end.clone(),
+    };
+
+    let probe = Series {
+        freq: normalized_rule.freq,
+        interval: normalized_rule.interval,
+        by_day: days,
+        dtstart: shifted,
+        final_at: None,
+    };
+
+    let final_at = match &normalized_rule.end {
+        RecurrenceEnd::Never => None,
+        RecurrenceEnd::Count { count } => {
+            if *count > MAX_SERIES_OCCURRENCES as u32 {
+                return Err(CommandError::validation(
+                    "recurrence",
+                    "重复次数过多，请减少次数。",
+                ));
+            }
+            // 精确取第 N 次实例：R2 溢出跳过会让「第 N 次」晚于「第 N 个周期」，
+            // 任何按周期数估算的换算都会把 final_at 算短，从而静默丢掉尾部实例。
+            let last = OccurrenceCursor::new(&probe, None).nth(*count as usize - 1);
+            Some(last.ok_or_else(|| {
+                CommandError::validation("recurrence", "重复规则无法生成这么多次实例，请减少次数。")
+            })?)
+        }
+        RecurrenceEnd::Until { date } => {
+            let until = NaiveDate::parse_from_str(date, "%Y-%m-%d")
+                .map_err(|_| CommandError::validation("recurrence", "重复截止日期格式无效。"))?
+                .and_hms_opt(23, 59, 0)
+                .ok_or_else(|| CommandError::validation("recurrence", "重复截止日期无效。"))?;
+            if until < shifted {
+                return Err(CommandError::validation(
+                    "recurrence",
+                    "重复截止日期不能早于开始日期。",
+                ));
+            }
+            let mut last = None;
+            let mut seen = 0usize;
+            for value in OccurrenceCursor::new(&probe, None) {
+                if value > until {
+                    break;
+                }
+                seen += 1;
+                if seen > MAX_SERIES_OCCURRENCES {
+                    return Err(CommandError::validation(
+                        "recurrence",
+                        "重复次数过多，请缩短截止日期。",
+                    ));
+                }
+                last = Some(value);
+            }
+            Some(last.ok_or_else(|| {
+                CommandError::validation("recurrence", "重复截止日期之前没有任何实例。")
+            })?)
+        }
+    };
+
+    Ok(NormalizedRecurrence {
+        rule: normalized_rule,
+        dtstart: shifted,
+        shift_days: (shifted.date() - dtstart.date()).num_days(),
+        final_at,
+    })
 }
 
 #[cfg(test)]
@@ -724,5 +864,341 @@ mod tests {
         let s = series(Freq::Daily, 1, "", "2000-01-01T10:00");
         let result = expand(&s, dt("2000-01-01T00:00"), dt("2100-01-01T00:00"));
         assert_eq!(result.len(), MAX_WINDOW_OCCURRENCES);
+    }
+
+    fn recurrence(freq: Freq, interval: u32, by_day: &[&str], end: RecurrenceEnd) -> Recurrence {
+        Recurrence {
+            freq,
+            interval,
+            by_day: by_day.iter().map(|code| (*code).to_string()).collect(),
+            end,
+        }
+    }
+
+    /// 把归一化结果还原成展开所需的 `Series`，用于交叉验证 `final_at` 与 `expand` 是否自洽。
+    fn series_of(normalized: &NormalizedRecurrence) -> Series {
+        Series {
+            freq: normalized.rule.freq,
+            interval: normalized.rule.interval,
+            by_day: normalized
+                .rule
+                .by_day
+                .iter()
+                .map(|code| weekday_from_code(code).expect("normalized weekday"))
+                .collect(),
+            dtstart: normalized.dtstart,
+            final_at: normalized.final_at,
+        }
+    }
+
+    #[test]
+    fn normalize_fills_missing_weekdays_from_the_start_date() {
+        let rule = recurrence(Freq::Weekly, 1, &[], RecurrenceEnd::Never);
+        let normalized = normalize(&rule, dt("2026-08-05T10:00")).expect("valid rule"); // 周三
+        assert_eq!(normalized.rule.by_day, vec!["WE".to_string()]);
+        assert_eq!(normalized.dtstart, dt("2026-08-05T10:00"));
+        assert_eq!(normalized.shift_days, 0);
+        assert_eq!(normalized.final_at, None);
+    }
+
+    #[test]
+    fn normalize_moves_the_start_date_onto_the_first_matching_weekday() {
+        let rule = recurrence(Freq::Weekly, 1, &["MO", "FR"], RecurrenceEnd::Never);
+        let normalized = normalize(&rule, dt("2026-08-05T10:00")).expect("valid rule"); // 周三
+        assert_eq!(normalized.dtstart, dt("2026-08-07T10:00")); // 顺延到周五
+        assert_eq!(normalized.shift_days, 2);
+    }
+
+    #[test]
+    fn normalize_sorts_and_dedups_weekdays() {
+        let rule = recurrence(
+            Freq::Weekly,
+            1,
+            &["FR", "MO", "FR", "WE"],
+            RecurrenceEnd::Never,
+        );
+        let normalized = normalize(&rule, dt("2026-08-03T10:00")).expect("valid rule"); // 周一
+        assert_eq!(
+            normalized.rule.by_day,
+            vec!["MO".to_string(), "WE".to_string(), "FR".to_string()]
+        );
+        assert_eq!(normalized.dtstart, dt("2026-08-03T10:00"));
+        assert_eq!(normalized.shift_days, 0);
+    }
+
+    #[test]
+    fn normalize_clears_weekdays_for_non_weekly_rules() {
+        for freq in [Freq::Daily, Freq::Monthly, Freq::Yearly] {
+            let rule = recurrence(freq, 1, &["MO", "FR"], RecurrenceEnd::Never);
+            let normalized = normalize(&rule, dt("2026-08-05T10:00")).expect("valid rule");
+            assert!(
+                normalized.rule.by_day.is_empty(),
+                "{freq:?} 不应保留 by_day"
+            );
+            assert_eq!(normalized.dtstart, dt("2026-08-05T10:00"));
+            assert_eq!(normalized.shift_days, 0);
+        }
+    }
+
+    #[test]
+    fn rejects_unknown_weekday_codes() {
+        let rule = recurrence(Freq::Weekly, 1, &["MO", "XX"], RecurrenceEnd::Never);
+        assert!(normalize(&rule, dt("2026-08-03T10:00")).is_err());
+    }
+
+    #[test]
+    fn computes_final_at_for_count_and_until() {
+        let count = recurrence(Freq::Daily, 2, &[], RecurrenceEnd::Count { count: 3 });
+        let normalized = normalize(&count, dt("2026-08-03T10:00")).expect("valid rule");
+        assert_eq!(normalized.final_at, Some(dt("2026-08-07T10:00")));
+
+        let until = recurrence(
+            Freq::Daily,
+            2,
+            &[],
+            RecurrenceEnd::Until {
+                date: "2026-08-08".into(),
+            },
+        );
+        let normalized = normalize(&until, dt("2026-08-03T10:00")).expect("valid rule");
+        assert_eq!(normalized.final_at, Some(dt("2026-08-07T10:00")));
+    }
+
+    #[test]
+    fn count_rules_expand_to_exactly_count_slots() {
+        // 只断言 final_at 的字面值无法证明它与展开自洽，这里改为「展开恰好 count 个槽位，
+        // 且最后一个槽位就是 final_at」，把归一化与展开两侧的上界语义绑死。
+        let cases: [(Freq, u32, &[&str], &str, u32); 11] = [
+            (Freq::Daily, 2, &[], "2026-08-03T10:00", 3),
+            (Freq::Daily, 1, &[], "2026-08-03T10:00", 200),
+            (
+                Freq::Daily,
+                MAX_RECURRENCE_INTERVAL,
+                &[],
+                "2026-08-03T10:00",
+                5,
+            ),
+            (Freq::Weekly, 2, &["MO", "FR"], "2026-08-03T10:00", 7),
+            (Freq::Weekly, 1, &[], "2026-08-05T10:00", 4),
+            (Freq::Weekly, 1, &["FR", "MO"], "2026-08-05T10:00", 5),
+            (Freq::Weekly, 3, &["SU", "SA", "SU"], "2026-08-05T10:00", 6),
+            // 以下四组会触发 R2 溢出跳过：「第 N 次实例」与「第 N 个周期」不是一回事。
+            (Freq::Monthly, 1, &[], "2026-01-31T09:00", 5),
+            (Freq::Monthly, 2, &[], "2026-01-31T09:00", 6),
+            (Freq::Yearly, 1, &[], "2024-02-29T18:30", 4),
+            (Freq::Yearly, 3, &[], "2024-02-29T18:30", 3),
+        ];
+
+        for (freq, interval, by_day, start, count) in cases {
+            let rule = recurrence(freq, interval, by_day, RecurrenceEnd::Count { count });
+            let normalized = normalize(&rule, dt(start)).expect("valid rule");
+            let slots = expand(
+                &series_of(&normalized),
+                dt("1900-01-01T00:00"),
+                dt("2400-01-01T00:00"),
+            );
+            let label = format!("{freq:?}/{interval}/{by_day:?}/{start}/count={count}");
+            assert_eq!(slots.len(), count as usize, "槽位数不等于 count：{label}");
+            assert_eq!(
+                normalized.final_at,
+                slots.last().copied(),
+                "final_at 不是第 count 次实例：{label}"
+            );
+        }
+    }
+
+    #[test]
+    fn count_final_at_counts_instances_not_periods_across_overflow_skips() {
+        let monthly = recurrence(Freq::Monthly, 1, &[], RecurrenceEnd::Count { count: 5 });
+        let normalized = normalize(&monthly, dt("2026-01-31T09:00")).expect("valid rule");
+        // 第 5 个周期是 2026-05-31，但 2 月与 4 月被跳过，第 5 次实例是 2026-08-31。
+        assert_eq!(normalized.final_at, Some(dt("2026-08-31T09:00")));
+
+        let yearly = recurrence(Freq::Yearly, 1, &[], RecurrenceEnd::Count { count: 3 });
+        let normalized = normalize(&yearly, dt("2024-02-29T18:30")).expect("valid rule");
+        // 第 3 个周期是 2026 年，但平年跳过，第 3 次实例落在 2032 年。
+        assert_eq!(normalized.final_at, Some(dt("2032-02-29T18:30")));
+    }
+
+    #[test]
+    fn until_final_at_is_the_last_slot_within_the_deadline() {
+        let rule = recurrence(
+            Freq::Weekly,
+            2,
+            &["MO", "FR"],
+            RecurrenceEnd::Until {
+                date: "2026-09-30".into(),
+            },
+        );
+        let normalized = normalize(&rule, dt("2026-08-03T10:00")).expect("valid rule");
+        let slots = expand(
+            &series_of(&normalized),
+            dt("2026-08-01T00:00"),
+            dt("2026-10-01T00:00"),
+        );
+        assert_eq!(normalized.final_at, slots.last().copied());
+        assert!(slots.last().expect("有实例").date() <= dt("2026-09-30T23:59").date());
+    }
+
+    #[test]
+    fn rejects_rules_that_exceed_the_series_cap() {
+        let rule = recurrence(
+            Freq::Daily,
+            1,
+            &[],
+            RecurrenceEnd::Until {
+                date: "2200-01-01".into(),
+            },
+        );
+        assert!(normalize(&rule, dt("2026-08-03T10:00")).is_err());
+
+        let too_many = recurrence(
+            Freq::Daily,
+            1,
+            &[],
+            RecurrenceEnd::Count {
+                count: MAX_SERIES_OCCURRENCES as u32 + 1,
+            },
+        );
+        assert!(normalize(&too_many, dt("2026-08-03T10:00")).is_err());
+    }
+
+    #[test]
+    fn rejects_invalid_interval_and_count() {
+        let bad_interval = recurrence(Freq::Daily, 0, &[], RecurrenceEnd::Never);
+        assert!(normalize(&bad_interval, dt("2026-08-03T10:00")).is_err());
+
+        let bad_count = recurrence(Freq::Daily, 1, &[], RecurrenceEnd::Count { count: 0 });
+        assert!(normalize(&bad_count, dt("2026-08-03T10:00")).is_err());
+    }
+
+    #[test]
+    fn rejects_intervals_above_the_cap() {
+        let at_cap = recurrence(
+            Freq::Daily,
+            MAX_RECURRENCE_INTERVAL,
+            &[],
+            RecurrenceEnd::Never,
+        );
+        assert!(normalize(&at_cap, dt("2026-08-03T10:00")).is_ok());
+
+        for interval in [MAX_RECURRENCE_INTERVAL + 1, 100_000, u32::MAX] {
+            let rule = recurrence(Freq::Daily, interval, &[], RecurrenceEnd::Never);
+            assert!(
+                normalize(&rule, dt("2026-08-03T10:00")).is_err(),
+                "interval={interval} 应被拒绝"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_a_count_the_rule_can_never_reach() {
+        // 每 999 个月重复 10000 次会越过日期表示范围，第 N 次实例根本不存在。
+        // 此时若退化成 final_at = None，有限系列会被当成永不结束，属于静默数据错误。
+        let rule = recurrence(
+            Freq::Monthly,
+            MAX_RECURRENCE_INTERVAL,
+            &[],
+            RecurrenceEnd::Count {
+                count: MAX_SERIES_OCCURRENCES as u32,
+            },
+        );
+        assert!(normalize(&rule, dt("2026-08-03T10:00")).is_err());
+    }
+
+    #[test]
+    fn rejects_an_until_earlier_than_the_normalized_start() {
+        // R1 把周三顺延到周五之后，截止日期反而早于开始日期。
+        let rule = recurrence(
+            Freq::Weekly,
+            1,
+            &["FR"],
+            RecurrenceEnd::Until {
+                date: "2026-08-06".into(),
+            },
+        );
+        assert!(normalize(&rule, dt("2026-08-05T10:00")).is_err());
+    }
+
+    #[test]
+    fn rejects_a_malformed_until_date() {
+        for date in ["2026-13-40", "2026/08/08", "", "2026-08"] {
+            let rule = recurrence(
+                Freq::Daily,
+                1,
+                &[],
+                RecurrenceEnd::Until { date: date.into() },
+            );
+            assert!(
+                normalize(&rule, dt("2026-08-03T10:00")).is_err(),
+                "until={date} 应被拒绝"
+            );
+        }
+    }
+
+    /// 由相邻两个实例反推游标为此空转了多少个周期：R2 溢出跳过的连续段长度。
+    fn skipped_periods(freq: Freq, a: NaiveDateTime, b: NaiveDateTime, interval: i64) -> i64 {
+        let periods = match freq {
+            Freq::Monthly => {
+                ((i64::from(b.year()) - i64::from(a.year())) * 12
+                    + (i64::from(b.month0()) - i64::from(a.month0())))
+                    / interval
+            }
+            Freq::Yearly => (i64::from(b.year()) - i64::from(a.year())) / interval,
+            _ => 1,
+        };
+        periods - 1
+    }
+
+    #[test]
+    fn interval_cap_keeps_overflow_skips_inside_the_cursor_budget() {
+        // MAX_CONSECUTIVE_SKIPS 是游标的空转预算，一旦某个合法 interval 的溢出跳过
+        // 连续段超过它，游标会提前终止并静默丢实例。这里锁住两者的关系：
+        // 在允许的 interval 全域内，最长连续跳过必须远低于预算。
+        let shapes: [(Freq, &str, &str); 8] = [
+            (Freq::Daily, "", "2026-08-03T10:00"),
+            (Freq::Weekly, "MO,FR", "2026-08-03T10:00"),
+            (Freq::Monthly, "", "2024-01-31T09:00"),
+            (Freq::Monthly, "", "2024-02-29T09:00"),
+            (Freq::Monthly, "", "2024-03-30T09:00"),
+            (Freq::Yearly, "", "2024-02-29T09:00"),
+            (Freq::Yearly, "", "2000-02-29T09:00"),
+            (Freq::Yearly, "", "2096-02-29T09:00"),
+        ];
+        // 逼近 NaiveDate 表示上限时游标本就无实例可产，此处不能把它误判成预算耗尽。
+        let horizon = NaiveDate::MAX.year() - 10_000;
+
+        let mut worst = 0i64;
+        for (freq, by_day, start) in shapes {
+            for interval in 1..=MAX_RECURRENCE_INTERVAL {
+                let s = Series {
+                    freq,
+                    interval,
+                    by_day: parse_by_day(by_day).expect("valid days"),
+                    dtstart: dt(start),
+                    final_at: None,
+                };
+                let slots: Vec<NaiveDateTime> = OccurrenceCursor::new(&s, None).take(8).collect();
+                if slots.last().is_none_or(|value| value.year() < horizon) {
+                    assert_eq!(
+                        slots.len(),
+                        8,
+                        "游标提前终止：{freq:?} interval={interval} start={start}"
+                    );
+                }
+                for pair in slots.windows(2) {
+                    worst = worst.max(skipped_periods(freq, pair[0], pair[1], i64::from(interval)));
+                }
+            }
+        }
+
+        assert!(worst > 0, "样本未触发任何 R2 跳过，该测试是空转的");
+        // 实测最长连续跳过为 15，预算 480；乘 8 的余量既留出正常波动，
+        // 又能在有人调高 MAX_RECURRENCE_INTERVAL 吃掉余量时立刻报警。
+        assert!(
+            worst * 8 < i64::from(MAX_CONSECUTIVE_SKIPS),
+            "跳过预算余量不足：最长连续跳过 {worst}，预算 {MAX_CONSECUTIVE_SKIPS}；\
+             调高 MAX_RECURRENCE_INTERVAL 前必须重新核算这条关系"
+        );
     }
 }
