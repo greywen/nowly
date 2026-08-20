@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { setLanguage } from '../i18n';
 import {
   occurrenceKey,
   presetToRecurrence,
@@ -276,5 +277,41 @@ describe('validateRecurrence', () => {
       )
     ];
     expect(new Set(messages).size).toBe(4);
+  });
+
+  it('renders localized copy for every rejected field instead of the raw i18n key', () => {
+    const rejected = () => [
+      validateRecurrence({ freq: 'daily', interval: 0, byDay: [], end: { kind: 'never' } }, '2026-08-03T10:00'),
+      validateRecurrence({ freq: 'weekly', interval: 1, byDay: [], end: { kind: 'never' } }, '2026-08-03T10:00'),
+      validateRecurrence(
+        { freq: 'daily', interval: 1, byDay: [], end: { kind: 'count', count: 0 } },
+        '2026-08-03T10:00'
+      ),
+      validateRecurrence(
+        { freq: 'daily', interval: 1, byDay: [], end: { kind: 'until', date: '2026-08-01' } },
+        '2026-08-03T10:00'
+      )
+    ];
+
+    expect(rejected()).toEqual([
+      '重复间隔必须是不小于 1 的整数。',
+      '按周重复时至少选择一个星期。',
+      '重复次数必须是不小于 1 的整数。',
+      '截止日期不能早于开始日期。'
+    ]);
+
+    // `translate` falls back to the other language before the raw key, so each
+    // side has to be checked on its own to catch a half-added key.
+    try {
+      setLanguage('en');
+      expect(rejected()).toEqual([
+        'The repeat interval must be a whole number of at least 1.',
+        'Select at least one weekday for a weekly repeat.',
+        'The number of occurrences must be a whole number of at least 1.',
+        'The end date cannot be earlier than the start date.'
+      ]);
+    } finally {
+      setLanguage('zh');
+    }
   });
 });

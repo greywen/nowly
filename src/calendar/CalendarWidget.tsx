@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Repeat } from 'lucide-react';
 import { CalendarSettingsControl, type CalendarSettings } from './CalendarSettingsControl';
 import {
   buildMonthGrid,
@@ -20,6 +20,7 @@ import {
   type CalendarView,
 } from './calendar-model';
 import { colorStyle } from '../lib/color';
+import { occurrenceKey } from '../lib/recurrence';
 import { t } from '../i18n';
 
 // Indexed by day-of-week (0 = Sunday … 6 = Saturday) so a column's label can be
@@ -118,6 +119,13 @@ function eventLabel(event: CalendarEvent) {
   return t('calendar.eventLabel', { time, title: event.title, category: eventCategoryLabel(event.category) });
 }
 
+// Marks an instance of a repeating series. Purely a badge: it carries no
+// interaction, the surrounding chip still owns the click.
+function repeatMark(event: CalendarEvent) {
+  if (!event.recurrence) return null;
+  return <Repeat className="event-repeat" aria-label={t('calendar.recurringEvent')} />;
+}
+
 export function CalendarWidget({
   year,
   monthIndex,
@@ -205,8 +213,10 @@ export function CalendarWidget({
     | { kind: 'move-hour'; event: CalendarEvent; isoDate: string; startHour: number; moved: boolean; downX: number; downY: number };
   const gestureRef = useRef<PointerGesture | null>(null);
   // Preview carries full start/end datetimes so date moves, stretches, and
-  // hour moves all render live through the same displayEvents mapping.
-  const [preview, setPreview] = useState<{ eventId: string; startAt: string; endAt: string } | null>(null);
+  // hour moves all render live through the same displayEvents mapping. It is
+  // keyed by `occurrenceKey` because every instance of a series shares one id;
+  // keying by id would drag the whole series at once.
+  const [preview, setPreview] = useState<{ eventKey: string; startAt: string; endAt: string } | null>(null);
   const [pointerActive, setPointerActive] = useState(false);
   // Set right after a move/resize gesture so the trailing click does not also
   // open the event.
@@ -250,7 +260,7 @@ export function CalendarWidget({
         if (!iso || iso === gesture.startIso) return;
         gesture.startIso = iso;
         setPreview({
-          eventId: event.id,
+          eventKey: occurrenceKey(event),
           startAt: `${iso}T${event.startAt.slice(11)}`,
           endAt: `${isoAddDays(iso, gesture.spanDays)}T${event.endAt.slice(11)}`
         });
@@ -262,7 +272,7 @@ export function CalendarWidget({
         if (endIso === gesture.endIso) return;
         gesture.endIso = endIso;
         setPreview({
-          eventId: event.id,
+          eventKey: occurrenceKey(event),
           startAt: event.startAt.slice(0, 16),
           endAt: `${endIso}T${event.endAt.slice(11)}`
         });
@@ -271,7 +281,7 @@ export function CalendarWidget({
         if (hour === null || hour === gesture.startHour) return;
         gesture.startHour = hour;
         const draft = shiftEventToHour(event, gesture.isoDate, hour);
-        setPreview({ eventId: event.id, startAt: draft.startAt, endAt: draft.endAt });
+        setPreview({ eventKey: occurrenceKey(event), startAt: draft.startAt, endAt: draft.endAt });
       }
     },
     [dayIsoFromPoint, hourFromPoint]
@@ -396,7 +406,7 @@ export function CalendarWidget({
   const displayEvents = useMemo(() => {
     if (!preview) return events;
     return events.map((event) =>
-      event.id === preview.eventId
+      occurrenceKey(event) === preview.eventKey
         ? { ...event, startAt: preview.startAt, endAt: preview.endAt }
         : event
     );
@@ -408,7 +418,7 @@ export function CalendarWidget({
   // retire the preview so we render straight from props (no visible snap).
   useEffect(() => {
     if (!preview) return;
-    const updated = events.find((item) => item.id === preview.eventId);
+    const updated = events.find((item) => occurrenceKey(item) === preview.eventKey);
     if (
       updated &&
       updated.startAt.slice(0, 16) === preview.startAt.slice(0, 16) &&
@@ -456,7 +466,7 @@ export function CalendarWidget({
     return (
       <button
         type="button"
-        key={event.id}
+        key={occurrenceKey(event)}
         draggable={false}
         aria-label={eventLabel(event)}
         onPointerDown={dropEnabled ? (pointerEvent) => handleMovePointerDown(pointerEvent, event) : undefined}
@@ -474,7 +484,7 @@ export function CalendarWidget({
           `${continuesAfter ? ' event-bar--open-end' : ''}`
         }
       >
-        <span className="event__title">{event.title}</span>
+        <span className="event__title">{repeatMark(event)}{event.title}</span>
         {resizableHere ? (
           <span
             className="event-bar__resize-handle"
@@ -494,7 +504,7 @@ export function CalendarWidget({
     return (
       <button
         type="button"
-        key={event.id}
+        key={occurrenceKey(event)}
         draggable={false}
         aria-label={eventLabel(event)}
         onPointerDown={dropEnabled ? (pointerEvent) => handleMovePointerDown(pointerEvent, event) : undefined}
@@ -505,7 +515,7 @@ export function CalendarWidget({
           `${dropEnabled ? ' event--movable' : ''}`
         }
       >
-        <span className="event__title">{event.title}</span>
+        <span className="event__title">{repeatMark(event)}{event.title}</span>
         {resizeEnabled ? (
           <span
             className="event-bar__resize-handle"
@@ -582,7 +592,7 @@ export function CalendarWidget({
                   >
                     {overflowByCol[col].map((event) => (
                       <span
-                        key={event.id}
+                        key={occurrenceKey(event)}
                         className="event-overflow-dot" style={colorStyle(event.color)}
                         aria-hidden="true"
                       />
@@ -705,12 +715,12 @@ export function CalendarWidget({
             {allDayEvents.map((event) => (
               <button
                 type="button"
-                key={event.id}
+                key={occurrenceKey(event)}
                 aria-label={eventLabel(event)}
                 onClick={() => onOpenEvent(event)}
                 className="event event--colored" style={colorStyle(event.color)}
               >
-                {event.title}
+                {repeatMark(event)}{event.title}
               </button>
             ))}
           </div>
@@ -729,7 +739,7 @@ export function CalendarWidget({
                   {hourEvents.map((event) => (
                     <button
                       type="button"
-                      key={event.id}
+                      key={occurrenceKey(event)}
                       draggable={false}
                       aria-label={eventLabel(event)}
                       onPointerDown={hourDropEnabled ? (pointerEvent) => handleHourMovePointerDown(pointerEvent, event, iso) : undefined}
@@ -739,7 +749,7 @@ export function CalendarWidget({
                       <span className="day-grid__event-time">
                         {event.startAt.slice(11, 16)} – {event.endAt.slice(11, 16)}
                       </span>
-                      <span className="day-grid__event-title">{event.title}</span>
+                      <span className="day-grid__event-title">{repeatMark(event)}{event.title}</span>
                     </button>
                   ))}
                 </div>
@@ -763,7 +773,7 @@ export function CalendarWidget({
               <h3 className="calendar-list-group__date">{dateFormat === 'iso' ? listDateLabel(group.isoDate, dateFormat) : listDateLabel(group.isoDate).replace('月', ' 月 ').replace('日', ' 日')}</h3>
               <ul className="calendar-list-group__items">
                 {group.events.map((event) => (
-                  <li key={event.id}>
+                  <li key={occurrenceKey(event)}>
                     <button
                       type="button"
                       aria-label={eventLabel(event)}
@@ -773,7 +783,7 @@ export function CalendarWidget({
                       <span className="calendar-list-item__time">
                         {event.allDay ? t('calendar.allDay') : event.startAt.slice(11, 16)}
                       </span>
-                      <span className="calendar-list-item__title">{event.title}</span>
+                      <span className="calendar-list-item__title">{repeatMark(event)}{event.title}</span>
                       <span className={`calendar-list-item__category date-detail-dialog__category--${event.category}`}>
                         {eventCategoryLabel(event.category)}
                       </span>

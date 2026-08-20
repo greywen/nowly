@@ -106,6 +106,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'calendar.summaryEmpty': '{scope}暂无日程',
     'calendar.allDay': '全天',
     'calendar.eventLabel': '{time} {title}，{category}',
+    'calendar.recurringEvent': '重复日程',
     'calendar.overflow': '另有 {count} 个日程',
     'calendar.dayGrid': '当日日程',
     'calendar.monthEmpty': '本月暂无日程',
@@ -367,6 +368,10 @@ export const translations: Record<Language, Record<string, string>> = {
     'recurrence.scope.all': '全部',
     'recurrence.noticeExceptionsCleared': '该日程已有的单次调整将被清除。',
     'recurrence.noticeLinkedTaskKept': '关联的任务将保留在原重复日程。',
+    'recurrence.errorInterval': '重复间隔必须是不小于 1 的整数。',
+    'recurrence.errorWeekday': '按周重复时至少选择一个星期。',
+    'recurrence.errorCount': '重复次数必须是不小于 1 的整数。',
+    'recurrence.errorUntil': '截止日期不能早于开始日期。',
 
     // NoteModal
     'noteModal.createTitle': '新建便签',
@@ -659,6 +664,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'calendar.summaryEmpty': '{scope}: no events',
     'calendar.allDay': 'All day',
     'calendar.eventLabel': '{time} {title}, {category}',
+    'calendar.recurringEvent': 'Recurring event',
     'calendar.overflow': '{count, plural, one {# more event} other {# more events}}',
     'calendar.dayGrid': 'Events for the day',
     'calendar.monthEmpty': 'No events this month',
@@ -920,6 +926,10 @@ export const translations: Record<Language, Record<string, string>> = {
     'recurrence.scope.all': 'All events',
     'recurrence.noticeExceptionsCleared': 'Single-occurrence adjustments already made to this series will be cleared.',
     'recurrence.noticeLinkedTaskKept': 'The linked task stays with the original recurring event.',
+    'recurrence.errorInterval': 'The repeat interval must be a whole number of at least 1.',
+    'recurrence.errorWeekday': 'Select at least one weekday for a weekly repeat.',
+    'recurrence.errorCount': 'The number of occurrences must be a whole number of at least 1.',
+    'recurrence.errorUntil': 'The end date cannot be earlier than the start date.',
 
     // NoteModal
     'noteModal.createTitle': 'New note',

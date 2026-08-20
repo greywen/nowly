@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import '../app/styles.css';
 import { sampleEvents } from '../lib/sample-data';
+import type { CalendarEvent, Recurrence } from './calendar-model';
 import { CalendarWidget } from './CalendarWidget';
 
 const baseProps = {
@@ -30,7 +31,32 @@ const baseProps = {
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
+  // jsdom has no elementFromPoint, so the drag test installs one by hand.
+  Reflect.deleteProperty(document, 'elementFromPoint');
 });
+
+const weeklyRule: Recurrence = { freq: 'weekly', interval: 1, byDay: ['TH'], end: { kind: 'never' } };
+
+// One expanded instance of a weekly series. Every instance of a series shares
+// the series row id, so only `occurrenceStartAt` tells them apart.
+function seriesInstance(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
+  return {
+    ...sampleEvents[0],
+    id: 'weekly-standup',
+    title: '每周站会',
+    recurrence: weeklyRule,
+    seriesId: 'weekly-standup',
+    seriesStartAt: '2026-07-23T09:30',
+    occurrenceStartAt: '2026-07-23T09:30',
+    ...overrides
+  };
+}
+
+function duplicateKeyWarnings(spy: { mock: { calls: unknown[][] } }) {
+  return spy.mock.calls.filter((call) =>
+    call.some((arg) => typeof arg === 'string' && arg.includes('same key'))
+  );
+}
 
 describe('CalendarWidget', () => {
   it('renders overflow dots in the dedicated event-row container', () => {
@@ -315,6 +341,79 @@ describe('CalendarWidget', () => {
     render(<CalendarWidget {...baseProps} view="list" />);
     expect(screen.getByRole('heading', { name: /7 月 23 日/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '09:30 站会，工作' })).toBeInTheDocument();
+  });
+
+  it('marks recurring instances with a repeat icon and leaves single events unmarked', () => {
+    render(<CalendarWidget {...baseProps} events={[seriesInstance(), sampleEvents[1]]} />);
+
+    const marks = screen.getAllByLabelText('重复日程');
+    expect(marks).toHaveLength(1);
+    expect(screen.getByRole('button', { name: '09:30 每周站会，工作' })).toContainElement(marks[0]);
+    expect(screen.getByRole('button', { name: '14:00 设计评审，工作' }).querySelector('.event-repeat')).toBeNull();
+  });
+
+  it('keeps sibling occurrences of one series distinct inside the same day cell', () => {
+    // A "this occurrence only" edit can drop a later instance into the same day
+    // as an untouched one. Both rows carry the series id, so a key built from
+    // `id` collapses the pair.
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { container } = render(
+      <CalendarWidget
+        {...baseProps}
+        events={[
+          seriesInstance(),
+          seriesInstance({
+            occurrenceStartAt: '2026-07-30T09:30',
+            startAt: '2026-07-23T11:00:00',
+            endAt: '2026-07-23T11:30:00',
+            isOverridden: true
+          })
+        ]}
+      />
+    );
+
+    const cell = container.querySelector('[data-iso-date="2026-07-23"]');
+    expect(cell?.querySelectorAll('.event.event-cell')).toHaveLength(2);
+    expect(screen.getAllByLabelText('重复日程')).toHaveLength(2);
+    expect(duplicateKeyWarnings(errorSpy)).toEqual([]);
+  });
+
+  it('previews only the dragged occurrence when a series spans several instances', () => {
+    const onMoveEvent = vi.fn();
+    const instances = [
+      seriesInstance(),
+      seriesInstance({
+        occurrenceStartAt: '2026-07-30T09:30',
+        startAt: '2026-07-30T09:30:00',
+        endAt: '2026-07-30T10:00:00'
+      })
+    ];
+    const { container } = render(
+      <CalendarWidget {...baseProps} events={instances} onMoveEvent={onMoveEvent} />
+    );
+    const cellOf = (isoDate: string) =>
+      container.querySelector(`[data-iso-date="${isoDate}"]`) as HTMLElement;
+    const chipsIn = (isoDate: string) => cellOf(isoDate).querySelectorAll('.event.event-cell');
+
+    // The gesture hit-tests with elementFromPoint, which jsdom does not provide.
+    Reflect.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: () => cellOf('2026-07-25')
+    });
+
+    fireEvent(
+      chipsIn('2026-07-23')[0],
+      new MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 10, clientY: 10 })
+    );
+    fireEvent(window, new MouseEvent('pointermove', { clientX: 200, clientY: 200 }));
+
+    expect(chipsIn('2026-07-25')).toHaveLength(1);
+    expect(chipsIn('2026-07-23')).toHaveLength(0);
+    expect(chipsIn('2026-07-30')).toHaveLength(1);
+
+    fireEvent(window, new MouseEvent('pointerup', {}));
+    expect(onMoveEvent).toHaveBeenCalledTimes(1);
+    expect(onMoveEvent).toHaveBeenCalledWith(instances[0], '2026-07-25');
   });
 
 });
