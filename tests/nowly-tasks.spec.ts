@@ -122,11 +122,16 @@ test('rolls back failed completion and retries the original target', async ({ pa
   await expect(page.getByText(/已完成/)).toBeVisible();
 });
 
-test('shows complete metadata by hover and keyboard focus', async ({ page }) => {
+test('shows metadata inline and never as a hover or focus tooltip', async ({ page }) => {
+  // The task row now renders due date and priority as a persistent inline meta
+  // line instead of the old hover/focus tooltip, so the metadata is always
+  // visible and no tooltip appears on either interaction.
+  await expect(page.getByText('今天到期 · 高优先级')).toBeVisible();
+
   const title = page.getByRole('button', { name:'编辑任务：发布 Nowly' });
   await title.hover();
-  await expect(page.getByRole('tooltip')).toContainText('高');
-  await expect(page.getByRole('tooltip')).toContainText('关联日程');
+  await expect(page.getByRole('tooltip')).toHaveCount(0);
   await title.focus();
-  await expect(page.getByRole('tooltip')).toContainText('截止日期');
+  await expect(title).toBeFocused();
+  await expect(page.getByRole('tooltip')).toHaveCount(0);
 });

@@ -9,6 +9,17 @@ function format(seconds: number) {
   return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
+// Today's accumulated focus, shown in the widget header. Under an hour it stays
+// in minutes; past that it splits into hours and minutes. A zero total reads as
+// a gentle "not yet" nudge rather than a bare 0m.
+function formatTodayFocus(totalSeconds: number, translate: (key: string, params?: Record<string, string | number>) => string) {
+  const minutes = Math.floor(Math.max(0, totalSeconds) / 60);
+  if (minutes <= 0) return translate('focusTimer.todayFocusNone');
+  const hours = Math.floor(minutes / 60);
+  if (hours <= 0) return translate('focusTimer.todayFocusMinutes', { minutes });
+  return translate('focusTimer.todayFocusHours', { hours, minutes: minutes % 60 });
+}
+
 type Tone = 'primary' | 'paused' | 'done';
 
 // Circular countdown ring — the heart of a pomodoro timer. It shows the share
@@ -111,6 +122,10 @@ export function FocusTimerWidget({ mode, onOpenStatistics, onEnterWallpaper }: P
   return (
     <div className="widget-content focus-timer">
       <div className="card-header focus-timer__header">
+        <div className="focus-timer__today">
+          <span className="focus-timer__today-label">{t('focusTimer.todayFocusLabel')}</span>
+          <span className="focus-timer__today-value">{formatTodayFocus(timer.todayFocusedSeconds, t)}</span>
+        </div>
         <button className="btn btn-icon" aria-label={t('focusTimer.statistics')} onClick={onOpenStatistics}>
           <BarChart3 aria-hidden="true" />
         </button>

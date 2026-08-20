@@ -56,6 +56,9 @@ test('shows the persisted-data empty dashboard without page overflow or motion',
 });
 
 test('keeps action buttons at 40px without resizing calendar content controls', async ({ page }) => {
+  await page.addInitScript(() => {
+    try { localStorage.setItem('nowly:onboarding-seen', 'true'); } catch { /* storage disabled */ }
+  });
   await page.goto('/');
 
   const actionButtons = [

@@ -256,7 +256,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'kanbanWidget.manageFields': '管理字段',
     'kanbanWidget.cardCount': '{count} 张任务',
     'kanbanWidget.addLane': '添加泳道',
-    'kanbanWidget.boardMenu': '看板更多操作',
+    'kanbanWidget.boardMenu': '看板设置',
     'kanbanWidget.errorLoad': '无法读取看板数据。',
     'kanbanWidget.retryLoad': '重试读取看板',
     'kanbanWidget.dismissDragError': '关闭拖放错误',
@@ -415,6 +415,12 @@ export const translations: Record<Language, Record<string, string>> = {
     'notesWidget.viewList': '列表视图',
     'notesWidget.viewBoard': '便利贴视图',
     'notesWidget.newNote': '新增便签',
+    'notesWidget.count': '{count} 条便签',
+    'notesWidget.settings': '便签显示设置',
+    'notesWidget.settingsTitle': '便签显示方式',
+    'notesWidget.settingsIntro': '选择便签在模块中的展示方式。',
+    'notesWidget.viewListDesc': '以紧凑列表逐条展示便签。',
+    'notesWidget.viewBoardDesc': '以便利贴墙的方式平铺展示便签。',
     'notesWidget.errorLoad': '无法读取便签。',
     'notesWidget.retryLoad': '重试读取便签',
     'notesWidget.loading': '正在读取本地便签',
@@ -470,6 +476,10 @@ export const translations: Record<Language, Record<string, string>> = {
     'focusTimer.fullscreen': '全屏专注',
     'focusTimer.notificationTitle': '专注完成',
     'focusTimer.notificationBody': '你已完成 {minutes} 分钟专注，休息一下吧。',
+    'focusTimer.todayFocusLabel': '今日专注',
+    'focusTimer.todayFocusHours': '{hours} 小时 {minutes} 分钟',
+    'focusTimer.todayFocusMinutes': '{minutes} 分钟',
+    'focusTimer.todayFocusNone': '暂未专注',
 
     // Focus statistics
     'focusStatistics.title': '专注统计',
@@ -814,7 +824,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'kanbanWidget.manageFields': 'Manage fields',
     'kanbanWidget.cardCount': '{count, plural, one {# task} other {# tasks}}',
     'kanbanWidget.addLane': 'Add lane',
-    'kanbanWidget.boardMenu': 'More board actions',
+    'kanbanWidget.boardMenu': 'Board settings',
     'kanbanWidget.errorLoad': 'Unable to load board data.',
     'kanbanWidget.retryLoad': 'Retry loading board',
     'kanbanWidget.dismissDragError': 'Dismiss drag error',
@@ -969,6 +979,10 @@ export const translations: Record<Language, Record<string, string>> = {
 
     // NotesWidget
     'notesWidget.viewAll': 'View all notes',
+    'notesWidget.count': '{count, plural, one {# note} other {# notes}}',
+    'notesWidget.settings': 'Notes display settings',
+    'notesWidget.settingsTitle': 'Notes layout',
+    'notesWidget.settingsIntro': 'Choose how notes appear in the module.',
     'notesWidget.switchView': 'Switch notes layout',
     'notesWidget.viewList': 'List view',
     'notesWidget.viewBoard': 'Sticky board view',
@@ -1028,6 +1042,10 @@ export const translations: Record<Language, Record<string, string>> = {
     'focusTimer.fullscreen': 'Fullscreen focus',
     'focusTimer.notificationTitle': 'Focus complete',
     'focusTimer.notificationBody': 'You completed a {minutes}-minute focus session. Take a break.',
+    'focusTimer.todayFocusLabel': 'Focused today',
+    'focusTimer.todayFocusHours': '{hours}h {minutes}m',
+    'focusTimer.todayFocusMinutes': '{minutes}m',
+    'focusTimer.todayFocusNone': 'No focus yet',
 
     // Focus statistics
     'focusStatistics.title': 'Focus statistics',

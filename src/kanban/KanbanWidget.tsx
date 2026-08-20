@@ -1,4 +1,4 @@
-import { Plus } from 'lucide-react';
+import { Plus, Settings } from 'lucide-react';
 import { type DragEvent, useRef, useState } from 'react';
 import { laneCardCount, totalCardCount } from './kanban-view';
 import { KanbanLane } from './KanbanLane';
@@ -112,9 +112,10 @@ export function KanbanWidget({ todayIso, recentColors = [], onRememberCustomColo
           <p>{t('kanbanWidget.cardCount', { count: totalCardCount(data) })}</p>
         </div>
         <div className="toolbar-actions">
+          <KanbanMenu label={t('kanbanWidget.boardMenu')} items={boardMenuItems} triggerIcon={Settings} />
           <button
             type="button"
-            className="good-icon-button"
+            className="btn btn-icon btn-primary"
             aria-label={t('kanbanWidget.addLane')}
             onClick={(event) => {
               rememberTrigger(event);
@@ -123,7 +124,6 @@ export function KanbanWidget({ todayIso, recentColors = [], onRememberCustomColo
           >
             <Plus aria-hidden="true" />
           </button>
-          <KanbanMenu label={t('kanbanWidget.boardMenu')} items={boardMenuItems} />
         </div>
       </div>
 

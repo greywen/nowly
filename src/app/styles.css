@@ -339,6 +339,12 @@ button:disabled { cursor: default; opacity: .65; }
 .sticky-note--tilt-1 .sticky-note__tape { left: auto; right: -12px; transform: rotate(45deg); }
 .sticky-note--tilt-3 .sticky-note__tape { left: auto; right: -12px; top: 14px; transform: rotate(45deg); }
 .empty-state { padding: 24px; border: 1px dashed var(--border-default); border-radius: var(--radius-default); text-align: center; }
+.notes-settings-dialog { width: min(400px, calc(100vw - 32px)); }
+.notes-settings__options { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.notes-settings__tile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 20px 12px; border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-surface); color: var(--text-secondary); font-size: 15.2px; font-weight: 500; }
+.notes-settings__tile:hover { border-color: var(--border-emphasis); background: var(--bg-subtle); }
+.notes-settings__tile.is-active { border-color: var(--color-primary); background: var(--color-primary-light); color: var(--color-primary-active); }
+.notes-settings__tile-icon { width: 24px; height: 24px; }
 .link-btn { padding: 0; border: 0; color: var(--color-primary-active); background: transparent; font-size: 13.6px; font-weight: 600; }
 .module-message { margin-bottom: 12px; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--color-danger-active); background: var(--color-danger-light); border-radius: var(--radius-default); font-size: 13.6px; }
 .module-message__actions { display: flex; align-items: center; gap: 12px; }
@@ -807,8 +813,11 @@ button:disabled { cursor: default; opacity: .65; }
 .note-dialog__actions .dialog-error { margin: 0 auto 0 0; }
 .notes-manager-dialog { width: min(800px, calc(100vw - 32px)); }
 .notes-manager-dialog .good-dialog__body { min-height: 0; overflow: hidden; }
-.notes-manager-list { min-height: 0; max-height: calc(100vh - 230px); display: grid; align-content: start; gap: 12px; overflow: auto; }
-.notes-manager-list .note { padding: 16px 20px; }
+.notes-manager-list { min-height: 0; max-height: calc(100vh - 230px); display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); align-content: start; gap: 8px; overflow: auto; }
+.notes-manager-list .note { padding: 10px 14px; }
+.notes-manager-list .note-title { display: flex; align-items: center; gap: 6px; }
+.notes-manager-list .note-title svg { width: 14px; height: 14px; flex: none; }
+.notes-manager-list .note-content { margin: 2px 0 0; display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; }
 .good-button svg { width: 18px; height: 18px; flex: none; }
 
 .feedback-dialog { width: min(560px, calc(100vw - 32px)); }
@@ -1116,7 +1125,10 @@ button:disabled { cursor: default; opacity: .65; }
    states stay within the design system (cyan-green primary, warm surfaces) and
    there is no transition or animation anywhere. */
 .focus-timer { container: focus / size; }
-.focus-timer__header { justify-content:flex-end; }
+.focus-timer__header { justify-content:space-between; align-items:center; gap:12px; }
+.focus-timer__today { flex:none; display:inline-flex; align-items:center; gap:8px; }
+.focus-timer__today-label { color:var(--text-muted); font-size:13.6px; font-weight:500; }
+.focus-timer__today-value { color:var(--text-strong); font-size:13.6px; font-weight:600; }
 .focus-timer__body { min-height:0; overflow:hidden; padding:20px 24px 24px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; }
 /* Ring + clock stack. The ring scales with the smaller module dimension so it
    never overflows; the centre content is absolutely positioned inside the

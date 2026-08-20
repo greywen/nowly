@@ -1,6 +1,8 @@
 import { MoreHorizontal } from 'lucide-react';
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 
+type TriggerIcon = React.ComponentType<{ 'aria-hidden'?: boolean }>;
+
 export type KanbanMenuItem = {
   label: string;
   onSelect: () => void;
@@ -15,11 +17,13 @@ export type KanbanMenuItem = {
 export function KanbanMenu({
   label,
   items,
-  triggerClassName
+  triggerClassName,
+  triggerIcon: TriggerIcon = MoreHorizontal
 }: {
   label: string;
   items: KanbanMenuItem[];
   triggerClassName?: string;
+  triggerIcon?: TriggerIcon;
 }) {
   const menuId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -57,14 +61,14 @@ export function KanbanMenu({
       <button
         ref={triggerRef}
         type="button"
-        className={`good-icon-button${triggerClassName ? ` ${triggerClassName}` : ''}`}
+        className={`btn btn-icon${open ? ' is-active' : ''}${triggerClassName ? ` ${triggerClassName}` : ''}`}
         aria-label={label}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
         onClick={() => setOpen((current) => !current)}
       >
-        <MoreHorizontal aria-hidden="true" />
+        <TriggerIcon aria-hidden={true} />
       </button>
       {open ? (
         <div id={menuId} role="menu" className="kanban-menu__popup" aria-label={label}>
