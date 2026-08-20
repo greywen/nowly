@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { CalendarEvent } from '../calendar/calendar-model';
+import type { CalendarEvent, Recurrence } from '../calendar/calendar-model';
 import {
   createEventDraft,
   eventToForm,
@@ -8,6 +8,9 @@ import {
   validateEventForm,
   type EventFormDraft
 } from './event-draft';
+
+// 2026-07-23 是周四，与 form/event 的开始日期一致。
+const rule: Recurrence = { freq: 'weekly', interval: 1, byDay: ['TH'], end: { kind: 'never' } };
 
 const form: EventFormDraft = {
   title: '  设计评审  ',
@@ -19,7 +22,8 @@ const form: EventFormDraft = {
   category: 'work',
   color: '#4FC9DA',
   linkedTaskId: null,
-  note: '  保留备注空格  '
+  note: '  保留备注空格  ',
+  recurrence: null
 };
 
 const event: CalendarEvent = {
@@ -52,7 +56,8 @@ describe('event draft helpers', () => {
       category: 'work',
       color: '#4FC9DA',
       linkedTaskId: null,
-      note: ''
+      note: '',
+      recurrence: null
     });
   });
 
@@ -74,8 +79,10 @@ describe('event draft helpers', () => {
       category: 'important',
       color: '#F06445',
       linkedTaskId: 't1',
-      note: '确认范围'
+      note: '确认范围',
+      recurrence: null
     });
+    expect(eventToForm({ ...event, recurrence: rule }).recurrence).toEqual(rule);
   });
 
   it('normalizes timed and all-day forms while trimming only the title', () => {
@@ -94,6 +101,24 @@ describe('event draft helpers', () => {
       startAt: '2026-07-23T00:00',
       endAt: '2026-07-23T23:59'
     });
+  });
+
+  it('carries the recurrence rule through to the draft instead of dropping it', () => {
+    expect(toEventDraft({ ...form, recurrence: rule }).recurrence).toEqual(rule);
+  });
+
+  it('rejects every invalid recurrence shape without touching valid ones', () => {
+    expect(validateEventForm({ ...form, recurrence: rule })).toEqual({});
+    const invalid: Recurrence[] = [
+      { ...rule, interval: 0 },
+      { ...rule, byDay: [] },
+      { ...rule, end: { kind: 'count', count: 0 } },
+      { ...rule, end: { kind: 'until', date: '2026-07-22' } }
+    ];
+    for (const recurrence of invalid) {
+      expect(Object.keys(validateEventForm({ ...form, recurrence }))).toEqual(['recurrence']);
+    }
+    expect(validateEventForm({ ...form, recurrence: { ...rule, end: { kind: 'until', date: '2026-07-23' } } })).toEqual({});
   });
 
   it('validates title, dates, required times, order, category, and color', () => {

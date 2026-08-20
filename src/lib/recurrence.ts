@@ -3,7 +3,8 @@ import { t } from '../i18n';
 
 export type RecurrencePreset = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom';
 
-const WEEKDAYS: Weekday[] = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'];
+/** 规范顺序：周一起，与 `datePicker` 的列顺序一致。写回 `byDay` 时必须按此排序。 */
+export const WEEKDAYS: Weekday[] = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'];
 
 /** 从本地朴素时间字符串取出星期，避免依赖时区解析。 */
 export function weekdayOf(startAt: string): Weekday {
