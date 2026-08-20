@@ -2,6 +2,7 @@ import { X } from 'lucide-react';
 import { type RefObject, useId } from 'react';
 import { Dialog } from '../components/Dialog';
 import { formatChineseDate } from '../lib/date';
+import { occurrenceKey } from '../lib/recurrence';
 import type { MatrixTask } from '../matrix/matrix-model';
 import {
   eventCategoryLabel,
@@ -90,7 +91,7 @@ export function DateDetailDialog({
           {dateEvents.map((event) => {
             const linkedTaskTitle = event.linkedTaskId ? taskTitles.get(event.linkedTaskId) : undefined;
             return (
-              <li key={event.id}>
+              <li key={occurrenceKey(event)}>
                 <button
                   type="button"
                   aria-label={eventAccessibleName(event)}

@@ -190,6 +190,8 @@ button:disabled { cursor: default; opacity: .65; }
 .event.event-bar:active { cursor: grabbing; }
 /* The title text opens the event on click; the surrounding chip body drags. */
 .event__title { cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Badge marking an instance of a repeating series; sits inline before the title. */
+.event-repeat { width: 16px; height: 16px; margin-right: 4px; vertical-align: text-bottom; }
 .event-bar.event--spanning { border-right: 0; }
 .event-bar--open-start { border-top-left-radius: 0; border-bottom-left-radius: 0; }
 .event-bar--open-end { border-top-right-radius: 0; border-bottom-right-radius: 0; }

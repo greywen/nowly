@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import type { CalendarEvent } from './calendar-model';
+import type { CalendarEvent, Recurrence } from './calendar-model';
 import type { MatrixTask } from '../matrix/matrix-model';
 import { DateDetailDialog } from './DateDetailDialog';
 
@@ -114,7 +114,46 @@ describe('DateDetailDialog', () => {
     expect(screen.getByRole('button', { name: /旧关联/ })).not.toHaveTextContent('关联任务');
   });
 
+  it('lists sibling occurrences of one series as separate rows', () => {
+    // Every instance of a series shares the series row id, so a row key built
+    // from `id` collapses two occurrences that land on the same day.
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const weeklyRule: Recurrence = { freq: 'weekly', interval: 1, byDay: ['TH'], end: { kind: 'never' } };
+    const seriesEvents = [
+      event({
+        id: 'weekly', title: '每周站会', startAt: '2026-07-23T09:30', endAt: '2026-07-23T10:00',
+        recurrence: weeklyRule, seriesId: 'weekly', seriesStartAt: '2026-07-23T09:30',
+        occurrenceStartAt: '2026-07-23T09:30'
+      }),
+      event({
+        id: 'weekly', title: '每周站会', startAt: '2026-07-23T11:00', endAt: '2026-07-23T11:30',
+        recurrence: weeklyRule, seriesId: 'weekly', seriesStartAt: '2026-07-23T09:30',
+        occurrenceStartAt: '2026-07-30T09:30', isOverridden: true
+      })
+    ];
+    render(
+      <DateDetailDialog
+        isoDate="2026-07-23"
+        events={seriesEvents}
+        tasks={[]}
+        isTopLayer
+        onClose={vi.fn()}
+        onCreateEvent={vi.fn()}
+        onEditEvent={vi.fn()}
+      />
+    );
+
+    expect(within(screen.getByRole('list', { name: '当日日程' })).getAllByRole('listitem')).toHaveLength(2);
+    expect(
+      errorSpy.mock.calls.filter((call) =>
+        call.some((arg) => typeof arg === 'string' && arg.includes('same key'))
+      )
+    ).toEqual([]);
+    errorSpy.mockRestore();
+  });
+
   it('shows a static empty state', () => {
+
     render(
       <DateDetailDialog
         isoDate="2026-07-23"
