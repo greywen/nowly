@@ -1,5 +1,5 @@
 use crate::error::CommandError;
-use chrono::{NaiveDateTime, Weekday};
+use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime, Weekday};
 use serde::{Deserialize, Serialize};
 
 /// 单个系列允许生成的实例总数上限。超过即视为校验错误，
@@ -127,6 +127,161 @@ pub fn end_to_columns(end: &RecurrenceEnd) -> (Option<String>, Option<u32>) {
     }
 }
 
+/// 连续跳过而不产出实例的周期数上限。月/年频率遇到 2 月 30 日这类
+/// 溢出会跳过整个周期，该上限保证跳过序列不会无限延伸。
+const MAX_CONSECUTIVE_SKIPS: u32 = 480;
+
+fn weekday_offset(day: Weekday) -> i64 {
+    i64::from(day.num_days_from_monday())
+}
+
+fn add_months(date: NaiveDate, months: i64) -> Option<NaiveDate> {
+    let total = i64::from(date.year()) * 12 + i64::from(date.month0()) + months;
+    let year = i32::try_from(total.div_euclid(12)).ok()?;
+    let month0 = u32::try_from(total.rem_euclid(12)).ok()?;
+    NaiveDate::from_ymd_opt(year, month0 + 1, date.day())
+}
+
+fn add_years(date: NaiveDate, years: i64) -> Option<NaiveDate> {
+    let year = i32::try_from(i64::from(date.year()) + years).ok()?;
+    NaiveDate::from_ymd_opt(year, date.month(), date.day())
+}
+
+/// 保守跳跃：先算出目标周期序号再退一格，用一次多余迭代换取边界安全。
+fn jump_index(delta: i64, interval: i64) -> i64 {
+    if delta <= 0 {
+        0
+    } else {
+        ((delta / interval) - 1).max(0)
+    }
+}
+
+/// 按时间升序产出该系列的槽位起始时刻。不理会 `final_at` 与任何窗口上界，
+/// 截断由调用方负责，使本类型保持单一职责。
+pub struct OccurrenceCursor {
+    freq: Freq,
+    interval: i64,
+    dtstart: NaiveDateTime,
+    week_anchor: NaiveDate,
+    day_offsets: Vec<i64>,
+    min_date: NaiveDate,
+    period: i64,
+    slot: usize,
+    exhausted: bool,
+}
+
+impl OccurrenceCursor {
+    /// `from` 为 `Some` 时产出的首个槽位是日期不早于 `from` 的那一个；为 `None` 时从
+    /// 首个槽位开始。下界按**日期**判定，同日更早时刻的槽位仍会产出，调用方若按
+    /// 时刻判定窗口需自行再过滤。
+    pub fn new(series: &Series, from: Option<NaiveDate>) -> Self {
+        let start_date = series.dtstart.date();
+        let interval = i64::from(series.interval.max(1));
+        let week_anchor = start_date - Duration::days(weekday_offset(start_date.weekday()));
+        let mut day_offsets: Vec<i64> = series
+            .by_day
+            .iter()
+            .map(|day| weekday_offset(*day))
+            .collect();
+        day_offsets.sort_unstable();
+        day_offsets.dedup();
+        if day_offsets.is_empty() {
+            day_offsets.push(weekday_offset(start_date.weekday()));
+        }
+
+        let period = match from {
+            None => 0,
+            Some(target) => match series.freq {
+                Freq::Daily => jump_index((target - start_date).num_days(), interval),
+                Freq::Weekly => {
+                    let target_anchor = target - Duration::days(weekday_offset(target.weekday()));
+                    jump_index((target_anchor - week_anchor).num_days() / 7, interval)
+                }
+                Freq::Monthly => {
+                    let months = (i64::from(target.year()) - i64::from(start_date.year())) * 12
+                        + (i64::from(target.month0()) - i64::from(start_date.month0()));
+                    jump_index(months, interval)
+                }
+                Freq::Yearly => jump_index(
+                    i64::from(target.year()) - i64::from(start_date.year()),
+                    interval,
+                ),
+            },
+        };
+
+        Self {
+            freq: series.freq,
+            interval,
+            dtstart: series.dtstart,
+            week_anchor,
+            day_offsets,
+            min_date: from.unwrap_or(start_date).max(start_date),
+            period,
+            slot: 0,
+            exhausted: false,
+        }
+    }
+
+    fn next_date(&mut self) -> Option<NaiveDate> {
+        let start_date = self.dtstart.date();
+        let mut skips = 0u32;
+        loop {
+            let candidate = match self.freq {
+                Freq::Daily => {
+                    start_date.checked_add_signed(Duration::days(self.period * self.interval))
+                }
+                Freq::Weekly => {
+                    if self.slot >= self.day_offsets.len() {
+                        self.slot = 0;
+                        self.period += 1;
+                        continue;
+                    }
+                    let offset = self.day_offsets[self.slot];
+                    self.slot += 1;
+                    self.week_anchor.checked_add_signed(Duration::days(
+                        self.period * self.interval * 7 + offset,
+                    ))
+                }
+                Freq::Monthly => add_months(start_date, self.period * self.interval),
+                Freq::Yearly => add_years(start_date, self.period * self.interval),
+            };
+
+            if !matches!(self.freq, Freq::Weekly) {
+                self.period += 1;
+            }
+
+            match candidate {
+                // 早于下界的候选来自两处：周频率首个分组里早于 dtstart 的星期，
+                // 以及保守跳跃刻意多退的那一格。
+                Some(date) if date >= self.min_date => return Some(date),
+                _ => {
+                    skips += 1;
+                    if skips > MAX_CONSECUTIVE_SKIPS {
+                        return None;
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl Iterator for OccurrenceCursor {
+    type Item = NaiveDateTime;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.exhausted {
+            return None;
+        }
+        match self.next_date() {
+            Some(date) => Some(date.and_time(self.dtstart.time())),
+            None => {
+                self.exhausted = true;
+                None
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -159,6 +314,117 @@ mod tests {
         assert_eq!(
             end_from_columns(None, Some(10)),
             RecurrenceEnd::Count { count: 10 }
+        );
+    }
+
+    fn dt(value: &str) -> NaiveDateTime {
+        NaiveDateTime::parse_from_str(value, "%Y-%m-%dT%H:%M").expect("valid datetime")
+    }
+
+    fn series(freq: Freq, interval: u32, by_day: &str, dtstart: &str) -> Series {
+        Series {
+            freq,
+            interval,
+            by_day: parse_by_day(by_day).expect("valid days"),
+            dtstart: dt(dtstart),
+            final_at: None,
+        }
+    }
+
+    fn take(series: &Series, n: usize) -> Vec<NaiveDateTime> {
+        OccurrenceCursor::new(series, None).take(n).collect()
+    }
+
+    #[test]
+    fn daily_cursor_steps_by_interval() {
+        let s = series(Freq::Daily, 3, "", "2026-08-03T10:00");
+        assert_eq!(
+            take(&s, 3),
+            vec![
+                dt("2026-08-03T10:00"),
+                dt("2026-08-06T10:00"),
+                dt("2026-08-09T10:00")
+            ]
+        );
+    }
+
+    #[test]
+    fn weekly_cursor_emits_selected_days_in_week_order() {
+        let s = series(Freq::Weekly, 2, "MO,FR", "2026-08-03T10:00"); // 2026-08-03 是周一
+        assert_eq!(
+            take(&s, 4),
+            vec![
+                dt("2026-08-03T10:00"),
+                dt("2026-08-07T10:00"),
+                dt("2026-08-17T10:00"),
+                dt("2026-08-21T10:00")
+            ]
+        );
+    }
+
+    #[test]
+    fn monthly_cursor_skips_months_without_the_day() {
+        let s = series(Freq::Monthly, 1, "", "2026-01-31T09:00");
+        assert_eq!(
+            take(&s, 3),
+            vec![
+                dt("2026-01-31T09:00"),
+                dt("2026-03-31T09:00"),
+                dt("2026-05-31T09:00")
+            ]
+        );
+    }
+
+    #[test]
+    fn yearly_cursor_skips_non_leap_years() {
+        let s = series(Freq::Yearly, 1, "", "2024-02-29T09:00");
+        assert_eq!(
+            take(&s, 2),
+            vec![dt("2024-02-29T09:00"), dt("2028-02-29T09:00")]
+        );
+    }
+
+    #[test]
+    fn cursor_jump_matches_sequential_walk() {
+        let s = series(Freq::Daily, 5, "", "2020-01-01T08:00");
+        let from = dt("2026-08-01T00:00");
+        let jumped: Vec<NaiveDateTime> = OccurrenceCursor::new(&s, Some(from.date()))
+            .take(3)
+            .collect();
+        let walked: Vec<NaiveDateTime> = OccurrenceCursor::new(&s, None)
+            .filter(|value| *value >= from)
+            .take(3)
+            .collect();
+        assert_eq!(jumped, walked);
+    }
+
+    #[test]
+    fn cursor_keeps_the_slot_that_equals_the_window_start() {
+        // 2026-03-05 恰好是第 9 个周期（63 天），保守跳跃不得把它跳过去。
+        let s = series(Freq::Daily, 7, "", "2026-01-01T09:00");
+        let jumped: Vec<NaiveDateTime> =
+            OccurrenceCursor::new(&s, Some(dt("2026-03-05T00:00").date()))
+                .take(2)
+                .collect();
+        assert_eq!(jumped, vec![dt("2026-03-05T09:00"), dt("2026-03-12T09:00")]);
+    }
+
+    #[test]
+    fn cursor_clamps_a_window_start_earlier_than_dtstart() {
+        // 2026-08-05 是周三，首个分组里的周一早于 dtstart，同样不得产出。
+        let s = series(Freq::Weekly, 3, "MO,WE", "2026-08-05T10:00");
+        let jumped: Vec<NaiveDateTime> =
+            OccurrenceCursor::new(&s, Some(dt("2020-01-01T00:00").date()))
+                .take(3)
+                .collect();
+        assert_eq!(jumped, take(&s, 3));
+        assert_eq!(
+            jumped,
+            vec![
+                dt("2026-08-05T10:00"),
+                dt("2026-08-24T10:00"),
+                dt("2026-08-26T10:00")
+            ]
         );
     }
 }
