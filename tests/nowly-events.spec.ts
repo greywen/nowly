@@ -12,7 +12,7 @@ test.beforeEach(async ({page})=>{
   Object.defineProperty(window,'__TAURI_INTERNALS__',{value:{invoke:async(command:string,args:any={})=>{
    window.__NOWLY_TEST_CALLS__.push({command,args});
    if(command==='list_events_in_range')return events.filter(e=>e.startAt>=args.range.startAt&&e.startAt<args.range.endAtExclusive);
-   if(command==='create_event'){const e={id:`e${sequence++}`,...args.draft,createdAt:now,updatedAt:now};events.push(e);if(e.linkedTaskId)tasks=tasks.map(t=>t.id===e.linkedTaskId?{...t,linkedEventId:e.id}:t);return e;}
+   if(command==='create_event'){const e={id:`e${sequence++}`,...args.draft,recurrence:args.draft.recurrence??null,seriesId:null,seriesStartAt:null,occurrenceStartAt:null,isOverridden:false,createdAt:now,updatedAt:now};events.push(e);if(e.linkedTaskId)tasks=tasks.map(t=>t.id===e.linkedTaskId?{...t,linkedEventId:e.id}:t);return e;}
    if(command==='update_event'){const id=args.target?.id??args.id;const old=events.find(e=>e.id===id);const updated={...old,...args.draft,updatedAt:now};events=events.map(e=>e.id===id?updated:e);return updated;}
    if(command==='delete_event'){const id=args.target?.id??args.id;events=events.filter(e=>e.id!==id);return null;}
    if(command==='list_tasks')return tasks;

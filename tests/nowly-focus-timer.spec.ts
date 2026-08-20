@@ -26,7 +26,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('starts focus and automatically presents the wallpaper fullscreen timer',async({page})=>{
-  await expect(page.getByRole('heading',{name:'专注计时'})).toBeVisible();
+  await expect(page.getByRole('button',{name:'开始专注'})).toBeVisible();
   await page.getByRole('button',{name:'开始专注'}).click();
   await page.getByRole('button',{name:/设为壁纸|Set as wallpaper/}).click();
   const fullscreen=page.getByRole('region',{name:'全屏专注'});

@@ -1,5 +1,7 @@
-import { LayoutGrid, List, Plus } from 'lucide-react';
-import { DEFAULT_NOTES_VIEW, notesViewOptions, type Note, type NotesViewMode } from './notes-model';
+import { Plus, Settings } from 'lucide-react';
+import { useState } from 'react';
+import { DEFAULT_NOTES_VIEW, type Note, type NotesViewMode } from './notes-model';
+import { NotesSettingsDialog } from './NotesSettingsDialog';
 import { colorStyle } from '../lib/color';
 import { t } from '../i18n';
 
@@ -17,7 +19,6 @@ type NotesWidgetProps = {
   onViewAll: (trigger: HTMLElement) => void;
 };
 
-const viewIcons = { list: List, board: LayoutGrid } as const;
 // Sticky notes hang at a few fixed angles so the board reads as paper instead
 // of a card grid. The tilt is static; nothing animates.
 const BOARD_TILTS = 4;
@@ -34,33 +35,27 @@ export function NotesWidget({
   onViewAll
 }: NotesWidgetProps) {
   const sortedNotes = [...notes].sort((left, right) => Number(right.pinned) - Number(left.pinned));
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   return (
     <div className="widget-content">
-      <div className="card-header card-header--actions-only">
+      <div className="card-header">
+        <div className="heading-group">
+          <p>{t('notesWidget.count', { count: notes.length })}</p>
+        </div>
         <div className="toolbar-actions">
-          {onSetView ? (
-            <div className="view-switch" role="group" aria-label={t('notesWidget.switchView')}>
-              {notesViewOptions().map((option) => {
-                const Icon = viewIcons[option.view];
-                return (
-                  <button
-                    key={option.view}
-                    type="button"
-                    className={`view-switch__btn view-switch__btn--icon${view === option.view ? ' is-active' : ''}`}
-                    aria-pressed={view === option.view}
-                    aria-label={option.label}
-                    title={option.label}
-                    onClick={() => onSetView(option.view)}
-                  >
-                    <Icon aria-hidden="true" />
-                  </button>
-                );
-              })}
-            </div>
-          ) : null}
           <button type="button" className="link-btn" onClick={(event) => onViewAll(event.currentTarget)}>{t('notesWidget.viewAll')}</button>
-          <button type="button" className="btn btn-icon" aria-label={t('notesWidget.newNote')} onClick={onCreateNote}>
+          {onSetView ? (
+            <button
+              type="button"
+              className="btn btn-icon"
+              aria-label={t('notesWidget.settings')}
+              onClick={() => setSettingsOpen(true)}
+            >
+              <Settings aria-hidden="true" />
+            </button>
+          ) : null}
+          <button type="button" className="btn btn-icon btn-primary" aria-label={t('notesWidget.newNote')} onClick={onCreateNote}>
             <Plus aria-hidden="true" />
           </button>
         </div>
@@ -122,6 +117,13 @@ export function NotesWidget({
           </div>
         )}
       </div>
+      {onSetView && settingsOpen ? (
+        <NotesSettingsDialog
+          view={view}
+          onSelect={onSetView}
+          onClose={() => setSettingsOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }

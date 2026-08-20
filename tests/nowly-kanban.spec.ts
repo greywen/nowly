@@ -238,8 +238,8 @@ test('creates a task in a lane and shows only the fields that have values', asyn
   await page.getByLabel('任务标题').fill('撰写发布说明');
   await page.getByRole('button', { name: '保存任务' }).click();
 
-  await expect(todo.getByRole('button', { name: '任务操作：撰写发布说明' })).toBeVisible();
   const card = todo.getByRole('article', { name: '任务：撰写发布说明' });
+  await expect(card).toBeVisible();
   // Empty optional fields render nothing at all.
   await expect(card.locator('.kanban-card__desc')).toHaveCount(0);
   await expect(card.locator('.kanban-badge')).toHaveCount(0);
@@ -267,19 +267,28 @@ test('manages global fields from the board menu and applies them to a card', asy
   await expect(card.locator('.kanban-badge')).toContainText('高');
 });
 
-test('moves a card to an adjacent lane through the keyboard menu', async ({ page }) => {
+test('moves a card to an adjacent lane by dragging it', async ({ page }) => {
   await addKanbanModule(page);
   const todo = page.getByRole('region', { name: '泳道：待处理' });
   await todo.getByRole('button', { name: '在待处理新增任务' }).click();
   await page.getByLabel('任务标题').fill('迁移数据');
   await page.getByRole('button', { name: '保存任务' }).click();
 
-  await todo.getByRole('button', { name: '任务操作：迁移数据' }).click();
-  await page.getByRole('menuitem', { name: '移至右侧泳道' }).click();
+  const card = todo.getByRole('article', { name: '任务：迁移数据' });
+  await expect(card).toBeVisible();
 
+  // Cards move by native HTML5 drag-and-drop. The drag payload lives in
+  // component state (dataTransfer is unreliable in the webview), so dispatching
+  // dragstart on the card and drop on the target lane is enough to move it. A
+  // shared DataTransfer handle keeps the handlers' setData/effectAllowed happy.
   const doing = page.getByRole('region', { name: '泳道：进行中' });
-  await expect(doing.getByRole('button', { name: '任务操作：迁移数据' })).toBeVisible();
-  await expect(todo.getByRole('button', { name: '任务操作：迁移数据' })).toHaveCount(0);
+  const dataTransfer = await page.evaluateHandle(() => new DataTransfer());
+  await card.dispatchEvent('dragstart', { dataTransfer });
+  await doing.dispatchEvent('dragover', { dataTransfer });
+  await doing.dispatchEvent('drop', { dataTransfer });
+
+  await expect(doing.getByRole('article', { name: '任务：迁移数据' })).toBeVisible();
+  await expect(todo.getByRole('article', { name: '任务：迁移数据' })).toHaveCount(0);
 });
 
 test('deleting a lane confirms the task count and cascades', async ({ page }) => {

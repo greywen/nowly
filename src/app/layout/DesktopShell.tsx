@@ -37,6 +37,7 @@ type DesktopShellProps = {
   overlay?: ReactNode;
 };
 
+// Render today's accumulated focus time as a compact, human-friendly label for
 // The wallpaper layer sits behind the app content. It stays hidden until a
 // wallpaper source is configured; for now it only anchors the stacking order
 // so the blur filter can soften the modules over the desktop wallpaper.

@@ -7,7 +7,7 @@ import { t, useTranslation } from '../i18n';
 import { completeFocus, focusedMilliseconds, initialFocusState, interruptFocus, pauseFocus, remainingSeconds as deriveRemaining, resumeFocus, snapshotFocus, startFocus, type FocusState } from './focus-model';
 
 type StatisticsResource={status:'loading'|'ready'|'error';data:FocusStatistics;message?:string};
-type FocusApi={state:FocusState;remainingSeconds:number;focusedSeconds:number;statistics:StatisticsResource;start(minutes?:number):Promise<void>;pause():Promise<void>;resume():Promise<void>;interrupt():Promise<void>;reset():void;loadStatistics(boundaries?:FocusPeriodBoundary[]):Promise<void>};
+type FocusApi={state:FocusState;remainingSeconds:number;focusedSeconds:number;todayFocusedSeconds:number;statistics:StatisticsResource;start(minutes?:number):Promise<void>;pause():Promise<void>;resume():Promise<void>;interrupt():Promise<void>;reset():void;loadStatistics(boundaries?:FocusPeriodBoundary[]):Promise<void>};
 const empty:FocusStatistics={totalFocusedSeconds:0,completedCount:0,interruptedCount:0,completionRate:0,points:[]};
 const Context=createContext<FocusApi|null>(null);
 
@@ -25,24 +25,29 @@ export function FocusTimerProvider({children}:{children:ReactNode}){
   const stateRef=useRef(state);stateRef.current=state;
   const [nowMono,setNowMono]=useState(()=>performance.now());
   const [statistics,setStatistics]=useState<StatisticsResource>({status:'loading',data:empty});
+  // Today's focus time is tracked apart from the statistics resource: the stats
+  // dialog reloads that resource with different period granularities, so the
+  // topbar reads a dedicated single-day total that never shifts under it.
+  const [todayRecordedSeconds,setTodayRecordedSeconds]=useState(0);
   useEffect(()=>{if(state.status!=='running')return;const id=window.setInterval(()=>setNowMono(performance.now()),1000);return()=>clearInterval(id)},[state.status]);
 
   async function loadStatistics(boundaries=dailyBoundaries(7)){setStatistics(current=>({...current,status:'loading'}));try{setStatistics({status:'ready',data:await repository.getFocusStatistics(boundaries)})}catch(error){setStatistics({status:'error',data:empty,message:error instanceof Error?error.message:'error'})}}
-  useEffect(()=>{void loadStatistics();},[]);// eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(()=>{void invoke<{id:string;plannedSeconds:number;startedAt:string}|null>('get_pending_focus_completion').then(async pending=>{if(!pending)return;const endedAt=new Date().toISOString();const record:FocusSession={id:pending.id,plannedSeconds:pending.plannedSeconds,focusedSeconds:pending.plannedSeconds,status:'completed',startedAt:pending.startedAt,endedAt,createdAt:endedAt};await repository.createFocusSession(record);await invoke('acknowledge_focus_completion',{id:pending.id});await loadStatistics()}).catch(()=>undefined)},[repository]);// eslint-disable-line react-hooks/exhaustive-deps
+  async function loadToday(){try{const stats=await repository.getFocusStatistics(dailyBoundaries(1));setTodayRecordedSeconds(stats.totalFocusedSeconds)}catch{/* keep the last known value */}}
+  useEffect(()=>{void loadStatistics();void loadToday();},[]);// eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(()=>{void invoke<{id:string;plannedSeconds:number;startedAt:string}|null>('get_pending_focus_completion').then(async pending=>{if(!pending)return;const endedAt=new Date().toISOString();const record:FocusSession={id:pending.id,plannedSeconds:pending.plannedSeconds,focusedSeconds:pending.plannedSeconds,status:'completed',startedAt:pending.startedAt,endedAt,createdAt:endedAt};await repository.createFocusSession(record);await invoke('acknowledge_focus_completion',{id:pending.id});await loadStatistics();await loadToday()}).catch(()=>undefined)},[repository]);// eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(()=>{let remove=()=>{};void listen<{id:string;plannedSeconds:number;startedAt:string}>('focus-session-completed',event=>{const current=stateRef.current;if(current.sessionId!==event.payload.id)return;const completed=completeFocus(current,performance.now());setState(completed);const record={...snapshotFocus(completed,performance.now(),Date.now()),focusedSeconds:completed.plannedSeconds,status:'completed' as const};void repository.createFocusSession(record).then(()=>invoke('acknowledge_focus_completion',{id:record.id})).then(()=>loadStatistics())}).then(unlisten=>{remove=unlisten});return()=>remove()},[repository]);
+  useEffect(()=>{let remove=()=>{};void listen<{id:string;plannedSeconds:number;startedAt:string}>('focus-session-completed',event=>{const current=stateRef.current;if(current.sessionId!==event.payload.id)return;const completed=completeFocus(current,performance.now());setState(completed);const record={...snapshotFocus(completed,performance.now(),Date.now()),focusedSeconds:completed.plannedSeconds,status:'completed' as const};void repository.createFocusSession(record).then(()=>invoke('acknowledge_focus_completion',{id:record.id})).then(()=>loadStatistics()).then(()=>loadToday())}).then(unlisten=>{remove=unlisten});return()=>remove()},[repository]);
 
   async function start(minutes=state.plannedSeconds/60){const idle=initialFocusState(minutes);const next=startFocus(idle,{id:crypto.randomUUID(),nowWallMs:Date.now(),nowMonoMs:performance.now()});setState(next);await invoke('start_focus_timer',{snapshot:{id:next.sessionId,plannedSeconds:next.plannedSeconds,startedAt:next.startedAt,notificationTitle:t('focusTimer.notificationTitle'),notificationBody:t('focusTimer.notificationBody',{minutes})},remainingSeconds:next.plannedSeconds})}
   async function pause(){const next=pauseFocus(stateRef.current,performance.now());setState(next);if(next!==stateRef.current)await invoke('pause_focus_timer')}
   async function resume(){const next=resumeFocus(stateRef.current,performance.now());setState(next);if(next!==stateRef.current)await invoke('resume_focus_timer')}
-  async function interrupt(){const result=interruptFocus(stateRef.current,performance.now(),Date.now());setState(result.state);await invoke('cancel_focus_timer');if(result.record){await repository.createFocusSession(result.record as FocusSession);await loadStatistics()}}
+  async function interrupt(){const result=interruptFocus(stateRef.current,performance.now(),Date.now());setState(result.state);await invoke('cancel_focus_timer');if(result.record){await repository.createFocusSession(result.record as FocusSession);await loadStatistics();await loadToday()}}
   // Return a finished session to the idle preview. Only a completed session is
   // cleared so this can never cut short a running or paused timer. Keeping the
   // planned duration means the next session and the wallpaper countdown start
   // clean instead of showing a stale 00:00.
   function reset(){setState(current=>current.status==='completed'?initialFocusState(current.plannedSeconds/60):current)}
-  const value=useMemo<FocusApi>(()=>({state,remainingSeconds:deriveRemaining(state,nowMono),focusedSeconds:Math.floor(focusedMilliseconds(state,nowMono)/1000),statistics,start,pause,resume,interrupt,reset,loadStatistics}),[state,nowMono,statistics]);
+  const value=useMemo<FocusApi>(()=>{const liveSeconds=state.status==='running'||state.status==='paused'?Math.floor(focusedMilliseconds(state,nowMono)/1000):0;return{state,remainingSeconds:deriveRemaining(state,nowMono),focusedSeconds:Math.floor(focusedMilliseconds(state,nowMono)/1000),todayFocusedSeconds:todayRecordedSeconds+liveSeconds,statistics,start,pause,resume,interrupt,reset,loadStatistics}},[state,nowMono,statistics,todayRecordedSeconds]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 export function useFocusTimer(){const value=useContext(Context);if(!value)throw new Error('useFocusTimer must be used inside FocusTimerProvider');return value}
