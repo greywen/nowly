@@ -9,6 +9,7 @@ declare global {
 test.beforeEach(async ({ page }) => {
   await page.clock.setFixedTime(new Date(2026, 6, 23, 9, 42));
   await page.addInitScript(() => {
+    try { localStorage.setItem('nowly:onboarding-seen', 'true'); } catch { /* storage disabled */ }
     const now = '2026-07-23T09:42:00.000Z';
     let sequence = 2;
     let failNextCompletion = false;

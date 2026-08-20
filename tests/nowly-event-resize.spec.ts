@@ -5,6 +5,7 @@ import { expect, test } from '@playwright/test';
 // unreliable (especially in the Tauri webview) so the stretch rarely fired.
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
+    try { localStorage.setItem('nowly:onboarding-seen', 'true'); } catch { /* storage disabled */ }
     const now = '2026-07-15T09:42:00.000Z';
     // Pin the app clock to July 2026 so the seeded multi-day event is in view.
     const RealDate = Date;
@@ -62,15 +63,20 @@ test.beforeEach(async ({ page }) => {
             return events.filter((e) => e.startAt >= args.range.startAt && e.startAt < args.range.endAtExclusive);
           }
           if (command === 'update_event') {
-            (window as any).__RESIZE_CALLS__.push({ id: args.id, draft: args.draft });
-            const old = events.find((e) => e.id === args.id);
+            const id = args.target?.id ?? args.id;
+            (window as any).__RESIZE_CALLS__.push({ id, draft: args.draft });
+            const old = events.find((e) => e.id === id);
             const updated = { ...old, ...args.draft, updatedAt: now };
-            events = events.map((e) => (e.id === args.id ? updated : e));
+            events = events.map((e) => (e.id === id ? updated : e));
             return updated;
           }
           if (command === 'list_tasks') return [];
           if (command === 'list_notes') return [];
+          if (command === 'list_extensions') return [];
           if (command === 'get_app_settings') return settings;
+          // Reject the layout query so the app falls back to its default
+          // layout (which includes the calendar module the drag tests need).
+          if (command === 'list_module_layout') throw new Error('use default layout');
           return 'ok';
         },
         transformCallback: (cb: (payload: unknown) => void) => {

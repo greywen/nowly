@@ -8,6 +8,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
+    try { localStorage.setItem('nowly:onboarding-seen', 'true'); } catch { /* storage disabled */ }
     const settings = {
       wallpaperEnabled: false, launchAtLogin: false, targetMonitorId: null,
       density: 'balanced', weekStart: 'monday', dateFormat: 'localized',
@@ -30,6 +31,7 @@ test.beforeEach(async ({ page }) => {
           if (command === 'list_tasks') return [];
           if (command === 'list_notes') return [];
           if (command === 'list_custom_templates') return [];
+          if (command === 'list_extensions') return [];
           if (command === 'list_module_layout') return Reflect.get(window, '__moduleLayout__');
           if (command === 'save_module_layout') {
             const layout = (args?.layout ?? []) as unknown;

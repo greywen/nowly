@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
+    try { localStorage.setItem('nowly:onboarding-seen', 'true'); } catch { /* storage disabled */ }
     const now = '2026-07-15T09:42:00.000Z';
     const RealDate = Date;
     class FixedDate extends RealDate {
@@ -25,7 +26,12 @@ test.beforeEach(async ({ page }) => {
         invoke: async (command: string) => {
           if (command === 'list_events_in_range') return events;
           if (command === 'list_tasks' || command === 'list_notes') return [];
+          if (command === 'list_extensions') return [];
           if (command === 'get_app_settings') return settings;
+          // Reject so useModuleLayout falls back to the default layout (which
+          // includes the calendar); returning a non-array would yield an empty
+          // layout and the calendar would never render.
+          if (command === 'list_module_layout') throw new Error('use default layout');
           return 'ok';
         },
         transformCallback: (callback: unknown) => { const id = 1; Reflect.set(window, `_${id}`, callback); return id; }

@@ -7,6 +7,7 @@ import { expect, test } from '@playwright/test';
 test.beforeEach(async ({ page }) => {
   await page.clock.setFixedTime(new Date(2026, 6, 23, 9, 42));
   await page.addInitScript(() => {
+    try { localStorage.setItem('nowly:onboarding-seen', 'true'); } catch { /* storage disabled */ }
     const now = '2026-07-23T09:42:00.000Z';
     let sequence = 1;
     const nextId = (prefix: string) => `${prefix}-${sequence++}`;
@@ -218,7 +219,7 @@ async function addKanbanModule(page: import('@playwright/test').Page) {
   await page.getByRole('button', { name: '添加模块' }).click();
   await page.getByRole('button', { name: '添加看板' }).click();
   await page.getByRole('button', { name: '关闭' }).click();
-  await page.getByRole('button', { name: '编辑布局' }).click();
+  await page.getByRole('button', { name: '完成编辑' }).click();
 }
 
 test('adds the kanban module, showing the three default lanes', async ({ page }) => {

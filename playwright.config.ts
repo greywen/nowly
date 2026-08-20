@@ -9,6 +9,10 @@ export default defineConfig({
   },
   use: {
     baseURL: 'http://localhost:1420',
+    // The UI follows the system language and the specs assert Chinese copy, so
+    // pin the browser locale to zh-CN; otherwise Playwright reports en-US and
+    // the app renders English, breaking every text-based assertion.
+    locale: 'zh-CN',
     ...devices['Desktop Chrome']
   },
   projects: [
