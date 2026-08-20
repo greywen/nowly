@@ -32,3 +32,19 @@ export type Note = {
   createdAt: string;
   updatedAt: string;
 };
+
+// How the notes widget lays out its notes: a compact list or a sticky-note wall.
+export type NotesViewMode = 'list' | 'board';
+export const DEFAULT_NOTES_VIEW: NotesViewMode = 'list';
+const notesViewModes: readonly NotesViewMode[] = ['list', 'board'];
+
+export function isNotesViewMode(value: unknown): value is NotesViewMode {
+  return typeof value === 'string' && notesViewModes.includes(value as NotesViewMode);
+}
+
+export function notesViewOptions(): Array<{ view: NotesViewMode; label: string }> {
+  return [
+    { view: 'list', label: t('notesWidget.viewList') },
+    { view: 'board', label: t('notesWidget.viewBoard') }
+  ];
+}

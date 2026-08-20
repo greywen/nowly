@@ -1,13 +1,32 @@
 import { expect, test } from '@playwright/test';
 
 test.beforeEach(async ({page})=>{
+ // Pin the UI language and skip the first-run tour so assertions do not depend
+ // on the browser locale or the coach-mark overlay.
+ await page.addInitScript(()=>{try{localStorage.setItem('nowly.language','zh');localStorage.setItem('nowly:onboarding-seen','true');}catch{/* storage disabled */}});
  await page.addInitScript(()=>{let notes:any[]=[];let sequence=1;const now='2026-07-23T09:42:00.000Z';const settings={wallpaperEnabled:false,launchAtLogin:false,targetMonitorId:null,density:'balanced',weekStart:'monday',dateFormat:'localized',showWeekends:true,calendarEnabled:true,matrixEnabled:true,notesEnabled:true};Object.defineProperty(window,'__TAURI_INTERNALS__',{value:{invoke:async(command:string,args:any={})=>{if(command==='list_events_in_range'||command==='list_tasks')return[];if(command==='list_notes')return notes;if(command==='get_app_settings')return settings;if(command==='create_note'){const note={id:`n${sequence++}`,...args.draft,createdAt:now,updatedAt:now};notes.push(note);return note;}if(command==='update_note'){const old=notes.find(n=>n.id===args.id);const note={...old,...args.draft,updatedAt:now};notes=notes.map(n=>n.id===args.id?note:n);return note;}if(command==='delete_note'){notes=notes.filter(n=>n.id!==args.id);return null;}if(command==='enter_wallpaper_mode'||command==='enter_foreground_mode')return'ok';throw new Error(`Unexpected command: ${command}`);},transformCallback:(callback:unknown)=>{const id=Math.floor(Math.random()*2**32);Reflect.set(window,`_${id}`,callback);return id;}}});});
  await page.goto('/');await expect(page.getByText('还没有便签')).toBeVisible();
 });
 
 test('creates pins edits manages and permanently deletes notes',async({page})=>{
- await page.getByRole('button',{name:'新增便签'}).click();await page.getByLabel('便签标题').fill('产品原则');await page.getByLabel('便签内容').fill('保持简单');await page.getByRole('radio',{name:'紫色'}).check();await page.getByRole('checkbox',{name:'置顶便签'}).check();await page.getByRole('button',{name:'保存便签'}).click();await expect(page.getByText('产品原则')).toBeVisible();
+ await page.getByRole('button',{name:'新增便签'}).click();await page.getByLabel('便签标题').fill('产品原则');await page.getByLabel('便签内容').fill('保持简单');await page.getByRole('radio',{name:'靛蓝'}).check();await page.getByRole('checkbox',{name:'置顶便签'}).check();await page.getByRole('button',{name:'保存便签'}).click();await expect(page.getByText('产品原则')).toBeVisible();
  await page.getByRole('button',{name:'查看全部便签'}).click();await expect(page.getByRole('dialog',{name:'全部便签'})).toBeVisible();await page.getByRole('button',{name:'编辑便签：产品原则'}).click();await page.getByLabel('便签内容').fill('保持简单并专注');await page.getByRole('button',{name:'保存便签'}).click();await page.getByRole('button',{name:'编辑便签：产品原则'}).click();await page.getByRole('button',{name:'删除便签'}).click();await expect(page.getByRole('dialog',{name:'永久删除“产品原则”？'})).toContainText('无法恢复');await page.getByRole('button',{name:'永久删除'}).click();
 });
 
 test('keeps page bounded and obeys no-motion design tokens',async({page})=>{const result=await page.evaluate(()=>({html:[document.documentElement.scrollWidth,document.documentElement.clientWidth,document.documentElement.scrollHeight,document.documentElement.clientHeight],body:[document.body.scrollWidth,document.body.clientWidth,document.body.scrollHeight,document.body.clientHeight],css:Array.from(document.styleSheets).flatMap(sheet=>{try{return Array.from(sheet.cssRules).map(rule=>rule.cssText)}catch{return[]}}).join('\n')}));expect(result.html[0]).toBeLessThanOrEqual(result.html[1]);expect(result.html[2]).toBeLessThanOrEqual(result.html[3]);expect(result.body[0]).toBeLessThanOrEqual(result.body[1]);expect(result.body[2]).toBeLessThanOrEqual(result.body[3]);expect(result.css.toLowerCase()).not.toContain('#009ef7');expect(result.css).toContain('transition: none !important');});
+
+test('switches to the sticky board layout and remembers the choice',async({page})=>{
+ const drafts=[{title:'产品原则',content:'保持简单，先解决真实问题',color:'靛蓝'},{title:'周末采购',content:'鸡蛋、面粉、咖啡豆',color:'草绿'},{title:'读书笔记',content:'第三章：把复杂留给自己',color:'暖黄'}];
+ for(const draft of drafts){await page.getByRole('button',{name:'新增便签'}).click();await page.getByLabel('便签标题').fill(draft.title);await page.getByLabel('便签内容').fill(draft.content);await page.getByRole('radio',{name:draft.color}).check();await page.getByRole('button',{name:'保存便签'}).click();await expect(page.getByText(draft.title)).toBeVisible();}
+ await expect(page.getByTestId('notes-list')).toBeVisible();
+ await page.getByRole('button',{name:'便利贴视图'}).click();
+ await expect(page.getByTestId('notes-board')).toBeVisible();
+ await expect(page.getByTestId('notes-list')).toHaveCount(0);
+ await expect(page.locator('.sticky-note')).toHaveCount(3);
+ await page.reload();
+ // The mocked backend starts empty after a reload; the remembered layout is what matters.
+ await expect(page.getByTestId('notes-board')).toHaveCount(1);
+ await page.getByRole('button',{name:'列表视图'}).click();
+ await expect(page.getByTestId('notes-list')).toHaveCount(1);
+ await expect(page.getByTestId('notes-board')).toHaveCount(0);
+});

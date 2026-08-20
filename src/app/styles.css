@@ -239,6 +239,8 @@ button:disabled { cursor: default; opacity: .65; }
 .view-switch__btn { min-height: 32px; padding: 4px 12px; border: 0; border-radius: var(--radius-sm); color: var(--text-secondary); background: transparent; font-size: 13.6px; font-weight: 600; }
 .view-switch__btn:hover { color: var(--color-primary-active); }
 .view-switch__btn.is-active { color: #fff; background: var(--color-primary); }
+.view-switch__btn--icon { width: 32px; padding: 0; display: inline-grid; place-items: center; }
+.view-switch__btn--icon svg { width: 16px; height: 16px; }
 
 .calendar-empty { margin-top: 12px; padding: 24px; display: grid; place-items: center; border: 1px dashed var(--border-default); border-radius: var(--radius-default); color: var(--text-muted); font-size: 15.2px; }
 
@@ -318,6 +320,22 @@ button:disabled { cursor: default; opacity: .65; }
 .note--purple { background: var(--color-info-light); }
 .note-title { color: var(--text-primary); font-size: 15.2px; font-weight: 600; }
 .note-content { margin: 4px 0; color: var(--text-secondary); font-size: 13.6px; }
+/* Sticky-board view: the same notes pinned to the panel like paper notes on a
+   wall. Tilt, tape and folded corner are static decoration; nothing animates. */
+.notes-board { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 24px; padding: 12px 14px 16px; }
+.sticky-note { position: relative; min-height: 136px; padding: 20px 16px 26px; display: flex; flex-direction: column; gap: 2px; border: 1px solid transparent; border-radius: var(--radius-sm); background-color: #fdfaf1; background-image: repeating-linear-gradient(180deg, transparent 0 23px, rgba(33, 31, 28, .06) 23px 24px); box-shadow: 0 1.6px 12px 4px rgba(0, 0, 0, .05); font-family: "Ink Free", "Segoe Script", "Bradley Hand", KaiTi, var(--font-sans); text-align: left; }
+.sticky-note:hover { border-color: var(--selected-color); }
+.sticky-note__title { color: var(--selected-color-fg); font-size: 17.2px; font-weight: 600; line-height: 24px; overflow-wrap: anywhere; }
+.sticky-note__content { display: -webkit-box; overflow: hidden; color: var(--text-secondary); font-size: 15.2px; line-height: 24px; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow-wrap: anywhere; }
+/* Tape sticks across a paper corner and slightly overhangs the sheet. */
+.sticky-note__tape { position: absolute; top: 10px; left: -12px; width: 54px; height: 16px; background: var(--selected-color); opacity: .32; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .5); transform: rotate(-45deg); }
+.sticky-note__fold { position: absolute; right: 0; bottom: 0; width: 24px; height: 24px; border-bottom-right-radius: var(--radius-sm); background: linear-gradient(135deg, rgba(33, 31, 28, .09) 0 50%, var(--bg-surface) 50% 100%); }
+.sticky-note--tilt-0 { transform: rotate(-1.4deg); }
+.sticky-note--tilt-1 { transform: rotate(1.1deg); }
+.sticky-note--tilt-2 { transform: rotate(-.6deg); }
+.sticky-note--tilt-3 { transform: rotate(1.8deg); }
+.sticky-note--tilt-1 .sticky-note__tape { left: auto; right: -12px; transform: rotate(45deg); }
+.sticky-note--tilt-3 .sticky-note__tape { left: auto; right: -12px; top: 14px; transform: rotate(45deg); }
 .empty-state { padding: 24px; border: 1px dashed var(--border-default); border-radius: var(--radius-default); text-align: center; }
 .link-btn { padding: 0; border: 0; color: var(--color-primary-active); background: transparent; font-size: 13.6px; font-weight: 600; }
 .module-message { margin-bottom: 12px; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--color-danger-active); background: var(--color-danger-light); border-radius: var(--radius-default); font-size: 13.6px; }
@@ -352,6 +370,7 @@ button:disabled { cursor: default; opacity: .65; }
 [data-density="compact"] .quadrant-grid { gap: 6px; }
 [data-density="compact"] .quadrant { padding: 8px; }
 [data-density="compact"] .notes-list { gap: 6px; }
+[data-density="compact"] .notes-board { gap: 16px 10px; padding: 8px 6px 10px; }
 [data-density="compact"] .task-row { padding: 4px 6px; }
 [data-density="compact"] .good-modal-body { padding: 24px; }
 [data-density="compact"] .good-modal-body > * + * { margin-top: 16px; }
@@ -367,6 +386,7 @@ button:disabled { cursor: default; opacity: .65; }
 [data-density="comfortable"] .quadrant-grid { gap: 20px; }
 [data-density="comfortable"] .quadrant { padding: 20px; }
 [data-density="comfortable"] .notes-list { gap: 16px; }
+[data-density="comfortable"] .notes-board { gap: 32px 20px; padding: 16px 10px 20px; }
 [data-density="comfortable"] .task-row { padding: 12px; }
 [data-density="comfortable"] .good-modal-body { padding: 40px; }
 [data-density="comfortable"] .good-modal-body > * + * { margin-top: 28px; }
