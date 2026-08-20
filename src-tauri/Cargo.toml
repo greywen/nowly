@@ -35,5 +35,9 @@ tauri-plugin-single-instance = "2.4.3"
 tauri-plugin-notification = "2"
 webview2-com = "0.38"
 
+[dev-dependencies]
+# mock runtime，用于在单元测试里真实走一遍 #[tauri::command] 的 IPC 参数解析。
+tauri = { version = "2", features = ["test"] }
+
 [target.'cfg(windows)'.dependencies]
 tauri-winrt-notification = "0.7"

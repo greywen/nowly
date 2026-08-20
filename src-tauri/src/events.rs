@@ -869,28 +869,22 @@ pub fn create_event(db: State<'_, AppDb>, draft: EventDraft) -> Result<Event, Co
 #[tauri::command]
 pub fn update_event(
     db: State<'_, AppDb>,
-    id: String,
+    target: EventTarget,
     draft: EventDraft,
-) -> Result<Event, CommandError> {
+    scope: EditScope,
+) -> Result<(), CommandError> {
     let mut connection = db.0.lock().map_err(CommandError::database)?;
-    // 命令契约的三选一改造属于 Task 12，此处先按整体编辑转发，保持前端行为不变。
-    let target = EventTarget {
-        id,
-        occurrence_start_at: None,
-    };
-    update(&mut connection, &target, draft, EditScope::All)?;
-    event_by_id(&connection, &target.id)?.ok_or_else(|| CommandError::not_found("未找到该日程。"))
+    update(&mut connection, &target, draft, scope)
 }
 
 #[tauri::command]
-pub fn delete_event(db: State<'_, AppDb>, id: String) -> Result<(), CommandError> {
+pub fn delete_event(
+    db: State<'_, AppDb>,
+    target: EventTarget,
+    scope: EditScope,
+) -> Result<(), CommandError> {
     let mut connection = db.0.lock().map_err(CommandError::database)?;
-    // 命令契约的三选一改造属于 Task 12，此处先按整体删除转发，保持前端行为不变。
-    let target = EventTarget {
-        id,
-        occurrence_start_at: None,
-    };
-    delete(&mut connection, &target, EditScope::All)
+    delete(&mut connection, &target, scope)
 }
 
 #[cfg(test)]
@@ -3059,5 +3053,467 @@ mod tests {
         assert_eq!(old_until, None);
         assert_eq!(old_count, Some(2));
         assert_eq!(old_final.as_deref(), Some("2026-08-10T19:00"));
+    }
+}
+
+/// 命令层契约。直接构造 Rust 结构体验证不了「前端发出的 JSON 能否被解析」，
+/// 因此这里用 mock runtime 走真实 IPC：命令名、参数名、camelCase 字段与 scope
+/// 变体全部按前端实际发送的形态断言。
+#[cfg(test)]
+mod command_tests {
+    use super::{create, list_in_range};
+    use crate::db::{migrate, AppDb};
+    use crate::models::{EventDraft, EventRange};
+    use crate::recurrence::{Freq, Recurrence, RecurrenceEnd};
+    use rusqlite::Connection;
+    use serde_json::{json, Value};
+    use std::sync::Mutex;
+    use tauri::ipc::{CallbackFn, InvokeBody};
+    use tauri::test::{
+        get_ipc_response, mock_builder, mock_context, noop_assets, MockRuntime, INVOKE_KEY,
+    };
+    use tauri::webview::InvokeRequest;
+    use tauri::{App, Manager, WebviewWindow, WebviewWindowBuilder};
+
+    struct Harness {
+        app: App<MockRuntime>,
+        webview: WebviewWindow<MockRuntime>,
+    }
+
+    impl Harness {
+        fn new() -> Self {
+            let mut connection = Connection::open_in_memory().unwrap();
+            connection
+                .execute_batch("PRAGMA foreign_keys = ON;")
+                .unwrap();
+            migrate(&mut connection).unwrap();
+            let app = mock_builder()
+                .manage(AppDb(Mutex::new(connection)))
+                .invoke_handler(tauri::generate_handler![
+                    super::list_events_in_range,
+                    super::create_event,
+                    super::update_event,
+                    super::delete_event
+                ])
+                .build(mock_context(noop_assets()))
+                .expect("mock app builds");
+            let webview = WebviewWindowBuilder::new(&app, "main", Default::default())
+                .build()
+                .expect("mock webview builds");
+            Self { app, webview }
+        }
+
+        fn invoke(&self, command: &str, args: Value) -> Result<Value, Value> {
+            get_ipc_response(
+                &self.webview,
+                InvokeRequest {
+                    cmd: command.into(),
+                    callback: CallbackFn(0),
+                    error: CallbackFn(1),
+                    url: "http://tauri.localhost".parse().unwrap(),
+                    body: InvokeBody::Json(args),
+                    headers: Default::default(),
+                    invoke_key: INVOKE_KEY.to_string(),
+                },
+            )
+            .map(|body| body.deserialize::<Value>().expect("响应体是 JSON"))
+        }
+
+        fn seed(&self, recurrence: Option<Recurrence>) -> String {
+            let state = self.app.state::<AppDb>();
+            let mut connection = state.0.lock().unwrap();
+            create(
+                &mut connection,
+                EventDraft {
+                    title: "周会".into(),
+                    start_at: "2026-08-03T19:00".into(),
+                    end_at: "2026-08-03T20:00".into(),
+                    all_day: false,
+                    category: "work".into(),
+                    color: "#4FC9DA".into(),
+                    linked_task_id: None,
+                    note: "".into(),
+                    recurrence,
+                },
+            )
+            .expect("create runs")
+            .id
+        }
+
+        fn august(&self) -> Vec<(String, String)> {
+            let state = self.app.state::<AppDb>();
+            let connection = state.0.lock().unwrap();
+            list_in_range(
+                &connection,
+                &EventRange {
+                    start_at: "2026-08-01T00:00".into(),
+                    end_at_exclusive: "2026-09-01T00:00".into(),
+                },
+            )
+            .expect("range query runs")
+            .into_iter()
+            .map(|event| (event.start_at, event.title))
+            .collect()
+        }
+
+        fn recurrence_count(&self, id: &str) -> Option<i64> {
+            let state = self.app.state::<AppDb>();
+            let connection = state.0.lock().unwrap();
+            connection
+                .query_row(
+                    "SELECT recurrence_count FROM events WHERE id=?1",
+                    [id],
+                    |row| row.get(0),
+                )
+                .expect("series row exists")
+        }
+
+        fn event_rows(&self) -> i64 {
+            let state = self.app.state::<AppDb>();
+            let connection = state.0.lock().unwrap();
+            connection
+                .query_row("SELECT COUNT(*) FROM events", [], |row| row.get(0))
+                .unwrap()
+        }
+    }
+
+    fn weekly() -> Recurrence {
+        Recurrence {
+            freq: Freq::Weekly,
+            interval: 1,
+            by_day: vec!["MO".into()],
+            end: RecurrenceEnd::Count { count: 5 },
+        }
+    }
+
+    fn weekly_json(count: u32) -> Value {
+        json!({
+            "freq": "weekly",
+            "interval": 1,
+            "byDay": ["MO"],
+            "end": { "kind": "count", "count": count }
+        })
+    }
+
+    fn draft_json(title: &str, start_at: &str, end_at: &str, recurrence: Value) -> Value {
+        json!({
+            "title": title,
+            "startAt": start_at,
+            "endAt": end_at,
+            "allDay": false,
+            "category": "work",
+            "color": "#4FC9DA",
+            "linkedTaskId": null,
+            "note": "",
+            "recurrence": recurrence
+        })
+    }
+
+    fn starts(rows: &[(String, String)]) -> Vec<&str> {
+        rows.iter().map(|(start, _)| start.as_str()).collect()
+    }
+
+    fn error_of(result: Result<Value, Value>) -> (String, Option<String>) {
+        let error = result.expect_err("命令返回错误");
+        (
+            error["code"].as_str().expect("错误带 code").to_owned(),
+            error["field"].as_str().map(str::to_owned),
+        )
+    }
+
+    #[test]
+    fn update_event_moves_a_single_occurrence_from_a_camel_case_payload() {
+        let harness = Harness::new();
+        let id = harness.seed(Some(weekly()));
+
+        let response = harness.invoke(
+            "update_event",
+            json!({
+                "target": { "id": id, "occurrenceStartAt": "2026-08-10T19:00" },
+                "draft": draft_json("周会（改期）", "2026-08-11T20:00", "2026-08-11T21:00", Value::Null),
+                "scope": "occurrence"
+            }),
+        );
+
+        assert_eq!(response, Ok(Value::Null));
+        let rows = harness.august();
+        assert_eq!(
+            starts(&rows),
+            vec![
+                "2026-08-03T19:00",
+                "2026-08-11T20:00",
+                "2026-08-17T19:00",
+                "2026-08-24T19:00",
+                "2026-08-31T19:00"
+            ]
+        );
+        assert_eq!(rows[1].1, "周会（改期）");
+    }
+
+    #[test]
+    fn update_event_splits_the_series_for_this_and_following() {
+        let harness = Harness::new();
+        let id = harness.seed(Some(weekly()));
+
+        let response = harness.invoke(
+            "update_event",
+            json!({
+                "target": { "id": id, "occurrenceStartAt": "2026-08-17T19:00" },
+                "draft": draft_json(
+                    "周会（新）",
+                    "2026-08-17T19:00",
+                    "2026-08-17T20:00",
+                    weekly_json(3),
+                ),
+                "scope": "thisAndFollowing"
+            }),
+        );
+
+        assert_eq!(response, Ok(Value::Null));
+        assert_eq!(harness.event_rows(), 2);
+        assert_eq!(harness.recurrence_count(&id), Some(2));
+        let rows = harness.august();
+        assert_eq!(
+            rows.iter()
+                .map(|(start, title)| (start.as_str(), title.as_str()))
+                .collect::<Vec<_>>(),
+            vec![
+                ("2026-08-03T19:00", "周会"),
+                ("2026-08-10T19:00", "周会"),
+                ("2026-08-17T19:00", "周会（新）"),
+                ("2026-08-24T19:00", "周会（新）"),
+                ("2026-08-31T19:00", "周会（新）")
+            ]
+        );
+    }
+
+    #[test]
+    fn update_event_rewrites_the_whole_series_for_all() {
+        let harness = Harness::new();
+        let id = harness.seed(Some(weekly()));
+
+        let response = harness.invoke(
+            "update_event",
+            json!({
+                "target": { "id": id, "occurrenceStartAt": null },
+                "draft": draft_json(
+                    "全员周会",
+                    "2026-08-03T19:30",
+                    "2026-08-03T20:30",
+                    weekly_json(5),
+                ),
+                "scope": "all"
+            }),
+        );
+
+        assert_eq!(response, Ok(Value::Null));
+        assert_eq!(harness.event_rows(), 1);
+        let rows = harness.august();
+        assert_eq!(
+            starts(&rows),
+            vec![
+                "2026-08-03T19:30",
+                "2026-08-10T19:30",
+                "2026-08-17T19:30",
+                "2026-08-24T19:30",
+                "2026-08-31T19:30"
+            ]
+        );
+        assert!(rows.iter().all(|(_, title)| title == "全员周会"));
+    }
+
+    #[test]
+    fn delete_event_excludes_only_the_targeted_occurrence() {
+        let harness = Harness::new();
+        let id = harness.seed(Some(weekly()));
+
+        let response = harness.invoke(
+            "delete_event",
+            json!({
+                "target": { "id": id, "occurrenceStartAt": "2026-08-10T19:00" },
+                "scope": "occurrence"
+            }),
+        );
+
+        assert_eq!(response, Ok(Value::Null));
+        assert_eq!(
+            starts(&harness.august()),
+            vec![
+                "2026-08-03T19:00",
+                "2026-08-17T19:00",
+                "2026-08-24T19:00",
+                "2026-08-31T19:00"
+            ]
+        );
+    }
+
+    #[test]
+    fn delete_event_truncates_the_series_for_this_and_following() {
+        let harness = Harness::new();
+        let id = harness.seed(Some(weekly()));
+
+        let response = harness.invoke(
+            "delete_event",
+            json!({
+                "target": { "id": id, "occurrenceStartAt": "2026-08-17T19:00" },
+                "scope": "thisAndFollowing"
+            }),
+        );
+
+        assert_eq!(response, Ok(Value::Null));
+        assert_eq!(
+            starts(&harness.august()),
+            vec!["2026-08-03T19:00", "2026-08-10T19:00"]
+        );
+    }
+
+    #[test]
+    fn delete_event_removes_the_whole_series_for_all() {
+        let harness = Harness::new();
+        let id = harness.seed(Some(weekly()));
+
+        let response = harness.invoke(
+            "delete_event",
+            json!({
+                "target": { "id": id, "occurrenceStartAt": null },
+                "scope": "all"
+            }),
+        );
+
+        assert_eq!(response, Ok(Value::Null));
+        assert_eq!(harness.event_rows(), 0);
+        assert!(harness.august().is_empty());
+    }
+
+    #[test]
+    fn commands_surface_the_slot_validation_error_untouched() {
+        let harness = Harness::new();
+        let id = harness.seed(Some(weekly()));
+
+        let update = harness.invoke(
+            "update_event",
+            json!({
+                "target": { "id": id, "occurrenceStartAt": "2026-08-11T19:00" },
+                "draft": draft_json("周会", "2026-08-11T19:00", "2026-08-11T20:00", Value::Null),
+                "scope": "occurrence"
+            }),
+        );
+        assert_eq!(
+            error_of(update),
+            ("validation_error".into(), Some("occurrenceStartAt".into()))
+        );
+
+        let delete = harness.invoke(
+            "delete_event",
+            json!({
+                "target": { "id": id, "occurrenceStartAt": "2026-08-11T19:00" },
+                "scope": "thisAndFollowing"
+            }),
+        );
+        assert_eq!(
+            error_of(delete),
+            ("validation_error".into(), Some("occurrenceStartAt".into()))
+        );
+    }
+
+    #[test]
+    fn commands_surface_the_scope_validation_error_untouched() {
+        let harness = Harness::new();
+        let id = harness.seed(None);
+
+        let update = harness.invoke(
+            "update_event",
+            json!({
+                "target": { "id": id, "occurrenceStartAt": null },
+                "draft": draft_json("评审", "2026-08-03T19:00", "2026-08-03T20:00", Value::Null),
+                "scope": "occurrence"
+            }),
+        );
+        assert_eq!(
+            error_of(update),
+            ("validation_error".into(), Some("scope".into()))
+        );
+
+        let delete = harness.invoke(
+            "delete_event",
+            json!({
+                "target": { "id": id, "occurrenceStartAt": null },
+                "scope": "thisAndFollowing"
+            }),
+        );
+        assert_eq!(
+            error_of(delete),
+            ("validation_error".into(), Some("scope".into()))
+        );
+    }
+
+    #[test]
+    fn commands_surface_the_not_found_error_untouched() {
+        let harness = Harness::new();
+
+        let update = harness.invoke(
+            "update_event",
+            json!({
+                "target": { "id": "missing", "occurrenceStartAt": null },
+                "draft": draft_json("评审", "2026-08-03T19:00", "2026-08-03T20:00", Value::Null),
+                "scope": "all"
+            }),
+        );
+        assert_eq!(error_of(update), ("not_found".into(), None));
+
+        let delete = harness.invoke(
+            "delete_event",
+            json!({
+                "target": { "id": "missing", "occurrenceStartAt": null },
+                "scope": "all"
+            }),
+        );
+        assert_eq!(error_of(delete), ("not_found".into(), None));
+    }
+
+    #[test]
+    fn commands_only_accept_the_camel_case_wire_format() {
+        let harness = Harness::new();
+        let id = harness.seed(Some(weekly()));
+
+        // 对照：同一形态的 camelCase 请求确实命中了单个实例。
+        let camel = harness.invoke(
+            "delete_event",
+            json!({
+                "target": { "id": id, "occurrenceStartAt": "2026-08-10T19:00" },
+                "scope": "occurrence"
+            }),
+        );
+        assert_eq!(camel, Ok(Value::Null));
+        assert_eq!(harness.august().len(), 4);
+
+        // 蛇形字段不会被读到：目标退化为整条系列，于是报的是 scope 而不是 occurrenceStartAt。
+        let snake_field = harness.invoke(
+            "delete_event",
+            json!({
+                "target": { "id": id, "occurrence_start_at": "2026-08-17T19:00" },
+                "scope": "occurrence"
+            }),
+        );
+        assert_eq!(
+            error_of(snake_field),
+            ("validation_error".into(), Some("scope".into()))
+        );
+
+        // 蛇形 scope 变体根本反序列化不了，命令体不会执行。
+        let snake_scope = harness
+            .invoke(
+                "delete_event",
+                json!({
+                    "target": { "id": id, "occurrenceStartAt": "2026-08-17T19:00" },
+                    "scope": "this_and_following"
+                }),
+            )
+            .expect_err("非法 scope 变体被拒绝");
+        assert!(
+            snake_scope.to_string().contains("thisAndFollowing"),
+            "错误应列出 camelCase 变体：{snake_scope}"
+        );
+        assert_eq!(harness.august().len(), 4);
     }
 }
