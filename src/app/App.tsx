@@ -15,6 +15,7 @@ import { KanbanWidget } from '../kanban/KanbanWidget';
 import { ModalRoot } from '../modals/ModalRoot';
 import { NotesWidget } from '../notes/NotesWidget';
 import { useNotes } from '../notes/useNotes';
+import { useNotesView } from '../notes/useNotesView';
 import { DesktopShell } from './layout/DesktopShell';
 import { useSettings } from '../settings/useSettings';
 import { useRecentColors } from '../settings/useRecentColors';
@@ -57,6 +58,7 @@ export function App() {
   const eventsFeature = useEvents({ onRefreshTasks: refreshTasks, weekStart: settingsFeature.settings.data.weekStart });
   const tasksFeature = useTasks({ onRefreshEvents: refreshEvents });
   const notesFeature = useNotes();
+  const notesView = useNotesView();
   const extensionsFeature = useExtensions();
   refreshTasksRef.current = tasksFeature.retryTasks;
   refreshEventsRef.current = eventsFeature.retryEvents;
@@ -198,6 +200,8 @@ export function App() {
         notes={notes}
         status={notesFeature.notes.status}
         errorMessage={notesFeature.notes.status === 'error' ? notesFeature.notes.message : undefined}
+        view={notesView.view}
+        onSetView={notesView.setView}
         onRetry={() => void notesFeature.retryNotes()}
         onCreateNote={() => openModalInForeground({type:'note-create',trigger:null})}
         onOpenNote={(note,trigger) => openModalInForeground({type:'note-edit',note,trigger})}
