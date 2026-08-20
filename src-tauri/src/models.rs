@@ -1,3 +1,4 @@
+use crate::recurrence::Recurrence;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -14,6 +15,12 @@ pub struct Event {
     pub note: String,
     pub created_at: String,
     pub updated_at: String,
+    pub recurrence: Option<Recurrence>,
+    /// 重复实例所属系列的行 id；单次日程为 None。`id` 始终是数据库行 id。
+    pub series_id: Option<String>,
+    /// 该实例原本应发生的时刻，即例外的身份键；单次日程为 None。
+    pub occurrence_start_at: Option<String>,
+    pub is_overridden: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -54,6 +61,23 @@ pub struct EventDraft {
     pub color: String,
     pub linked_task_id: Option<String>,
     pub note: String,
+    pub recurrence: Option<Recurrence>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EventTarget {
+    pub id: String,
+    /// 为 None 时表示目标是单次日程，此时 scope 必须为 All。
+    pub occurrence_start_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum EditScope {
+    Occurrence,
+    ThisAndFollowing,
+    All,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -254,7 +278,157 @@ pub struct SandboxExtensionDraft {
 
 #[cfg(test)]
 mod tests {
-    use super::{EventDraft, NoteDraft, TaskDraft};
+    use super::{EditScope, Event, EventDraft, EventTarget, NoteDraft, TaskDraft};
+    use crate::recurrence::{Freq, Recurrence, RecurrenceEnd};
+    use serde_json::{json, Value};
+
+    fn event() -> Event {
+        Event {
+            id: "e1".into(),
+            title: "评审".into(),
+            start_at: "2026-08-10T10:00".into(),
+            end_at: "2026-08-10T11:00".into(),
+            all_day: false,
+            category: "work".into(),
+            color: "#4FC9DA".into(),
+            linked_task_id: None,
+            note: "".into(),
+            created_at: "2026-08-01T08:00:00Z".into(),
+            updated_at: "2026-08-01T08:00:00Z".into(),
+            recurrence: None,
+            series_id: None,
+            occurrence_start_at: None,
+            is_overridden: false,
+        }
+    }
+
+    #[test]
+    fn serializes_event_target_and_scope_in_camel_case() {
+        let target = EventTarget {
+            id: "s1".into(),
+            occurrence_start_at: Some("2026-08-10T10:00".into()),
+        };
+        assert_eq!(
+            serde_json::to_value(&target).expect("target serializes"),
+            json!({ "id": "s1", "occurrenceStartAt": "2026-08-10T10:00" })
+        );
+
+        // 单次日程目标必须序列化出显式 null，前端类型是 string | null 而非可选属性。
+        assert_eq!(
+            serde_json::to_value(EventTarget {
+                id: "e1".into(),
+                occurrence_start_at: None,
+            })
+            .expect("target serializes"),
+            json!({ "id": "e1", "occurrenceStartAt": null })
+        );
+
+        for (scope, literal) in [
+            (EditScope::Occurrence, "\"occurrence\""),
+            (EditScope::ThisAndFollowing, "\"thisAndFollowing\""),
+            (EditScope::All, "\"all\""),
+        ] {
+            assert_eq!(
+                serde_json::to_string(&scope).expect("scope serializes"),
+                literal
+            );
+            assert_eq!(
+                serde_json::from_str::<EditScope>(literal).expect("scope parses"),
+                scope
+            );
+        }
+    }
+
+    #[test]
+    fn serializes_event_recurrence_fields_in_camel_case() {
+        let value = serde_json::to_value(event()).expect("event serializes");
+        let object = value.as_object().expect("event serializes to an object");
+
+        // 用 Some(&Null) 而不是 is_null()，以区分「键存在且为 null」与「键被省略」。
+        assert_eq!(object.get("recurrence"), Some(&Value::Null));
+        assert_eq!(object.get("seriesId"), Some(&Value::Null));
+        assert_eq!(object.get("occurrenceStartAt"), Some(&Value::Null));
+        assert_eq!(object.get("isOverridden"), Some(&Value::Bool(false)));
+        for snake in ["series_id", "occurrence_start_at", "is_overridden"] {
+            assert!(!object.contains_key(snake), "{snake} 不应出现在契约里");
+        }
+
+        let overridden = Event {
+            series_id: Some("s1".into()),
+            occurrence_start_at: Some("2026-08-10T10:00".into()),
+            is_overridden: true,
+            recurrence: Some(rule()),
+            ..event()
+        };
+        let value = serde_json::to_value(&overridden).expect("event serializes");
+        assert_eq!(value["seriesId"], json!("s1"));
+        assert_eq!(value["occurrenceStartAt"], json!("2026-08-10T10:00"));
+        assert_eq!(value["isOverridden"], json!(true));
+        assert_eq!(
+            serde_json::from_value::<Event>(value).expect("event parses"),
+            overridden
+        );
+    }
+
+    fn rule() -> Recurrence {
+        Recurrence {
+            freq: Freq::Weekly,
+            interval: 2,
+            by_day: vec!["MO".into()],
+            end: RecurrenceEnd::Count { count: 5 },
+        }
+    }
+
+    #[test]
+    fn serializes_recurrence_end_as_a_tagged_union() {
+        assert_eq!(
+            serde_json::to_value(rule()).expect("rule serializes"),
+            json!({
+                "freq": "weekly",
+                "interval": 2,
+                "byDay": ["MO"],
+                "end": { "kind": "count", "count": 5 }
+            })
+        );
+        assert_eq!(
+            serde_json::to_value(RecurrenceEnd::Never).expect("end serializes"),
+            json!({ "kind": "never" })
+        );
+        assert_eq!(
+            serde_json::to_value(RecurrenceEnd::Until {
+                date: "2026-09-30".into()
+            })
+            .expect("end serializes"),
+            json!({ "kind": "until", "date": "2026-09-30" })
+        );
+    }
+
+    #[test]
+    fn event_draft_carries_an_optional_recurrence() {
+        let base = json!({
+            "title": "评审",
+            "startAt": "2026-08-10T10:00",
+            "endAt": "2026-08-10T11:00",
+            "allDay": false,
+            "category": "work",
+            "color": "blue",
+            "linkedTaskId": null,
+            "note": ""
+        });
+
+        let plain: EventDraft = serde_json::from_value(base.clone()).expect("draft parses");
+        assert_eq!(plain.recurrence, None);
+
+        let mut with_rule = base;
+        with_rule["recurrence"] = json!({
+            "freq": "weekly",
+            "interval": 2,
+            "byDay": ["MO"],
+            "end": { "kind": "count", "count": 5 }
+        });
+        let repeating: EventDraft = serde_json::from_value(with_rule).expect("draft parses");
+        assert_eq!(repeating.recurrence, Some(rule()));
+    }
 
     #[test]
     fn note_draft_deserializes_camel_case() {
