@@ -32,6 +32,7 @@ const linkedEvent: CalendarEvent = {
   updatedAt: '2026-07-20T09:00:00Z',
   recurrence: null,
   seriesId: null,
+  seriesStartAt: null,
   occurrenceStartAt: null,
   isOverridden: false
 };

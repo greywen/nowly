@@ -74,6 +74,9 @@ export type CalendarEvent = {
   // Row id of the series this instance belongs to; null for single events.
   // `id` is always the database row id, so a whole series shares one id.
   seriesId: string | null;
+  // The series' own start (dtstart); null for single events. Equal to
+  // `occurrenceStartAt` exactly on the first occurrence of the series.
+  seriesStartAt: string | null;
   // The slot this instance was originally due at, i.e. the exception identity.
   occurrenceStartAt: string | null;
   isOverridden: boolean;

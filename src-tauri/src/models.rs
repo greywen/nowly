@@ -18,6 +18,9 @@ pub struct Event {
     pub recurrence: Option<Recurrence>,
     /// 重复实例所属系列的行 id；单次日程为 None。`id` 始终是数据库行 id。
     pub series_id: Option<String>,
+    /// 该实例所属系列的开始时刻（dtstart）；单次日程为 None。
+    /// 与 `occurrence_start_at` 相等即表示这是系列的首个实例。
+    pub series_start_at: Option<String>,
     /// 该实例原本应发生的时刻，即例外的身份键；单次日程为 None。
     pub occurrence_start_at: Option<String>,
     pub is_overridden: bool,
@@ -297,6 +300,7 @@ mod tests {
             updated_at: "2026-08-01T08:00:00Z".into(),
             recurrence: None,
             series_id: None,
+            series_start_at: None,
             occurrence_start_at: None,
             is_overridden: false,
         }
@@ -347,14 +351,21 @@ mod tests {
         // 用 Some(&Null) 而不是 is_null()，以区分「键存在且为 null」与「键被省略」。
         assert_eq!(object.get("recurrence"), Some(&Value::Null));
         assert_eq!(object.get("seriesId"), Some(&Value::Null));
+        assert_eq!(object.get("seriesStartAt"), Some(&Value::Null));
         assert_eq!(object.get("occurrenceStartAt"), Some(&Value::Null));
         assert_eq!(object.get("isOverridden"), Some(&Value::Bool(false)));
-        for snake in ["series_id", "occurrence_start_at", "is_overridden"] {
+        for snake in [
+            "series_id",
+            "series_start_at",
+            "occurrence_start_at",
+            "is_overridden",
+        ] {
             assert!(!object.contains_key(snake), "{snake} 不应出现在契约里");
         }
 
         let overridden = Event {
             series_id: Some("s1".into()),
+            series_start_at: Some("2026-08-03T10:00".into()),
             occurrence_start_at: Some("2026-08-10T10:00".into()),
             is_overridden: true,
             recurrence: Some(rule()),
@@ -362,6 +373,7 @@ mod tests {
         };
         let value = serde_json::to_value(&overridden).expect("event serializes");
         assert_eq!(value["seriesId"], json!("s1"));
+        assert_eq!(value["seriesStartAt"], json!("2026-08-03T10:00"));
         assert_eq!(value["occurrenceStartAt"], json!("2026-08-10T10:00"));
         assert_eq!(value["isOverridden"], json!(true));
         assert_eq!(

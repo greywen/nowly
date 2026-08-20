@@ -21,6 +21,7 @@ function event(overrides: Partial<CalendarEvent>): CalendarEvent {
     updatedAt: '2026-07-23T09:00:00Z',
     recurrence: null,
     seriesId: null,
+    seriesStartAt: null,
     occurrenceStartAt: null,
     isOverridden: false,
     ...overrides

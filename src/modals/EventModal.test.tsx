@@ -7,12 +7,14 @@ import { EventModal } from './EventModal';
 
 const now = () => new Date(2026, 6, 23, 9, 42);
 const task: MatrixTask = { id:'t1', title:'发布 Nowly', quadrant:'important_urgent', dueAt:null, priority:1, completed:false, linkedEventId:null, note:'', createdAt:'x', updatedAt:'x' };
-const existing: CalendarEvent = { id:'e1', title:'设计评审', startAt:'2026-07-23T14:00', endAt:'2026-07-23T15:00', allDay:false, category:'important', color:'red', linkedTaskId:'t1', note:'确认范围', createdAt:'x', updatedAt:'x', recurrence:null, seriesId:null, occurrenceStartAt:null, isOverridden:false };
+const existing: CalendarEvent = { id:'e1', title:'设计评审', startAt:'2026-07-23T14:00', endAt:'2026-07-23T15:00', allDay:false, category:'important', color:'red', linkedTaskId:'t1', note:'确认范围', createdAt:'x', updatedAt:'x', recurrence:null, seriesId:null, seriesStartAt:null, occurrenceStartAt:null, isOverridden:false };
 // 既有 fixture 的 `color:'red'` 已通不过十六进制校验，编辑保存需要一个合法颜色。
 const editable: CalendarEvent = { ...existing, color:'#F06445' };
 const weeklyRule: Recurrence = { freq:'weekly', interval:1, byDay:['MO'], end:{ kind:'never' } };
-// 2026-08-10 是周一；未被覆盖的实例满足 occurrenceStartAt === startAt。
-const recurring: CalendarEvent = { ...editable, startAt:'2026-08-10T10:00', endAt:'2026-08-10T11:00', recurrence:weeklyRule, seriesId:'e1', occurrenceStartAt:'2026-08-10T10:00' };
+// 系列 dtstart 就是 2026-08-10（周一），所以这条是首个实例。
+const recurring: CalendarEvent = { ...editable, startAt:'2026-08-10T10:00', endAt:'2026-08-10T11:00', recurrence:weeklyRule, seriesId:'e1', seriesStartAt:'2026-08-10T10:00', occurrenceStartAt:'2026-08-10T10:00' };
+// 同一系列的第二次，未被覆盖：occurrenceStartAt 仍等于 startAt，但它不是首个实例。
+const laterOccurrence: CalendarEvent = { ...recurring, startAt:'2026-08-17T10:00', endAt:'2026-08-17T11:00', occurrenceStartAt:'2026-08-17T10:00' };
 
 async function pick(user: ReturnType<typeof userEvent.setup>, select: string, option: string) {
   await user.click(screen.getByRole('combobox', { name:select }));
@@ -246,11 +248,28 @@ describe('EventModal', () => {
     await waitFor(()=>expect(deleteEvent).toHaveBeenCalledWith(editable, 'all'));
   });
 
-  it('shows the this-and-following scope once the instance is overridden', async () => {
+  it('hides the this-and-following scope on the first occurrence of the series', async () => {
+    const user=userEvent.setup();
+    render(<EventModal {...props({ mode:{type:'edit',event:recurring} })} />);
+    await user.click(screen.getByRole('button', { name:'删除日程' }));
+    expect(await screen.findByRole('dialog', { name:'删除重复日程' })).toBeInTheDocument();
+    expect(screen.queryByRole('radio', { name:'此后所有' })).toBeNull();
+  });
+
+  it('shows the this-and-following scope on a later, untouched occurrence', async () => {
+    const user=userEvent.setup();
+    render(<EventModal {...props({ mode:{type:'edit',event:laterOccurrence} })} />);
+    await user.click(screen.getByRole('button', { name:'删除日程' }));
+    expect(await screen.findByRole('radio', { name:'此后所有' })).toBeInTheDocument();
+  });
+
+  // 被覆盖不改变「是第几次」：身份键仍是 dtstart，「此后所有」依旧等价于「全部」。
+  it('keeps the first occurrence narrowed after it has been overridden', async () => {
     const user=userEvent.setup();
     const moved: CalendarEvent={ ...recurring, startAt:'2026-08-11T10:00', endAt:'2026-08-11T11:00', isOverridden:true };
     render(<EventModal {...props({ mode:{type:'edit',event:moved} })} />);
     await user.click(screen.getByRole('button', { name:'删除日程' }));
-    expect(await screen.findByRole('radio', { name:'此后所有' })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name:'删除重复日程' })).toBeInTheDocument();
+    expect(screen.queryByRole('radio', { name:'此后所有' })).toBeNull();
   });
 });
