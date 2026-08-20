@@ -19,6 +19,7 @@ const MIGRATIONS: &[(i64, Migration)] = &[
     (10, migration_10_hex_colors_and_recent_colors),
     (11, migration_11_focus_sessions),
     (12, migration_12_extension_allowed_hosts),
+    (13, migration_13_recurrence),
 ];
 
 pub fn open_database(path: PathBuf) -> Result<Connection> {
@@ -406,6 +407,48 @@ fn migration_12_extension_allowed_hosts(transaction: &Transaction<'_>) -> Result
     Ok(())
 }
 
+// 跨列 CHECK 只能挂在最后添加的那一列上，因为被引用的列必须已经存在。
+// SQLite 不会用新增的 CHECK 回验存量行，而存量行取默认值本就满足约束。
+fn migration_13_recurrence(transaction: &Transaction<'_>) -> Result<()> {
+    transaction.execute_batch(
+        "ALTER TABLE events ADD COLUMN recurrence_freq TEXT;
+         ALTER TABLE events ADD COLUMN recurrence_interval INTEGER NOT NULL DEFAULT 1
+            CHECK (recurrence_interval >= 1);
+         ALTER TABLE events ADD COLUMN recurrence_by_day TEXT NOT NULL DEFAULT '';
+         ALTER TABLE events ADD COLUMN recurrence_until TEXT;
+         ALTER TABLE events ADD COLUMN recurrence_count INTEGER;
+         ALTER TABLE events ADD COLUMN recurrence_final_at TEXT
+            CHECK ((recurrence_until IS NULL OR recurrence_count IS NULL)
+                   AND (recurrence_freq IS NOT NULL
+                        OR (recurrence_until IS NULL
+                            AND recurrence_count IS NULL
+                            AND recurrence_final_at IS NULL)));
+
+         CREATE INDEX idx_events_recurrence_active
+            ON events(recurrence_final_at) WHERE recurrence_freq IS NOT NULL;
+
+         CREATE TABLE IF NOT EXISTS event_exceptions (
+           id TEXT PRIMARY KEY,
+           series_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+           occurrence_start_at TEXT NOT NULL,
+           kind TEXT NOT NULL CHECK (kind IN ('excluded','overridden')),
+           title TEXT,
+           start_at TEXT,
+           end_at TEXT,
+           all_day INTEGER,
+           category TEXT,
+           color TEXT,
+           note TEXT,
+           created_at TEXT NOT NULL,
+           updated_at TEXT NOT NULL
+         );
+         CREATE UNIQUE INDEX IF NOT EXISTS idx_event_exceptions_slot
+            ON event_exceptions(series_id, occurrence_start_at);
+         CREATE INDEX IF NOT EXISTS idx_event_exceptions_moved
+            ON event_exceptions(series_id, start_at);",
+    )
+}
+
 fn migration_10_hex_colors_and_recent_colors(transaction: &Transaction<'_>) -> Result<()> {
     transaction.execute_batch(
         "UPDATE events SET color = CASE lower(color)
@@ -582,7 +625,7 @@ mod tests {
             .unwrap()
             .collect::<Result<_, _>>()
             .unwrap();
-        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
 
         let event_fks: Vec<(String, String, String)> = connection
             .prepare("PRAGMA foreign_key_list(events)")
@@ -669,7 +712,7 @@ mod tests {
             .collect::<Result<_, _>>()
             .expect("versions collect");
 
-        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
         for table in [
             "events",
             "tasks",
@@ -811,5 +854,99 @@ mod tests {
         let _ = std::fs::remove_file(path);
 
         assert_eq!(enabled, 1);
+    }
+
+    #[test]
+    fn migration_13_adds_recurrence_columns_and_exception_table() {
+        let mut connection = Connection::open_in_memory().expect("memory db opens");
+        migrate(&mut connection).expect("migration succeeds");
+
+        let versions: Vec<i64> = connection
+            .prepare("SELECT version FROM schema_migrations ORDER BY version")
+            .expect("version query prepares")
+            .query_map([], |row| row.get(0))
+            .expect("version query runs")
+            .collect::<Result<Vec<_>>>()
+            .expect("versions collect");
+        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
+
+        connection
+            .execute(
+                "INSERT INTO events(id,title,start_at,end_at,all_day,category,color,note,created_at,updated_at)
+                 VALUES ('e1','会议','2026-08-03T10:00','2026-08-03T11:00',0,'work','#0BB783','','t','t')",
+                [],
+            )
+            .expect("single event inserts with recurrence defaults");
+
+        let interval: i64 = connection
+            .query_row(
+                "SELECT recurrence_interval FROM events WHERE id='e1'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("interval defaults");
+        assert_eq!(interval, 1);
+
+        // 单次日程携带重复字段必须被 CHECK 拒绝
+        let dirty = connection.execute("UPDATE events SET recurrence_count=3 WHERE id='e1'", []);
+        assert!(dirty.is_err(), "单次日程不得携带重复字段");
+
+        // until 与 count 互斥
+        connection
+            .execute(
+                "UPDATE events SET recurrence_freq='weekly',recurrence_by_day='MO',recurrence_until='2026-12-31' WHERE id='e1'",
+                [],
+            )
+            .expect("weekly rule applies");
+        let both = connection.execute("UPDATE events SET recurrence_count=5 WHERE id='e1'", []);
+        assert!(both.is_err(), "until 与 count 不得同时存在");
+
+        connection
+            .execute(
+                "INSERT INTO event_exceptions(id,series_id,occurrence_start_at,kind,created_at,updated_at)
+                 VALUES ('x1','e1','2026-08-10T10:00','excluded','t','t')",
+                [],
+            )
+            .expect("exception inserts");
+        let orphan = connection.execute(
+            "INSERT INTO event_exceptions(id,series_id,occurrence_start_at,kind,created_at,updated_at)
+             VALUES ('x2','missing','2026-08-10T10:00','excluded','t','t')",
+            [],
+        );
+        assert!(orphan.is_err(), "例外必须挂在真实系列上");
+    }
+
+    #[test]
+    fn deleting_a_series_cascades_its_exceptions() {
+        let mut connection = Connection::open_in_memory().expect("memory db opens");
+        connection
+            .execute_batch("PRAGMA foreign_keys = ON;")
+            .expect("foreign keys on");
+        migrate(&mut connection).expect("migration succeeds");
+        connection
+            .execute(
+                "INSERT INTO events(id,title,start_at,end_at,all_day,category,color,note,created_at,updated_at,
+                                    recurrence_freq,recurrence_by_day)
+                 VALUES ('e1','会议','2026-08-03T10:00','2026-08-03T11:00',0,'work','#0BB783','','t','t','weekly','MO')",
+                [],
+            )
+            .expect("series inserts");
+        connection
+            .execute(
+                "INSERT INTO event_exceptions(id,series_id,occurrence_start_at,kind,created_at,updated_at)
+                 VALUES ('x1','e1','2026-08-10T10:00','excluded','t','t')",
+                [],
+            )
+            .expect("exception inserts");
+
+        connection
+            .execute("DELETE FROM events WHERE id='e1'", [])
+            .expect("series deletes");
+        let remaining: i64 = connection
+            .query_row("SELECT COUNT(*) FROM event_exceptions", [], |row| {
+                row.get(0)
+            })
+            .expect("count runs");
+        assert_eq!(remaining, 0);
     }
 }
