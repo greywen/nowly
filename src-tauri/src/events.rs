@@ -27,6 +27,11 @@ fn read_event(row: &Row<'_>) -> rusqlite::Result<Event> {
         note: row.get(8)?,
         created_at: row.get(9)?,
         updated_at: row.get(10)?,
+        // temporary: 展开编排接入前，每行都以单次日程形态返回。
+        recurrence: None,
+        series_id: None,
+        occurrence_start_at: None,
+        is_overridden: false,
     })
 }
 
@@ -357,6 +362,7 @@ mod tests {
             color: "#4FC9DA".into(),
             linked_task_id: None,
             note: "".into(),
+            recurrence: None,
         }
     }
 
