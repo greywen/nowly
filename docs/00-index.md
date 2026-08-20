@@ -43,6 +43,7 @@ cargo test --manifest-path src-tauri/Cargo.toml    # Rust 测试
 - [Good 离线单日期选择器设计规格](./superpowers/specs/2026-07-29-good-single-date-picker-design.md)
 - [Good 离线时间选择器设计规格](./superpowers/specs/2026-07-29-good-offline-time-picker-design.md)
 - [Good 离线 Select 设计规格](./superpowers/specs/2026-07-29-good-offline-select-design.md)
+- [Nowly 日程重复规则设计规格](./superpowers/specs/2026-08-20-nowly-recurring-events-design.md)
 
 ## Prototypes
 
@@ -66,3 +67,4 @@ cargo test --manifest-path src-tauri/Cargo.toml    # Rust 测试
 - [Good 离线单日期选择器实施计划](./superpowers/plans/2026-07-29-good-single-date-picker.md)
 - [Good 离线时间选择器实施计划](./superpowers/plans/2026-07-29-good-offline-time-picker.md)
 - [Good 离线 Select 实施计划](./superpowers/plans/2026-07-29-good-offline-select.md)
+- [Nowly 日程重复规则实施计划](./superpowers/plans/2026-08-20-nowly-recurring-events.md)
