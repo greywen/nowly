@@ -1,6 +1,6 @@
 import { X } from 'lucide-react';
 import { type RefObject, useId, useMemo, useState } from 'react';
-import { eventColorPresets, type CalendarEvent, type EventCategory, type EventDraft } from '../calendar/calendar-model';
+import { eventColorPresets, type CalendarEvent, type EditScope, type EventCategory, type EventDraft } from '../calendar/calendar-model';
 import { t } from '../i18n';
 import { ColorPicker } from '../components/ColorPicker';
 import type { HexColor } from '../lib/color';
@@ -18,11 +18,11 @@ type EventModalProps = {
   tasks: MatrixTask[];
   restoreFocusRef?: RefObject<HTMLElement | null>;
   onClose(): void;
-  onSaved(event:CalendarEvent, previousLinkedTaskId:string|null): Promise<void> | void;
+  onSaved(): Promise<void> | void;
   onDeleted(event:CalendarEvent): Promise<void> | void;
   createEvent(draft:EventDraft): Promise<CalendarEvent>;
-  updateEvent(event:CalendarEvent,draft:EventDraft): Promise<CalendarEvent>;
-  deleteEvent(event:CalendarEvent): Promise<void>;
+  updateEvent(event:CalendarEvent,draft:EventDraft,scope:EditScope): Promise<void>;
+  deleteEvent(event:CalendarEvent,scope:EditScope): Promise<void>;
   now?: () => Date;
   recentColors?: HexColor[];
   onRememberCustomColor?: (color: HexColor) => Promise<void> | void;
@@ -46,11 +46,11 @@ export function EventModal({ mode,tasks,restoreFocusRef,onClose,onSaved,onDelete
   async function save(){
     const validation=validateEventForm(form); setErrors(validation); setDialogError(''); if(Object.keys(validation).length)return;
     setBusy(true);
-    try { const draft=toEventDraft(form); const saved=mode.type==='create'?await createEvent(draft):await updateEvent(mode.event,draft); if(onRememberCustomColor&&!eventColorPresets().some(p=>p.value===saved.color))await onRememberCustomColor(saved.color); await onSaved(saved,mode.type==='edit'?mode.event.linkedTaskId:null); onClose(); }
+    try { const draft=toEventDraft(form); if(mode.type==='create')await createEvent(draft); else await updateEvent(mode.event,draft,'all'); if(onRememberCustomColor&&!eventColorPresets().some(p=>p.value===draft.color))await onRememberCustomColor(draft.color); await onSaved(); onClose(); }
     catch(error){ const repositoryError=error as RepositoryError; if(repositoryError.code==='validation_error'&&repositoryError.field)setErrors({[repositoryError.field]:repositoryError.message}); else setDialogError(message(error)); }
     finally{setBusy(false);}
   }
-  async function remove(){ if(mode.type!=='edit')return; setBusy(true); setDialogError(''); try{await deleteEvent(mode.event);await onDeleted(mode.event);setConfirm(null);onClose();}catch(error){setDialogError(message(error));}finally{setBusy(false);} }
+  async function remove(){ if(mode.type!=='edit')return; setBusy(true); setDialogError(''); try{await deleteEvent(mode.event,'all');await onDeleted(mode.event);setConfirm(null);onClose();}catch(error){setDialogError(message(error));}finally{setBusy(false);} }
 
   return <>
     <Dialog title={mode.type==='create'?t('eventModal.createTitle'):t('eventModal.editTitle')} ariaLabelledBy={titleId} isTopLayer={!confirm} restoreFocusRef={restoreFocusRef} onRequestClose={requestClose} className="event-dialog"

@@ -3,7 +3,8 @@ import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { RepositoryProvider } from '../data/RepositoryContext';
 import type { AppSettings, NowlyRepository } from '../data/nowly-repository';
-import type { CalendarEvent, EventDraft } from './calendar-model';
+import type { CalendarEvent, EventDraft, Recurrence } from './calendar-model';
+import { resizeEventEndToDate, shiftEventToDate, shiftEventToHour } from './calendar-view';
 import { useEvents } from './useEvents';
 
 const settings: AppSettings = {
@@ -38,6 +39,20 @@ function event(id: string, linkedTaskId: string | null = null): CalendarEvent {
     seriesId: null,
     occurrenceStartAt: null,
     isOverridden: false
+  };
+}
+
+const weekly: Recurrence = { freq: 'weekly', interval: 1, byDay: ['TH'], end: { kind: 'never' } };
+
+// 系列展开出来的一个实例：`id` 是系列行 id，`occurrenceStartAt` 才是这一次的身份。
+function instance(id: string, slot: string, linkedTaskId: string | null = null): CalendarEvent {
+  return {
+    ...event(id, linkedTaskId),
+    startAt: slot,
+    endAt: `${slot.slice(0, 11)}${String(Number(slot.slice(11, 13)) + 1).padStart(2, '0')}:00`,
+    recurrence: weekly,
+    seriesId: id,
+    occurrenceStartAt: slot
   };
 }
 
@@ -156,7 +171,7 @@ describe('useEvents', () => {
     const repository = createRepository({
       listEventsInRange: vi.fn().mockResolvedValue([existing]),
       createEvent: vi.fn().mockResolvedValue(event('e2')),
-      updateEvent: vi.fn().mockResolvedValue(event('e1')),
+      updateEvent: vi.fn().mockResolvedValue(undefined),
       deleteEvent: vi.fn().mockResolvedValue(undefined)
     });
     const { result } = renderHook(() => useEvents({ now, onRefreshTasks: vi.fn() }), {
@@ -165,8 +180,8 @@ describe('useEvents', () => {
     await waitFor(() => expect(result.current.events.status).toBe('ready'));
 
     await act(() => result.current.createEvent(draft));
-    await act(() => result.current.updateEvent(existing, draft));
-    await act(() => result.current.deleteEvent(existing));
+    await act(() => result.current.updateEvent(existing, draft, 'all'));
+    await act(() => result.current.deleteEvent(existing, 'all'));
     expect(repository.listEventsInRange).toHaveBeenCalledTimes(4);
   });
 
@@ -176,7 +191,7 @@ describe('useEvents', () => {
     const repository = createRepository({
       listEventsInRange: vi.fn().mockResolvedValue([]),
       createEvent: vi.fn().mockResolvedValue(event('created', 't1')),
-      updateEvent: vi.fn().mockResolvedValue(event('updated')),
+      updateEvent: vi.fn().mockResolvedValue(undefined),
       deleteEvent: vi.fn().mockResolvedValue(undefined)
     });
     const { result } = renderHook(() => useEvents({ now, onRefreshTasks }), {
@@ -185,13 +200,17 @@ describe('useEvents', () => {
     await waitFor(() => expect(result.current.events.status).toBe('ready'));
 
     await act(() => result.current.createEvent({ ...draft, linkedTaskId: 't1' }));
-    await act(() => result.current.updateEvent(linked, draft));
-    await act(() => result.current.deleteEvent(linked));
+    await act(() => result.current.updateEvent(linked, draft, 'all'));
+    await act(() => result.current.deleteEvent(linked, 'all'));
     expect(onRefreshTasks).toHaveBeenCalledTimes(3);
 
-    await act(() => result.current.updateEvent(event('plain'), draft));
-    await act(() => result.current.deleteEvent(event('plain')));
-    expect(onRefreshTasks).toHaveBeenCalledTimes(3);
+    // 新建关联：旧实体未关联，只有草稿能告知这次写入会动任务。
+    await act(() => result.current.updateEvent(event('plain'), { ...draft, linkedTaskId: 't2' }, 'all'));
+    expect(onRefreshTasks).toHaveBeenCalledTimes(4);
+
+    await act(() => result.current.updateEvent(event('plain'), draft, 'all'));
+    await act(() => result.current.deleteEvent(event('plain'), 'all'));
+    expect(onRefreshTasks).toHaveBeenCalledTimes(4);
   });
 
   it('rethrows write failures without changing current event data', async () => {
@@ -208,5 +227,127 @@ describe('useEvents', () => {
 
     await expect(act(() => result.current.createEvent(draft))).rejects.toBe(failure);
     expect(result.current.events).toEqual({ status: 'ready', data: [existing] });
+  });
+
+  it('sends the structured target and the chosen scope for every edit scope', async () => {
+    const updateEvent = vi.fn().mockResolvedValue(undefined);
+    const deleteEvent = vi.fn().mockResolvedValue(undefined);
+    const repository = createRepository({ updateEvent, deleteEvent });
+    const { result } = renderHook(() => useEvents({ now, onRefreshTasks: vi.fn() }), {
+      wrapper: wrapper(repository)
+    });
+    await waitFor(() => expect(result.current.events.status).toBe('ready'));
+
+    const first = instance('s1', '2026-07-23T14:00');
+    const later = instance('s1', '2026-07-30T14:00');
+
+    await act(() => result.current.updateEvent(first, draft, 'occurrence'));
+    expect(updateEvent).toHaveBeenLastCalledWith(
+      { id: 's1', occurrenceStartAt: '2026-07-23T14:00' },
+      draft,
+      'occurrence'
+    );
+    await act(() => result.current.updateEvent(later, draft, 'thisAndFollowing'));
+    expect(updateEvent).toHaveBeenLastCalledWith(
+      { id: 's1', occurrenceStartAt: '2026-07-30T14:00' },
+      draft,
+      'thisAndFollowing'
+    );
+    await act(() => result.current.updateEvent(later, draft, 'all'));
+    expect(updateEvent).toHaveBeenLastCalledWith({ id: 's1', occurrenceStartAt: '2026-07-30T14:00' }, draft, 'all');
+
+    await act(() => result.current.deleteEvent(first, 'occurrence'));
+    expect(deleteEvent).toHaveBeenLastCalledWith({ id: 's1', occurrenceStartAt: '2026-07-23T14:00' }, 'occurrence');
+    await act(() => result.current.deleteEvent(later, 'thisAndFollowing'));
+    expect(deleteEvent).toHaveBeenLastCalledWith(
+      { id: 's1', occurrenceStartAt: '2026-07-30T14:00' },
+      'thisAndFollowing'
+    );
+    await act(() => result.current.deleteEvent(later, 'all'));
+    expect(deleteEvent).toHaveBeenLastCalledWith({ id: 's1', occurrenceStartAt: '2026-07-30T14:00' }, 'all');
+  });
+
+  it('keeps single events on a null occurrence slot and the whole-series scope', async () => {
+    const updateEvent = vi.fn().mockResolvedValue(undefined);
+    const deleteEvent = vi.fn().mockResolvedValue(undefined);
+    const repository = createRepository({ updateEvent, deleteEvent });
+    const { result } = renderHook(() => useEvents({ now, onRefreshTasks: vi.fn() }), {
+      wrapper: wrapper(repository)
+    });
+    await waitFor(() => expect(result.current.events.status).toBe('ready'));
+    const single = event('e1');
+
+    await act(() => result.current.updateEvent(single, draft, 'all'));
+    await act(() => result.current.deleteEvent(single, 'all'));
+
+    expect(updateEvent).toHaveBeenCalledWith({ id: 'e1', occurrenceStartAt: null }, draft, 'all');
+    expect(deleteEvent).toHaveBeenCalledWith({ id: 'e1', occurrenceStartAt: null }, 'all');
+    // 目标必须是结构化的两键对象，而不是整条实体：多余字段会被后端拒绝。
+    expect(Object.keys(updateEvent.mock.calls[0][0]).sort()).toEqual(['id', 'occurrenceStartAt']);
+    expect(Object.keys(deleteEvent.mock.calls[0][0]).sort()).toEqual(['id', 'occurrenceStartAt']);
+  });
+
+  it('shows the refetched range after a write instead of anything the mutation returned', async () => {
+    const before = event('e1');
+    const after = { ...event('e1'), title: '改期评审' };
+    const listEventsInRange = vi.fn().mockResolvedValueOnce([before]).mockResolvedValue([after]);
+    const updateEvent = vi.fn().mockResolvedValue(undefined);
+    const repository = createRepository({ listEventsInRange, updateEvent });
+    const { result } = renderHook(() => useEvents({ now, onRefreshTasks: vi.fn() }), {
+      wrapper: wrapper(repository)
+    });
+    await waitFor(() => expect(result.current.events.data).toEqual([before]));
+
+    let returned: unknown = 'unset';
+    await act(async () => {
+      returned = await result.current.updateEvent(before, draft, 'all');
+    });
+
+    expect(returned).toBeUndefined();
+    expect(listEventsInRange).toHaveBeenCalledTimes(2);
+    expect(listEventsInRange).toHaveBeenLastCalledWith({
+      startAt: '2026-07-01T00:00',
+      endAtExclusive: '2026-08-01T00:00'
+    });
+    expect(result.current.events).toEqual({ status: 'ready', data: [after] });
+  });
+
+  it('drags a recurring instance as one occurrence and a single event as the whole series', async () => {
+    const updateEvent = vi.fn().mockResolvedValue(undefined);
+    const repository = createRepository({ updateEvent });
+    const { result } = renderHook(() => useEvents({ now, onRefreshTasks: vi.fn() }), {
+      wrapper: wrapper(repository)
+    });
+    await waitFor(() => expect(result.current.events.status).toBe('ready'));
+
+    const single = event('e1');
+    await act(() => result.current.moveEvent(single, '2026-07-24'));
+    expect(updateEvent).toHaveBeenLastCalledWith(
+      { id: 'e1', occurrenceStartAt: null },
+      shiftEventToDate(single, '2026-07-24'),
+      'all'
+    );
+
+    const occurrence = instance('s1', '2026-07-23T14:00');
+    await act(() => result.current.moveEvent(occurrence, '2026-07-24'));
+    expect(updateEvent).toHaveBeenLastCalledWith(
+      { id: 's1', occurrenceStartAt: '2026-07-23T14:00' },
+      shiftEventToDate(occurrence, '2026-07-24'),
+      'occurrence'
+    );
+
+    await act(() => result.current.moveEventToHour(occurrence, '2026-07-23', 9));
+    expect(updateEvent).toHaveBeenLastCalledWith(
+      { id: 's1', occurrenceStartAt: '2026-07-23T14:00' },
+      shiftEventToHour(occurrence, '2026-07-23', 9),
+      'occurrence'
+    );
+
+    await act(() => result.current.resizeEvent(occurrence, '2026-07-25'));
+    expect(updateEvent).toHaveBeenLastCalledWith(
+      { id: 's1', occurrenceStartAt: '2026-07-23T14:00' },
+      resizeEventEndToDate(occurrence, '2026-07-25'),
+      'occurrence'
+    );
   });
 });

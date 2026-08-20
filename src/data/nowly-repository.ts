@@ -1,4 +1,10 @@
-import type { CalendarEvent, EventDraft, EventRange } from '../calendar/calendar-model';
+import type {
+  CalendarEvent,
+  EditScope,
+  EventDraft,
+  EventRange,
+  EventTarget
+} from '../calendar/calendar-model';
 import type {
   KanbanCard,
   KanbanCardDraft,
@@ -115,8 +121,8 @@ export type RepositoryError = {
 export type NowlyRepository = {
   listEventsInRange(range: EventRange): Promise<CalendarEvent[]>;
   createEvent(draft: EventDraft): Promise<CalendarEvent>;
-  updateEvent(id: string, draft: EventDraft): Promise<CalendarEvent>;
-  deleteEvent(id: string): Promise<void>;
+  updateEvent(target: EventTarget, draft: EventDraft, scope: EditScope): Promise<void>;
+  deleteEvent(target: EventTarget, scope: EditScope): Promise<void>;
   listTasks(): Promise<MatrixTask[]>;
   createTask(draft: TaskDraft): Promise<MatrixTask>;
   updateTask(id: string, draft: TaskDraft): Promise<MatrixTask>;

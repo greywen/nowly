@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNowlyRepository } from '../data/RepositoryContext';
 import type { WeekStart } from '../lib/date';
-import type { CalendarEvent, CalendarView, EventDraft } from './calendar-model';
+import type { CalendarEvent, CalendarView, EditScope, EventDraft, EventTarget } from './calendar-model';
 import { monthRange, rangeFor, resizeEventEndToDate, shiftEventToDate, shiftEventToHour } from './calendar-view';
 import { t } from '../i18n';
 
@@ -27,6 +27,18 @@ function pad(value: number) {
 
 function isoOf(date: Date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+// The command layer identifies an instance structurally; `occurrenceKey` is a
+// render-only key and is never sent back.
+function targetOf(event: CalendarEvent): EventTarget {
+  return { id: event.id, occurrenceStartAt: event.occurrenceStartAt };
+}
+
+// Dragging moves the instance the user grabbed, not the series behind it.
+// Single events have no slot, so the whole-series scope is their only legal one.
+function dragScope(event: CalendarEvent): EditScope {
+  return event.occurrenceStartAt === null ? 'all' : 'occurrence';
 }
 
 export function useEvents({
@@ -171,17 +183,16 @@ export function useEvents({
   );
 
   const updateEvent = useCallback(
-    async (event: CalendarEvent, draft: EventDraft) => {
-      const updated = await repository.updateEvent(event.id, draft);
-      await refreshAfterWrite(event.linkedTaskId !== null || updated.linkedTaskId !== null);
-      return updated;
+    async (event: CalendarEvent, draft: EventDraft, scope: EditScope) => {
+      await repository.updateEvent(targetOf(event), draft, scope);
+      await refreshAfterWrite(event.linkedTaskId !== null || draft.linkedTaskId !== null);
     },
     [refreshAfterWrite, repository]
   );
 
   const deleteEvent = useCallback(
-    async (event: CalendarEvent) => {
-      await repository.deleteEvent(event.id);
+    async (event: CalendarEvent, scope: EditScope) => {
+      await repository.deleteEvent(targetOf(event), scope);
       await refreshAfterWrite(event.linkedTaskId !== null);
     },
     [refreshAfterWrite, repository]
@@ -189,9 +200,10 @@ export function useEvents({
 
   const moveEvent = useCallback(
     async (event: CalendarEvent, isoDate: string) => {
-      if (event.startAt.slice(0, 10) === isoDate) return event;
-      const updated = await repository.updateEvent(event.id, shiftEventToDate(event, isoDate));
-      const refreshTasks = event.linkedTaskId !== null || updated.linkedTaskId !== null;
+      if (event.startAt.slice(0, 10) === isoDate) return;
+      const draft = shiftEventToDate(event, isoDate);
+      await repository.updateEvent(targetOf(event), draft, dragScope(event));
+      const refreshTasks = event.linkedTaskId !== null || draft.linkedTaskId !== null;
       const [targetYear, targetMonth] = isoDate.split('-').map(Number);
       const outsideVisibleMonth =
         state.view === 'month' &&
@@ -207,21 +219,19 @@ export function useEvents({
       } else {
         await refreshAfterWrite(refreshTasks);
       }
-      return updated;
     },
     [onRefreshTasks, refreshAfterWrite, repository, state]
   );
 
   const moveEventToHour = useCallback(
     async (event: CalendarEvent, isoDate: string, startHour: number) => {
-      if (event.allDay) return event;
+      if (event.allDay) return;
       const draft = shiftEventToHour(event, isoDate, startHour);
       if (draft.startAt === event.startAt.slice(0, 16) && draft.endAt === event.endAt.slice(0, 16)) {
-        return event;
+        return;
       }
-      const updated = await repository.updateEvent(event.id, draft);
-      await refreshAfterWrite(event.linkedTaskId !== null || updated.linkedTaskId !== null);
-      return updated;
+      await repository.updateEvent(targetOf(event), draft, dragScope(event));
+      await refreshAfterWrite(event.linkedTaskId !== null || draft.linkedTaskId !== null);
     },
     [refreshAfterWrite, repository]
   );
@@ -231,10 +241,10 @@ export function useEvents({
       // Stretch or shrink the event so it ends on the dropped day; the end date
       // is clamped so it never lands before the start date.
       const endDate = endIsoDate < event.startAt.slice(0, 10) ? event.startAt.slice(0, 10) : endIsoDate;
-      if (endDate === event.endAt.slice(0, 10)) return event;
-      const updated = await repository.updateEvent(event.id, resizeEventEndToDate(event, endDate));
-      await refreshAfterWrite(event.linkedTaskId !== null || updated.linkedTaskId !== null);
-      return updated;
+      if (endDate === event.endAt.slice(0, 10)) return;
+      const draft = resizeEventEndToDate(event, endDate);
+      await repository.updateEvent(targetOf(event), draft, dragScope(event));
+      await refreshAfterWrite(event.linkedTaskId !== null || draft.linkedTaskId !== null);
     },
     [refreshAfterWrite, repository]
   );
