@@ -282,6 +282,40 @@ impl Iterator for OccurrenceCursor {
     }
 }
 
+/// 返回该系列落在 `[window_start, window_end_exclusive)` 内的槽位起始时刻，升序。
+///
+/// 上界 `final_at` 按**闭区间**判定：归一化已把 `count = N` 换算成第 N 个槽位的时刻，
+/// 用半开区间会丢掉最后一次实例。窗口右端点则按 R4 半开。
+/// 游标的下界只有日期粒度，因此同日更早时刻的槽位在此再过滤一次。
+pub fn expand(
+    series: &Series,
+    window_start: NaiveDateTime,
+    window_end_exclusive: NaiveDateTime,
+) -> Vec<NaiveDateTime> {
+    let mut out = Vec::new();
+    if window_start >= window_end_exclusive {
+        return out;
+    }
+    // 无限系列下游标永不返回 None，截断必须发生在收集过程中。
+    for value in OccurrenceCursor::new(series, Some(window_start.date())) {
+        if let Some(final_at) = series.final_at {
+            if value > final_at {
+                break;
+            }
+        }
+        if value >= window_end_exclusive {
+            break;
+        }
+        if value >= window_start {
+            out.push(value);
+            if out.len() >= MAX_WINDOW_OCCURRENCES {
+                break;
+            }
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -426,5 +460,269 @@ mod tests {
                 dt("2026-08-26T10:00")
             ]
         );
+    }
+
+    /// 参考实现专用的月份平移，刻意与生产侧 `add_months` 用不同的算式表达，
+    /// 以免两边共享同一个差一错误。
+    fn naive_shift_month(date: NaiveDate, months: i64) -> Option<NaiveDate> {
+        let shifted = i64::from(date.month()) - 1 + months;
+        let year = i64::from(date.year()) + shifted.div_euclid(12);
+        let month = shifted.rem_euclid(12) + 1;
+        NaiveDate::from_ymd_opt(
+            i32::try_from(year).ok()?,
+            u32::try_from(month).ok()?,
+            date.day(),
+        )
+    }
+
+    fn naive_shift_year(date: NaiveDate, years: i64) -> Option<NaiveDate> {
+        NaiveDate::from_ymd_opt(
+            i32::try_from(i64::from(date.year()) + years).ok()?,
+            date.month(),
+            date.day(),
+        )
+    }
+
+    /// 朴素参考实现：自 `dtstart` 起逐个周期推进到窗口，不做任何跳跃定位，
+    /// 也不复用 `OccurrenceCursor` 或生产侧的日期推进助手——复用了差分就退化成
+    /// 自己跟自己比。仅用于交叉验证生产实现，永远不要在产品代码中使用。
+    fn naive_expand(
+        series: &Series,
+        window_start: NaiveDateTime,
+        window_end: NaiveDateTime,
+    ) -> Vec<NaiveDateTime> {
+        let mut out = Vec::new();
+        if window_start >= window_end {
+            return out;
+        }
+        let start_date = series.dtstart.date();
+        let time = series.dtstart.time();
+        let interval = i64::from(series.interval.max(1));
+        let mut offsets: Vec<i64> = series
+            .by_day
+            .iter()
+            .map(|day| i64::from(day.num_days_from_monday()))
+            .collect();
+        offsets.sort_unstable();
+        offsets.dedup();
+        if offsets.is_empty() {
+            offsets.push(i64::from(start_date.weekday().num_days_from_monday()));
+        }
+        let week_anchor =
+            start_date - Duration::days(i64::from(start_date.weekday().num_days_from_monday()));
+
+        let mut done = false;
+        for period in 0..(MAX_SERIES_OCCURRENCES as i64) {
+            let dates: Vec<NaiveDate> = match series.freq {
+                Freq::Daily => start_date
+                    .checked_add_signed(Duration::days(period * interval))
+                    .into_iter()
+                    .collect(),
+                Freq::Weekly => offsets
+                    .iter()
+                    .filter_map(|offset| {
+                        week_anchor
+                            .checked_add_signed(Duration::days(period * interval * 7 + offset))
+                    })
+                    .collect(),
+                Freq::Monthly => naive_shift_month(start_date, period * interval)
+                    .into_iter()
+                    .collect(),
+                Freq::Yearly => naive_shift_year(start_date, period * interval)
+                    .into_iter()
+                    .collect(),
+            };
+            for date in dates {
+                if date < start_date {
+                    continue;
+                }
+                let value = date.and_time(time);
+                if let Some(final_at) = series.final_at {
+                    if value > final_at {
+                        done = true;
+                        break;
+                    }
+                }
+                if value >= window_end {
+                    done = true;
+                    break;
+                }
+                if value >= window_start {
+                    out.push(value);
+                    if out.len() >= MAX_WINDOW_OCCURRENCES {
+                        done = true;
+                        break;
+                    }
+                }
+            }
+            if done {
+                break;
+            }
+        }
+        out
+    }
+
+    const DIFF_STARTS: [&str; 4] = [
+        "2020-01-31T09:00",
+        "2024-02-29T18:30",
+        "2026-08-03T10:00",
+        "2026-12-31T23:00",
+    ];
+    const DIFF_WINDOWS: [(&str, &str); 8] = [
+        ("2026-08-01T00:00", "2026-09-01T00:00"),
+        ("2026-01-01T00:00", "2027-01-01T00:00"),
+        ("2020-01-01T00:00", "2020-02-01T00:00"),
+        ("2030-06-01T00:00", "2030-06-08T00:00"),
+        // 起点恰好压在某些系列的槽位时刻上
+        ("2026-08-03T10:00", "2026-08-31T10:00"),
+        // 起点落在两个槽位之间（同日、比槽位时刻早/晚各覆盖一次）
+        ("2026-08-03T12:00", "2026-08-10T09:30"),
+        // 起点早于全部 dtstart
+        ("2019-01-01T00:00", "2020-02-15T12:00"),
+        // 起点晚于带结束条件系列的 final_at
+        ("2028-01-01T00:00", "2028-03-01T00:00"),
+    ];
+
+    fn assert_expand_matches_naive(s: &Series) -> usize {
+        let mut checked = 0;
+        for (ws, we) in DIFF_WINDOWS {
+            let expected = naive_expand(s, dt(ws), dt(we));
+            let actual = expand(s, dt(ws), dt(we));
+            assert_eq!(actual, expected, "shape={s:?} window={ws}..{we}");
+            checked += 1;
+        }
+        checked
+    }
+
+    #[test]
+    fn expand_matches_the_naive_reference_across_many_shapes() {
+        let freqs = [Freq::Daily, Freq::Weekly, Freq::Monthly, Freq::Yearly];
+        let intervals = [1u32, 2, 3, 7];
+        let day_sets = ["MO", "MO,FR", "TU,WE,TH", "SA,SU"];
+        let ends = [
+            None,
+            Some("2027-06-30T23:59"),
+            Some("2026-08-15T00:00"),
+            // 以下三个刻意压在各 dtstart 的槽位时刻上，用来暴露闭区间/半开区间之差。
+            Some("2026-08-10T10:00"),
+            Some("2026-03-31T09:00"),
+            Some("2032-02-29T18:30"),
+        ];
+
+        let mut checked = 0;
+        for start in DIFF_STARTS {
+            for freq in freqs {
+                for interval in intervals {
+                    for days in day_sets {
+                        for end in ends {
+                            let s = Series {
+                                freq,
+                                interval,
+                                by_day: parse_by_day(days).expect("valid days"),
+                                dtstart: dt(start),
+                                final_at: end.map(dt),
+                            };
+                            checked += assert_expand_matches_naive(&s);
+                        }
+                    }
+                }
+            }
+        }
+        assert!(checked >= 1000, "差分覆盖不足：{checked}");
+    }
+
+    #[test]
+    fn expand_matches_the_naive_reference_for_overflow_shapes() {
+        // R2：monthly + 31 日、yearly + 2 月 29 日的跳过语义，在跳跃与朴素两侧必须一致。
+        let mut checked = 0;
+        for (freq, start) in [
+            (Freq::Monthly, "2020-01-31T09:00"),
+            (Freq::Monthly, "2026-08-31T07:15"),
+            (Freq::Yearly, "2024-02-29T18:30"),
+            (Freq::Yearly, "2020-02-29T00:00"),
+        ] {
+            for interval in [1u32, 2, 3, 4, 5, 7, 12] {
+                for end in [None, Some("2035-01-01T00:00"), Some("2032-02-29T18:30")] {
+                    let s = Series {
+                        freq,
+                        interval,
+                        by_day: Vec::new(),
+                        dtstart: dt(start),
+                        final_at: end.map(dt),
+                    };
+                    checked += assert_expand_matches_naive(&s);
+                }
+            }
+        }
+        assert!(checked >= 100, "溢出差分覆盖不足：{checked}");
+    }
+
+    #[test]
+    fn expand_treats_the_window_as_half_open() {
+        let s = series(Freq::Daily, 1, "", "2026-08-03T10:00");
+        let result = expand(&s, dt("2026-08-03T10:00"), dt("2026-08-05T10:00"));
+        assert_eq!(result, vec![dt("2026-08-03T10:00"), dt("2026-08-04T10:00")]);
+    }
+
+    #[test]
+    fn expand_stops_at_final_at() {
+        let mut s = series(Freq::Daily, 1, "", "2026-08-03T10:00");
+        s.final_at = Some(dt("2026-08-04T10:00"));
+        let result = expand(&s, dt("2026-08-01T00:00"), dt("2026-09-01T00:00"));
+        assert_eq!(result, vec![dt("2026-08-03T10:00"), dt("2026-08-04T10:00")]);
+    }
+
+    #[test]
+    fn expand_returns_exactly_count_slots() {
+        // 归一化把 count = 5 换算成第 5 个槽位的时刻写入 final_at，
+        // 上界为闭区间时才恰好还剩 5 个；写成半开会丢掉最后一次。
+        let mut s = series(Freq::Weekly, 2, "MO,FR", "2026-08-03T10:00");
+        let expected: Vec<NaiveDateTime> =
+            naive_expand(&s, dt("2026-08-03T10:00"), dt("2030-01-01T00:00"))
+                .into_iter()
+                .take(5)
+                .collect();
+        assert_eq!(expected.len(), 5);
+        s.final_at = Some(expected[4]);
+        assert_eq!(
+            expand(&s, dt("2020-01-01T00:00"), dt("2030-01-01T00:00")),
+            expected
+        );
+    }
+
+    #[test]
+    fn expand_excludes_the_last_slot_when_it_equals_the_window_end() {
+        let mut s = series(Freq::Daily, 1, "", "2026-08-03T10:00");
+        s.final_at = Some(dt("2026-08-05T10:00"));
+        assert_eq!(
+            expand(&s, dt("2026-08-01T00:00"), dt("2026-08-05T10:00")),
+            vec![dt("2026-08-03T10:00"), dt("2026-08-04T10:00")]
+        );
+        assert_eq!(
+            expand(&s, dt("2026-08-01T00:00"), dt("2026-08-05T10:01")).len(),
+            3
+        );
+    }
+
+    #[test]
+    fn expand_drops_same_day_slots_earlier_than_the_window_start() {
+        // 游标下界是日期粒度，会吐出 08-05T10:00；时刻级过滤必须把它挡掉。
+        let s = series(Freq::Daily, 1, "", "2026-08-03T10:00");
+        let result = expand(&s, dt("2026-08-05T12:00"), dt("2026-08-07T12:00"));
+        assert_eq!(result, vec![dt("2026-08-06T10:00"), dt("2026-08-07T10:00")]);
+    }
+
+    #[test]
+    fn expand_returns_nothing_for_an_empty_window() {
+        let s = series(Freq::Daily, 1, "", "2026-08-03T10:00");
+        assert!(expand(&s, dt("2026-08-05T10:00"), dt("2026-08-05T10:00")).is_empty());
+        assert!(expand(&s, dt("2026-08-06T10:00"), dt("2026-08-05T10:00")).is_empty());
+    }
+
+    #[test]
+    fn expand_truncates_at_the_window_cap() {
+        let s = series(Freq::Daily, 1, "", "2000-01-01T10:00");
+        let result = expand(&s, dt("2000-01-01T00:00"), dt("2100-01-01T00:00"));
+        assert_eq!(result.len(), MAX_WINDOW_OCCURRENCES);
     }
 }
