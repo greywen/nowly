@@ -4,6 +4,7 @@ declare global { interface Window { __NOWLY_TEST_CALLS__: Array<{command:string;
 
 test.beforeEach(async ({page})=>{
  await page.addInitScript(()=>{
+  try{localStorage.setItem('nowly:onboarding-seen','true');}catch{/* storage disabled */}
   const now='2026-07-23T09:42:00.000Z'; let sequence=1; let events:any[]=[];
   let tasks:any[]=[{id:'t1',title:'发布 Nowly v0.1',quadrant:'important_urgent',dueAt:null,priority:1,completed:false,linkedEventId:null,note:'',createdAt:now,updatedAt:now}];
   const settings={wallpaperEnabled:false,launchAtLogin:false,targetMonitorId:null,density:'balanced',weekStart:'monday',dateFormat:'localized',showWeekends:true,calendarEnabled:true,matrixEnabled:true,notesEnabled:true};
@@ -12,8 +13,8 @@ test.beforeEach(async ({page})=>{
    window.__NOWLY_TEST_CALLS__.push({command,args});
    if(command==='list_events_in_range')return events.filter(e=>e.startAt>=args.range.startAt&&e.startAt<args.range.endAtExclusive);
    if(command==='create_event'){const e={id:`e${sequence++}`,...args.draft,createdAt:now,updatedAt:now};events.push(e);if(e.linkedTaskId)tasks=tasks.map(t=>t.id===e.linkedTaskId?{...t,linkedEventId:e.id}:t);return e;}
-   if(command==='update_event'){const old=events.find(e=>e.id===args.id);const updated={...old,...args.draft,updatedAt:now};events=events.map(e=>e.id===args.id?updated:e);return updated;}
-   if(command==='delete_event'){events=events.filter(e=>e.id!==args.id);return null;}
+   if(command==='update_event'){const id=args.target?.id??args.id;const old=events.find(e=>e.id===id);const updated={...old,...args.draft,updatedAt:now};events=events.map(e=>e.id===id?updated:e);return updated;}
+   if(command==='delete_event'){const id=args.target?.id??args.id;events=events.filter(e=>e.id!==id);return null;}
    if(command==='list_tasks')return tasks;
    if(command==='create_task'){const t={id:`t${sequence++}`,...args.draft,createdAt:now,updatedAt:now};tasks.push(t);return t;}
    if(command==='update_task'){const old=tasks.find(t=>t.id===args.id);const updated={...old,...args.draft,updatedAt:now};tasks=tasks.map(t=>t.id===args.id?updated:t);return updated;}
