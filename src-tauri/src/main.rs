@@ -17,6 +17,7 @@ mod module_state;
 mod net;
 mod monitors;
 mod notes;
+mod recurrence;
 mod settings;
 mod tasks;
 mod wallpaper;
