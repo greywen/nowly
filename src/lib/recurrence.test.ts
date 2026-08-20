@@ -23,12 +23,13 @@ const base: CalendarEvent = {
   updatedAt: 't',
   recurrence: null,
   seriesId: null,
+  seriesStartAt: null,
   occurrenceStartAt: null,
   isOverridden: false
 };
 
 function instance(slot: string, overrides: Partial<CalendarEvent> = {}): CalendarEvent {
-  return { ...base, seriesId: base.id, occurrenceStartAt: slot, startAt: slot, ...overrides };
+  return { ...base, seriesId: base.id, seriesStartAt: base.startAt, occurrenceStartAt: slot, startAt: slot, ...overrides };
 }
 
 describe('weekdayOf', () => {

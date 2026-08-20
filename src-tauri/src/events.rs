@@ -79,6 +79,7 @@ fn read_series_row(row: &Row<'_>) -> rusqlite::Result<SeriesRow> {
             updated_at: row.get(10)?,
             recurrence: None,
             series_id: None,
+            series_start_at: None,
             occurrence_start_at: None,
             is_overridden: false,
         },
@@ -93,6 +94,7 @@ fn read_event(row: &Row<'_>) -> rusqlite::Result<Event> {
     let mut event = series_row.event;
     if series_row.rule.is_some() {
         event.series_id = Some(event.id.clone());
+        event.series_start_at = Some(event.start_at.clone());
         event.occurrence_start_at = Some(event.start_at.clone());
         event.recurrence = series_row.rule;
     }
@@ -106,6 +108,8 @@ fn instance_from(row: &SeriesRow, slot: NaiveDateTime, duration: Duration) -> Ev
     event.end_at = (slot + duration).format(LOCAL_MINUTE_FORMAT).to_string();
     event.recurrence = row.rule.clone();
     event.series_id = Some(row.event.id.clone());
+    // 系列行的 `start_at` 就是 dtstart；实例的 `start_at` 已被平移，必须从行上取。
+    event.series_start_at = Some(row.event.start_at.clone());
     event.occurrence_start_at = Some(event.start_at.clone());
     event.is_overridden = false;
     event
@@ -126,6 +130,7 @@ fn overridden_instance(
     event.note = fields.note.clone();
     event.recurrence = row.rule.clone();
     event.series_id = Some(row.event.id.clone());
+    event.series_start_at = Some(row.event.start_at.clone());
     event.occurrence_start_at = Some(slot.to_owned());
     event.is_overridden = true;
     event
@@ -1165,6 +1170,109 @@ mod tests {
                 "2026-08-31T10:00"
             ]
         );
+    }
+
+    /// 前端靠 `occurrence_start_at == series_start_at` 判定首个实例。
+    /// `occurrence_start_at == start_at` 在所有未被覆盖的实例上都成立，与「是不是第一次」无关，
+    /// 因此系列的 dtstart 必须由后端单独暴露。
+    #[test]
+    fn every_instance_carries_the_series_dtstart() {
+        let connection = seeded();
+        let events = august(&connection);
+        assert_eq!(events.len(), 5);
+        for event in &events {
+            assert_eq!(event.series_start_at.as_deref(), Some("2026-08-03T10:00"));
+        }
+        // 首个实例：两者相等。
+        assert_eq!(
+            events[0].occurrence_start_at.as_deref(),
+            events[0].series_start_at.as_deref()
+        );
+        // 其后每一次：槽位在推进，dtstart 不动。
+        for event in &events[1..] {
+            assert_ne!(
+                event.occurrence_start_at.as_deref(),
+                event.series_start_at.as_deref()
+            );
+            assert_eq!(event.occurrence_start_at.as_deref(), Some(event.start_at.as_str()));
+        }
+
+        // 系列行自身读出来也是它的首个实例。
+        let series = event_by_id(&connection, "s1")
+            .expect("query runs")
+            .expect("series present");
+        assert_eq!(series.series_start_at.as_deref(), Some("2026-08-03T10:00"));
+        assert_eq!(
+            series.occurrence_start_at.as_deref(),
+            series.series_start_at.as_deref()
+        );
+    }
+
+    #[test]
+    fn overridden_instances_still_report_the_series_dtstart() {
+        let connection = seeded();
+        // 首个实例被挪走：它的身份键仍是 dtstart，所以两者仍应相等。
+        upsert_overridden(
+            &connection,
+            "s1",
+            "2026-08-03T10:00",
+            &override_fields("首次改期", "2026-08-04T14:00", "2026-08-04T15:00"),
+            "t",
+        )
+        .expect("override first");
+        // 第三次被挪走：dtstart 不变，身份键仍是它自己的槽位。
+        upsert_overridden(
+            &connection,
+            "s1",
+            "2026-08-17T10:00",
+            &override_fields("挪到下午", "2026-08-17T15:00", "2026-08-17T16:00"),
+            "t",
+        )
+        .expect("override later");
+        let events = august(&connection);
+        for event in &events {
+            assert_eq!(event.series_start_at.as_deref(), Some("2026-08-03T10:00"));
+        }
+        let first = events
+            .iter()
+            .find(|event| event.occurrence_start_at.as_deref() == Some("2026-08-03T10:00"))
+            .expect("overridden first present");
+        assert!(first.is_overridden);
+        assert_eq!(first.start_at, "2026-08-04T14:00");
+        assert_eq!(
+            first.occurrence_start_at.as_deref(),
+            first.series_start_at.as_deref()
+        );
+        let later = events
+            .iter()
+            .find(|event| event.occurrence_start_at.as_deref() == Some("2026-08-17T10:00"))
+            .expect("overridden later present");
+        assert!(later.is_overridden);
+        assert_ne!(
+            later.occurrence_start_at.as_deref(),
+            later.series_start_at.as_deref()
+        );
+    }
+
+    #[test]
+    fn single_events_have_no_series_dtstart() {
+        let mut connection = database();
+        let created = create(&mut connection, draft()).expect("create runs");
+        assert!(created.series_start_at.is_none());
+        let fetched = event_by_id(&connection, &created.id)
+            .expect("query runs")
+            .expect("event present");
+        assert!(fetched.series_start_at.is_none());
+        let listed = list_in_range(
+            &connection,
+            &EventRange {
+                start_at: "2026-07-01T00:00".into(),
+                end_at_exclusive: "2026-08-01T00:00".into(),
+            },
+        )
+        .expect("range query runs");
+        assert_eq!(listed.len(), 1);
+        assert!(listed[0].series_start_at.is_none());
     }
 
     #[test]

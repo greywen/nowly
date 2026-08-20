@@ -32,6 +32,7 @@ function event(id: string, startAt: string, endAt: string, allDay = false): Cale
     updatedAt: '2026-07-01T00:00:00Z',
     recurrence: null,
     seriesId: null,
+    seriesStartAt: null,
     occurrenceStartAt: null,
     isOverridden: false
   };

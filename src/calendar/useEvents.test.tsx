@@ -37,6 +37,7 @@ function event(id: string, linkedTaskId: string | null = null): CalendarEvent {
     createdAt: '2026-07-23T09:00:00Z',
     updatedAt: '2026-07-23T09:00:00Z',
     seriesId: null,
+    seriesStartAt: null,
     occurrenceStartAt: null,
     isOverridden: false
   };
@@ -52,6 +53,7 @@ function instance(id: string, slot: string, linkedTaskId: string | null = null):
     endAt: `${slot.slice(0, 11)}${String(Number(slot.slice(11, 13)) + 1).padStart(2, '0')}:00`,
     recurrence: weekly,
     seriesId: id,
+    seriesStartAt: draft.startAt,
     occurrenceStartAt: slot
   };
 }
