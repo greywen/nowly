@@ -80,7 +80,8 @@ export function toEventDraft(form: EventFormDraft): EventDraft {
     category: form.category,
     color: normalizeHexColor(form.color) as EventColor,
     linkedTaskId: form.linkedTaskId,
-    note: form.note
+    note: form.note,
+    recurrence: null
   };
 }
 

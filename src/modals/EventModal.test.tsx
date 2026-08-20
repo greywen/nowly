@@ -7,7 +7,7 @@ import { EventModal } from './EventModal';
 
 const now = () => new Date(2026, 6, 23, 9, 42);
 const task: MatrixTask = { id:'t1', title:'发布 Nowly', quadrant:'important_urgent', dueAt:null, priority:1, completed:false, linkedEventId:null, note:'', createdAt:'x', updatedAt:'x' };
-const existing: CalendarEvent = { id:'e1', title:'设计评审', startAt:'2026-07-23T14:00', endAt:'2026-07-23T15:00', allDay:false, category:'important', color:'red', linkedTaskId:'t1', note:'确认范围', createdAt:'x', updatedAt:'x' };
+const existing: CalendarEvent = { id:'e1', title:'设计评审', startAt:'2026-07-23T14:00', endAt:'2026-07-23T15:00', allDay:false, category:'important', color:'red', linkedTaskId:'t1', note:'确认范围', createdAt:'x', updatedAt:'x', recurrence:null, seriesId:null, occurrenceStartAt:null, isOverridden:false };
 
 function props(overrides: Record<string, unknown> = {}) {
   return {

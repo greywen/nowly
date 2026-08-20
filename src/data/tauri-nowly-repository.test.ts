@@ -21,7 +21,8 @@ describe('tauriNowlyRepository', () => {
       category: 'work' as const,
       color: 'blue' as const,
       linkedTaskId: null,
-      note: ''
+      note: '',
+      recurrence: null
     };
 
     const taskDraft = {

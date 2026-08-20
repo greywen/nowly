@@ -29,7 +29,11 @@ const linkedEvent: CalendarEvent = {
   linkedTaskId: 't1',
   note: '',
   createdAt: '2026-07-20T09:00:00Z',
-  updatedAt: '2026-07-20T09:00:00Z'
+  updatedAt: '2026-07-20T09:00:00Z',
+  recurrence: null,
+  seriesId: null,
+  occurrenceStartAt: null,
+  isOverridden: false
 };
 
 describe('TaskRow', () => {

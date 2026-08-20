@@ -24,7 +24,8 @@ const draft: EventDraft = {
   category: 'work',
   color: 'blue',
   linkedTaskId: null,
-  note: ''
+  note: '',
+  recurrence: null
 };
 
 function event(id: string, linkedTaskId: string | null = null): CalendarEvent {
@@ -33,7 +34,10 @@ function event(id: string, linkedTaskId: string | null = null): CalendarEvent {
     ...draft,
     linkedTaskId,
     createdAt: '2026-07-23T09:00:00Z',
-    updatedAt: '2026-07-23T09:00:00Z'
+    updatedAt: '2026-07-23T09:00:00Z',
+    seriesId: null,
+    occurrenceStartAt: null,
+    isOverridden: false
   };
 }
 
