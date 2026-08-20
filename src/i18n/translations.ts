@@ -374,6 +374,9 @@ export const translations: Record<Language, Record<string, string>> = {
 
     // NotesWidget
     'notesWidget.viewAll': '查看全部便签',
+    'notesWidget.switchView': '切换便签展示方式',
+    'notesWidget.viewList': '列表视图',
+    'notesWidget.viewBoard': '便利贴视图',
     'notesWidget.newNote': '新增便签',
     'notesWidget.errorLoad': '无法读取便签。',
     'notesWidget.retryLoad': '重试读取便签',
@@ -892,6 +895,9 @@ export const translations: Record<Language, Record<string, string>> = {
 
     // NotesWidget
     'notesWidget.viewAll': 'View all notes',
+    'notesWidget.switchView': 'Switch notes layout',
+    'notesWidget.viewList': 'List view',
+    'notesWidget.viewBoard': 'Sticky board view',
     'notesWidget.newNote': 'New note',
     'notesWidget.errorLoad': 'Unable to load notes.',
     'notesWidget.retryLoad': 'Retry loading notes',

@@ -1,5 +1,5 @@
-import { Plus } from 'lucide-react';
-import type { Note } from './notes-model';
+import { LayoutGrid, List, Plus } from 'lucide-react';
+import { DEFAULT_NOTES_VIEW, notesViewOptions, type Note, type NotesViewMode } from './notes-model';
 import { colorStyle } from '../lib/color';
 import { t } from '../i18n';
 
@@ -9,16 +9,25 @@ type NotesWidgetProps = {
   notes: Note[];
   status: LoadStatus;
   errorMessage?: string;
+  view?: NotesViewMode;
+  onSetView?: (view: NotesViewMode) => void;
   onRetry: () => void;
   onCreateNote: () => void;
   onOpenNote: (note: Note, trigger: HTMLElement) => void;
   onViewAll: (trigger: HTMLElement) => void;
 };
 
+const viewIcons = { list: List, board: LayoutGrid } as const;
+// Sticky notes hang at a few fixed angles so the board reads as paper instead
+// of a card grid. The tilt is static; nothing animates.
+const BOARD_TILTS = 4;
+
 export function NotesWidget({
   notes,
   status,
   errorMessage,
+  view = DEFAULT_NOTES_VIEW,
+  onSetView,
   onRetry,
   onCreateNote,
   onOpenNote,
@@ -30,6 +39,26 @@ export function NotesWidget({
     <div className="widget-content">
       <div className="card-header card-header--actions-only">
         <div className="toolbar-actions">
+          {onSetView ? (
+            <div className="view-switch" role="group" aria-label={t('notesWidget.switchView')}>
+              {notesViewOptions().map((option) => {
+                const Icon = viewIcons[option.view];
+                return (
+                  <button
+                    key={option.view}
+                    type="button"
+                    className={`view-switch__btn view-switch__btn--icon${view === option.view ? ' is-active' : ''}`}
+                    aria-pressed={view === option.view}
+                    aria-label={option.label}
+                    title={option.label}
+                    onClick={() => onSetView(option.view)}
+                  >
+                    <Icon aria-hidden="true" />
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
           <button type="button" className="link-btn" onClick={(event) => onViewAll(event.currentTarget)}>{t('notesWidget.viewAll')}</button>
           <button type="button" className="btn btn-icon" aria-label={t('notesWidget.newNote')} onClick={onCreateNote}>
             <Plus aria-hidden="true" />
@@ -59,20 +88,39 @@ export function NotesWidget({
             </button>
           </div>
         ) : null}
-        <div className="notes-list">
-          {sortedNotes.map((note) => (
-            <button
-              key={note.id}
-              type="button"
-              onClick={(event) => onOpenNote(note, event.currentTarget)}
-              className="note"
-              style={colorStyle(note.color)}
-            >
-              <div className="note-title">{note.title}</div>
-              <div className="note-content">{note.content}</div>
-            </button>
-          ))}
-        </div>
+        {view === 'board' ? (
+          <div data-testid="notes-board" className="notes-board">
+            {sortedNotes.map((note, index) => (
+              <button
+                key={note.id}
+                type="button"
+                onClick={(event) => onOpenNote(note, event.currentTarget)}
+                className={`sticky-note sticky-note--tilt-${index % BOARD_TILTS}`}
+                style={colorStyle(note.color)}
+              >
+                <span className="sticky-note__tape" aria-hidden="true" />
+                <span className="sticky-note__title">{note.title}</span>
+                <span className="sticky-note__content">{note.content}</span>
+                <span className="sticky-note__fold" aria-hidden="true" />
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div data-testid="notes-list" className="notes-list">
+            {sortedNotes.map((note) => (
+              <button
+                key={note.id}
+                type="button"
+                onClick={(event) => onOpenNote(note, event.currentTarget)}
+                className="note"
+                style={colorStyle(note.color)}
+              >
+                <div className="note-title">{note.title}</div>
+                <div className="note-content">{note.content}</div>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
