@@ -1,7 +1,7 @@
 use crate::db::AppDb;
 use crate::error::CommandError;
 use crate::event_exceptions::{self, Exception};
-use crate::models::{Event, EventDraft, EventRange};
+use crate::models::{EditScope, Event, EventDraft, EventRange, EventTarget};
 use crate::recurrence::{
     self, end_from_columns, freq_from_str, parse_by_day, Recurrence, Series,
 };
@@ -280,6 +280,18 @@ pub fn validate_and_normalize(mut draft: EventDraft) -> Result<EventDraft, Comma
         draft.start_at = format!("{start_date}T00:00");
         draft.end_at = format!("{end_date}T23:59");
     }
+    if let Some(rule) = draft.recurrence.clone() {
+        // R1 可能把开始日期顺延到规则内的首个匹配日，写库的必须是顺延后的值。
+        let dtstart = parse_local(&draft.start_at, "startAt")?;
+        let dtend = parse_local(&draft.end_at, "endAt")?;
+        let duration = dtend - dtstart;
+        let normalized = recurrence::normalize(&rule, dtstart)?;
+        draft.start_at = normalized.dtstart.format(LOCAL_MINUTE_FORMAT).to_string();
+        draft.end_at = (normalized.dtstart + duration)
+            .format(LOCAL_MINUTE_FORMAT)
+            .to_string();
+        draft.recurrence = Some(normalized.rule);
+    }
     Ok(draft)
 }
 
@@ -298,8 +310,79 @@ fn event_by_id(connection: &Connection, id: &str) -> Result<Option<Event>, Comma
         .map_err(CommandError::database)
 }
 
-fn sql_write_error(error: rusqlite::Error) -> CommandError {
-    match &error {
+/// 重复规则对应的六个存储列。返回元组而非结构体，因为它只在
+/// INSERT / UPDATE 的参数位上原样展开，不参与任何其他运算。
+type RecurrenceColumns = (
+    Option<&'static str>,
+    u32,
+    String,
+    Option<String>,
+    Option<u32>,
+    Option<String>,
+);
+
+fn recurrence_columns(draft: &EventDraft) -> Result<RecurrenceColumns, CommandError> {
+    let Some(rule) = draft.recurrence.as_ref() else {
+        return Ok((None, 1, String::new(), None, None, None));
+    };
+    let dtstart = parse_local(&draft.start_at, "startAt")?;
+    let normalized = recurrence::normalize(rule, dtstart)?;
+    let (until, count) = recurrence::end_to_columns(&normalized.rule.end);
+    Ok((
+        Some(recurrence::freq_to_str(normalized.rule.freq)),
+        normalized.rule.interval,
+        normalized.rule.by_day.join(","),
+        until,
+        count,
+        normalized
+            .final_at
+            .map(|value| value.format(LOCAL_MINUTE_FORMAT).to_string()),
+    ))
+}
+
+/// 规则与完整开始时刻均未变时，槽位序列 `f(dtstart, rule)` 不变，
+/// 既有例外的身份键仍然有效。此处必须比完整的 `start_at`：只比 `HH:MM`
+/// 会漏判「周一 8/3 平移到周一 8/10」这类日期平移，使旧例外整体错位。
+fn slots_unchanged(
+    old_start: &str,
+    old_rule: &Option<Recurrence>,
+    new_start: &str,
+    new_rule: &Option<Recurrence>,
+) -> bool {
+    old_start == new_start && old_rule == new_rule
+}
+
+/// 由系列行重建展开所需的 `Series`。`final_at` 由归一化重算，与写入时同源。
+fn series_of(event: &Event, rule: &Recurrence) -> Result<Series, CommandError> {
+    let dtstart = parse_local(&event.start_at, "startAt")?;
+    let normalized = recurrence::normalize(rule, dtstart)?;
+    Ok(Series {
+        freq: normalized.rule.freq,
+        interval: normalized.rule.interval,
+        by_day: parse_by_day(&normalized.rule.by_day.join(","))?,
+        dtstart: normalized.dtstart,
+        final_at: normalized.final_at,
+    })
+}
+
+/// 校验 `EventTarget` 带来的槽位确实由该系列展开得出。放在任何写入之前，
+/// 使非法槽位在留下孤儿例外行之前就被挡住。
+fn require_slot(existing: &Event, slot_text: &str) -> Result<NaiveDateTime, CommandError> {
+    let rule = existing.recurrence.as_ref().ok_or_else(|| {
+        CommandError::validation("occurrenceStartAt", "该日程不是重复日程。")
+    })?;
+    let slot = parse_local(slot_text, "occurrenceStartAt")?;
+    if recurrence::slot_exists(&series_of(existing, rule)?, slot) {
+        Ok(slot)
+    } else {
+        Err(CommandError::validation(
+            "occurrenceStartAt",
+            "该实例不属于此重复日程。",
+        ))
+    }
+}
+
+fn sql_write_error(error: rusqlite::Error) -> CommandError {    match &error {
         rusqlite::Error::SqliteFailure(details, _)
             if details.code == rusqlite::ErrorCode::ConstraintViolation =>
         {
@@ -393,12 +476,16 @@ pub fn create(connection: &mut Connection, draft: EventDraft) -> Result<Event, C
     if let Some(task_id) = draft.linked_task_id.as_deref() {
         require_task(&transaction, task_id)?;
     }
+    let (freq, interval, by_day, until, count, final_at) = recurrence_columns(&draft)?;
     transaction
         .execute(
-            "INSERT INTO events(id,title,start_at,end_at,all_day,category,color,linked_task_id,note,created_at,updated_at)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,NULL,?8,?9,?9)",
+            "INSERT INTO events(id,title,start_at,end_at,all_day,category,color,linked_task_id,note,
+                                created_at,updated_at,recurrence_freq,recurrence_interval,
+                                recurrence_by_day,recurrence_until,recurrence_count,recurrence_final_at)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,NULL,?8,?9,?9,?10,?11,?12,?13,?14,?15)",
             params![id, draft.title, draft.start_at, draft.end_at, i64::from(draft.all_day),
-                    draft.category, draft.color, draft.note, now],
+                    draft.category, draft.color, draft.note, now,
+                    freq, interval, by_day, until, count, final_at],
         )
         .map_err(sql_write_error)?;
     relink(
@@ -423,44 +510,63 @@ pub fn create(connection: &mut Connection, draft: EventDraft) -> Result<Event, C
 
 pub fn update(
     connection: &mut Connection,
-    id: &str,
+    target: &EventTarget,
     draft: EventDraft,
-) -> Result<Event, CommandError> {
+    scope: EditScope,
+) -> Result<(), CommandError> {
+    if target.occurrence_start_at.is_none() && scope != EditScope::All {
+        return Err(CommandError::validation("scope", "单次日程只能整体编辑。"));
+    }
     let draft = validate_and_normalize(draft)?;
     let now = timestamp();
     let transaction = connection
         .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(CommandError::database)?;
-    let old_task_id: Option<Option<String>> = transaction
-        .query_row(
-            "SELECT linked_task_id FROM events WHERE id=?1",
-            [id],
-            |row| row.get(0),
-        )
-        .optional()
-        .map_err(CommandError::database)?;
-    let old_task_id = old_task_id.ok_or_else(|| CommandError::not_found("未找到该日程。"))?;
-    relink(
-        &transaction,
-        id,
-        old_task_id.as_deref(),
-        draft.linked_task_id.as_deref(),
-        &now,
-    )?;
-    let affected = transaction
-        .execute(
-            "UPDATE events SET title=?2,start_at=?3,end_at=?4,all_day=?5,category=?6,color=?7,
-             linked_task_id=?8,note=?9,updated_at=?10 WHERE id=?1",
-            params![id, draft.title, draft.start_at, draft.end_at, i64::from(draft.all_day),
-                    draft.category, draft.color, draft.linked_task_id, draft.note, now],
-        )
-        .map_err(sql_write_error)?;
-    if affected != 1 {
-        return Err(CommandError::not_found("未找到该日程。"));
+
+    let existing = event_by_id(&transaction, &target.id)?
+        .ok_or_else(|| CommandError::not_found("未找到该日程。"))?;
+    if let Some(slot) = target.occurrence_start_at.as_deref() {
+        require_slot(&existing, slot)?;
     }
-    let event = event_by_id(&transaction, id)?.ok_or_else(|| CommandError::not_found("未找到该日程。"))?;
-    transaction.commit().map_err(sql_write_error)?;
-    Ok(event)
+
+    match scope {
+        EditScope::All => {
+            relink(
+                &transaction,
+                &target.id,
+                existing.linked_task_id.as_deref(),
+                draft.linked_task_id.as_deref(),
+                &now,
+            )?;
+            // 跨列一致性 CHECK 在 UPDATE 时重新求值整行，重复列必须一次写成一致状态。
+            let (freq, interval, by_day, until, count, final_at) = recurrence_columns(&draft)?;
+            transaction
+                .execute(
+                    "UPDATE events SET title=?2,start_at=?3,end_at=?4,all_day=?5,category=?6,color=?7,
+                     linked_task_id=?8,note=?9,updated_at=?10,recurrence_freq=?11,recurrence_interval=?12,
+                     recurrence_by_day=?13,recurrence_until=?14,recurrence_count=?15,recurrence_final_at=?16
+                     WHERE id=?1",
+                    params![target.id, draft.title, draft.start_at, draft.end_at,
+                            i64::from(draft.all_day), draft.category, draft.color,
+                            draft.linked_task_id, draft.note, now,
+                            freq, interval, by_day, until, count, final_at],
+                )
+                .map_err(sql_write_error)?;
+            if !slots_unchanged(
+                &existing.start_at,
+                &existing.recurrence,
+                &draft.start_at,
+                &draft.recurrence,
+            ) {
+                event_exceptions::delete_all(&transaction, &target.id)?;
+            }
+        }
+        EditScope::Occurrence | EditScope::ThisAndFollowing => {
+            return Err(CommandError::validation("scope", "该范围尚未实现。"));
+        }
+    }
+
+    transaction.commit().map_err(sql_write_error)
 }
 
 pub fn delete(connection: &mut Connection, id: &str) -> Result<(), CommandError> {
@@ -516,7 +622,13 @@ pub fn update_event(
     draft: EventDraft,
 ) -> Result<Event, CommandError> {
     let mut connection = db.0.lock().map_err(CommandError::database)?;
-    update(&mut connection, &id, draft)
+    // 命令契约的三选一改造属于 Task 12，此处先按整体编辑转发，保持前端行为不变。
+    let target = EventTarget {
+        id,
+        occurrence_start_at: None,
+    };
+    update(&mut connection, &target, draft, EditScope::All)?;
+    event_by_id(&connection, &target.id)?.ok_or_else(|| CommandError::not_found("未找到该日程。"))
 }
 
 #[tauri::command]
@@ -530,8 +642,8 @@ mod tests {
     use super::{create, delete, event_by_id, list_in_range, update, validate_and_normalize};
     use crate::db::migrate;
     use crate::event_exceptions::{upsert_excluded, upsert_overridden, OverrideFields};
-    use crate::models::{Event, EventDraft, EventRange};
-    use crate::recurrence::{Freq, RecurrenceEnd};
+    use crate::models::{EditScope, Event, EventDraft, EventRange, EventTarget};
+    use crate::recurrence::{Freq, Recurrence, RecurrenceEnd};
     use rusqlite::Connection;
 
     fn database() -> Connection {
@@ -552,6 +664,20 @@ mod tests {
             linked_task_id: None,
             note: "".into(),
             recurrence: None,
+        }
+    }
+
+    fn whole(id: &str) -> EventTarget {
+        EventTarget {
+            id: id.into(),
+            occurrence_start_at: None,
+        }
+    }
+
+    fn at(id: &str, slot: &str) -> EventTarget {
+        EventTarget {
+            id: id.into(),
+            occurrence_start_at: Some(slot.into()),
         }
     }
 
@@ -578,15 +704,16 @@ mod tests {
         assert_eq!(created.title, "评审");
         assert!(uuid::Uuid::parse_str(&created.id).is_ok());
 
-        let updated = update(&mut connection, &created.id, EventDraft {
+        update(&mut connection, &whole(&created.id), EventDraft {
             title: "复盘".into(), color: "#F06445".into(), ..draft()
-        }).unwrap();
+        }, EditScope::All).unwrap();
+        let updated = event_by_id(&connection, &created.id).unwrap().unwrap();
         assert_eq!(updated.title, "复盘");
         assert_eq!(updated.created_at, created.created_at);
         assert!(updated.updated_at >= created.updated_at);
 
         delete(&mut connection, &created.id).unwrap();
-        assert_eq!(update(&mut connection, &created.id, draft()).unwrap_err().code, "not_found");
+        assert_eq!(update(&mut connection, &whole(&created.id), draft(), EditScope::All).unwrap_err().code, "not_found");
         assert_eq!(delete(&mut connection, &created.id).unwrap_err().code, "not_found");
     }
 
@@ -598,7 +725,7 @@ mod tests {
         let first = create(&mut connection, EventDraft { linked_task_id: Some("t1".into()), ..draft() }).unwrap();
         let second = create(&mut connection, EventDraft { linked_task_id: Some("t2".into()), ..draft() }).unwrap();
 
-        update(&mut connection, &second.id, EventDraft { linked_task_id: Some("t1".into()), ..draft() }).unwrap();
+        update(&mut connection, &whole(&second.id), EventDraft { linked_task_id: Some("t1".into()), ..draft() }, EditScope::All).unwrap();
         assert_eq!(event_link(&connection, &first.id), None);
         assert_eq!(event_link(&connection, &second.id).as_deref(), Some("t1"));
         assert_eq!(task_link(&connection, "t1").as_deref(), Some(second.id.as_str()));
@@ -1080,11 +1207,11 @@ mod tests {
     }
 
     #[test]
-    fn update_returns_the_recurrence_of_the_series_row() {
+    fn updating_all_keeps_the_series_shape_when_the_rule_is_resubmitted() {
         let mut connection = seeded();
-        let updated = update(
+        update(
             &mut connection,
-            "s1",
+            &at("s1", "2026-08-03T10:00"),
             EventDraft {
                 title: "周会（改名）".into(),
                 start_at: "2026-08-03T10:00".into(),
@@ -1094,10 +1221,14 @@ mod tests {
                 color: "#0BB783".into(),
                 linked_task_id: None,
                 note: String::new(),
-                recurrence: None,
+                recurrence: Some(weekly(&["MO"], RecurrenceEnd::Never)),
             },
+            EditScope::All,
         )
         .expect("update runs");
+        let updated = event_by_id(&connection, "s1")
+            .expect("query runs")
+            .expect("series present");
         assert_eq!(updated.title, "周会（改名）");
         assert_eq!(
             updated.recurrence.as_ref().expect("rule survives update").freq,
@@ -1105,6 +1236,7 @@ mod tests {
         );
         assert_eq!(updated.series_id.as_deref(), Some("s1"));
         assert_eq!(updated.occurrence_start_at.as_deref(), Some("2026-08-03T10:00"));
+        assert_eq!(august(&connection).len(), 5);
     }
 
     #[test]
@@ -1120,5 +1252,397 @@ mod tests {
             .expect("query runs")
             .expect("event present");
         assert_eq!(fetched, created);
+    }
+
+    fn draft_with(
+        title: &str,
+        start: &str,
+        end: &str,
+        recurrence: Option<Recurrence>,
+    ) -> EventDraft {
+        EventDraft {
+            title: title.into(),
+            start_at: start.into(),
+            end_at: end.into(),
+            all_day: false,
+            category: "work".into(),
+            color: "#0BB783".into(),
+            linked_task_id: None,
+            note: String::new(),
+            recurrence,
+        }
+    }
+
+    fn weekly(days: &[&str], end: RecurrenceEnd) -> Recurrence {
+        Recurrence {
+            freq: Freq::Weekly,
+            interval: 1,
+            by_day: days.iter().map(|value| (*value).to_string()).collect(),
+            end,
+        }
+    }
+
+    /// 直接回读重复列，用于区分「返回值对」与「真的写进库了」。
+    type RecurrenceColumns = (
+        Option<String>,
+        i64,
+        String,
+        Option<String>,
+        Option<i64>,
+        Option<String>,
+    );
+
+    fn recurrence_columns_of(connection: &Connection, id: &str) -> RecurrenceColumns {
+        connection
+            .query_row(
+                "SELECT recurrence_freq,recurrence_interval,recurrence_by_day,
+                        recurrence_until,recurrence_count,recurrence_final_at
+                 FROM events WHERE id=?1",
+                [id],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                        row.get(5)?,
+                    ))
+                },
+            )
+            .expect("recurrence columns read")
+    }
+
+    fn stored_bounds(connection: &Connection, id: &str) -> (String, String) {
+        connection
+            .query_row(
+                "SELECT start_at,end_at FROM events WHERE id=?1",
+                [id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("bounds read")
+    }
+
+    fn exception_count(connection: &Connection, series_id: &str) -> i64 {
+        connection
+            .query_row(
+                "SELECT COUNT(*) FROM event_exceptions WHERE series_id=?1",
+                [series_id],
+                |row| row.get(0),
+            )
+            .expect("count runs")
+    }
+
+    fn stored_title(connection: &Connection, id: &str) -> String {
+        connection
+            .query_row("SELECT title FROM events WHERE id=?1", [id], |row| {
+                row.get(0)
+            })
+            .expect("title reads")
+    }
+
+    #[test]
+    fn create_aligns_the_start_date_onto_the_rule() {
+        let mut connection = database();
+        // 2026-08-05 是周三，规则只含周一与周五 → 顺延到 8/7
+        let created = create(
+            &mut connection,
+            draft_with(
+                "健身",
+                "2026-08-05T07:00",
+                "2026-08-05T08:00",
+                Some(weekly(&["MO", "FR"], RecurrenceEnd::Never)),
+            ),
+        )
+        .expect("create runs");
+        assert_eq!(created.start_at, "2026-08-07T07:00");
+        assert_eq!(created.end_at, "2026-08-07T08:00");
+        // 顺延必须落在库里，而不只是返回值上
+        assert_eq!(
+            stored_bounds(&connection, &created.id),
+            ("2026-08-07T07:00".to_string(), "2026-08-07T08:00".to_string())
+        );
+        let (freq, interval, by_day, until, count, final_at) =
+            recurrence_columns_of(&connection, &created.id);
+        assert_eq!(freq.as_deref(), Some("weekly"));
+        assert_eq!(interval, 1);
+        assert_eq!(by_day, "MO,FR");
+        assert_eq!(until, None);
+        assert_eq!(count, None);
+        assert_eq!(final_at, None);
+    }
+
+    #[test]
+    fn create_stores_final_at_for_a_counted_series() {
+        let mut connection = database();
+        let created = create(
+            &mut connection,
+            draft_with(
+                "复盘",
+                "2026-08-03T19:00",
+                "2026-08-03T20:00",
+                Some(weekly(&["MO"], RecurrenceEnd::Count { count: 3 })),
+            ),
+        )
+        .expect("create runs");
+        let (freq, _, _, until, count, final_at) = recurrence_columns_of(&connection, &created.id);
+        assert_eq!(freq.as_deref(), Some("weekly"));
+        assert_eq!(until, None);
+        assert_eq!(count, Some(3));
+        assert_eq!(final_at.as_deref(), Some("2026-08-17T19:00"));
+        assert_eq!(
+            starts(&august(&connection)),
+            vec!["2026-08-03T19:00", "2026-08-10T19:00", "2026-08-17T19:00"]
+        );
+    }
+
+    #[test]
+    fn create_leaves_the_recurrence_columns_empty_for_a_single_event() {
+        let mut connection = database();
+        let created = create(&mut connection, draft()).expect("create runs");
+        assert_eq!(
+            recurrence_columns_of(&connection, &created.id),
+            (None, 1, String::new(), None, None, None)
+        );
+    }
+
+    #[test]
+    fn updating_all_keeps_exceptions_when_the_start_and_rule_are_unchanged() {
+        let mut connection = seeded();
+        upsert_excluded(&connection, "s1", "2026-08-10T10:00", "t").expect("exclude");
+        update(
+            &mut connection,
+            &at("s1", "2026-08-03T10:00"),
+            draft_with(
+                "周会（改名）",
+                "2026-08-03T10:00",
+                "2026-08-03T11:00",
+                Some(weekly(&["MO"], RecurrenceEnd::Never)),
+            ),
+            EditScope::All,
+        )
+        .expect("update runs");
+        assert_eq!(exception_count(&connection, "s1"), 1);
+        assert_eq!(august(&connection).len(), 4);
+    }
+
+    #[test]
+    fn updating_all_clears_exceptions_when_the_start_date_moves() {
+        let mut connection = seeded();
+        upsert_excluded(&connection, "s1", "2026-08-10T10:00", "t").expect("exclude");
+        update(
+            &mut connection,
+            &at("s1", "2026-08-03T10:00"),
+            draft_with(
+                "周会",
+                "2026-08-10T10:00",
+                "2026-08-10T11:00",
+                Some(weekly(&["MO"], RecurrenceEnd::Never)),
+            ),
+            EditScope::All,
+        )
+        .expect("update runs");
+        assert_eq!(exception_count(&connection, "s1"), 0);
+        assert_eq!(
+            starts(&august(&connection)),
+            vec!["2026-08-10T10:00", "2026-08-17T10:00", "2026-08-24T10:00", "2026-08-31T10:00"]
+        );
+    }
+
+    #[test]
+    fn updating_all_clears_exceptions_when_only_the_time_of_day_moves() {
+        let mut connection = seeded();
+        upsert_excluded(&connection, "s1", "2026-08-10T10:00", "t").expect("exclude");
+        update(
+            &mut connection,
+            &at("s1", "2026-08-03T10:00"),
+            draft_with(
+                "周会",
+                "2026-08-03T15:00",
+                "2026-08-03T16:00",
+                Some(weekly(&["MO"], RecurrenceEnd::Never)),
+            ),
+            EditScope::All,
+        )
+        .expect("update runs");
+        assert_eq!(exception_count(&connection, "s1"), 0);
+        // 旧例外若残留会按 10:00 的身份键落空，实例数必须回到 5
+        assert_eq!(august(&connection).len(), 5);
+    }
+
+    #[test]
+    fn updating_all_clears_exceptions_when_only_the_rule_changes() {
+        let mut connection = seeded();
+        upsert_excluded(&connection, "s1", "2026-08-10T10:00", "t").expect("exclude");
+        update(
+            &mut connection,
+            &at("s1", "2026-08-03T10:00"),
+            draft_with(
+                "周会",
+                "2026-08-03T10:00",
+                "2026-08-03T11:00",
+                Some(weekly(&["MO", "WE"], RecurrenceEnd::Never)),
+            ),
+            EditScope::All,
+        )
+        .expect("update runs");
+        assert_eq!(exception_count(&connection, "s1"), 0);
+        assert_eq!(recurrence_columns_of(&connection, "s1").2, "MO,WE");
+        // 8/10 若仍被排除，周一那次会缺失
+        assert!(starts(&august(&connection)).contains(&"2026-08-10T10:00"));
+    }
+
+    #[test]
+    fn updating_all_rewrites_the_end_condition_in_one_statement() {
+        let mut connection = seeded();
+        update(
+            &mut connection,
+            &at("s1", "2026-08-03T10:00"),
+            draft_with(
+                "周会",
+                "2026-08-03T10:00",
+                "2026-08-03T11:00",
+                Some(weekly(
+                    &["MO"],
+                    RecurrenceEnd::Until {
+                        date: "2026-08-17".into(),
+                    },
+                )),
+            ),
+            EditScope::All,
+        )
+        .expect("until update runs");
+        let (_, _, _, until, count, final_at) = recurrence_columns_of(&connection, "s1");
+        assert_eq!(until.as_deref(), Some("2026-08-17"));
+        assert_eq!(count, None);
+        assert_eq!(final_at.as_deref(), Some("2026-08-17T10:00"));
+        assert_eq!(august(&connection).len(), 3);
+
+        // until → count 是跨列 CHECK 最容易被中间态卡住的一步
+        update(
+            &mut connection,
+            &at("s1", "2026-08-03T10:00"),
+            draft_with(
+                "周会",
+                "2026-08-03T10:00",
+                "2026-08-03T11:00",
+                Some(weekly(&["MO"], RecurrenceEnd::Count { count: 2 })),
+            ),
+            EditScope::All,
+        )
+        .expect("count update runs");
+        let (_, _, _, until, count, final_at) = recurrence_columns_of(&connection, "s1");
+        assert_eq!(until, None);
+        assert_eq!(count, Some(2));
+        assert_eq!(final_at.as_deref(), Some("2026-08-10T10:00"));
+        assert_eq!(august(&connection).len(), 2);
+    }
+
+    #[test]
+    fn updating_all_can_turn_a_series_into_a_single_event() {
+        let mut connection = seeded();
+        upsert_excluded(&connection, "s1", "2026-08-10T10:00", "t").expect("exclude");
+        update(
+            &mut connection,
+            &at("s1", "2026-08-03T10:00"),
+            draft_with("只此一次", "2026-08-03T10:00", "2026-08-03T11:00", None),
+            EditScope::All,
+        )
+        .expect("update runs");
+        assert_eq!(
+            recurrence_columns_of(&connection, "s1"),
+            (None, 1, String::new(), None, None, None)
+        );
+        assert_eq!(exception_count(&connection, "s1"), 0);
+        assert_eq!(starts(&august(&connection)), vec!["2026-08-03T10:00"]);
+    }
+
+    #[test]
+    fn updating_all_rejects_a_slot_the_series_never_produces() {
+        let mut connection = seeded();
+        upsert_excluded(&connection, "s1", "2026-08-10T10:00", "t").expect("exclude");
+        // 2026-08-04 是周二，2026-08-03T11:00 是对的日子、错的时刻
+        for slot in ["2026-08-04T10:00", "2026-08-03T11:00"] {
+            let error = update(
+                &mut connection,
+                &at("s1", slot),
+                draft_with(
+                    "偷改",
+                    "2026-08-03T10:00",
+                    "2026-08-03T11:00",
+                    Some(weekly(&["MO"], RecurrenceEnd::Never)),
+                ),
+                EditScope::All,
+            )
+            .expect_err("slot must be rejected");
+            assert_eq!(error.code, "validation_error");
+            assert_eq!(error.field.as_deref(), Some("occurrenceStartAt"));
+        }
+        // 拒绝路径不得留下任何痕迹：例外仍在，系列行未被改写
+        assert_eq!(exception_count(&connection, "s1"), 1);
+        assert_eq!(stored_title(&connection, "s1"), "周会");
+        assert_eq!(august(&connection).len(), 4);
+    }
+
+    #[test]
+    fn updating_all_rejects_an_occurrence_target_on_a_single_event() {
+        let mut connection = database();
+        let created = create(&mut connection, draft()).expect("create runs");
+        let error = update(
+            &mut connection,
+            &at(&created.id, "2026-07-23T14:00"),
+            draft(),
+            EditScope::All,
+        )
+        .expect_err("target must be rejected");
+        assert_eq!(error.code, "validation_error");
+        assert_eq!(error.field.as_deref(), Some("occurrenceStartAt"));
+    }
+
+    #[test]
+    fn rejects_a_scope_other_than_all_for_single_events() {
+        let mut connection = seeded();
+        let error = update(
+            &mut connection,
+            &whole("s1"),
+            draft_with("周会", "2026-08-03T10:00", "2026-08-03T11:00", None),
+            EditScope::Occurrence,
+        )
+        .expect_err("scope must be rejected");
+        assert_eq!(error.code, "validation_error");
+    }
+
+    #[test]
+    fn updating_a_single_event_leaves_the_recurrence_columns_empty() {
+        let mut connection = database();
+        insert_task(&connection, "t1");
+        let created = create(&mut connection, draft()).expect("create runs");
+        update(
+            &mut connection,
+            &whole(&created.id),
+            EventDraft {
+                title: "复盘".into(),
+                start_at: "2026-07-24T09:00".into(),
+                end_at: "2026-07-24T10:00".into(),
+                linked_task_id: Some("t1".into()),
+                ..draft()
+            },
+            EditScope::All,
+        )
+        .expect("update runs");
+        let updated = event_by_id(&connection, &created.id)
+            .expect("query runs")
+            .expect("event present");
+        assert_eq!(updated.title, "复盘");
+        assert_eq!(updated.start_at, "2026-07-24T09:00");
+        assert_eq!(updated.linked_task_id.as_deref(), Some("t1"));
+        assert!(updated.recurrence.is_none());
+        assert!(updated.series_id.is_none());
+        assert!(updated.occurrence_start_at.is_none());
+        assert_eq!(
+            recurrence_columns_of(&connection, &created.id),
+            (None, 1, String::new(), None, None, None)
+        );
+        assert_eq!(task_link(&connection, "t1").as_deref(), Some(created.id.as_str()));
     }
 }
