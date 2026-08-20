@@ -5,6 +5,7 @@ mod color;
 mod commands;
 mod db;
 mod error;
+mod event_exceptions;
 mod events;
 mod extensions;
 mod feedback;
