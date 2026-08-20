@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { EditScope, EventDraft } from '../calendar/calendar-model';
 import { tauriNowlyRepository } from './tauri-nowly-repository';
 
 const invokeMock = vi.hoisted(() => vi.fn());
@@ -37,8 +38,8 @@ describe('tauriNowlyRepository', () => {
 
     await tauriNowlyRepository.listEventsInRange(range);
     await tauriNowlyRepository.createEvent(draft);
-    await tauriNowlyRepository.updateEvent('e1', draft);
-    await tauriNowlyRepository.deleteEvent('e1');
+    await tauriNowlyRepository.updateEvent({ id: 'e1', occurrenceStartAt: null }, draft, 'all');
+    await tauriNowlyRepository.deleteEvent({ id: 'e1', occurrenceStartAt: null }, 'all');
     await tauriNowlyRepository.listTasks();
     await tauriNowlyRepository.createTask(taskDraft);
     await tauriNowlyRepository.updateTask('t1', taskDraft);
@@ -68,8 +69,14 @@ describe('tauriNowlyRepository', () => {
 
     expect(invokeMock.mock.calls).toContainEqual(['list_events_in_range', { range }]);
     expect(invokeMock.mock.calls).toContainEqual(['create_event', { draft }]);
-    expect(invokeMock.mock.calls).toContainEqual(['update_event', { id: 'e1', draft }]);
-    expect(invokeMock.mock.calls).toContainEqual(['delete_event', { id: 'e1' }]);
+    expect(invokeMock.mock.calls).toContainEqual([
+      'update_event',
+      { target: { id: 'e1', occurrenceStartAt: null }, draft, scope: 'all' }
+    ]);
+    expect(invokeMock.mock.calls).toContainEqual([
+      'delete_event',
+      { target: { id: 'e1', occurrenceStartAt: null }, scope: 'all' }
+    ]);
     expect(invokeMock.mock.calls).toContainEqual(['list_tasks']);
     expect(invokeMock.mock.calls).toContainEqual(['create_task', { draft: taskDraft }]);
     expect(invokeMock.mock.calls).toContainEqual(['update_task', { id: 't1', draft: taskDraft }]);
@@ -89,5 +96,44 @@ describe('tauriNowlyRepository', () => {
     expect(invokeMock.mock.calls).toContainEqual(['list_extensions']);
     expect(invokeMock.mock.calls).toContainEqual(['install_extension', { draft: extensionDraft }]);
     expect(invokeMock.mock.calls).toContainEqual(['uninstall_extension', { id: 'x1' }]);
+  });
+
+  it('forwards the occurrence target and every edit scope verbatim', async () => {
+    invokeMock.mockResolvedValue(undefined);
+    const draft: EventDraft = {
+      title: '周会',
+      startAt: '2026-08-10T10:00',
+      endAt: '2026-08-10T11:00',
+      allDay: false,
+      category: 'work',
+      color: '#1F9C8A',
+      linkedTaskId: null,
+      note: '',
+      recurrence: { freq: 'weekly', interval: 1, byDay: ['MO'], end: { kind: 'never' } }
+    };
+    const target = { id: 's1', occurrenceStartAt: '2026-08-10T10:00' };
+    const scopes: EditScope[] = ['occurrence', 'thisAndFollowing', 'all'];
+
+    for (const scope of scopes) {
+      await tauriNowlyRepository.updateEvent(target, draft, scope);
+      await tauriNowlyRepository.deleteEvent(target, scope);
+    }
+
+    const updates = invokeMock.mock.calls.filter(([command]) => command === 'update_event');
+    const deletions = invokeMock.mock.calls.filter(([command]) => command === 'delete_event');
+    expect(updates.map(([, payload]) => payload)).toEqual([
+      { target, draft, scope: 'occurrence' },
+      { target, draft, scope: 'thisAndFollowing' },
+      { target, draft, scope: 'all' }
+    ]);
+    expect(deletions.map(([, payload]) => payload)).toEqual([
+      { target, scope: 'occurrence' },
+      { target, scope: 'thisAndFollowing' },
+      { target, scope: 'all' }
+    ]);
+    // 载荷的键集合必须精确：残留的旧 `id` 键会被后端当作未知字段而反序列化失败。
+    expect(Object.keys(updates[0][1] as object).sort()).toEqual(['draft', 'scope', 'target']);
+    expect(Object.keys(deletions[0][1] as object).sort()).toEqual(['scope', 'target']);
+    expect(Object.keys(updates[0][1].target as object).sort()).toEqual(['id', 'occurrenceStartAt']);
   });
 });

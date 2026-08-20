@@ -1,5 +1,5 @@
 import { DateDetailDialog } from '../calendar/DateDetailDialog';
-import type { CalendarEvent, EventDraft } from '../calendar/calendar-model';
+import type { CalendarEvent, EditScope, EventDraft } from '../calendar/calendar-model';
 import type { ModalState } from '../lib/modal-store';
 import type { MatrixTask, TaskDraft } from '../matrix/matrix-model';
 import { EventModal } from './EventModal';
@@ -17,9 +17,9 @@ type Props = {
   onClose(): void;
   onChangeModal(modal: ModalState): void;
   createEvent(draft: EventDraft): Promise<CalendarEvent>;
-  updateEvent(event: CalendarEvent, draft: EventDraft): Promise<CalendarEvent>;
-  deleteEvent(event: CalendarEvent): Promise<void>;
-  onSaved(event: CalendarEvent, oldLink: string | null): void | Promise<void>;
+  updateEvent(event: CalendarEvent, draft: EventDraft, scope: EditScope): Promise<void>;
+  deleteEvent(event: CalendarEvent, scope: EditScope): Promise<void>;
+  onSaved(): void | Promise<void>;
   onDeleted(event: CalendarEvent): void | Promise<void>;
   createTask(draft: TaskDraft): Promise<MatrixTask>;
   updateTask(task: MatrixTask, draft: TaskDraft): Promise<MatrixTask>;

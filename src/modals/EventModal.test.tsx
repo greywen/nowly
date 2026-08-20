@@ -12,7 +12,7 @@ const existing: CalendarEvent = { id:'e1', title:'设计评审', startAt:'2026-0
 function props(overrides: Record<string, unknown> = {}) {
   return {
     mode: { type:'create' as const, dateIso:'2026-07-23' }, tasks:[task], onClose:vi.fn(), onSaved:vi.fn(), onDeleted:vi.fn(),
-    createEvent:vi.fn().mockResolvedValue({ ...existing, linkedTaskId:null }), updateEvent:vi.fn().mockResolvedValue(existing), deleteEvent:vi.fn().mockResolvedValue(undefined), now,
+    createEvent:vi.fn().mockResolvedValue({ ...existing, linkedTaskId:null }), updateEvent:vi.fn().mockResolvedValue(undefined), deleteEvent:vi.fn().mockResolvedValue(undefined), now,
     ...overrides
   };
 }
@@ -102,5 +102,23 @@ describe('EventModal', () => {
     expect(screen.getByRole('dialog', { name:'永久删除“设计评审”？' })).toHaveTextContent('若存在关联，只解除关联，不删除关联任务。');
     await user.click(screen.getByRole('button', { name:'永久删除' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('删除失败。');
+  });
+
+  it('edits and deletes a single event on the whole-series scope', async () => {
+    const user=userEvent.setup();
+    // 既有 fixture 的 `color:'red'` 已通不过十六进制校验，编辑保存需要一个合法颜色。
+    const editable={ ...existing, color:'#F06445' };
+    const updateEvent=vi.fn().mockResolvedValue(undefined); const deleteEvent=vi.fn().mockResolvedValue(undefined);
+    render(<EventModal {...props({ mode:{type:'edit',event:editable}, updateEvent, deleteEvent })} />);
+    await user.type(screen.getByLabelText('日程标题'), '改');
+    await user.click(screen.getByRole('button', { name:'保存' }));
+    await waitFor(()=>expect(updateEvent).toHaveBeenCalledTimes(1));
+    expect(updateEvent.mock.calls[0][0]).toBe(editable);
+    expect(updateEvent.mock.calls[0][1]).toMatchObject({ title:'设计评审改', recurrence:null });
+    expect(updateEvent.mock.calls[0][2]).toBe('all');
+
+    await user.click(screen.getByRole('button', { name:'删除日程' }));
+    await user.click(screen.getByRole('button', { name:'永久删除' }));
+    await waitFor(()=>expect(deleteEvent).toHaveBeenCalledWith(editable, 'all'));
   });
 });

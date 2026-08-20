@@ -4,8 +4,8 @@ import type { NowlyRepository } from './nowly-repository';
 export const tauriNowlyRepository: NowlyRepository = {
   listEventsInRange: (range) => invoke('list_events_in_range', { range }),
   createEvent: (draft) => invoke('create_event', { draft }),
-  updateEvent: (id, draft) => invoke('update_event', { id, draft }),
-  deleteEvent: (id) => invoke('delete_event', { id }),
+  updateEvent: (target, draft, scope) => invoke('update_event', { target, draft, scope }),
+  deleteEvent: (target, scope) => invoke('delete_event', { target, scope }),
   listTasks: () => invoke('list_tasks'),
   createTask: (draft) => invoke('create_task', { draft }),
   updateTask: (id, draft) => invoke('update_task', { id, draft }),
