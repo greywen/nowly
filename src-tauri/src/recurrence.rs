@@ -323,8 +323,27 @@ pub fn expand(
     out
 }
 
-/// 归一化结果。`shift_days` 供调用方同步平移 `end_at`，保持实例时长不变。
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// 判断 `slot` 是否是该系列真实展开得出的槽位。
+///
+/// 例外行以槽位时刻为身份键，写入前必须用它确认身份：一个不存在的槽位会写出
+/// 永远匹配不上、也永不显示的孤儿例外行。判定按日期收敛——本规则模型下每个
+/// 日期至多产生一个槽位，因此只需检查该日期上的候选是否恰好等于 `slot`，
+/// 无限系列也能在常数步内终止。
+pub fn slot_exists(series: &Series, slot: NaiveDateTime) -> bool {
+    if slot < series.dtstart {
+        return false;
+    }
+    if let Some(final_at) = series.final_at {
+        if slot > final_at {
+            return false;
+        }
+    }
+    OccurrenceCursor::new(series, Some(slot.date()))
+        .take_while(|value| value.date() <= slot.date())
+        .any(|value| value == slot)
+}
+
+/// 归一化结果。`shift_days` 供调用方同步平移 `end_at`，保持实例时长不变。#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NormalizedRecurrence {
     pub rule: Recurrence,
     pub dtstart: NaiveDateTime,
@@ -1200,5 +1219,37 @@ mod tests {
             "跳过预算余量不足：最长连续跳过 {worst}，预算 {MAX_CONSECUTIVE_SKIPS}；\
              调高 MAX_RECURRENCE_INTERVAL 前必须重新核算这条关系"
         );
+    }
+
+    #[test]
+    fn slot_exists_accepts_only_real_slots() {
+        let s = series(Freq::Weekly, 1, "MO,FR", "2026-08-03T10:00");
+        assert!(slot_exists(&s, dt("2026-08-03T10:00")));
+        assert!(slot_exists(&s, dt("2026-08-07T10:00")));
+        assert!(slot_exists(&s, dt("2026-09-28T10:00")));
+        // 不在规则内的星期
+        assert!(!slot_exists(&s, dt("2026-08-04T10:00")));
+        // 对的日子、错的时刻
+        assert!(!slot_exists(&s, dt("2026-08-03T11:00")));
+        // 早于 dtstart
+        assert!(!slot_exists(&s, dt("2026-07-31T10:00")));
+    }
+
+    #[test]
+    fn slot_exists_respects_the_interval_and_the_final_bound() {
+        let mut s = series(Freq::Weekly, 2, "MO", "2026-08-03T10:00");
+        assert!(slot_exists(&s, dt("2026-08-17T10:00")));
+        assert!(!slot_exists(&s, dt("2026-08-10T10:00")));
+
+        s.final_at = Some(dt("2026-08-17T10:00"));
+        assert!(slot_exists(&s, dt("2026-08-17T10:00")));
+        assert!(!slot_exists(&s, dt("2026-08-31T10:00")));
+    }
+
+    #[test]
+    fn slot_exists_skips_months_that_overflow() {
+        let s = series(Freq::Monthly, 1, "", "2026-01-31T08:00");
+        assert!(slot_exists(&s, dt("2026-03-31T08:00")));
+        assert!(!slot_exists(&s, dt("2026-02-28T08:00")));
     }
 }
