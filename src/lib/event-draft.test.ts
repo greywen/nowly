@@ -33,7 +33,11 @@ const event: CalendarEvent = {
   linkedTaskId: 't1',
   note: '确认范围',
   createdAt: '2026-07-23T09:00:00Z',
-  updatedAt: '2026-07-23T09:00:00Z'
+  updatedAt: '2026-07-23T09:00:00Z',
+  recurrence: null,
+  seriesId: null,
+  occurrenceStartAt: null,
+  isOverridden: false
 };
 
 describe('event draft helpers', () => {
@@ -83,7 +87,8 @@ describe('event draft helpers', () => {
       category: 'work',
       color: '#4FC9DA',
       linkedTaskId: null,
-      note: '  保留备注空格  '
+      note: '  保留备注空格  ',
+      recurrence: null
     });
     expect(toEventDraft({ ...form, allDay: true, startTime: '09:15', endTime: '10:20' })).toMatchObject({
       startAt: '2026-07-23T00:00',

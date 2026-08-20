@@ -19,6 +19,10 @@ function event(overrides: Partial<CalendarEvent>): CalendarEvent {
     note: '',
     createdAt: '2026-07-23T09:00:00Z',
     updatedAt: '2026-07-23T09:00:00Z',
+    recurrence: null,
+    seriesId: null,
+    occurrenceStartAt: null,
+    isOverridden: false,
     ...overrides
   };
 }

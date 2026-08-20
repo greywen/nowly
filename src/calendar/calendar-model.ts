@@ -20,6 +20,27 @@ export function eventColorPresets(): readonly ColorPreset[] {
 }
 export const DEFAULT_EVENT_COLOR = DESIGN_COLORS.primary;
 
+export type Weekday = 'MO' | 'TU' | 'WE' | 'TH' | 'FR' | 'SA' | 'SU';
+export type RecurrenceFreq = 'daily' | 'weekly' | 'monthly' | 'yearly';
+
+export type RecurrenceEnd =
+  | { kind: 'never' }
+  | { kind: 'until'; date: string }
+  | { kind: 'count'; count: number };
+
+export type Recurrence = {
+  freq: RecurrenceFreq;
+  interval: number;
+  byDay: Weekday[];
+  end: RecurrenceEnd;
+};
+
+export type EditScope = 'occurrence' | 'thisAndFollowing' | 'all';
+
+// Structured identity the command layer accepts. `occurrenceStartAt` is null for
+// single events, in which case the scope must be 'all'.
+export type EventTarget = { id: string; occurrenceStartAt: string | null };
+
 export type EventDraft = {
   title: string;
   startAt: string;
@@ -29,6 +50,7 @@ export type EventDraft = {
   color: EventColor;
   linkedTaskId: string | null;
   note: string;
+  recurrence: Recurrence | null;
 };
 
 export type EventRange = {
@@ -48,6 +70,13 @@ export type CalendarEvent = {
   note: string;
   createdAt: string;
   updatedAt: string;
+  recurrence: Recurrence | null;
+  // Row id of the series this instance belongs to; null for single events.
+  // `id` is always the database row id, so a whole series shares one id.
+  seriesId: string | null;
+  // The slot this instance was originally due at, i.e. the exception identity.
+  occurrenceStartAt: string | null;
+  isOverridden: boolean;
 };
 
 export type CalendarDay = {

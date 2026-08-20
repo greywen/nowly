@@ -14,7 +14,11 @@ export const sampleEvents: CalendarEvent[] = [
     linkedTaskId: null,
     note: '',
     createdAt: '2026-07-23T09:00:00Z',
-    updatedAt: '2026-07-23T09:00:00Z'
+    updatedAt: '2026-07-23T09:00:00Z',
+    recurrence: null,
+    seriesId: null,
+    occurrenceStartAt: null,
+    isOverridden: false
   },
   {
     id: 'event-2',
@@ -27,7 +31,11 @@ export const sampleEvents: CalendarEvent[] = [
     linkedTaskId: 'task-1',
     note: '确认单主界面 UI',
     createdAt: '2026-07-23T09:00:00Z',
-    updatedAt: '2026-07-23T09:00:00Z'
+    updatedAt: '2026-07-23T09:00:00Z',
+    recurrence: null,
+    seriesId: null,
+    occurrenceStartAt: null,
+    isOverridden: false
   },
   {
     id: 'event-3',
@@ -40,7 +48,11 @@ export const sampleEvents: CalendarEvent[] = [
     linkedTaskId: null,
     note: '',
     createdAt: '2026-07-23T09:00:00Z',
-    updatedAt: '2026-07-23T09:00:00Z'
+    updatedAt: '2026-07-23T09:00:00Z',
+    recurrence: null,
+    seriesId: null,
+    occurrenceStartAt: null,
+    isOverridden: false
   }
 ];
 
