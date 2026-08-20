@@ -20,6 +20,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'common.close': '关闭',
     'common.deleteUnrecoverable': '删除后无法恢复。',
     'common.opFailed': '操作失败，请重试。',
+    'common.confirm': '确定',
 
     // App summary
     'app.summary': '今天 {events} 个日程 · {tasks} 个重要任务 · {notes} 条便签',
@@ -336,6 +337,16 @@ export const translations: Record<Language, Record<string, string>> = {
     'eventModal.deleteTitle': '永久删除“{title}”？',
     'eventModal.deleteDesc2': '若存在关联，只解除关联，不删除关联任务。',
 
+    // RecurrenceScopeDialog
+    'recurrence.editScopeTitle': '编辑重复日程',
+    'recurrence.deleteScopeTitle': '删除重复日程',
+    'recurrence.scopeLegend': '应用范围',
+    'recurrence.scope.occurrence': '仅此次',
+    'recurrence.scope.thisAndFollowing': '此后所有',
+    'recurrence.scope.all': '全部',
+    'recurrence.noticeExceptionsCleared': '该日程已有的单次调整将被清除。',
+    'recurrence.noticeLinkedTaskKept': '关联的任务将保留在原重复日程。',
+
     // NoteModal
     'noteModal.createTitle': '新建便签',
     'noteModal.editTitle': '编辑便签',
@@ -541,6 +552,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'common.close': 'Close',
     'common.deleteUnrecoverable': 'This cannot be undone.',
     'common.opFailed': 'Something went wrong. Please try again.',
+    'common.confirm': 'Confirm',
 
     // App summary
     'app.summary': 'Today: {events, plural, one {# event} other {# events}} · {tasks, plural, one {# key task} other {# key tasks}} · {notes, plural, one {# note} other {# notes}}',
@@ -856,6 +868,16 @@ export const translations: Record<Language, Record<string, string>> = {
     'eventModal.save': 'Save',
     'eventModal.deleteTitle': 'Permanently delete "{title}"?',
     'eventModal.deleteDesc2': 'If linked, only the link is removed; the linked task is kept.',
+
+    // RecurrenceScopeDialog
+    'recurrence.editScopeTitle': 'Edit recurring event',
+    'recurrence.deleteScopeTitle': 'Delete recurring event',
+    'recurrence.scopeLegend': 'Apply to',
+    'recurrence.scope.occurrence': 'This event',
+    'recurrence.scope.thisAndFollowing': 'This and following events',
+    'recurrence.scope.all': 'All events',
+    'recurrence.noticeExceptionsCleared': 'Single-occurrence adjustments already made to this series will be cleared.',
+    'recurrence.noticeLinkedTaskKept': 'The linked task stays with the original recurring event.',
 
     // NoteModal
     'noteModal.createTitle': 'New note',
