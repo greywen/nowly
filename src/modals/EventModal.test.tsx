@@ -1,13 +1,23 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import type { CalendarEvent } from '../calendar/calendar-model';
+import type { CalendarEvent, Recurrence } from '../calendar/calendar-model';
 import type { MatrixTask } from '../matrix/matrix-model';
 import { EventModal } from './EventModal';
 
 const now = () => new Date(2026, 6, 23, 9, 42);
 const task: MatrixTask = { id:'t1', title:'发布 Nowly', quadrant:'important_urgent', dueAt:null, priority:1, completed:false, linkedEventId:null, note:'', createdAt:'x', updatedAt:'x' };
 const existing: CalendarEvent = { id:'e1', title:'设计评审', startAt:'2026-07-23T14:00', endAt:'2026-07-23T15:00', allDay:false, category:'important', color:'red', linkedTaskId:'t1', note:'确认范围', createdAt:'x', updatedAt:'x', recurrence:null, seriesId:null, occurrenceStartAt:null, isOverridden:false };
+// 既有 fixture 的 `color:'red'` 已通不过十六进制校验，编辑保存需要一个合法颜色。
+const editable: CalendarEvent = { ...existing, color:'#F06445' };
+const weeklyRule: Recurrence = { freq:'weekly', interval:1, byDay:['MO'], end:{ kind:'never' } };
+// 2026-08-10 是周一；未被覆盖的实例满足 occurrenceStartAt === startAt。
+const recurring: CalendarEvent = { ...editable, startAt:'2026-08-10T10:00', endAt:'2026-08-10T11:00', recurrence:weeklyRule, seriesId:'e1', occurrenceStartAt:'2026-08-10T10:00' };
+
+async function pick(user: ReturnType<typeof userEvent.setup>, select: string, option: string) {
+  await user.click(screen.getByRole('combobox', { name:select }));
+  await user.click(screen.getByRole('option', { name:option }));
+}
 
 function props(overrides: Record<string, unknown> = {}) {
   return {
@@ -106,8 +116,6 @@ describe('EventModal', () => {
 
   it('edits and deletes a single event on the whole-series scope', async () => {
     const user=userEvent.setup();
-    // 既有 fixture 的 `color:'red'` 已通不过十六进制校验，编辑保存需要一个合法颜色。
-    const editable={ ...existing, color:'#F06445' };
     const updateEvent=vi.fn().mockResolvedValue(undefined); const deleteEvent=vi.fn().mockResolvedValue(undefined);
     render(<EventModal {...props({ mode:{type:'edit',event:editable}, updateEvent, deleteEvent })} />);
     await user.type(screen.getByLabelText('日程标题'), '改');
@@ -120,5 +128,129 @@ describe('EventModal', () => {
     await user.click(screen.getByRole('button', { name:'删除日程' }));
     await user.click(screen.getByRole('button', { name:'永久删除' }));
     await waitFor(()=>expect(deleteEvent).toHaveBeenCalledWith(editable, 'all'));
+  });
+
+  it('sends a weekly recurrence built from the chosen preset', async () => {
+    const user=userEvent.setup(); const createEvent=vi.fn().mockResolvedValue(existing);
+    render(<EventModal {...props({ createEvent })} />);
+    await user.type(screen.getByLabelText('日程标题'), '健身');
+    await pick(user, '重复', '每周');
+    await user.click(screen.getByRole('button', { name:'保存' }));
+    await waitFor(()=>expect(createEvent).toHaveBeenCalledTimes(1));
+    // 2026-07-23 是周四，预设的 byDay 跟随开始日期。
+    expect(createEvent.mock.calls[0][0].recurrence).toEqual({ freq:'weekly', interval:1, byDay:['TH'], end:{ kind:'never' } });
+  });
+
+  it('keeps the custom panel open and clears the rule when repeating is turned off', async () => {
+    const user=userEvent.setup(); render(<EventModal {...props()} />);
+    await pick(user, '重复', '自定义');
+    // 预设是本地状态：种子规则是普通周规则，不得被 recurrenceToPreset 反推成「每周」而收起面板。
+    expect(screen.getByRole('combobox', { name:'重复' })).toHaveTextContent('自定义');
+    expect(screen.getByLabelText('重复间隔')).toHaveValue(1);
+    await pick(user, '重复', '不重复');
+    expect(screen.queryByLabelText('重复间隔')).toBeNull();
+  });
+
+  it('sends the custom interval, weekdays, and count end condition', async () => {
+    const user=userEvent.setup(); const createEvent=vi.fn().mockResolvedValue(existing);
+    render(<EventModal {...props({ createEvent })} />);
+    await user.type(screen.getByLabelText('日程标题'), '周会');
+    await pick(user, '重复', '自定义');
+    fireEvent.change(screen.getByLabelText('重复间隔'), { target:{ value:'2' } });
+    await user.click(screen.getByRole('checkbox', { name:'一' }));
+    await user.click(screen.getByRole('radio', { name:'按次数结束' }));
+    fireEvent.change(screen.getByLabelText('重复次数'), { target:{ value:'5' } });
+    await user.click(screen.getByRole('button', { name:'保存' }));
+    await waitFor(()=>expect(createEvent).toHaveBeenCalledTimes(1));
+    expect(createEvent.mock.calls[0][0].recurrence).toEqual({ freq:'weekly', interval:2, byDay:['MO','TH'], end:{ kind:'count', count:5 } });
+  });
+
+  it('blocks saving an invalid recurrence and surfaces the error', async () => {
+    const user=userEvent.setup(); const createEvent=vi.fn().mockResolvedValue(existing);
+    const { container }=render(<EventModal {...props({ createEvent })} />);
+    await user.type(screen.getByLabelText('日程标题'), '健身');
+    await pick(user, '重复', '自定义');
+    fireEvent.change(screen.getByLabelText('重复间隔'), { target:{ value:'0' } });
+    await user.click(screen.getByRole('button', { name:'保存' }));
+    expect(createEvent).not.toHaveBeenCalled();
+    // 不断言文案：校验文案键由 Task 17 补齐，现在 t() 会回退为键名。
+    expect(container.querySelector('#event-recurrence-error')).not.toBeNull();
+  });
+
+  it('keeps the recurrence rule when only a non-time field changes', async () => {
+    const user=userEvent.setup(); const updateEvent=vi.fn().mockResolvedValue(undefined);
+    render(<EventModal {...props({ mode:{type:'edit',event:recurring}, updateEvent })} />);
+    await user.type(screen.getByLabelText('日程标题'), '改');
+    await user.click(screen.getByRole('button', { name:'保存' }));
+    await user.click(await screen.findByRole('radio', { name:'全部' }));
+    expect(screen.queryByText('该日程已有的单次调整将被清除。')).toBeNull();
+    await user.click(screen.getByRole('button', { name:'确定' }));
+    await waitFor(()=>expect(updateEvent).toHaveBeenCalledTimes(1));
+    expect(updateEvent.mock.calls[0][1]).toMatchObject({ title:'设计评审改' });
+    expect(updateEvent.mock.calls[0][1].recurrence).toEqual(weeklyRule);
+    expect(updateEvent.mock.calls[0][2]).toBe('all');
+  });
+
+  it('asks for a scope before saving an edit to a recurring instance', async () => {
+    const user=userEvent.setup(); const updateEvent=vi.fn().mockResolvedValue(undefined);
+    render(<EventModal {...props({ mode:{type:'edit',event:recurring}, updateEvent })} />);
+    await user.type(screen.getByLabelText('日程标题'), '改');
+    await user.click(screen.getByRole('button', { name:'保存' }));
+    expect(await screen.findByRole('dialog', { name:'编辑重复日程' })).toBeInTheDocument();
+    expect(updateEvent).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('radio', { name:'仅此次' }));
+    await user.click(screen.getByRole('button', { name:'确定' }));
+    await waitFor(()=>expect(updateEvent).toHaveBeenCalledTimes(1));
+    expect(updateEvent.mock.calls[0][0]).toBe(recurring);
+    expect(updateEvent.mock.calls[0][2]).toBe('occurrence');
+  });
+
+  it('warns about cleared adjustments only when the whole series really moves', async () => {
+    const user=userEvent.setup();
+    const { container }=render(<EventModal {...props({ mode:{type:'edit',event:recurring} })} />);
+    await user.click(screen.getByRole('button', { name:'开始日期' }));
+    // 同为周一 10:00，只有日期变了：只比 HH:MM 的判定会漏报。
+    await user.click(container.querySelector('[data-date="2026-08-03"]') as HTMLElement);
+    await user.click(screen.getByRole('button', { name:'保存' }));
+    await user.click(await screen.findByRole('radio', { name:'全部' }));
+    expect(screen.getByText('该日程已有的单次调整将被清除。')).toBeInTheDocument();
+    await user.click(screen.getByRole('radio', { name:'仅此次' }));
+    expect(screen.queryByText('该日程已有的单次调整将被清除。')).toBeNull();
+  });
+
+  it('asks for a scope before deleting a recurring instance', async () => {
+    const user=userEvent.setup(); const deleteEvent=vi.fn().mockResolvedValue(undefined);
+    render(<EventModal {...props({ mode:{type:'edit',event:recurring}, deleteEvent })} />);
+    await user.click(screen.getByRole('button', { name:'删除日程' }));
+    expect(await screen.findByRole('dialog', { name:'删除重复日程' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name:'永久删除“设计评审”？' })).toBeNull();
+    await user.click(screen.getByRole('radio', { name:'仅此次' }));
+    await user.click(screen.getByRole('button', { name:'确定' }));
+    await waitFor(()=>expect(deleteEvent).toHaveBeenCalledWith(recurring, 'occurrence'));
+  });
+
+  it('never asks for a scope on a single event', async () => {
+    const user=userEvent.setup();
+    const updateEvent=vi.fn().mockResolvedValue(undefined); const deleteEvent=vi.fn().mockResolvedValue(undefined);
+    render(<EventModal {...props({ mode:{type:'edit',event:editable}, updateEvent, deleteEvent })} />);
+    await user.type(screen.getByLabelText('日程标题'), '改');
+    await user.click(screen.getByRole('button', { name:'保存' }));
+    expect(screen.queryByRole('dialog', { name:'编辑重复日程' })).toBeNull();
+    await waitFor(()=>expect(updateEvent).toHaveBeenCalledTimes(1));
+    expect(updateEvent.mock.calls[0][2]).toBe('all');
+
+    await user.click(screen.getByRole('button', { name:'删除日程' }));
+    expect(screen.queryByRole('dialog', { name:'删除重复日程' })).toBeNull();
+    expect(screen.getByRole('dialog', { name:'永久删除“设计评审”？' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name:'永久删除' }));
+    await waitFor(()=>expect(deleteEvent).toHaveBeenCalledWith(editable, 'all'));
+  });
+
+  it('shows the this-and-following scope once the instance is overridden', async () => {
+    const user=userEvent.setup();
+    const moved: CalendarEvent={ ...recurring, startAt:'2026-08-11T10:00', endAt:'2026-08-11T11:00', isOverridden:true };
+    render(<EventModal {...props({ mode:{type:'edit',event:moved} })} />);
+    await user.click(screen.getByRole('button', { name:'删除日程' }));
+    expect(await screen.findByRole('radio', { name:'此后所有' })).toBeInTheDocument();
   });
 });

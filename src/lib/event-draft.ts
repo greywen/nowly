@@ -3,9 +3,11 @@ import {
   type CalendarEvent,
   type EventCategory,
   type EventColor,
-  type EventDraft
+  type EventDraft,
+  type Recurrence
 } from '../calendar/calendar-model';
 import { normalizeHexColor } from './color';
+import { validateRecurrence } from './recurrence';
 import { t } from '../i18n';
 
 export type EventFormDraft = {
@@ -19,10 +21,11 @@ export type EventFormDraft = {
   color: EventColor;
   linkedTaskId: string | null;
   note: string;
+  recurrence: Recurrence | null;
 };
 
 export type EventFieldErrors = Partial<
-  Record<'title' | 'startAt' | 'endAt' | 'category' | 'color' | 'linkedTaskId', string>
+  Record<'title' | 'startAt' | 'endAt' | 'category' | 'color' | 'linkedTaskId' | 'recurrence', string>
 >;
 
 const categories: EventCategory[] = ['work', 'important', 'personal', 'learning'];
@@ -52,8 +55,14 @@ export function createEventDraft(dateIso: string, now: Date): EventFormDraft {
     category: 'work',
     color: DEFAULT_EVENT_COLOR,
     linkedTaskId: null,
-    note: ''
+    note: '',
+    recurrence: null
   };
+}
+
+/** 表单里代表这条日程开始时刻的本地朴素时间，与 `toEventDraft` 的组装方式保持一致。 */
+function formStartAt(form: EventFormDraft) {
+  return `${form.startDate}T${form.allDay ? '00:00' : form.startTime}`;
 }
 
 export function eventToForm(event: CalendarEvent): EventFormDraft {
@@ -67,21 +76,22 @@ export function eventToForm(event: CalendarEvent): EventFormDraft {
     category: event.category,
     color: event.color,
     linkedTaskId: event.linkedTaskId,
-    note: event.note
+    note: event.note,
+    recurrence: event.recurrence
   };
 }
 
 export function toEventDraft(form: EventFormDraft): EventDraft {
   return {
     title: form.title.trim(),
-    startAt: `${form.startDate}T${form.allDay ? '00:00' : form.startTime}`,
+    startAt: formStartAt(form),
     endAt: `${form.endDate}T${form.allDay ? '23:59' : form.endTime}`,
     allDay: form.allDay,
     category: form.category,
     color: normalizeHexColor(form.color) as EventColor,
     linkedTaskId: form.linkedTaskId,
     note: form.note,
-    recurrence: null
+    recurrence: form.recurrence
   };
 }
 
@@ -97,6 +107,8 @@ export function validateEventForm(form: EventFormDraft): EventFieldErrors {
   }
   if (!categories.includes(form.category)) return { category: t('eventDraft.errorCategory') };
   if (!normalizeHexColor(form.color)) return { color: t('eventDraft.errorColor') };
+  const recurrenceError = validateRecurrence(form.recurrence, formStartAt(form));
+  if (recurrenceError) return { recurrence: recurrenceError };
   return {};
 }
 
