@@ -352,15 +352,23 @@ fn slots_unchanged(
     old_start == new_start && old_rule == new_rule
 }
 
-/// 拆分时新系列的 `dtstart` 就落在被编辑的槽位上，日期变化是拆分的固有语义；
-/// 结束条件也必然被改写。因此自该槽位起两段序列是否重合，只由时刻与序列形状
-/// （频率 / 间隔 / 星期）决定。重合时旧例外的身份键仍能精确命中新系列。
+/// 自被编辑的槽位起，两段序列是否完全重合——重合时旧例外的身份键仍能精确命中新系列。
+///
+/// 「新系列的 `dtstart` 落在该槽位上」是充分性的前提，必须实际校验而非假设：用户在
+/// 「此后所有」里可以改日期，把周一 8/17 改成周二 8/18 而规则仍是 weekly MO 时，R1 会把
+/// 新 `dtstart` 对齐到 8/24，时刻与规则却都没变；只比后两项就会把 8/17 的例外迁到一个
+/// 根本不产出该槽位的新系列上。`draft.start_at` 必须是归一化后的值，比的正是 R1 的结果。
 /// 与 `slots_unchanged` 的判定条件不同，两者不可互换。
-fn slots_continue(existing: &Event, draft: &EventDraft) -> Result<bool, CommandError> {
+fn slots_continue(
+    existing: &Event,
+    draft: &EventDraft,
+    slot: NaiveDateTime,
+) -> Result<bool, CommandError> {
     let shape =
         |rule: Option<&Recurrence>| rule.map(|rule| (rule.freq, rule.interval, rule.by_day.clone()));
-    Ok(parse_local(&existing.start_at, "startAt")?.time()
-        == parse_local(&draft.start_at, "startAt")?.time()
+    let new_start = parse_local(&draft.start_at, "startAt")?;
+    Ok(new_start == slot
+        && parse_local(&existing.start_at, "startAt")?.time() == new_start.time()
         && shape(existing.recurrence.as_ref()) == shape(draft.recurrence.as_ref()))
 }
 
@@ -624,9 +632,16 @@ pub fn update(
                 })?
                 .end
                 .clone();
+            // 用户在弹窗里改了结束条件时，新系列必须采用提交值：承接会把「永不结束改成共 3 次」
+            // 静默丢弃，既不生效也不报错。原系列的截断不受影响，仍由原结束条件决定。
+            let edited_end = draft
+                .recurrence
+                .as_ref()
+                .map(|rule| rule.end.clone())
+                .filter(|end| *end != old_end);
 
             // 结束条件承接：Count 在两段之间守恒，Never / Until 原样交给新系列。
-            let new_end = match old_end {
+            let carried_end = match &old_end {
                 recurrence::RecurrenceEnd::Count { count } => {
                     let consumed = occurrences_before(&existing, slot)?;
                     let remaining = count
@@ -645,9 +660,10 @@ pub fn update(
                 }
                 other => {
                     truncate_before(&transaction, &existing, slot, &now)?;
-                    other
+                    other.clone()
                 }
             };
+            let new_end = edited_end.unwrap_or(carried_end);
 
             let mut new_draft = draft;
             // 关联任务留在原系列：搬移要在两个唯一索引下做双向写，中间态易冲突。
@@ -670,7 +686,7 @@ pub fn update(
                 )
                 .map_err(sql_write_error)?;
 
-            if slots_continue(&existing, &new_draft)? {
+            if slots_continue(&existing, &new_draft, slot)? {
                 event_exceptions::move_from(&transaction, &target.id, slot_text, &new_id)?;
             } else {
                 // 序列已错位，这些身份键在新系列上永不命中，留存即为幽灵行。
@@ -2829,5 +2845,219 @@ mod tests {
         assert_eq!(count, Some(3));
         assert_eq!(final_at.as_deref(), Some("2026-08-17T21:00"));
         assert_eq!(instances_of(&connection, &created.id).len(), 3);
+    }
+
+    #[test]
+    fn splitting_drops_exceptions_when_the_start_date_moves_off_the_slot() {
+        let mut connection = seeded();
+        upsert_excluded(&connection, "s1", "2026-08-10T10:00", "t").expect("exclude before the cut");
+        // 切点自身的覆盖行被挪到十二月：槽位仍在八月的幽灵行会被 list_in_range 静默丢弃
+        upsert_overridden(
+            &connection,
+            "s1",
+            "2026-08-17T10:00",
+            &override_fields("远期改期", "2026-12-07T09:00", "2026-12-07T10:00"),
+            "t",
+        )
+        .expect("override at the cut");
+
+        // 8/18 是周二而规则仍是周一：R1 把新系列对齐到 8/24，切点 8/17 不再是它的槽位
+        update(
+            &mut connection,
+            &at("s1", "2026-08-17T10:00"),
+            draft_with(
+                "新周会",
+                "2026-08-18T10:00",
+                "2026-08-18T11:00",
+                Some(weekly(&["MO"], RecurrenceEnd::Never)),
+            ),
+            EditScope::ThisAndFollowing,
+        )
+        .expect("update runs");
+
+        let new_id = other_series_id(&connection, "s1");
+        assert_eq!(
+            stored_bounds(&connection, &new_id),
+            (
+                "2026-08-24T10:00".to_string(),
+                "2026-08-24T11:00".to_string()
+            )
+        );
+        assert_eq!(
+            exception_rows(&connection, "s1"),
+            vec![("2026-08-10T10:00".to_string(), "excluded".to_string())]
+        );
+        // 时刻与规则都没变，但 8/17 不再是新系列的槽位：迁过去即为删不掉的幽灵行
+        assert!(exception_rows(&connection, &new_id).is_empty());
+        assert!(far_overrides(&connection).is_empty());
+        assert_eq!(
+            starts(&august(&connection)),
+            vec!["2026-08-03T10:00", "2026-08-24T10:00", "2026-08-31T10:00"]
+        );
+    }
+
+    #[test]
+    fn splitting_migrates_exceptions_when_the_rule_realigns_onto_the_slot() {
+        let mut connection = seeded_for_split();
+        // 8/12 是周三，R1 把它对齐回 8/17：判定必须用归一化后的 dtstart，
+        // 否则用户提交的原始日期一变就会误杀本该迁移的例外
+        update(
+            &mut connection,
+            &at("s1", "2026-08-17T10:00"),
+            draft_with(
+                "新周会",
+                "2026-08-12T10:00",
+                "2026-08-12T11:00",
+                Some(weekly(&["MO"], RecurrenceEnd::Never)),
+            ),
+            EditScope::ThisAndFollowing,
+        )
+        .expect("update runs");
+
+        let new_id = other_series_id(&connection, "s1");
+        assert_eq!(
+            stored_bounds(&connection, &new_id),
+            (
+                "2026-08-17T10:00".to_string(),
+                "2026-08-17T11:00".to_string()
+            )
+        );
+        assert_eq!(
+            exception_rows(&connection, &new_id),
+            vec![
+                ("2026-08-24T10:00".to_string(), "excluded".to_string()),
+                ("2026-08-31T10:00".to_string(), "overridden".to_string()),
+            ]
+        );
+        let far = far_overrides(&connection);
+        assert_eq!(starts(&far), vec!["2026-12-07T09:00"]);
+        assert_eq!(far[0].series_id.as_deref(), Some(new_id.as_str()));
+    }
+
+    #[test]
+    fn splitting_applies_an_end_condition_the_user_changed() {
+        let mut connection = seeded();
+        // 「永不结束」改成「共 3 次」：静默忽略用户输入比报错更差
+        update(
+            &mut connection,
+            &at("s1", "2026-08-17T10:00"),
+            draft_with(
+                "新周会",
+                "2026-08-17T10:00",
+                "2026-08-17T11:00",
+                Some(weekly(&["MO"], RecurrenceEnd::Count { count: 3 })),
+            ),
+            EditScope::ThisAndFollowing,
+        )
+        .expect("update runs");
+
+        let new_id = other_series_id(&connection, "s1");
+        let (_, _, _, until, count, final_at) = recurrence_columns_of(&connection, &new_id);
+        assert_eq!(until, None);
+        assert_eq!(count, Some(3));
+        assert_eq!(final_at.as_deref(), Some("2026-08-31T10:00"));
+        assert_eq!(
+            instances_of(&connection, &new_id),
+            vec![
+                "2026-08-17T10:00",
+                "2026-08-24T10:00",
+                "2026-08-31T10:00"
+            ]
+        );
+        // 原系列仍按原结束条件截断：原为 Never，故切成 Until(该次前一天)
+        let (_, _, _, old_until, old_count, old_final) = recurrence_columns_of(&connection, "s1");
+        assert_eq!(old_until.as_deref(), Some("2026-08-16"));
+        assert_eq!(old_count, None);
+        assert_eq!(old_final.as_deref(), Some("2026-08-10T10:00"));
+    }
+
+    #[test]
+    fn splitting_applies_an_until_the_user_shortened() {
+        let mut connection = database();
+        let created = create(
+            &mut connection,
+            draft_with(
+                "周会",
+                "2026-08-03T10:00",
+                "2026-08-03T11:00",
+                Some(weekly(
+                    &["MO"],
+                    RecurrenceEnd::Until {
+                        date: "2026-09-28".into(),
+                    },
+                )),
+            ),
+        )
+        .expect("create runs");
+
+        update(
+            &mut connection,
+            &at(&created.id, "2026-08-17T10:00"),
+            draft_with(
+                "新周会",
+                "2026-08-17T10:00",
+                "2026-08-17T11:00",
+                Some(weekly(
+                    &["MO"],
+                    RecurrenceEnd::Until {
+                        date: "2026-08-24".into(),
+                    },
+                )),
+            ),
+            EditScope::ThisAndFollowing,
+        )
+        .expect("update runs");
+
+        let new_id = other_series_id(&connection, &created.id);
+        let (_, _, _, new_until, new_count, new_final) = recurrence_columns_of(&connection, &new_id);
+        assert_eq!(new_until.as_deref(), Some("2026-08-24"));
+        assert_eq!(new_count, None);
+        assert_eq!(new_final.as_deref(), Some("2026-08-24T10:00"));
+        assert_eq!(
+            instances_of(&connection, &new_id),
+            vec!["2026-08-17T10:00", "2026-08-24T10:00"]
+        );
+        assert_eq!(instances_of(&connection, &created.id).len(), 2);
+    }
+
+    #[test]
+    fn splitting_a_counted_series_applies_an_edited_count() {
+        let mut connection = database();
+        let created = create(
+            &mut connection,
+            draft_with(
+                "复盘",
+                "2026-08-03T19:00",
+                "2026-08-03T20:00",
+                Some(weekly(&["MO"], RecurrenceEnd::Count { count: 5 })),
+            ),
+        )
+        .expect("create runs");
+
+        // 改动了次数：守恒让位于用户输入，新系列取 10 而不是 5-2
+        update(
+            &mut connection,
+            &at(&created.id, "2026-08-17T19:00"),
+            draft_with(
+                "复盘（新）",
+                "2026-08-17T19:00",
+                "2026-08-17T20:00",
+                Some(weekly(&["MO"], RecurrenceEnd::Count { count: 10 })),
+            ),
+            EditScope::ThisAndFollowing,
+        )
+        .expect("update runs");
+
+        let new_id = other_series_id(&connection, &created.id);
+        let (_, _, _, new_until, new_count, _) = recurrence_columns_of(&connection, &new_id);
+        assert_eq!(new_until, None);
+        assert_eq!(new_count, Some(10));
+        assert_eq!(instances_of(&connection, &new_id).len(), 10);
+        // 原系列仍按原规则截断为 Count(k)
+        let (_, _, _, old_until, old_count, old_final) =
+            recurrence_columns_of(&connection, &created.id);
+        assert_eq!(old_until, None);
+        assert_eq!(old_count, Some(2));
+        assert_eq!(old_final.as_deref(), Some("2026-08-10T19:00"));
     }
 }
