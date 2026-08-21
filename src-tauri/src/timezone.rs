@@ -23,6 +23,31 @@ pub fn parse_wall(value: &str) -> Result<NaiveDateTime, CommandError> {
         .map_err(|_| CommandError::validation("startAt", "钟面时间格式无效。"))
 }
 
+/// 把某具名时区下的钟面时间换算成 UTC 瞬时点。
+/// DST 重叠（钟面出现两次）取第一次出现（earlier）；
+/// DST 断层（钟面不存在）取断层后的第一个有效瞬时点（later）。
+pub fn wall_to_utc(wall: NaiveDateTime, tz: Tz) -> DateTime<Utc> {
+    match tz.from_local_datetime(&wall) {
+        LocalResult::Single(dt) => dt.with_timezone(&Utc),
+        LocalResult::Ambiguous(earlier, _later) => earlier.with_timezone(&Utc),
+        LocalResult::None => {
+            // 断层：该钟面在本地不存在。逐分钟前探，找到断层后第一个有效钟面，
+            // 返回它对应的瞬时点。DST 断层至多数小时，3 小时窗口足以覆盖。
+            let mut probe = wall;
+            for _ in 0..(3 * 60) {
+                probe += Duration::minutes(1);
+                match tz.from_local_datetime(&probe) {
+                    LocalResult::Single(dt) => return dt.with_timezone(&Utc),
+                    LocalResult::Ambiguous(dt, _) => return dt.with_timezone(&Utc),
+                    LocalResult::None => {}
+                }
+            }
+            // 真实时区不会走到这里；兜底按 UTC 解释，保证函数全域有返回值。
+            Utc.from_utc_datetime(&wall)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -51,5 +76,33 @@ mod tests {
             parse_wall("nope").unwrap_err().field.as_deref(),
             Some("startAt")
         );
+    }
+
+    #[test]
+    fn converts_wall_to_utc_normally() {
+        // 上海不实行夏令时，UTC+8 恒定：10:00 → 02:00Z。
+        let utc = wall_to_utc(parse_wall("2026-08-03T10:00").unwrap(), Tz::Asia__Shanghai);
+        assert_eq!(utc.format(UTC_FORMAT).to_string(), "2026-08-03T02:00Z");
+    }
+
+    #[test]
+    fn spring_forward_gap_takes_the_instant_after_the_gap() {
+        // 纽约 2026-03-08，02:00 跳到 03:00，02:30 不存在。
+        // 断层后第一个有效钟面是 03:00 EDT(UTC-4) = 07:00Z。
+        let utc = wall_to_utc(
+            parse_wall("2026-03-08T02:30").unwrap(),
+            Tz::America__New_York,
+        );
+        assert_eq!(utc.format(UTC_FORMAT).to_string(), "2026-03-08T07:00Z");
+    }
+
+    #[test]
+    fn fall_back_overlap_takes_the_earlier_instant() {
+        // 纽约 2026-11-01，01:30 出现两次。第一次是 EDT(UTC-4) = 05:30Z。
+        let utc = wall_to_utc(
+            parse_wall("2026-11-01T01:30").unwrap(),
+            Tz::America__New_York,
+        );
+        assert_eq!(utc.format(UTC_FORMAT).to_string(), "2026-11-01T05:30Z");
     }
 }
