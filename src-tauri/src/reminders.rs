@@ -2,7 +2,9 @@ use crate::error::CommandError;
 use crate::events::list_in_range;
 use crate::models::{Event, EventRange};
 use crate::events::MAX_REMINDER_MINUTES;
+use crate::timezone;
 use chrono::{Duration, NaiveDateTime};
+use chrono_tz::Tz;
 use rusqlite::{params, Connection};
 
 const LOCAL_MINUTE_FORMAT: &str = "%Y-%m-%dT%H:%M";
@@ -46,18 +48,32 @@ fn dispatch_identity(event: &Event) -> (String, String) {
     )
 }
 
-/// 从展开后的日程实例里挑出此刻应触发的提醒。
+/// 把一条事件实例的显示钟面（`start_at`，已是设备时区钟面）在设备时区下换算成 UTC 瞬时点。
+/// 事件自身是否带时区不影响这里——`start_at` 已由读取路径统一成设备钟面。
+fn instant_of(start_at: &str, device: Tz) -> Option<chrono::DateTime<chrono::Utc>> {
+    let wall = NaiveDateTime::parse_from_str(start_at, LOCAL_MINUTE_FORMAT).ok()?;
+    Some(timezone::wall_to_utc(wall, device))
+}
+
+/// 在指定设备时区下挑出此刻应触发的提醒。触发判定在 UTC 瞬时点上进行，
+/// 使「提前 N 分钟」在 DST 边界两侧精确（跨断层的裸钟面相减会偏移一小时）。
 ///
 /// 对每条提醒偏移量 `offset`，触发时刻 `fire_time = start - offset`。当
 /// `fire_time <= now` 且 `now < start + grace` 时该提醒到期：既覆盖常驻期间的准点触发，
 /// 也覆盖关闭后重开的补发，同时排除早已开始的过期日程。
-pub fn due_reminders(events: &[Event], now: NaiveDateTime, grace: Duration) -> Vec<DueReminder> {
+pub fn due_reminders_utc(
+    events: &[Event],
+    now_wall: NaiveDateTime,
+    grace: Duration,
+    device: Tz,
+) -> Vec<DueReminder> {
+    let now = timezone::wall_to_utc(now_wall, device);
     let mut due = Vec::new();
     for event in events {
         if event.reminders.is_empty() {
             continue;
         }
-        let Ok(start) = NaiveDateTime::parse_from_str(&event.start_at, LOCAL_MINUTE_FORMAT) else {
+        let Some(start) = instant_of(&event.start_at, device) else {
             continue;
         };
         for &offset in &event.reminders {
@@ -79,6 +95,11 @@ pub fn due_reminders(events: &[Event], now: NaiveDateTime, grace: Duration) -> V
         }
     }
     due
+}
+
+/// 取真实设备时区的到期判定入口，供 `poll_due` 使用。
+pub fn due_reminders(events: &[Event], now_wall: NaiveDateTime, grace: Duration) -> Vec<DueReminder> {
+    due_reminders_utc(events, now_wall, grace, timezone::device_tz())
 }
 
 /// 组装一条提醒通知的正文，用中文描述日程何时开始。
@@ -236,6 +257,29 @@ mod tests {
             due_reminders(&events, dt("2026-08-10T10:04"), Duration::minutes(GRACE_MINUTES)).len(),
             1
         );
+    }
+
+    #[test]
+    fn timed_reminder_offset_is_exact_across_a_dst_gap() {
+        // 设备时区取纽约，2026-03-08 是春跳日（02:00→03:00，02:xx 不存在）。
+        // 事件显示钟面 03:15（设备纽约钟面，03:15 EDT = 07:15Z），提前 30 分钟。
+        // 触发瞬时点 = 06:45Z；该瞬时点对应纽约钟面 01:45（仍在 EST，UTC-5）。
+        // 裸钟面相减会得到落在断层里的 02:45（不存在），从而漏判；按 UTC 瞬时点比较则精确。
+        let ev = Event {
+            start_at: "2026-03-08T03:15".into(),
+            end_at: "2026-03-08T04:15".into(),
+            start_tz: Some("America/New_York".into()),
+            end_tz: Some("America/New_York".into()),
+            reminders: vec![30],
+            ..event("2026-03-08T03:15", vec![30])
+        };
+        let due = due_reminders_utc(
+            &[ev],
+            dt("2026-03-08T01:45"),
+            Duration::minutes(GRACE_MINUTES),
+            chrono_tz::Tz::America__New_York,
+        );
+        assert_eq!(due.len(), 1, "触发瞬时点必须按设备时区精确换算，跨 DST 断层不漂移");
     }
 
     fn database() -> Connection {
