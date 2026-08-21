@@ -4,7 +4,6 @@ use crate::event_exceptions::{self, Exception};
 use crate::models::{EditScope, Event, EventDraft, EventRange, EventTarget};
 use crate::recurrence::{self, parse_by_day, Recurrence, Series};
 use chrono::{Duration, NaiveDateTime, SecondsFormat, Utc};
-use chrono_tz::Tz;
 use rusqlite::{params, Connection, OptionalExtension, Row, Transaction, TransactionBehavior};
 use uuid::Uuid;
 use tauri::State;
@@ -99,7 +98,6 @@ struct SeriesRow {
     created_at: String,
     updated_at: String,
     rrule: Option<String>,
-    final_at: Option<String>,
     rdate: Vec<String>,
     exdate: Vec<String>,
 }
@@ -129,7 +127,6 @@ fn read_series_row(row: &Row<'_>) -> rusqlite::Result<SeriesRow> {
         created_at: row.get(14)?,
         updated_at: row.get(15)?,
         rrule: row.get(16)?,
-        final_at: row.get(17)?,
         rdate: parse_json_list(row.get(18)?),
         exdate: parse_json_list(row.get(19)?),
     })

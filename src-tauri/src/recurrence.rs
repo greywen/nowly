@@ -1,3 +1,10 @@
+// 本模块保留一套自研重复展开实现（`expand`、`OccurrenceCursor`、列式结束条件换算等）作为
+// 重复数学的参照实现（reference oracle）：其单元测试对照朴素展开逐形状校验，守护
+// `normalize`/`OccurrenceCursor` 等仍在生产路径上使用的逻辑。ICS 革新后，生产读取路径的
+// 展开已改由 `rrule_engine`（包 `rrule` crate）承担，故本模块的部分列式换算辅助与 `expand`
+// 仅被自身测试引用；保留它们作为参照与回归护栏，此处按模块允许 dead_code。
+#![allow(dead_code)]
+
 use crate::error::CommandError;
 use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime, Weekday};
 use serde::{Deserialize, Serialize};
