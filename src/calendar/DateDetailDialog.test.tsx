@@ -118,6 +118,36 @@ describe('DateDetailDialog', () => {
     expect(screen.getByRole('button', { name: /旧关联/ })).not.toHaveTextContent('关联任务');
   });
 
+  it('shows the source timezone for a tz-bound event', () => {
+    render(
+      <DateDetailDialog
+        isoDate="2026-07-23"
+        events={[event({ id: 'tz', title: '跨时区会议', startAt: '2026-07-23T10:00', endAt: '2026-07-23T11:00', startTz: 'Asia/Shanghai', endTz: 'Asia/Shanghai' })]}
+        tasks={[]}
+        isTopLayer
+        onClose={vi.fn()}
+        onCreateEvent={vi.fn()}
+        onEditEvent={vi.fn()}
+      />
+    );
+    expect(screen.getByText(/Asia\/Shanghai/)).toBeInTheDocument();
+  });
+
+  it('does not show a timezone for a floating event', () => {
+    render(
+      <DateDetailDialog
+        isoDate="2026-07-23"
+        events={[event({ id: 'floating', title: '浮动会议', startAt: '2026-07-23T10:00', endAt: '2026-07-23T11:00', startTz: null, endTz: null })]}
+        tasks={[]}
+        isTopLayer
+        onClose={vi.fn()}
+        onCreateEvent={vi.fn()}
+        onEditEvent={vi.fn()}
+      />
+    );
+    expect(screen.queryByText(/Asia\/Shanghai/)).not.toBeInTheDocument();
+  });
+
   it('lists sibling occurrences of one series as separate rows', () => {
     // Every instance of a series shares the series row id, so a row key built
     // from `id` collapses two occurrences that land on the same day.

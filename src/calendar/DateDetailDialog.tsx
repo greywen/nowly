@@ -99,6 +99,7 @@ export function DateDetailDialog({
                   onClick={(clickEvent) => onEditEvent(event, clickEvent.currentTarget)}
                 >
                   <span className="date-detail-dialog__time">{event.allDay ? t('calendar.allDay') : event.startAt.slice(11, 16)}</span>
+                  {event.startTz ? <span className="date-detail-dialog__tz">({event.startTz})</span> : null}
                   <span className="date-detail-dialog__event-copy">
                     <strong>{event.title}</strong>
                     {linkedTaskTitle ? <small>{t('dateDetail.linkedTask', { title: linkedTaskTitle })}</small> : null}
