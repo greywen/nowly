@@ -8,6 +8,9 @@ pub struct Event {
     pub title: String,
     pub start_at: String,
     pub end_at: String,
+    /// 事件自身的具名 IANA 时区；浮动/全天为 None。
+    pub start_tz: Option<String>,
+    pub end_tz: Option<String>,
     pub all_day: bool,
     pub category: String,
     pub color: String,
@@ -19,6 +22,9 @@ pub struct Event {
     pub created_at: String,
     pub updated_at: String,
     pub recurrence: Option<Recurrence>,
+    /// 标准 RFC 5545 RRULE 串（不含 `RRULE:` 前缀），供前端只读展示与 Spec B 使用。
+    /// 单次事件为 None。
+    pub rrule: Option<String>,
     /// 重复实例所属系列的行 id；单次日程为 None。`id` 始终是数据库行 id。
     pub series_id: Option<String>,
     /// 该实例所属系列的开始时刻（dtstart）；单次日程为 None。
@@ -62,6 +68,10 @@ pub struct EventDraft {
     pub title: String,
     pub start_at: String,
     pub end_at: String,
+    #[serde(default)]
+    pub start_tz: Option<String>,
+    #[serde(default)]
+    pub end_tz: Option<String>,
     pub all_day: bool,
     pub category: String,
     pub color: String,
@@ -296,6 +306,8 @@ mod tests {
             title: "评审".into(),
             start_at: "2026-08-10T10:00".into(),
             end_at: "2026-08-10T11:00".into(),
+            start_tz: None,
+            end_tz: None,
             all_day: false,
             category: "work".into(),
             color: "#4FC9DA".into(),
@@ -305,10 +317,25 @@ mod tests {
             created_at: "2026-08-01T08:00:00Z".into(),
             updated_at: "2026-08-01T08:00:00Z".into(),
             recurrence: None,
+            rrule: None,
             series_id: None,
             series_start_at: None,
             occurrence_start_at: None,
             is_overridden: false,
+        }
+    }
+
+    #[test]
+    fn event_serializes_timezone_and_rrule_fields() {
+        let value = serde_json::to_value(event()).expect("event serializes");
+        let object = value.as_object().expect("object");
+        // 浮动事件三字段为 null。
+        assert_eq!(object.get("startTz"), Some(&Value::Null));
+        assert_eq!(object.get("endTz"), Some(&Value::Null));
+        assert_eq!(object.get("rrule"), Some(&Value::Null));
+        // snake_case 不泄漏。
+        for snake in ["start_tz", "end_tz"] {
+            assert!(!object.contains_key(snake));
         }
     }
 
