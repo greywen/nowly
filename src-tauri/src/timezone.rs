@@ -16,6 +16,13 @@ pub fn parse_tz(name: &str) -> Result<Tz, CommandError> {
         .map_err(|_| CommandError::validation("timezone", format!("未知的时区：{name}")))
 }
 
+/// 解析钟面时间字符串（`%Y-%m-%dT%H:%M`）。失败时字段名记为 `startAt`，
+/// 便于校验错误直接对应到前端字段。
+pub fn parse_wall(value: &str) -> Result<NaiveDateTime, CommandError> {
+    NaiveDateTime::parse_from_str(value, WALL_FORMAT)
+        .map_err(|_| CommandError::validation("startAt", "钟面时间格式无效。"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -30,5 +37,19 @@ mod tests {
     fn rejects_an_unknown_name() {
         let err = parse_tz("Mars/Olympus").unwrap_err();
         assert_eq!(err.field.as_deref(), Some("timezone"));
+    }
+
+    #[test]
+    fn parses_wall_clock_strings() {
+        let wall = parse_wall("2026-08-03T10:00").unwrap();
+        assert_eq!(wall.format(WALL_FORMAT).to_string(), "2026-08-03T10:00");
+    }
+
+    #[test]
+    fn rejects_malformed_wall_clock() {
+        assert_eq!(
+            parse_wall("nope").unwrap_err().field.as_deref(),
+            Some("startAt")
+        );
     }
 }
