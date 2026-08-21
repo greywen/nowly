@@ -53,9 +53,25 @@ pub fn utc_to_wall(instant: DateTime<Utc>, tz: Tz) -> NaiveDateTime {
     instant.with_timezone(&tz).naive_local()
 }
 
+/// 探测设备当前的 IANA 时区。探测失败或时区名无法解析时回退到 UTC，
+/// 保证调用方永远拿到一个合法时区而不必处理错误。
+pub fn device_tz() -> Tz {
+    iana_time_zone::get_timezone()
+        .ok()
+        .and_then(|name| name.parse::<Tz>().ok())
+        .unwrap_or(Tz::UTC)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn device_tz_returns_a_valid_zone() {
+        // 只要求不 panic 并返回一个合法时区；具体值取决于运行环境。
+        let tz = device_tz();
+        assert!(!tz.name().is_empty());
+    }
 
     #[test]
     fn converts_utc_to_wall_in_target_zone() {
