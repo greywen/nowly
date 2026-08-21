@@ -178,6 +178,8 @@ mod tests {
             title: "评审".into(),
             start_at: start_at.into(),
             end_at: start_at.into(),
+            start_tz: None,
+            end_tz: None,
             all_day: false,
             category: "work".into(),
             color: "#4FC9DA".into(),
@@ -187,6 +189,7 @@ mod tests {
             created_at: "t".into(),
             updated_at: "t".into(),
             recurrence: None,
+            rrule: None,
             series_id: None,
             series_start_at: None,
             occurrence_start_at: None,
@@ -268,9 +271,9 @@ mod tests {
         connection
             .execute(
                 "INSERT INTO events(id,title,start_at,end_at,all_day,category,color,note,created_at,updated_at,
-                                    recurrence_freq,recurrence_interval,recurrence_by_day,reminders)
+                                    rrule,reminders)
                  VALUES ('s1','周会','2026-08-03T10:00','2026-08-03T11:00',0,'work','#4FC9DA','','t','t',
-                         'weekly',1,'MO','[10]')",
+                         'FREQ=WEEKLY;BYDAY=MO','[10]')",
                 [],
             )
             .unwrap();

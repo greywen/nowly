@@ -192,9 +192,8 @@ mod tests {
         for id in ["s1", "s2"] {
             connection
                 .execute(
-                    "INSERT INTO events(id,title,start_at,end_at,all_day,category,color,note,created_at,updated_at,
-                                        recurrence_freq,recurrence_by_day)
-                     VALUES (?1,'周会','2026-08-03T10:00','2026-08-03T11:00',0,'work','#0BB783','','t','t','weekly','MO')",
+                    "INSERT INTO events(id,title,start_at,end_at,all_day,category,color,note,created_at,updated_at,rrule)
+                     VALUES (?1,'周会','2026-08-03T10:00','2026-08-03T11:00',0,'work','#0BB783','','t','t','FREQ=WEEKLY;BYDAY=MO')",
                     [id],
                 )
                 .expect("series inserts");

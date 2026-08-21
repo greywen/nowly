@@ -2,10 +2,9 @@ use crate::db::AppDb;
 use crate::error::CommandError;
 use crate::event_exceptions::{self, Exception};
 use crate::models::{EditScope, Event, EventDraft, EventRange, EventTarget};
-use crate::recurrence::{
-    self, end_from_columns, freq_from_str, parse_by_day, Recurrence, Series,
-};
+use crate::recurrence::{self, parse_by_day, Recurrence, Series};
 use chrono::{Duration, NaiveDateTime, SecondsFormat, Utc};
+use chrono_tz::Tz;
 use rusqlite::{params, Connection, OptionalExtension, Row, Transaction, TransactionBehavior};
 use uuid::Uuid;
 use tauri::State;
@@ -13,10 +12,10 @@ use tauri::State;
 const LOCAL_MINUTE_FORMAT: &str = "%Y-%m-%dT%H:%M";
 const CATEGORIES: &[&str] = &["work", "important", "personal", "learning"];
 
-const EVENT_COLUMNS: &str = "id,title,start_at,end_at,all_day,category,color,linked_task_id,note,\
-                             created_at,updated_at,recurrence_freq,recurrence_interval,\
-                             recurrence_by_day,recurrence_until,recurrence_count,recurrence_final_at,\
-                             reminders";
+// 列顺序决定后续 `row.get(idx)` 的下标，务必与 read_series_row 中的索引一致。
+const EVENT_COLUMNS: &str = "id,title,start_at,end_at,start_tz,end_tz,start_utc,end_utc,\
+                             all_day,category,color,linked_task_id,note,reminders,\
+                             created_at,updated_at,rrule,recurrence_final_at,rdate,exdate";
 
 /// 提醒偏移量的上限：四周（分钟）。超过即视为无意义的提醒。
 pub const MAX_REMINDER_MINUTES: i64 = 4 * 7 * 24 * 60;
@@ -83,118 +82,150 @@ fn parse_local(value: &str, field: &str) -> Result<NaiveDateTime, CommandError> 
         .map_err(|_| CommandError::validation(field, "日期或时间格式无效。"))
 }
 
-/// 系列行读出的原始数据。展开前的中间形态，不直接对外暴露。
+/// 系列行读出的原始数据（事件自身时区下的钟面 + RRULE 串）。展开前的中间形态，不直接对外暴露。
 struct SeriesRow {
-    event: Event,
-    rule: Option<Recurrence>,
+    id: String,
+    title: String,
+    start_wall: String,
+    end_wall: String,
+    start_tz: Option<String>,
+    end_tz: Option<String>,
+    all_day: bool,
+    category: String,
+    color: String,
+    linked_task_id: Option<String>,
+    note: String,
+    reminders: Vec<i64>,
+    created_at: String,
+    updated_at: String,
+    rrule: Option<String>,
     final_at: Option<String>,
+    rdate: Vec<String>,
+    exdate: Vec<String>,
 }
 
-/// 重复列的取值只由归一化写入，读到越界或未知值即为数据损坏，必须报错而非取默认值。
-fn corrupt_column(index: usize, message: String) -> rusqlite::Error {
-    rusqlite::Error::FromSqlConversionFailure(index, rusqlite::types::Type::Text, message.into())
+/// 解析 rdate/exdate 存储列（JSON 数组的钟面串）。空串/损坏值一律视为空列表。
+fn parse_json_list(raw: Option<String>) -> Vec<String> {
+    raw.filter(|s| !s.trim().is_empty())
+        .and_then(|s| serde_json::from_str::<Vec<String>>(&s).ok())
+        .unwrap_or_default()
 }
 
 fn read_series_row(row: &Row<'_>) -> rusqlite::Result<SeriesRow> {
-    let freq: Option<String> = row.get(11)?;
-    let interval: i64 = row.get(12)?;
-    let by_day: String = row.get(13)?;
-    let until: Option<String> = row.get(14)?;
-    let count: Option<i64> = row.get(15)?;
-    let final_at: Option<String> = row.get(16)?;
-    let reminders: String = row.get(17)?;
-
-    let rule = match freq {
-        Some(freq) => Some(Recurrence {
-            freq: freq_from_str(&freq)
-                .map_err(|_| corrupt_column(11, format!("未知的重复频率：{freq}")))?,
-            interval: u32::try_from(interval)
-                .map_err(|_| corrupt_column(12, format!("重复间隔越界：{interval}")))?,
-            by_day: by_day
-                .split(',')
-                .filter(|code| !code.is_empty())
-                .map(str::to_owned)
-                .collect(),
-            end: end_from_columns(
-                until,
-                count
-                    .map(u32::try_from)
-                    .transpose()
-                    .map_err(|_| corrupt_column(15, "重复次数越界。".to_owned()))?,
-            ),
-        }),
-        None => None,
-    };
-
+    let reminders: String = row.get(13)?;
     Ok(SeriesRow {
-        event: Event {
-            id: row.get(0)?,
-            title: row.get(1)?,
-            start_at: row.get(2)?,
-            end_at: row.get(3)?,
-            all_day: row.get::<_, i64>(4)? == 1,
-            category: row.get(5)?,
-            color: row.get(6)?,
-            linked_task_id: row.get(7)?,
-            note: row.get(8)?,
-            reminders: parse_reminders(&reminders),
-            created_at: row.get(9)?,
-            updated_at: row.get(10)?,
-            recurrence: None,
-            series_id: None,
-            series_start_at: None,
-            occurrence_start_at: None,
-            is_overridden: false,
-        },
-        rule,
-        final_at,
+        id: row.get(0)?,
+        title: row.get(1)?,
+        start_wall: row.get(2)?,
+        end_wall: row.get(3)?,
+        start_tz: row.get(4)?,
+        end_tz: row.get(5)?,
+        all_day: row.get::<_, i64>(8)? == 1,
+        category: row.get(9)?,
+        color: row.get(10)?,
+        linked_task_id: row.get(11)?,
+        note: row.get(12)?,
+        reminders: parse_reminders(&reminders),
+        created_at: row.get(14)?,
+        updated_at: row.get(15)?,
+        rrule: row.get(16)?,
+        final_at: row.get(17)?,
+        rdate: parse_json_list(row.get(18)?),
+        exdate: parse_json_list(row.get(19)?),
     })
+}
+
+/// 把事件自身时区下的钟面换算成设备时区的显示钟面。浮动/全天原样返回。
+fn to_display_wall(wall: &str, tz: &Option<String>) -> String {
+    let Some(tz_name) = tz else {
+        return wall.to_owned();
+    };
+    let (Ok(zone), Ok(naive)) = (
+        crate::timezone::parse_tz(tz_name),
+        crate::timezone::parse_wall(wall),
+    ) else {
+        return wall.to_owned();
+    };
+    let instant = crate::timezone::wall_to_utc(naive, zone);
+    crate::timezone::format_wall(crate::timezone::utc_to_wall(instant, crate::timezone::device_tz()))
+}
+
+/// 由系列行装配一个 `Event`。`occurrence_wall` 为该实例在系列自身时区下的钟面起点
+/// （身份键）；为 None 时表示单次事件或系列首实例，直接用行上的 start/end。
+/// 展开实例按系列时长平移后再换算成设备显示钟面。
+fn event_from_series_row(row: &SeriesRow, occurrence_wall: Option<&str>) -> Event {
+    let is_series = row.rrule.is_some();
+    // 计算该实例（系列时区）的起止钟面。
+    let (inst_start_wall, inst_end_wall) = match occurrence_wall {
+        Some(slot) => {
+            match (
+                crate::timezone::parse_wall(&row.start_wall),
+                crate::timezone::parse_wall(&row.end_wall),
+                crate::timezone::parse_wall(slot),
+            ) {
+                (Ok(base_start), Ok(base_end), Ok(slot_start)) => {
+                    let duration = base_end - base_start;
+                    (
+                        crate::timezone::format_wall(slot_start),
+                        crate::timezone::format_wall(slot_start + duration),
+                    )
+                }
+                // 解析失败兜底：退回行上的起止钟面。
+                _ => (row.start_wall.clone(), row.end_wall.clone()),
+            }
+        }
+        None => (row.start_wall.clone(), row.end_wall.clone()),
+    };
+    let start_display = to_display_wall(&inst_start_wall, &row.start_tz);
+    let end_display = to_display_wall(&inst_end_wall, &row.end_tz);
+    Event {
+        id: row.id.clone(),
+        title: row.title.clone(),
+        start_at: start_display,
+        end_at: end_display,
+        start_tz: row.start_tz.clone(),
+        end_tz: row.end_tz.clone(),
+        all_day: row.all_day,
+        category: row.category.clone(),
+        color: row.color.clone(),
+        linked_task_id: row.linked_task_id.clone(),
+        note: row.note.clone(),
+        reminders: row.reminders.clone(),
+        created_at: row.created_at.clone(),
+        updated_at: row.updated_at.clone(),
+        recurrence: row
+            .rrule
+            .as_deref()
+            .and_then(crate::rrule_bridge::rrule_to_recurrence),
+        rrule: row.rrule.clone(),
+        series_id: is_series.then(|| row.id.clone()),
+        series_start_at: is_series.then(|| row.start_wall.clone()),
+        occurrence_start_at: occurrence_wall
+            .map(str::to_owned)
+            .or_else(|| is_series.then(|| row.start_wall.clone())),
+        is_overridden: false,
+    }
 }
 
 /// 系列行本身即它的首个实例：R1 已保证 `start_at` 落在规则上。
 fn read_event(row: &Row<'_>) -> rusqlite::Result<Event> {
-    let series_row = read_series_row(row)?;
-    let mut event = series_row.event;
-    if series_row.rule.is_some() {
-        event.series_id = Some(event.id.clone());
-        event.series_start_at = Some(event.start_at.clone());
-        event.occurrence_start_at = Some(event.start_at.clone());
-        event.recurrence = series_row.rule;
-    }
-    Ok(event)
+    Ok(event_from_series_row(&read_series_row(row)?, None))
 }
 
-/// 把系列行按恒定时长平移到某个槽位，得到一个展开实例。
-fn instance_from(row: &SeriesRow, slot: NaiveDateTime, duration: Duration) -> Event {
-    let mut event = row.event.clone();
-    event.start_at = slot.format(LOCAL_MINUTE_FORMAT).to_string();
-    event.end_at = (slot + duration).format(LOCAL_MINUTE_FORMAT).to_string();
-    event.recurrence = row.rule.clone();
-    event.series_id = Some(row.event.id.clone());
-    // 系列行的 `start_at` 就是 dtstart；实例的 `start_at` 已被平移，必须从行上取。
-    event.series_start_at = Some(row.event.start_at.clone());
-    event.occurrence_start_at = Some(event.start_at.clone());
-    event.is_overridden = false;
-    event
-}
-
-fn overridden_instance(
+/// 用 override 字段装配一个被覆盖的实例。override 钟面继承系列时区，显示换算复用 `to_display_wall`。
+fn overridden_event(
     row: &SeriesRow,
-    slot: &str,
+    slot_wall: &str,
     fields: &event_exceptions::OverrideFields,
 ) -> Event {
-    let mut event = row.event.clone();
+    let mut event = event_from_series_row(row, Some(slot_wall));
     event.title = fields.title.clone();
-    event.start_at = fields.start_at.clone();
-    event.end_at = fields.end_at.clone();
+    event.start_at = to_display_wall(&fields.start_at, &row.start_tz);
+    event.end_at = to_display_wall(&fields.end_at, &row.end_tz);
     event.all_day = fields.all_day;
     event.category = fields.category.clone();
     event.color = fields.color.clone();
     event.note = fields.note.clone();
-    event.recurrence = row.rule.clone();
-    event.series_id = Some(row.event.id.clone());
-    event.series_start_at = Some(row.event.start_at.clone());
-    event.occurrence_start_at = Some(slot.to_owned());
     event.is_overridden = true;
     event
 }
@@ -207,105 +238,61 @@ pub fn list_in_range(
     connection: &Connection,
     range: &EventRange,
 ) -> Result<Vec<Event>, CommandError> {
-    let start = parse_local(&range.start_at, "startAt")?;
-    let end = parse_local(&range.end_at_exclusive, "endAtExclusive")?;
-    if start >= end {
+    let device = crate::timezone::device_tz();
+    let win_start = parse_local(&range.start_at, "startAt")?;
+    let win_end = parse_local(&range.end_at_exclusive, "endAtExclusive")?;
+    if win_start >= win_end {
         return Err(CommandError::validation(
             "endAtExclusive",
             "查询结束时间必须晚于开始时间。",
         ));
     }
-    // 例外表与系列预筛都用字典序比较窗口，必须重新格式化成定长形式，
-    // 因为 chrono 的解析接受 `2026-8-1T0:00` 这类变长写法。
-    let window_start = start.format(LOCAL_MINUTE_FORMAT).to_string();
-    let window_end = end.format(LOCAL_MINUTE_FORMAT).to_string();
+    // 设备钟面窗口对应的 UTC 瞬时点，用于带时区事件的 UTC 缓存比较。
+    let win_start_utc =
+        crate::timezone::format_utc(crate::timezone::wall_to_utc(win_start, device));
+    let win_end_utc = crate::timezone::format_utc(crate::timezone::wall_to_utc(win_end, device));
+    let win_start_wall = crate::timezone::format_wall(win_start);
+    let win_end_wall = crate::timezone::format_wall(win_end);
 
     let mut results: Vec<Event> = Vec::new();
 
+    // —— 单次事件：浮动/全天走钟面，带时区走 UTC 缓存 ——
     let mut singles = connection
         .prepare(&format!(
-            "SELECT {EVENT_COLUMNS} FROM events
-             WHERE recurrence_freq IS NULL AND start_at >= ?1 AND start_at < ?2"
+            "SELECT {EVENT_COLUMNS} FROM events WHERE rrule IS NULL AND (
+                (start_tz IS NULL AND start_at >= ?1 AND start_at < ?2)
+                OR (start_tz IS NOT NULL AND start_utc >= ?3 AND start_utc < ?4))"
         ))
         .map_err(CommandError::database)?;
     let rows = singles
-        .query_map(params![window_start, window_end], read_event)
+        .query_map(
+            params![win_start_wall, win_end_wall, win_start_utc, win_end_utc],
+            read_event,
+        )
         .map_err(CommandError::database)?;
     for row in rows {
         results.push(row.map_err(CommandError::database)?);
     }
 
-    // 预筛仍可能与窗口相交的系列：规则本身够到窗口，或某次被覆盖后落进窗口。
-    let mut series_statement = connection
-        .prepare(&format!(
-            "SELECT {EVENT_COLUMNS} FROM events
-             WHERE recurrence_freq IS NOT NULL
-               AND ((start_at < ?2
-                     AND (recurrence_final_at IS NULL OR recurrence_final_at >= ?1))
-                    OR EXISTS (SELECT 1 FROM event_exceptions
-                               WHERE event_exceptions.series_id = events.id
-                                 AND event_exceptions.kind = 'overridden'
-                                 AND event_exceptions.start_at >= ?1
-                                 AND event_exceptions.start_at < ?2))"
-        ))
-        .map_err(CommandError::database)?;
-    let series_rows = series_statement
-        .query_map(params![window_start, window_end], read_series_row)
-        .map_err(CommandError::database)?;
-
-    for series_row in series_rows {
-        let series_row = series_row.map_err(CommandError::database)?;
-        let Some(rule) = series_row.rule.clone() else {
-            continue;
-        };
-        let dtstart = parse_local(&series_row.event.start_at, "startAt")?;
-        let dtend = parse_local(&series_row.event.end_at, "endAt")?;
-        let duration = dtend - dtstart;
-        let final_at = match series_row.final_at.as_deref() {
-            Some(value) => Some(parse_local(value, "recurrenceFinalAt")?),
-            None => None,
-        };
-        let series = Series {
-            freq: rule.freq,
-            interval: rule.interval,
-            by_day: parse_by_day(&rule.by_day.join(","))?,
-            dtstart,
-            final_at,
-        };
-
-        let exceptions = event_exceptions::load_for_window(
-            connection,
-            &series_row.event.id,
-            &window_start,
-            &window_end,
-        )?;
-
-        for slot in recurrence::expand(&series, start, end) {
-            let key = slot.format(LOCAL_MINUTE_FORMAT).to_string();
-            match exceptions.get(&key) {
-                Some(Exception::Excluded) => {}
-                // 覆盖可能把这一次移出窗口，此时它不属于本窗口。
-                Some(Exception::Overridden(fields)) => {
-                    if within(&fields.start_at, &window_start, &window_end) {
-                        results.push(overridden_instance(&series_row, &key, fields));
-                    }
-                }
-                None => results.push(instance_from(&series_row, slot, duration)),
-            }
+    // —— 系列：全部取回，逐个在系列自身时区展开（引擎窗口为空则自然不产出）——
+    let series_rows: Vec<SeriesRow> = {
+        let mut series_stmt = connection
+            .prepare(&format!(
+                "SELECT {EVENT_COLUMNS} FROM events WHERE rrule IS NOT NULL"
+            ))
+            .map_err(CommandError::database)?;
+        let mapped = series_stmt
+            .query_map([], read_series_row)
+            .map_err(CommandError::database)?;
+        let mut collected = Vec::new();
+        for row in mapped {
+            collected.push(row.map_err(CommandError::database)?);
         }
+        collected
+    };
 
-        // 槽位在窗口外、被覆盖后移入窗口的实例不会被展开产出，需要单独补入。
-        for (key, exception) in &exceptions {
-            let Exception::Overridden(fields) = exception else {
-                continue;
-            };
-            if within(key, &window_start, &window_end) {
-                continue;
-            }
-            if within(&fields.start_at, &window_start, &window_end) {
-                results.push(overridden_instance(&series_row, key, fields));
-            }
-        }
+    for series_row in &series_rows {
+        expand_series_into(connection, series_row, win_start, win_end, device, &mut results)?;
     }
 
     results.sort_by(|left, right| {
@@ -316,6 +303,97 @@ pub fn list_in_range(
             .then(left.occurrence_start_at.cmp(&right.occurrence_start_at))
     });
     Ok(results)
+}
+
+/// 把一个系列在设备窗口内展开，叠加例外（excluded 剔除、overridden 覆盖）。
+/// 例外身份键与展开都在系列自身时区的钟面下进行；两路补入：
+/// Pass 1 遍历窗内展开槽位（未被例外改动的照常产出，被移出窗口的丢弃）；
+/// Pass 2 补入被覆盖后移入窗口、但原槽位在窗外的实例。
+fn expand_series_into(
+    connection: &Connection,
+    row: &SeriesRow,
+    win_start: NaiveDateTime,
+    win_end: NaiveDateTime,
+    device: chrono_tz::Tz,
+    out: &mut Vec<Event>,
+) -> Result<(), CommandError> {
+    // 系列自身时区（浮动为 None）。
+    let series_tz = match &row.start_tz {
+        Some(name) => Some(crate::timezone::parse_tz(name)?),
+        None => None,
+    };
+    // 设备钟面窗口 → 系列时区钟面窗口。浮动系列：钟面窗口原样。
+    let (ws, we) = match series_tz {
+        Some(zone) => {
+            let s = crate::timezone::utc_to_wall(
+                crate::timezone::wall_to_utc(win_start, device),
+                zone,
+            );
+            let e = crate::timezone::utc_to_wall(
+                crate::timezone::wall_to_utc(win_end, device),
+                zone,
+            );
+            (s, e)
+        }
+        None => (win_start, win_end),
+    };
+    let ws_wall = crate::timezone::format_wall(ws);
+    let we_wall = crate::timezone::format_wall(we);
+
+    let spec = crate::rrule_engine::SeriesSpec {
+        dtstart_wall: crate::timezone::parse_wall(&row.start_wall)?,
+        tz: series_tz,
+        rrule: row.rrule.clone(),
+        rdate: row
+            .rdate
+            .iter()
+            .filter_map(|s| crate::timezone::parse_wall(s).ok())
+            .collect(),
+        exdate: row
+            .exdate
+            .iter()
+            .filter_map(|s| crate::timezone::parse_wall(s).ok())
+            .collect(),
+    };
+    let occs = crate::rrule_engine::expand(
+        &spec,
+        ws,
+        we,
+        crate::rrule_engine::MAX_WINDOW_OCCURRENCES,
+    )?;
+
+    // 例外：同时取回影响窗内槽位的、以及被覆盖后移入窗口的。键为系列时区钟面。
+    let exceptions =
+        event_exceptions::load_for_window(connection, &row.id, &ws_wall, &we_wall)?;
+
+    // Pass 1：窗内展开槽位。
+    for occ in &occs {
+        let slot_wall = crate::timezone::format_wall(occ.wall);
+        match exceptions.get(&slot_wall) {
+            Some(Exception::Excluded) => {}
+            Some(Exception::Overridden(fields)) => {
+                // 覆盖可能把这一次移出窗口，此时它不属于本窗口。
+                if within(&fields.start_at, &ws_wall, &we_wall) {
+                    out.push(overridden_event(row, &slot_wall, fields));
+                }
+            }
+            None => out.push(event_from_series_row(row, Some(&slot_wall))),
+        }
+    }
+
+    // Pass 2：槽位在窗外、被覆盖后移入窗口的实例（Pass 1 不会产出）。
+    for (slot_wall, exception) in &exceptions {
+        let Exception::Overridden(fields) = exception else {
+            continue;
+        };
+        if within(slot_wall, &ws_wall, &we_wall) {
+            continue;
+        }
+        if within(&fields.start_at, &ws_wall, &we_wall) {
+            out.push(overridden_event(row, slot_wall, fields));
+        }
+    }
+    Ok(())
 }
 
 pub fn validate_and_normalize(mut draft: EventDraft) -> Result<EventDraft, CommandError> {
@@ -379,34 +457,80 @@ fn event_by_id(connection: &Connection, id: &str) -> Result<Option<Event>, Comma
         .map_err(CommandError::database)
 }
 
-/// 重复规则对应的六个存储列。返回元组而非结构体，因为它只在
-/// INSERT / UPDATE 的参数位上原样展开，不参与任何其他运算。
-type RecurrenceColumns = (
-    Option<&'static str>,
-    u32,
-    String,
-    Option<String>,
-    Option<u32>,
-    Option<String>,
-);
+/// 一条事件写库时的全部 ICS 存储列。
+struct IcsColumns {
+    start_tz: Option<String>,
+    end_tz: Option<String>,
+    start_utc: Option<String>,
+    end_utc: Option<String>,
+    rrule: Option<String>,
+    final_at: Option<String>,
+    rdate: String,
+    exdate: String,
+}
 
-fn recurrence_columns(draft: &EventDraft) -> Result<RecurrenceColumns, CommandError> {
-    let Some(rule) = draft.recurrence.as_ref() else {
-        return Ok((None, 1, String::new(), None, None, None));
-    };
+/// 由重复规则算出绝对上界钟面（供范围预筛）。无限系列返回 None。
+fn compute_final_at(
+    draft: &EventDraft,
+    rule: &Recurrence,
+) -> Result<Option<String>, CommandError> {
     let dtstart = parse_local(&draft.start_at, "startAt")?;
     let normalized = recurrence::normalize(rule, dtstart)?;
-    let (until, count) = recurrence::end_to_columns(&normalized.rule.end);
-    Ok((
-        Some(recurrence::freq_to_str(normalized.rule.freq)),
-        normalized.rule.interval,
-        normalized.rule.by_day.join(","),
-        until,
-        count,
-        normalized
-            .final_at
-            .map(|value| value.format(LOCAL_MINUTE_FORMAT).to_string()),
-    ))
+    Ok(normalized
+        .final_at
+        .map(|value| value.format(LOCAL_MINUTE_FORMAT).to_string()))
+}
+
+/// 由归一化后的 draft 计算全部 ICS 存储列。本地新建：定时事件绑设备时区，全天浮动。
+fn ics_columns(draft: &EventDraft) -> Result<IcsColumns, CommandError> {
+    // 事件自身时区：全天为浮动（None）；定时事件取 draft.start_tz（订阅路径已带），
+    // 本地新建时 draft.start_tz 为 None，则绑设备时区。
+    let (start_tz, end_tz) = if draft.all_day {
+        (None, None)
+    } else {
+        let device = crate::timezone::device_tz().name().to_owned();
+        (
+            Some(draft.start_tz.clone().unwrap_or_else(|| device.clone())),
+            Some(draft.end_tz.clone().unwrap_or(device)),
+        )
+    };
+
+    // UTC 缓存：仅带时区事件。
+    let compute_utc = |wall: &str, tz: &Option<String>| -> Result<Option<String>, CommandError> {
+        match tz {
+            Some(name) => {
+                let zone = crate::timezone::parse_tz(name)?;
+                let naive = crate::timezone::parse_wall(wall)?;
+                Ok(Some(crate::timezone::format_utc(
+                    crate::timezone::wall_to_utc(naive, zone),
+                )))
+            }
+            None => Ok(None),
+        }
+    };
+    let start_utc = compute_utc(&draft.start_at, &start_tz)?;
+    let end_utc = compute_utc(&draft.end_at, &end_tz)?;
+
+    // RRULE 串 + final_at（经桥接把简单 Recurrence 转标准串）。
+    let (rrule, final_at) = match draft.recurrence.as_ref() {
+        Some(rule) => {
+            let text = crate::rrule_bridge::recurrence_to_rrule(rule);
+            let final_at = compute_final_at(draft, rule)?;
+            (Some(text), final_at)
+        }
+        None => (None, None),
+    };
+
+    Ok(IcsColumns {
+        start_tz,
+        end_tz,
+        start_utc,
+        end_utc,
+        rrule,
+        final_at,
+        rdate: "[]".to_owned(),
+        exdate: "[]".to_owned(),
+    })
 }
 
 /// 规则与完整开始时刻均未变时，槽位序列 `f(dtstart, rule)` 不变，
@@ -565,17 +689,18 @@ pub fn create(connection: &mut Connection, draft: EventDraft) -> Result<Event, C
     if let Some(task_id) = draft.linked_task_id.as_deref() {
         require_task(&transaction, task_id)?;
     }
-    let (freq, interval, by_day, until, count, final_at) = recurrence_columns(&draft)?;
+    let cols = ics_columns(&draft)?;
     transaction
         .execute(
-            "INSERT INTO events(id,title,start_at,end_at,all_day,category,color,linked_task_id,note,
-                                created_at,updated_at,recurrence_freq,recurrence_interval,
-                                recurrence_by_day,recurrence_until,recurrence_count,recurrence_final_at,reminders)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,NULL,?8,?9,?9,?10,?11,?12,?13,?14,?15,?16)",
-            params![id, draft.title, draft.start_at, draft.end_at, i64::from(draft.all_day),
-                    draft.category, draft.color, draft.note, now,
-                    freq, interval, by_day, until, count, final_at,
-                    reminders_to_json(&draft.reminders)],
+            "INSERT INTO events(id,title,start_at,end_at,start_tz,end_tz,start_utc,end_utc,
+                                all_day,category,color,linked_task_id,note,reminders,
+                                created_at,updated_at,rrule,recurrence_final_at,rdate,exdate)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,NULL,?12,?13,?14,?14,?15,?16,?17,?18)",
+            params![id, draft.title, draft.start_at, draft.end_at,
+                    cols.start_tz, cols.end_tz, cols.start_utc, cols.end_utc,
+                    i64::from(draft.all_day), draft.category, draft.color,
+                    draft.note, reminders_to_json(&draft.reminders), now,
+                    cols.rrule, cols.final_at, cols.rdate, cols.exdate],
         )
         .map_err(sql_write_error)?;
     relink(
@@ -640,18 +765,19 @@ pub fn update(
                 &now,
             )?;
             // 跨列一致性 CHECK 在 UPDATE 时重新求值整行，重复列必须一次写成一致状态。
-            let (freq, interval, by_day, until, count, final_at) = recurrence_columns(&draft)?;
+            let cols = ics_columns(&draft)?;
             transaction
                 .execute(
-                    "UPDATE events SET title=?2,start_at=?3,end_at=?4,all_day=?5,category=?6,color=?7,
-                     linked_task_id=?8,note=?9,updated_at=?10,recurrence_freq=?11,recurrence_interval=?12,
-                     recurrence_by_day=?13,recurrence_until=?14,recurrence_count=?15,recurrence_final_at=?16,
-                     reminders=?17
+                    "UPDATE events SET title=?2,start_at=?3,end_at=?4,start_tz=?5,end_tz=?6,
+                     start_utc=?7,end_utc=?8,all_day=?9,category=?10,color=?11,
+                     linked_task_id=?12,note=?13,updated_at=?14,rrule=?15,recurrence_final_at=?16,
+                     rdate=?17,exdate=?18,reminders=?19
                      WHERE id=?1",
                     params![target.id, draft.title, draft.start_at, draft.end_at,
+                            cols.start_tz, cols.end_tz, cols.start_utc, cols.end_utc,
                             i64::from(draft.all_day), draft.category, draft.color,
                             draft.linked_task_id, draft.note, now,
-                            freq, interval, by_day, until, count, final_at,
+                            cols.rrule, cols.final_at, cols.rdate, cols.exdate,
                             reminders_to_json(&draft.reminders)],
                 )
                 .map_err(sql_write_error)?;
@@ -747,16 +873,17 @@ pub fn update(
             }
 
             let new_id = Uuid::new_v4().hyphenated().to_string();
-            let (freq, interval, by_day, until, count, final_at) = recurrence_columns(&new_draft)?;
+            let cols = ics_columns(&new_draft)?;
             transaction
                 .execute(
-                    "INSERT INTO events(id,title,start_at,end_at,all_day,category,color,linked_task_id,note,
-                                        created_at,updated_at,recurrence_freq,recurrence_interval,
-                                        recurrence_by_day,recurrence_until,recurrence_count,recurrence_final_at,reminders)
-                     VALUES (?1,?2,?3,?4,?5,?6,?7,NULL,?8,?9,?9,?10,?11,?12,?13,?14,?15,?16)",
+                    "INSERT INTO events(id,title,start_at,end_at,start_tz,end_tz,start_utc,end_utc,
+                                        all_day,category,color,linked_task_id,note,
+                                        created_at,updated_at,rrule,recurrence_final_at,rdate,exdate,reminders)
+                     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,NULL,?12,?13,?13,?14,?15,?16,?17,?18)",
                     params![new_id, new_draft.title, new_draft.start_at, new_draft.end_at,
+                            cols.start_tz, cols.end_tz, cols.start_utc, cols.end_utc,
                             i64::from(new_draft.all_day), new_draft.category, new_draft.color,
-                            new_draft.note, now, freq, interval, by_day, until, count, final_at,
+                            new_draft.note, now, cols.rrule, cols.final_at, cols.rdate, cols.exdate,
                             reminders_to_json(&new_draft.reminders)],
                 )
                 .map_err(sql_write_error)?;
@@ -812,15 +939,15 @@ fn rewrite_end(
     };
     let dtstart = parse_local(&existing.start_at, "startAt")?;
     let normalized = recurrence::normalize(&rewritten, dtstart)?;
-    let (until, count) = recurrence::end_to_columns(&normalized.rule.end);
+    // 重复列已并入单一 rrule 串：经桥接把归一化后的规则转回标准 RRULE 串写库，
+    // 同时重算 recurrence_final_at 作为范围预筛的绝对上界。
+    let rrule = crate::rrule_bridge::recurrence_to_rrule(&normalized.rule);
     transaction
         .execute(
-            "UPDATE events SET recurrence_until=?2,recurrence_count=?3,recurrence_final_at=?4,
-             updated_at=?5 WHERE id=?1",
+            "UPDATE events SET rrule=?2,recurrence_final_at=?3,updated_at=?4 WHERE id=?1",
             params![
                 existing.id,
-                until,
-                count,
+                rrule,
                 normalized
                     .final_at
                     .map(|value| value.format(LOCAL_MINUTE_FORMAT).to_string()),
@@ -990,6 +1117,8 @@ mod tests {
             note: "".into(),
             reminders: Vec::new(),
             recurrence: None,
+            start_tz: None,
+            end_tz: None,
         }
     }
 
@@ -1021,6 +1150,101 @@ mod tests {
 
     fn task_link(connection: &Connection, id: &str) -> Option<String> {
         connection.query_row("SELECT linked_event_id FROM tasks WHERE id=?1", [id], |row| row.get(0)).unwrap()
+    }
+
+    #[test]
+    fn reads_a_tz_bound_single_event_with_display_conversion() {
+        let connection = database();
+        // 上海 10:00（02:00Z）。
+        connection.execute(
+            "INSERT INTO events(id,title,start_at,end_at,start_tz,end_tz,start_utc,end_utc,
+                                all_day,category,color,note,reminders,created_at,updated_at)
+             VALUES ('e1','会议','2026-08-03T10:00','2026-08-03T11:00','Asia/Shanghai','Asia/Shanghai',
+                     '2026-08-03T02:00Z','2026-08-03T03:00Z',0,'work','#4FC9DA','','[]','t','t')",
+            [],
+        ).unwrap();
+        let event = event_by_id(&connection, "e1").unwrap().unwrap();
+        assert_eq!(event.start_tz.as_deref(), Some("Asia/Shanghai"));
+        assert_eq!(event.rrule, None);
+        // 显示钟面 = 02:00Z 换算到设备时区。
+        use chrono::TimeZone;
+        let instant = chrono::Utc.with_ymd_and_hms(2026, 8, 3, 2, 0, 0).unwrap();
+        let expected = crate::timezone::format_wall(
+            crate::timezone::utc_to_wall(instant, crate::timezone::device_tz()),
+        );
+        assert_eq!(event.start_at, expected);
+    }
+
+    #[test]
+    fn create_binds_device_tz_and_computes_utc_cache_for_timed_events() {
+        let mut connection = database();
+        let created = create(&mut connection, draft()).unwrap();
+        // 直读存储列（非下发显示值）。
+        let (tz, utc): (Option<String>, Option<String>) = connection
+            .query_row(
+                "SELECT start_tz, start_utc FROM events WHERE id=?1",
+                [&created.id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        let device = crate::timezone::device_tz();
+        assert_eq!(tz.as_deref(), Some(device.name()));
+        assert!(utc.is_some(), "带时区事件必须有 UTC 缓存");
+    }
+
+    #[test]
+    fn create_leaves_all_day_events_floating() {
+        let mut connection = database();
+        let created = create(&mut connection, EventDraft { all_day: true, ..draft() }).unwrap();
+        let (tz, utc): (Option<String>, Option<String>) = connection
+            .query_row(
+                "SELECT start_tz, start_utc FROM events WHERE id=?1",
+                [&created.id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(tz, None, "全天事件浮动，无时区");
+        assert_eq!(utc, None, "全天事件无 UTC 缓存");
+    }
+
+    #[test]
+    fn range_query_expands_tz_bound_series_via_engine() {
+        let connection = database();
+        // 上海每周一 10:00 的系列。
+        connection.execute(
+            "INSERT INTO events(id,title,start_at,end_at,start_tz,end_tz,start_utc,end_utc,
+                                all_day,category,color,note,reminders,created_at,updated_at,rrule,recurrence_final_at)
+             VALUES ('s1','周会','2026-08-03T10:00','2026-08-03T11:00','Asia/Shanghai','Asia/Shanghai',
+                     '2026-08-03T02:00Z','2026-08-03T03:00Z',0,'work','#4FC9DA','','[]','t','t',
+                     'FREQ=WEEKLY;BYDAY=MO',NULL)",
+            [],
+        ).unwrap();
+        let events = list_in_range(&connection, &EventRange {
+            start_at: "2026-08-01T00:00".into(),
+            end_at_exclusive: "2026-09-01T00:00".into(),
+        }).unwrap();
+        // 八月的周一：3、10、17、24、31 共五次。
+        assert_eq!(events.len(), 5);
+        assert!(events.iter().all(|e| e.series_id.as_deref() == Some("s1")));
+        // occurrence_start_at 是系列时区钟面。
+        assert_eq!(events[0].occurrence_start_at.as_deref(), Some("2026-08-03T10:00"));
+    }
+
+    #[test]
+    fn range_query_keeps_floating_events_by_wall_clock() {
+        let connection = database();
+        connection.execute(
+            "INSERT INTO events(id,title,start_at,end_at,all_day,category,color,note,reminders,created_at,updated_at)
+             VALUES ('f1','浮动','2026-08-10T09:00','2026-08-10T10:00',0,'work','#4FC9DA','','[]','t','t')",
+            [],
+        ).unwrap();
+        let events = list_in_range(&connection, &EventRange {
+            start_at: "2026-08-01T00:00".into(),
+            end_at_exclusive: "2026-09-01T00:00".into(),
+        }).unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].start_at, "2026-08-10T09:00");
+        assert_eq!(events[0].start_tz, None);
     }
 
     #[test]
@@ -1153,8 +1377,7 @@ mod tests {
     }
 
     const SERIES_COLUMNS: &str = "id,title,start_at,end_at,all_day,category,color,note,created_at,updated_at,\
-                                  recurrence_freq,recurrence_interval,recurrence_by_day,\
-                                  recurrence_until,recurrence_final_at";
+                                  rrule,recurrence_final_at";
 
     /// 2026-08-03 是周一，因此 `s1` 在八月展开出 8/3、8/10、8/17、8/24、8/31 共五次。
     fn seeded() -> Connection {
@@ -1164,7 +1387,7 @@ mod tests {
                 &format!(
                     "INSERT INTO events({SERIES_COLUMNS})
                      VALUES ('s1','周会','2026-08-03T10:00','2026-08-03T11:00',0,'work','#0BB783','','t','t',
-                             'weekly',1,'MO',NULL,NULL)"
+                             'FREQ=WEEKLY;BYDAY=MO',NULL)"
                 ),
                 [],
             )
@@ -1236,7 +1459,7 @@ mod tests {
                 &format!(
                     "INSERT INTO events({SERIES_COLUMNS})
                      VALUES ('bounded','晨会','2026-08-03T10:00','2026-08-03T11:00',0,'work','#0BB783','','t','t',
-                             'weekly',1,'MO','2026-08-17','2026-08-17T10:00')"
+                             'FREQ=WEEKLY;BYDAY=MO;UNTIL=20260817T235900Z','2026-08-17T10:00')"
                 ),
                 [],
             )
@@ -1527,7 +1750,7 @@ mod tests {
                 &format!(
                     "INSERT INTO events({SERIES_COLUMNS})
                      VALUES ('past','旧周会','2026-07-06T10:00','2026-07-06T11:00',0,'work','#0BB783','','t','t',
-                             'weekly',1,'MO','2026-07-27','2026-07-27T10:00')"
+                             'FREQ=WEEKLY;BYDAY=MO;UNTIL=20260727T235900Z','2026-07-27T10:00')"
                 ),
                 [],
             )
@@ -1546,7 +1769,7 @@ mod tests {
                 &format!(
                     "INSERT INTO events({SERIES_COLUMNS})
                      VALUES ('future','新周会','2026-09-07T10:00','2026-09-07T11:00',0,'work','#0BB783','','t','t',
-                             'weekly',1,'MO',NULL,NULL)"
+                             'FREQ=WEEKLY;BYDAY=MO',NULL)"
                 ),
                 [],
             )
@@ -1636,10 +1859,9 @@ mod tests {
         connection
             .execute(
                 "INSERT INTO events(id,title,start_at,end_at,all_day,category,color,note,created_at,updated_at,
-                                    recurrence_freq,recurrence_interval,recurrence_by_day,
-                                    recurrence_count,recurrence_final_at)
+                                    rrule,recurrence_final_at)
                  VALUES ('daily','站会','2026-08-03T09:00','2026-08-03T09:15',0,'work','#0BB783','','t','t',
-                         'daily',3,'',4,'2026-08-12T09:00')",
+                         'FREQ=DAILY;INTERVAL=3;COUNT=4','2026-08-12T09:00')",
                 [],
             )
             .expect("counted series inserts");
@@ -1679,6 +1901,8 @@ mod tests {
                 note: String::new(),
                 reminders: Vec::new(),
                 recurrence: Some(weekly(&["MO"], RecurrenceEnd::Never)),
+                start_tz: None,
+                end_tz: None,
             },
             EditScope::All,
         )
@@ -1728,6 +1952,8 @@ mod tests {
             note: String::new(),
             reminders: Vec::new(),
             recurrence,
+            start_tz: None,
+            end_tz: None,
         }
     }
 
@@ -1750,25 +1976,34 @@ mod tests {
         Option<String>,
     );
 
+    /// 兼容垫片：新 schema 只存 `rrule` 串与 `recurrence_final_at`，此处经桥接把 RRULE 串
+    /// 解码回旧的分列元组，使既有断言（比 freq/interval/by_day/until/count/final_at）无需改写
+    /// 即可验证真实落库状态。
     fn recurrence_columns_of(connection: &Connection, id: &str) -> RecurrenceColumns {
-        connection
+        let (rrule, final_at): (Option<String>, Option<String>) = connection
             .query_row(
-                "SELECT recurrence_freq,recurrence_interval,recurrence_by_day,
-                        recurrence_until,recurrence_count,recurrence_final_at
-                 FROM events WHERE id=?1",
+                "SELECT rrule,recurrence_final_at FROM events WHERE id=?1",
                 [id],
-                |row| {
-                    Ok((
-                        row.get(0)?,
-                        row.get(1)?,
-                        row.get(2)?,
-                        row.get(3)?,
-                        row.get(4)?,
-                        row.get(5)?,
-                    ))
-                },
+                |row| Ok((row.get(0)?, row.get(1)?)),
             )
-            .expect("recurrence columns read")
+            .expect("recurrence columns read");
+        match rrule
+            .as_deref()
+            .and_then(crate::rrule_bridge::rrule_to_recurrence)
+        {
+            Some(rule) => {
+                let (until, count) = crate::recurrence::end_to_columns(&rule.end);
+                (
+                    Some(crate::recurrence::freq_to_str(rule.freq).to_string()),
+                    i64::from(rule.interval),
+                    rule.by_day.join(","),
+                    until,
+                    count.map(i64::from),
+                    final_at,
+                )
+            }
+            None => (None, 1, String::new(), None, None, final_at),
+        }
     }
 
     fn stored_bounds(connection: &Connection, id: &str) -> (String, String) {
@@ -3336,6 +3571,8 @@ mod command_tests {
                     title: "周会".into(),
                     start_at: "2026-08-03T19:00".into(),
                     end_at: "2026-08-03T20:00".into(),
+                    start_tz: None,
+                    end_tz: None,
                     all_day: false,
                     category: "work".into(),
                     color: "#4FC9DA".into(),
@@ -3368,13 +3605,16 @@ mod command_tests {
         fn recurrence_count(&self, id: &str) -> Option<i64> {
             let state = self.app.state::<AppDb>();
             let connection = state.0.lock().unwrap();
-            connection
-                .query_row(
-                    "SELECT recurrence_count FROM events WHERE id=?1",
-                    [id],
-                    |row| row.get(0),
-                )
-                .expect("series row exists")
+            let rrule: Option<String> = connection
+                .query_row("SELECT rrule FROM events WHERE id=?1", [id], |row| row.get(0))
+                .expect("series row exists");
+            rrule
+                .as_deref()
+                .and_then(crate::rrule_bridge::rrule_to_recurrence)
+                .and_then(|rule| match rule.end {
+                    crate::recurrence::RecurrenceEnd::Count { count } => Some(i64::from(count)),
+                    _ => None,
+                })
         }
 
         fn event_rows(&self) -> i64 {
