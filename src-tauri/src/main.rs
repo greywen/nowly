@@ -20,6 +20,7 @@ mod monitors;
 mod notes;
 mod recurrence;
 mod reminders;
+mod rrule_bridge;
 mod rrule_engine;
 mod settings;
 mod tasks;
