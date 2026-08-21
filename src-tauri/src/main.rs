@@ -22,6 +22,7 @@ mod recurrence;
 mod reminders;
 mod settings;
 mod tasks;
+mod timezone;
 mod wallpaper;
 mod window_lifecycle;
 
