@@ -57,9 +57,11 @@ B 与 C 都建在 A 之上，B 与 C 之间无依赖（谁先做都行）。
 | A4 | 时区换算层（钟面↔UTC↔本机，DST 边界） | ✅ |
 | A5 | 完整 RRULE 解析/展开/往返 + RDATE/EXDATE | ✅ |
 | A6 | 范围查询适配（浮动钟面 / 带时区 UTC 两路） | ✅ |
-| A7 | 提醒触发时刻按时区计算 | ⬜ |
-| A8 | 前端 `CalendarEvent` 模型与渲染适配 | ⬜ |
-| A9 | 测试全绿（Rust + 前端 + 回归重写） | ⬜ |
+| A7 | 提醒触发时刻按时区计算 | ✅ |
+| A8 | 前端 `CalendarEvent` 模型与渲染适配 | ✅ |
+| A9 | 测试全绿（Rust + 前端 + 回归重写） | ✅ |
+
+> **Spec A 完成**：五份实现计划（Part 1 / 2 / 3a / 3b / 4）全部落地。281 个 Rust 测试 + 444 个前端测试全绿，`tsc` 与 `vite build` 通过。e2e（Playwright）需 Tauri 后端运行环境，按约定在此环境跳过。Nowly 日历数据模型已与 RFC 5545 同构，Spec B（RRULE 编辑 UI）与 Spec C（日历订阅）可在此地基上分别立计划实施。
 
 ### Spec B｜完整 RRULE 编辑 UI
 
