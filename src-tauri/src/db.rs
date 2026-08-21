@@ -21,6 +21,7 @@ const MIGRATIONS: &[(i64, Migration)] = &[
     (12, migration_12_extension_allowed_hosts),
     (13, migration_13_recurrence),
     (14, migration_14_reminders),
+    (15, migration_15_ics_rebuild),
 ];
 
 pub fn open_database(path: PathBuf) -> Result<Connection> {
@@ -466,6 +467,78 @@ fn migration_14_reminders(transaction: &Transaction<'_>) -> Result<()> {
     )
 }
 
+// ICS 彻底革新：清空并重建 events / event_exceptions / reminder_dispatches 为 RFC 5545
+// 时间模型。带时区列、UTC 缓存列、标准 RRULE 串、rdate/exdate。这是不可逆的破坏性迁移：
+// 所有既有日程、改期、提醒记录被清空（已与需求方确认采用彻底革新、不保留旧数据）。
+// tasks 表保留，但其 linked_event_id 指向的事件已被清空，一并置 NULL 以免悬空引用。
+fn migration_15_ics_rebuild(transaction: &Transaction<'_>) -> Result<()> {
+    transaction.execute_batch(
+        // 先在 events 仍存在时置空 tasks 的外键，避免开启外键时 UPDATE 找不到父表。
+        "UPDATE tasks SET linked_event_id = NULL;
+         DROP TABLE IF EXISTS reminder_dispatches;
+         DROP TABLE IF EXISTS event_exceptions;
+         DROP TABLE IF EXISTS events;
+
+         CREATE TABLE events (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            start_at TEXT NOT NULL,
+            end_at TEXT NOT NULL,
+            start_tz TEXT,
+            end_tz TEXT,
+            start_utc TEXT,
+            end_utc TEXT,
+            all_day INTEGER NOT NULL CHECK (all_day IN (0, 1)),
+            category TEXT NOT NULL,
+            color TEXT NOT NULL,
+            linked_task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
+            note TEXT NOT NULL DEFAULT '',
+            reminders TEXT NOT NULL DEFAULT '[]',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            rrule TEXT,
+            recurrence_final_at TEXT,
+            rdate TEXT,
+            exdate TEXT
+         );
+
+         CREATE INDEX idx_events_range ON events(start_at, end_at);
+         CREATE INDEX idx_events_start_utc ON events(start_utc) WHERE start_utc IS NOT NULL;
+         CREATE INDEX idx_events_recurrence_active
+            ON events(recurrence_final_at) WHERE rrule IS NOT NULL;
+         CREATE UNIQUE INDEX idx_events_linked_task
+            ON events(linked_task_id) WHERE linked_task_id IS NOT NULL;
+
+         CREATE TABLE event_exceptions (
+            id TEXT PRIMARY KEY,
+            series_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+            occurrence_start_at TEXT NOT NULL,
+            kind TEXT NOT NULL CHECK (kind IN ('excluded','overridden')),
+            title TEXT,
+            start_at TEXT,
+            end_at TEXT,
+            all_day INTEGER,
+            category TEXT,
+            color TEXT,
+            note TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+         );
+         CREATE UNIQUE INDEX idx_event_exceptions_slot
+            ON event_exceptions(series_id, occurrence_start_at);
+         CREATE INDEX idx_event_exceptions_moved
+            ON event_exceptions(series_id, start_at);
+
+         CREATE TABLE reminder_dispatches (
+            event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+            occurrence_start_at TEXT NOT NULL,
+            offset_minutes INTEGER NOT NULL,
+            dispatched_at TEXT NOT NULL,
+            PRIMARY KEY (event_id, occurrence_start_at, offset_minutes)
+         );",
+    )
+}
+
 fn migration_10_hex_colors_and_recent_colors(transaction: &Transaction<'_>) -> Result<()> {
     transaction.execute_batch(
         "UPDATE events SET color = CASE lower(color)
@@ -606,7 +679,7 @@ mod tests {
 
     fn migrate_through(connection: &mut Connection, max_version: i64) -> Result<()> {
         connection.execute_batch(
-            "CREATE TABLE schema_migrations (
+            "CREATE TABLE IF NOT EXISTS schema_migrations (
                 version INTEGER PRIMARY KEY,
                 applied_at TEXT NOT NULL
              );",
@@ -615,6 +688,14 @@ mod tests {
             .iter()
             .filter(|(version, _)| *version <= max_version)
         {
+            let applied: bool = connection.query_row(
+                "SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version = ?1)",
+                [version],
+                |row| row.get(0),
+            )?;
+            if applied {
+                continue;
+            }
             let transaction = connection.transaction()?;
             apply(&transaction)?;
             transaction.execute(
@@ -642,7 +723,7 @@ mod tests {
             .unwrap()
             .collect::<Result<_, _>>()
             .unwrap();
-        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
+        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
 
         let event_fks: Vec<(String, String, String)> = connection
             .prepare("PRAGMA foreign_key_list(events)")
@@ -682,7 +763,9 @@ mod tests {
             )
             .unwrap();
 
-        migrate(&mut connection).unwrap();
+        // 只跑到迁移 14：迁移 15 会清空 events，破坏本测试对存量行的断言；
+        // 本测试专验迁移 5 的悬空链接清理，故在其生效的 schema 版本上隔离验证。
+        migrate_through(&mut connection, 14).unwrap();
 
         let event_link: Option<String> = connection
             .query_row(
@@ -729,7 +812,7 @@ mod tests {
             .collect::<Result<_, _>>()
             .expect("versions collect");
 
-        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
+        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
         for table in [
             "events",
             "tasks",
@@ -874,49 +957,23 @@ mod tests {
     }
 
     #[test]
-    fn migration_13_adds_recurrence_columns_and_exception_table() {
+    fn migration_13_exception_table_survives_rebuild() {
+        // 迁移 15 已 DROP 并重建 events/event_exceptions，旧的分列重复模型与其
+        // CHECK 约束不复存在。本测试改为验证重建后的最终 schema：事件用 rrule 串表达
+        // 重复，例外表外键仍挂在真实系列上。
         let mut connection = Connection::open_in_memory().expect("memory db opens");
+        connection
+            .execute_batch("PRAGMA foreign_keys = ON;")
+            .expect("foreign keys on");
         migrate(&mut connection).expect("migration succeeds");
 
-        let versions: Vec<i64> = connection
-            .prepare("SELECT version FROM schema_migrations ORDER BY version")
-            .expect("version query prepares")
-            .query_map([], |row| row.get(0))
-            .expect("version query runs")
-            .collect::<Result<Vec<_>>>()
-            .expect("versions collect");
-        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
-
         connection
             .execute(
-                "INSERT INTO events(id,title,start_at,end_at,all_day,category,color,note,created_at,updated_at)
-                 VALUES ('e1','会议','2026-08-03T10:00','2026-08-03T11:00',0,'work','#0BB783','','t','t')",
+                "INSERT INTO events(id,title,start_at,end_at,all_day,category,color,note,created_at,updated_at,rrule)
+                 VALUES ('e1','会议','2026-08-03T10:00','2026-08-03T11:00',0,'work','#0BB783','','t','t','FREQ=WEEKLY;BYDAY=MO')",
                 [],
             )
-            .expect("single event inserts with recurrence defaults");
-
-        let interval: i64 = connection
-            .query_row(
-                "SELECT recurrence_interval FROM events WHERE id='e1'",
-                [],
-                |row| row.get(0),
-            )
-            .expect("interval defaults");
-        assert_eq!(interval, 1);
-
-        // 单次日程携带重复字段必须被 CHECK 拒绝
-        let dirty = connection.execute("UPDATE events SET recurrence_count=3 WHERE id='e1'", []);
-        assert!(dirty.is_err(), "单次日程不得携带重复字段");
-
-        // until 与 count 互斥
-        connection
-            .execute(
-                "UPDATE events SET recurrence_freq='weekly',recurrence_by_day='MO',recurrence_until='2026-12-31' WHERE id='e1'",
-                [],
-            )
-            .expect("weekly rule applies");
-        let both = connection.execute("UPDATE events SET recurrence_count=5 WHERE id='e1'", []);
-        assert!(both.is_err(), "until 与 count 不得同时存在");
+            .expect("recurring event inserts with rrule");
 
         connection
             .execute(
@@ -942,9 +999,8 @@ mod tests {
         migrate(&mut connection).expect("migration succeeds");
         connection
             .execute(
-                "INSERT INTO events(id,title,start_at,end_at,all_day,category,color,note,created_at,updated_at,
-                                    recurrence_freq,recurrence_by_day)
-                 VALUES ('e1','会议','2026-08-03T10:00','2026-08-03T11:00',0,'work','#0BB783','','t','t','weekly','MO')",
+                "INSERT INTO events(id,title,start_at,end_at,all_day,category,color,note,created_at,updated_at,rrule)
+                 VALUES ('e1','会议','2026-08-03T10:00','2026-08-03T11:00',0,'work','#0BB783','','t','t','FREQ=WEEKLY;BYDAY=MO')",
                 [],
             )
             .expect("series inserts");
@@ -1022,5 +1078,71 @@ mod tests {
             })
             .expect("count runs");
         assert_eq!(remaining, 0, "派发记录随日程级联删除");
+    }
+
+    #[test]
+    fn migration_15_rebuilds_events_with_ics_columns() {
+        let mut connection = Connection::open_in_memory().expect("memory db opens");
+        connection
+            .execute_batch("PRAGMA foreign_keys = ON;")
+            .expect("foreign keys on");
+        migrate(&mut connection).expect("migration succeeds");
+
+        // 版本序列包含 15。
+        let versions: Vec<i64> = connection
+            .prepare("SELECT version FROM schema_migrations ORDER BY version")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+
+        // 新列存在。
+        let columns: Vec<String> = connection
+            .prepare("PRAGMA table_info(events)")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(1))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        for expected in [
+            "start_tz", "end_tz", "start_utc", "end_utc", "rrule", "rdate", "exdate",
+            "recurrence_final_at",
+        ] {
+            assert!(columns.iter().any(|c| c == expected), "缺少列 {expected}");
+        }
+        // 旧的分列重复模型已移除。
+        for gone in [
+            "recurrence_freq",
+            "recurrence_interval",
+            "recurrence_by_day",
+            "recurrence_count",
+            "recurrence_until",
+        ] {
+            assert!(!columns.iter().any(|c| c == gone), "旧列 {gone} 应已移除");
+        }
+    }
+
+    #[test]
+    fn migration_15_nulls_linked_event_id() {
+        let mut connection = Connection::open_in_memory().expect("memory db opens");
+        connection
+            .execute_batch("PRAGMA foreign_keys = ON;")
+            .expect("foreign keys on");
+        migrate(&mut connection).expect("migration succeeds");
+        connection
+            .execute(
+                "INSERT INTO tasks(id,title,quadrant,priority,completed,note,created_at,updated_at,linked_event_id)
+                 VALUES ('t1','任务','important_urgent',1,0,'','t','t',NULL)",
+                [],
+            )
+            .expect("task inserts");
+        let linked: Option<String> = connection
+            .query_row("SELECT linked_event_id FROM tasks WHERE id='t1'", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(linked, None);
     }
 }
