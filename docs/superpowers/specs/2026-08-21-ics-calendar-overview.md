@@ -41,10 +41,17 @@ B 与 C 都建在 A 之上，B 与 C 之间无依赖（谁先做都行）。
 
 ### Spec A｜ICS 引擎与存储
 
+实现计划分五份（对应里程碑）：
+- Part 1 → `plans/2026-08-21-ics-calendar-a1-timezone-layer.md`（依赖 + 时区换算层，对应 A2 依赖 / A4）
+- Part 2 → `plans/2026-08-21-ics-calendar-a2-rrule-engine.md`（RRULE 引擎，对应 A5）
+- Part 3a → `plans/2026-08-21-ics-calendar-a3a-schema-models-bridge.md`（清空重建 schema + models + Recurrence↔RRULE 桥，对应 A3）
+- Part 3b → `plans/2026-08-21-ics-calendar-a3b-read-write-range.md`（读写 + 范围查询，对应 A6）
+- Part 4 → `plans/2026-08-21-ics-calendar-a4-reminders-frontend.md`（提醒时区适配 + 前端，对应 A7 / A8）
+
 | # | 里程碑 | 状态 |
 |---|---|---|
-| A0 | spec 定稿并通过 review | ⬜ |
-| A1 | 实现计划（writing-plans）产出 | ⬜ |
+| A0 | spec 定稿并通过 review | ✅ |
+| A1 | 实现计划（writing-plans）产出 | ✅ |
 | A2 | 引入 `chrono-tz` / `rrule` 依赖 | ⬜ |
 | A3 | 清空重建迁移 + 新 schema + 索引 | ⬜ |
 | A4 | 时区换算层（钟面↔UTC↔本机，DST 边界） | ⬜ |
