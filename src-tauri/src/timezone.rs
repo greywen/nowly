@@ -48,9 +48,22 @@ pub fn wall_to_utc(wall: NaiveDateTime, tz: Tz) -> DateTime<Utc> {
     }
 }
 
+/// 把 UTC 瞬时点换算成某具名时区下的钟面时间。用于按设备时区显示带时区事件。
+pub fn utc_to_wall(instant: DateTime<Utc>, tz: Tz) -> NaiveDateTime {
+    instant.with_timezone(&tz).naive_local()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn converts_utc_to_wall_in_target_zone() {
+        let instant = wall_to_utc(parse_wall("2026-08-03T10:00").unwrap(), Tz::Asia__Shanghai);
+        // 同一瞬时点在纽约（EDT, UTC-4）是前一天 22:00。
+        let wall = utc_to_wall(instant, Tz::America__New_York);
+        assert_eq!(wall.format(WALL_FORMAT).to_string(), "2026-08-02T22:00");
+    }
 
     #[test]
     fn parses_a_valid_iana_name() {
