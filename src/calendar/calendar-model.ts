@@ -75,6 +75,14 @@ export type CalendarEvent = {
   createdAt: string;
   updatedAt: string;
   recurrence: Recurrence | null;
+  // The event's own named IANA timezone; null for floating/all-day events. Used
+  // for detail annotation only, not month-grid rendering (startAt/endAt are
+  // already the device-timezone display wall clock).
+  startTz: string | null;
+  endTz: string | null;
+  // Standard RFC 5545 RRULE string; null for single events. For detail display
+  // and the Spec B editor UI.
+  rrule: string | null;
   // Row id of the series this instance belongs to; null for single events.
   // `id` is always the database row id, so a whole series shares one id.
   seriesId: string | null;
