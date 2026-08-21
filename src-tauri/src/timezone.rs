@@ -62,6 +62,16 @@ pub fn device_tz() -> Tz {
         .unwrap_or(Tz::UTC)
 }
 
+/// 把钟面时间格式化成存储字符串（`%Y-%m-%dT%H:%M`）。
+pub fn format_wall(wall: NaiveDateTime) -> String {
+    wall.format(WALL_FORMAT).to_string()
+}
+
+/// 把 UTC 瞬时点格式化成缓存列字符串（`%Y-%m-%dT%H:%MZ`）。
+pub fn format_utc(instant: DateTime<Utc>) -> String {
+    instant.format(UTC_FORMAT).to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -71,6 +81,14 @@ mod tests {
         // 只要求不 panic 并返回一个合法时区；具体值取决于运行环境。
         let tz = device_tz();
         assert!(!tz.name().is_empty());
+    }
+
+    #[test]
+    fn formats_wall_and_utc_strings() {
+        let wall = parse_wall("2026-08-03T10:00").unwrap();
+        assert_eq!(format_wall(wall), "2026-08-03T10:00");
+        let instant = wall_to_utc(wall, Tz::Asia__Shanghai);
+        assert_eq!(format_utc(instant), "2026-08-03T02:00Z");
     }
 
     #[test]
