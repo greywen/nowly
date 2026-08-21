@@ -146,13 +146,28 @@ fn to_rrule_utc(instant: DateTime<Utc>) -> DateTime<rrule::Tz> {
     instant.with_timezone(&rrule::Tz::UTC)
 }
 
-/// 单次事件展开（无 RRULE）：dtstart 加 rdate 减 exdate，过滤到窗口。Task 4 实现。
+/// 单次事件展开（无 RRULE）：候选 = {dtstart} ∪ rdate，减去 exdate，过滤到窗口。
 fn expand_single(
-    _spec: &SeriesSpec,
-    _start: NaiveDateTime,
-    _end: NaiveDateTime,
+    spec: &SeriesSpec,
+    start: NaiveDateTime,
+    end: NaiveDateTime,
 ) -> Result<Vec<Occurrence>, CommandError> {
-    Ok(Vec::new())
+    let mut candidates: Vec<NaiveDateTime> = Vec::new();
+    candidates.push(spec.dtstart_wall);
+    candidates.extend(spec.rdate.iter().copied());
+    candidates.retain(|w| !spec.exdate.contains(w));
+    candidates.sort_unstable();
+    candidates.dedup();
+
+    let mut out = Vec::new();
+    for wall in candidates {
+        if wall < start || wall >= end {
+            continue;
+        }
+        let utc = spec.tz.map(|tz| timezone::wall_to_utc(wall, tz));
+        out.push(Occurrence { wall, utc });
+    }
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -215,6 +230,51 @@ mod tests {
         assert_eq!(dates, vec!["2026-01-20", "2026-02-17", "2026-03-17"]);
         // 浮动事件无 UTC 瞬时点。
         assert!(occ.iter().all(|o| o.utc.is_none()));
+    }
+
+    #[test]
+    fn expands_a_single_tz_bound_event() {
+        let spec = SeriesSpec {
+            dtstart_wall: parse_wall("2026-08-03T10:00").unwrap(),
+            tz: Some(Tz::Asia__Shanghai),
+            rrule: None,
+            rdate: Vec::new(),
+            exdate: Vec::new(),
+        };
+        let (s, e) = window("2026-08-01T00:00", "2026-09-01T00:00");
+        let occ = expand(&spec, s, e, MAX_WINDOW_OCCURRENCES).unwrap();
+        assert_eq!(occ.len(), 1);
+        assert_eq!(occ[0].wall.format("%Y-%m-%dT%H:%M").to_string(), "2026-08-03T10:00");
+        assert_eq!(timezone::format_utc(occ[0].utc.unwrap()), "2026-08-03T02:00Z");
+    }
+
+    #[test]
+    fn single_event_outside_window_is_excluded() {
+        let spec = SeriesSpec {
+            dtstart_wall: parse_wall("2026-08-03T10:00").unwrap(),
+            tz: None,
+            rrule: None,
+            rdate: Vec::new(),
+            exdate: Vec::new(),
+        };
+        let (s, e) = window("2026-09-01T00:00", "2026-10-01T00:00");
+        assert!(expand(&spec, s, e, MAX_WINDOW_OCCURRENCES).unwrap().is_empty());
+    }
+
+    #[test]
+    fn single_event_with_rdate_and_exdate() {
+        // dtstart 被 exdate 排除，只剩一个 rdate。
+        let spec = SeriesSpec {
+            dtstart_wall: parse_wall("2026-08-03T10:00").unwrap(),
+            tz: None,
+            rrule: None,
+            rdate: vec![parse_wall("2026-08-10T10:00").unwrap()],
+            exdate: vec![parse_wall("2026-08-03T10:00").unwrap()],
+        };
+        let (s, e) = window("2026-08-01T00:00", "2026-09-01T00:00");
+        let occ = expand(&spec, s, e, MAX_WINDOW_OCCURRENCES).unwrap();
+        let dates: Vec<String> = occ.iter().map(|o| o.wall.format("%Y-%m-%d").to_string()).collect();
+        assert_eq!(dates, vec!["2026-08-10"]);
     }
 
     #[test]
