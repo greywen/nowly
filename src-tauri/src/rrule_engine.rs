@@ -38,3 +38,71 @@ pub struct SeriesSpec {
 
 /// 单次展开的实例数量上限，防御超大/无限系列。与旧引擎的 MAX_WINDOW_OCCURRENCES 同量级。
 pub const MAX_WINDOW_OCCURRENCES: usize = 1_000;
+
+/// rrule crate 解析 DTSTART/RDATE/EXDATE 用的秒级时间戳格式。
+const ICS_STAMP: &str = "%Y%m%dT%H%M%S";
+
+fn stamp(wall: NaiveDateTime) -> String {
+    wall.format(ICS_STAMP).to_string()
+}
+
+/// 把系列规格组合成 rrule crate 能解析的 ICS 文本。
+/// 带时区用 `DTSTART;TZID=<zone>:<stamp>`，浮动用 `DTSTART:<stamp>`。
+/// RDATE/EXDATE 沿用 DTSTART 的时区语境（与 dtstart 同一钟面框架）。
+fn compose_ics(spec: &SeriesSpec) -> String {
+    let mut lines: Vec<String> = Vec::new();
+    match spec.tz {
+        Some(tz) => lines.push(format!("DTSTART;TZID={}:{}", tz.name(), stamp(spec.dtstart_wall))),
+        None => lines.push(format!("DTSTART:{}", stamp(spec.dtstart_wall))),
+    }
+    if let Some(rule) = &spec.rrule {
+        lines.push(format!("RRULE:{rule}"));
+    }
+    if !spec.rdate.is_empty() {
+        let stamps: Vec<String> = spec.rdate.iter().map(|w| stamp(*w)).collect();
+        lines.push(format!("RDATE:{}", stamps.join(",")));
+    }
+    if !spec.exdate.is_empty() {
+        let stamps: Vec<String> = spec.exdate.iter().map(|w| stamp(*w)).collect();
+        lines.push(format!("EXDATE:{}", stamps.join(",")));
+    }
+    lines.join("\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::timezone::parse_wall;
+
+    #[test]
+    fn composes_ics_for_a_tz_bound_series() {
+        let spec = SeriesSpec {
+            dtstart_wall: parse_wall("2026-08-03T10:00").unwrap(),
+            tz: Some(Tz::Asia__Shanghai),
+            rrule: Some("FREQ=WEEKLY;BYDAY=MO".into()),
+            rdate: Vec::new(),
+            exdate: Vec::new(),
+        };
+        let ics = compose_ics(&spec);
+        assert_eq!(
+            ics,
+            "DTSTART;TZID=Asia/Shanghai:20260803T100000\nRRULE:FREQ=WEEKLY;BYDAY=MO"
+        );
+    }
+
+    #[test]
+    fn composes_ics_for_a_floating_series_with_exdate() {
+        let spec = SeriesSpec {
+            dtstart_wall: parse_wall("2026-01-01T09:00").unwrap(),
+            tz: None,
+            rrule: Some("FREQ=DAILY;COUNT=3".into()),
+            rdate: vec![parse_wall("2026-01-10T09:00").unwrap()],
+            exdate: vec![parse_wall("2026-01-02T09:00").unwrap()],
+        };
+        let ics = compose_ics(&spec);
+        assert_eq!(
+            ics,
+            "DTSTART:20260101T090000\nRRULE:FREQ=DAILY;COUNT=3\nRDATE:20260110T090000\nEXDATE:20260102T090000"
+        );
+    }
+}
