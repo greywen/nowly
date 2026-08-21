@@ -69,10 +69,153 @@ fn compose_ics(spec: &SeriesSpec) -> String {
     lines.join("\n")
 }
 
+/// 把 `[window_start_wall, window_end_excl_wall)`（系列时区钟面半开窗口）内的实例展开。
+/// `limit` 为实例数量上限。带时区事件每个实例带 UTC 瞬时点；浮动事件为 None。
+pub fn expand(
+    spec: &SeriesSpec,
+    window_start_wall: NaiveDateTime,
+    window_end_excl_wall: NaiveDateTime,
+    limit: usize,
+) -> Result<Vec<Occurrence>, CommandError> {
+    if window_start_wall >= window_end_excl_wall {
+        return Ok(Vec::new());
+    }
+    // 单次事件路径在 Task 4 实现。
+    let Some(_) = spec.rrule.as_ref() else {
+        return expand_single(spec, window_start_wall, window_end_excl_wall);
+    };
+
+    // 窗口两端换算成 UTC 瞬时点，供 rrule 的 after/before 按瞬时点过滤。
+    // 带时区：用系列时区把钟面窗口换算成 UTC；浮动：钟面即当作 UTC 瞬时点。
+    let (after_utc, before_utc) = window_instants(spec, window_start_wall, window_end_excl_wall);
+
+    let ics = compose_ics(spec);
+    let set: RRuleSet = ics
+        .parse()
+        .map_err(|e| CommandError::validation("recurrence", format!("重复规则无效：{e}")))?;
+
+    // after/before 按瞬时点闭区间过滤；右界的半开由下方钟面 < end 再保证。
+    let after = to_rrule_utc(after_utc);
+    let before = to_rrule_utc(before_utc);
+    let result = set.after(after).before(before).all(limit as u16);
+
+    let mut out = Vec::new();
+    for dt in result.dates {
+        let wall = dt.naive_local();
+        // 半开右界：钟面 >= 窗口末端的实例（after/before 闭区间可能带入）剔除。
+        if wall >= window_end_excl_wall {
+            continue;
+        }
+        if wall < window_start_wall {
+            continue;
+        }
+        let utc = if spec.tz.is_some() {
+            Some(dt.with_timezone(&Utc))
+        } else {
+            None
+        };
+        out.push(Occurrence { wall, utc });
+        if out.len() >= limit {
+            break;
+        }
+    }
+    Ok(out)
+}
+
+/// 把系列时区钟面窗口换算成 UTC 瞬时点对。
+fn window_instants(
+    spec: &SeriesSpec,
+    start_wall: NaiveDateTime,
+    end_wall: NaiveDateTime,
+) -> (DateTime<Utc>, DateTime<Utc>) {
+    match spec.tz {
+        Some(tz) => (
+            timezone::wall_to_utc(start_wall, tz),
+            timezone::wall_to_utc(end_wall, tz),
+        ),
+        // 浮动：钟面直接当作 UTC 瞬时点（仅用于 after/before 的相对过滤，语义自洽）。
+        None => (
+            DateTime::<Utc>::from_naive_utc_and_offset(start_wall, Utc),
+            DateTime::<Utc>::from_naive_utc_and_offset(end_wall, Utc),
+        ),
+    }
+}
+
+/// 把 UTC 瞬时点转成 rrule crate 的 `DateTime<rrule::Tz>`（UTC 载体，按瞬时点比较）。
+fn to_rrule_utc(instant: DateTime<Utc>) -> DateTime<rrule::Tz> {
+    instant.with_timezone(&rrule::Tz::UTC)
+}
+
+/// 单次事件展开（无 RRULE）：dtstart 加 rdate 减 exdate，过滤到窗口。Task 4 实现。
+fn expand_single(
+    _spec: &SeriesSpec,
+    _start: NaiveDateTime,
+    _end: NaiveDateTime,
+) -> Result<Vec<Occurrence>, CommandError> {
+    Ok(Vec::new())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::timezone::parse_wall;
+
+    fn window(start: &str, end: &str) -> (NaiveDateTime, NaiveDateTime) {
+        (parse_wall(start).unwrap(), parse_wall(end).unwrap())
+    }
+
+    #[test]
+    fn expands_tz_bound_weekly_with_dst_offset_shift() {
+        let spec = SeriesSpec {
+            dtstart_wall: parse_wall("2026-03-02T10:00").unwrap(),
+            tz: Some(Tz::America__New_York),
+            rrule: Some("FREQ=WEEKLY;BYDAY=MO".into()),
+            rdate: Vec::new(),
+            exdate: Vec::new(),
+        };
+        let (s, e) = window("2026-03-01T00:00", "2026-03-31T00:00");
+        let occ = expand(&spec, s, e, MAX_WINDOW_OCCURRENCES).unwrap();
+        // 钟面恒为 10:00。
+        assert!(occ.iter().all(|o| o.wall.format("%H:%M").to_string() == "10:00"));
+        // 3/2 在 DST 前：15:00Z；3/9 在 DST 后：14:00Z。
+        let by_date = |d: &str| occ.iter().find(|o| o.wall.format("%Y-%m-%d").to_string() == d).unwrap();
+        assert_eq!(timezone::format_utc(by_date("2026-03-02").utc.unwrap()), "2026-03-02T15:00Z");
+        assert_eq!(timezone::format_utc(by_date("2026-03-09").utc.unwrap()), "2026-03-09T14:00Z");
+    }
+
+    #[test]
+    fn window_right_bound_is_half_open() {
+        let spec = SeriesSpec {
+            dtstart_wall: parse_wall("2026-08-01T10:00").unwrap(),
+            tz: Some(Tz::Asia__Shanghai),
+            rrule: Some("FREQ=DAILY".into()),
+            rdate: Vec::new(),
+            exdate: Vec::new(),
+        };
+        // 窗口 [8/1, 8/3)：应含 8/1、8/2，不含 8/3。
+        let (s, e) = window("2026-08-01T00:00", "2026-08-03T00:00");
+        let occ = expand(&spec, s, e, MAX_WINDOW_OCCURRENCES).unwrap();
+        let dates: Vec<String> = occ.iter().map(|o| o.wall.format("%Y-%m-%d").to_string()).collect();
+        assert_eq!(dates, vec!["2026-08-01", "2026-08-02"]);
+    }
+
+    #[test]
+    fn expands_monthly_ordinal_weekday() {
+        // 每月第 3 个周二。
+        let spec = SeriesSpec {
+            dtstart_wall: parse_wall("2026-01-01T09:00").unwrap(),
+            tz: None,
+            rrule: Some("FREQ=MONTHLY;BYDAY=TU;BYSETPOS=3".into()),
+            rdate: Vec::new(),
+            exdate: Vec::new(),
+        };
+        let (s, e) = window("2026-01-01T00:00", "2026-04-01T00:00");
+        let occ = expand(&spec, s, e, MAX_WINDOW_OCCURRENCES).unwrap();
+        let dates: Vec<String> = occ.iter().map(|o| o.wall.format("%Y-%m-%d").to_string()).collect();
+        assert_eq!(dates, vec!["2026-01-20", "2026-02-17", "2026-03-17"]);
+        // 浮动事件无 UTC 瞬时点。
+        assert!(occ.iter().all(|o| o.utc.is_none()));
+    }
 
     #[test]
     fn composes_ics_for_a_tz_bound_series() {
