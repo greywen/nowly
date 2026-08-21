@@ -782,6 +782,7 @@ button:disabled { cursor: default; opacity: .65; }
 }
 .date-detail-dialog__event:hover { border-color: var(--color-primary); background: var(--bg-subtle); }
 .date-detail-dialog__time { color: var(--text-muted); font-size: 13.6px; font-weight: 600; }
+.date-detail-dialog__tz { margin-left: 8px; color: var(--text-muted); font-size: 0.85rem; }
 .date-detail-dialog__event-copy { min-width: 0; display: grid; gap: 4px; }
 .date-detail-dialog__event-copy strong { overflow: hidden; color: var(--text-primary); font-size: 15.2px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .date-detail-dialog__event-copy small { color: var(--text-muted); font-size: 13.6px; }
