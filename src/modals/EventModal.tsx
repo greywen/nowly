@@ -10,7 +10,7 @@ import { Dialog } from '../components/Dialog';
 import { Select } from '../components/Select';
 import { TimePicker } from '../components/TimePicker';
 import type { RepositoryError } from '../data/nowly-repository';
-import { createEventDraft, eventToForm, isEventFormDirty, toEventDraft, validateEventForm, type EventFieldErrors, type EventFormDraft } from '../lib/event-draft';
+import { createEventDraft, eventToForm, isEventFormDirty, MAX_REMINDERS, toEventDraft, validateEventForm, type EventFieldErrors, type EventFormDraft } from '../lib/event-draft';
 import { presetToRecurrence, recurrenceToPreset, weekdayOf, WEEKDAYS, type RecurrencePreset } from '../lib/recurrence';
 import { RecurrenceScopeDialog } from './RecurrenceScopeDialog';
 import type { MatrixTask } from '../matrix/matrix-model';
@@ -31,6 +31,26 @@ type EventModalProps = {
 };
 
 const categoryOptions = () => [{value:'work',label:t('category.work')},{value:'important',label:t('category.important')},{value:'personal',label:t('category.personal')},{value:'learning',label:t('category.learning')}];
+
+// Reminder offsets are stored as minutes. The editor shows each as a value plus
+// a unit, mirroring Google Calendar. Units are ordered largest-last so the
+// display picks the coarsest unit that divides the offset evenly.
+type ReminderUnit = 'minute' | 'hour' | 'day' | 'week';
+const REMINDER_UNIT_MINUTES: Record<ReminderUnit, number> = { minute: 1, hour: 60, day: 1440, week: 10080 };
+const reminderUnitOptions = () => (['minute','hour','day','week'] as const).map(unit=>({value:unit,label:t(`reminder.unit.${unit}`)}));
+// Default a new reminder to 10 minutes before, matching the common calendar default.
+const DEFAULT_REMINDER_MINUTES = 10;
+
+function splitReminder(minutes:number):{value:number;unit:ReminderUnit}{
+  for(const unit of ['week','day','hour'] as const){
+    const size=REMINDER_UNIT_MINUTES[unit];
+    if(minutes>=size&&minutes%size===0)return {value:minutes/size,unit};
+  }
+  return {value:minutes,unit:'minute'};
+}
+function joinReminder(value:number,unit:ReminderUnit):number{
+  return Math.max(0,Math.round(value))*REMINDER_UNIT_MINUTES[unit];
+}
 const presetOptions = () => (['none','daily','weekly','monthly','yearly','custom'] as const).map(preset=>({value:preset,label:t(`recurrence.preset.${preset}`)}));
 const freqOptions = () => (['daily','weekly','monthly','yearly'] as const).map(freq=>({value:freq,label:t(`recurrence.freq.${freq}`)}));
 const weekdayLabels = () => t('recurrence.weekdays').split(',');
@@ -72,6 +92,9 @@ export function EventModal({ mode,tasks,restoreFocusRef,onClose,onSaved,onDelete
   const changeFreq=(freq:RecurrenceFreq)=>patchRecurrence({freq,byDay:freq==='weekly'?[weekdayOf(startAt)]:[]});
   const toggleWeekday=(day:Weekday)=>{ if(!form.recurrence)return; const chosen=new Set(form.recurrence.byDay); if(!chosen.delete(day))chosen.add(day); patchRecurrence({byDay:WEEKDAYS.filter(value=>chosen.has(value))}); };
   const changeEnd=(kind:RecurrenceEnd['kind'])=>patchRecurrence({end:kind==='until'?{kind:'until',date:form.endDate}:kind==='count'?{kind:'count',count:10}:{kind:'never'}});
+  const addReminder=()=>update('reminders',[...form.reminders,DEFAULT_REMINDER_MINUTES]);
+  const removeReminder=(index:number)=>update('reminders',form.reminders.filter((_,position)=>position!==index));
+  const changeReminder=(index:number,minutes:number)=>update('reminders',form.reminders.map((value,position)=>position===index?minutes:value));
 
   function save(){
     const validation=validateEventForm(form); setErrors(validation); setDialogError(''); if(Object.keys(validation).length)return;
@@ -110,6 +133,21 @@ export function EventModal({ mode,tasks,restoreFocusRef,onClose,onSaved,onDelete
             {rule.end.kind==='count'?<div className="good-field"><label htmlFor="event-recurrence-count">{t('recurrence.count')}</label><input id="event-recurrence-count" className="good-input" type="number" min={1} value={rule.end.count} disabled={busy} onChange={e=>patchRecurrence({end:{kind:'count',count:Number(e.target.value)}})}/></div>:null}
           </div>:null}
           {errors.recurrence?<span id="event-recurrence-error" className="field-error">{errors.recurrence}</span>:null}
+        </div>
+        <div className="reminder-field">
+          <span className="reminder-field__label">{t('eventModal.reminders')}</span>
+          {form.reminders.length===0?<p className="reminder-field__empty">{t('reminder.none')}</p>:null}
+          {form.reminders.map((minutes,index)=>{
+            const {value,unit}=splitReminder(minutes);
+            return <div key={index} className="reminder-row">
+              <input className="good-input reminder-row__value" type="number" min={0} value={value} disabled={busy} aria-label={t('reminder.valueLabel')} onChange={e=>changeReminder(index,joinReminder(Number(e.target.value),unit))}/>
+              <Select id={`event-reminder-unit-${index}`} label={t('reminder.unitLabel')} hideLabel options={reminderUnitOptions()} value={unit} disabled={busy} onChange={v=>changeReminder(index,joinReminder(value,v as ReminderUnit))}/>
+              <span className="reminder-row__suffix">{t('reminder.before')}</span>
+              <button type="button" className="good-icon-button reminder-row__remove" aria-label={t('reminder.remove')} disabled={busy} onClick={()=>removeReminder(index)}><X aria-hidden="true"/></button>
+            </div>;
+          })}
+          {form.reminders.length<MAX_REMINDERS?<button type="button" className="good-button reminder-field__add" disabled={busy} onClick={addReminder}>{t('reminder.add')}</button>:null}
+          {errors.reminders?<span className="field-error">{errors.reminders}</span>:null}
         </div>
         <Select id="event-category" label={t('eventModal.category')} options={categoryOptions()} value={form.category} disabled={busy} onChange={v=>update('category',v as EventCategory)}/>{errors.category?<span className="field-error">{errors.category}</span>:null}
         <ColorPicker legend={t('eventModal.color')} name="event-color" value={form.color} presets={eventColorPresets()} recentColors={recentColors} disabled={busy} onChange={color=>update('color',color)} onRememberColor={onRememberCustomColor}/>{errors.color?<span className="field-error">{errors.color}</span>:null}

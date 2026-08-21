@@ -20,6 +20,7 @@ const base: CalendarEvent = {
   color: '#0BB783',
   linkedTaskId: null,
   note: '',
+  reminders: [],
   createdAt: 't',
   updatedAt: 't',
   recurrence: null,

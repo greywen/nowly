@@ -429,6 +429,7 @@ export function shiftEventToDate(event: CalendarEvent, isoDate: string): EventDr
     color: event.color,
     linkedTaskId: event.linkedTaskId,
     note: event.note,
+    reminders: event.reminders,
     recurrence: event.recurrence
   };
 }
@@ -452,6 +453,7 @@ export function resizeEventEndToDate(event: CalendarEvent, isoDate: string): Eve
     color: event.color,
     linkedTaskId: event.linkedTaskId,
     note: event.note,
+    reminders: event.reminders,
     recurrence: event.recurrence
   };
 }
@@ -489,6 +491,7 @@ export function shiftEventToHour(event: CalendarEvent, isoDate: string, startHou
     color: event.color,
     linkedTaskId: event.linkedTaskId,
     note: event.note,
+    reminders: event.reminders,
     recurrence: event.recurrence
   };
 }

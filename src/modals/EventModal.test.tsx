@@ -7,7 +7,7 @@ import { EventModal } from './EventModal';
 
 const now = () => new Date(2026, 6, 23, 9, 42);
 const task: MatrixTask = { id:'t1', title:'发布 Nowly', quadrant:'important_urgent', dueAt:null, priority:1, completed:false, linkedEventId:null, note:'', createdAt:'x', updatedAt:'x' };
-const existing: CalendarEvent = { id:'e1', title:'设计评审', startAt:'2026-07-23T14:00', endAt:'2026-07-23T15:00', allDay:false, category:'important', color:'red', linkedTaskId:'t1', note:'确认范围', createdAt:'x', updatedAt:'x', recurrence:null, seriesId:null, seriesStartAt:null, occurrenceStartAt:null, isOverridden:false };
+const existing: CalendarEvent = { id:'e1', title:'设计评审', startAt:'2026-07-23T14:00', endAt:'2026-07-23T15:00', allDay:false, category:'important', color:'red', linkedTaskId:'t1', note:'确认范围', reminders:[], createdAt:'x', updatedAt:'x', recurrence:null, seriesId:null, seriesStartAt:null, occurrenceStartAt:null, isOverridden:false };
 // 既有 fixture 的 `color:'red'` 已通不过十六进制校验，编辑保存需要一个合法颜色。
 const editable: CalendarEvent = { ...existing, color:'#F06445' };
 const weeklyRule: Recurrence = { freq:'weekly', interval:1, byDay:['MO'], end:{ kind:'never' } };
@@ -271,5 +271,43 @@ describe('EventModal', () => {
     await user.click(screen.getByRole('button', { name:'删除日程' }));
     expect(await screen.findByRole('dialog', { name:'删除重复日程' })).toBeInTheDocument();
     expect(screen.queryByRole('radio', { name:'此后所有' })).toBeNull();
+  });
+
+  it('adds a reminder and submits it as minutes before start', async () => {
+    const user=userEvent.setup(); const createEvent=vi.fn().mockResolvedValue({ ...existing, linkedTaskId:null });
+    render(<EventModal {...props({ createEvent })} />);
+    // 默认没有提醒。
+    expect(screen.getByText('无提醒')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name:'添加提醒' }));
+    // 新提醒默认 10 分钟前。
+    expect(screen.getByLabelText('提前数量')).toHaveValue(10);
+    await user.type(screen.getByLabelText('日程标题'), '会议');
+    await user.click(screen.getByRole('button', { name:'保存' }));
+    await waitFor(()=>expect(createEvent).toHaveBeenCalledTimes(1));
+    expect(createEvent.mock.calls[0][0].reminders).toEqual([10]);
+  });
+
+  it('converts the unit into stored minutes and loads them back', async () => {
+    const user=userEvent.setup(); const createEvent=vi.fn().mockResolvedValue({ ...existing, linkedTaskId:null });
+    render(<EventModal {...props({ createEvent })} />);
+    await user.click(screen.getByRole('button', { name:'添加提醒' }));
+    await user.click(screen.getByRole('combobox', { name:'提前单位' }));
+    await user.click(screen.getByRole('option', { name:'小时' }));
+    await user.type(screen.getByLabelText('日程标题'), '会议');
+    await user.click(screen.getByRole('button', { name:'保存' }));
+    await waitFor(()=>expect(createEvent).toHaveBeenCalledTimes(1));
+    // 10 小时 = 600 分钟。
+    expect(createEvent.mock.calls[0][0].reminders).toEqual([600]);
+  });
+
+  it('shows an existing reminder in its coarsest unit and removes it', async () => {
+    const user=userEvent.setup();
+    const withReminder: CalendarEvent={ ...editable, reminders:[1440] };
+    render(<EventModal {...props({ mode:{type:'edit',event:withReminder} })} />);
+    // 1440 分钟应显示为 1 天。
+    expect(screen.getByLabelText('提前数量')).toHaveValue(1);
+    expect(screen.getByRole('combobox', { name:'提前单位' })).toHaveTextContent('天');
+    await user.click(screen.getByRole('button', { name:'删除提醒' }));
+    expect(screen.getByText('无提醒')).toBeInTheDocument();
   });
 });

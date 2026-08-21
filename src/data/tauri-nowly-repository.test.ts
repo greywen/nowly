@@ -23,6 +23,7 @@ describe('tauriNowlyRepository', () => {
       color: 'blue' as const,
       linkedTaskId: null,
       note: '',
+      reminders: [],
       recurrence: null
     };
 
@@ -109,6 +110,7 @@ describe('tauriNowlyRepository', () => {
       color: '#1F9C8A',
       linkedTaskId: null,
       note: '',
+      reminders: [],
       recurrence: { freq: 'weekly', interval: 1, byDay: ['MO'], end: { kind: 'never' } }
     };
     const target = { id: 's1', occurrenceStartAt: '2026-08-10T10:00' };

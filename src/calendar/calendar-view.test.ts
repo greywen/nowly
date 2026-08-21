@@ -30,6 +30,7 @@ function event(id: string, startAt: string, endAt: string, allDay = false): Cale
     note: '',
     createdAt: '2026-07-01T00:00:00Z',
     updatedAt: '2026-07-01T00:00:00Z',
+    reminders: [],
     recurrence: null,
     seriesId: null,
     seriesStartAt: null,

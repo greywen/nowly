@@ -15,7 +15,68 @@ const CATEGORIES: &[&str] = &["work", "important", "personal", "learning"];
 
 const EVENT_COLUMNS: &str = "id,title,start_at,end_at,all_day,category,color,linked_task_id,note,\
                              created_at,updated_at,recurrence_freq,recurrence_interval,\
-                             recurrence_by_day,recurrence_until,recurrence_count,recurrence_final_at";
+                             recurrence_by_day,recurrence_until,recurrence_count,recurrence_final_at,\
+                             reminders";
+
+/// 提醒偏移量的上限：四周（分钟）。超过即视为无意义的提醒。
+pub const MAX_REMINDER_MINUTES: i64 = 4 * 7 * 24 * 60;
+/// 单条日程允许携带的提醒条数上限。
+pub const MAX_REMINDERS: usize = 5;
+
+/// 把存储列里的 JSON 文本解析成提醒偏移量列表。空串或损坏值一律视为无提醒。
+fn parse_reminders(raw: &str) -> Vec<i64> {
+    if raw.trim().is_empty() {
+        return Vec::new();
+    }
+    serde_json::from_str::<Vec<i64>>(raw).unwrap_or_default()
+}
+
+/// 把提醒偏移量列表序列化成写库用的 JSON 文本。
+fn reminders_to_json(reminders: &[i64]) -> String {
+    serde_json::to_string(reminders).unwrap_or_else(|_| "[]".to_owned())
+}
+
+/// 清空一条日程已发出的提醒去重记录。开始时刻或提醒集合变化后调用，
+/// 使新的提醒时刻可以重新触发。
+fn reset_reminder_dispatches(
+    connection: &Connection,
+    event_id: &str,
+) -> Result<(), CommandError> {
+    connection
+        .execute(
+            "DELETE FROM reminder_dispatches WHERE event_id=?1",
+            [event_id],
+        )
+        .map(|_| ())
+        .map_err(CommandError::database)
+}
+
+/// 校验并归一化提醒偏移量：负值非法、超过上限非法、条数受限，去重后按升序排列。
+fn normalize_reminders(reminders: &[i64]) -> Result<Vec<i64>, CommandError> {
+    let mut seen = std::collections::BTreeSet::new();
+    for &offset in reminders {
+        if offset < 0 {
+            return Err(CommandError::validation(
+                "reminders",
+                "提醒时间不能早于日程开始前。",
+            ));
+        }
+        if offset > MAX_REMINDER_MINUTES {
+            return Err(CommandError::validation(
+                "reminders",
+                "提醒时间最多提前四周。",
+            ));
+        }
+        seen.insert(offset);
+    }
+    if seen.len() > MAX_REMINDERS {
+        return Err(CommandError::validation(
+            "reminders",
+            format!("最多只能设置 {MAX_REMINDERS} 条提醒。"),
+        ));
+    }
+    Ok(seen.into_iter().collect())
+}
 
 fn parse_local(value: &str, field: &str) -> Result<NaiveDateTime, CommandError> {
     NaiveDateTime::parse_from_str(value, LOCAL_MINUTE_FORMAT)
@@ -41,6 +102,7 @@ fn read_series_row(row: &Row<'_>) -> rusqlite::Result<SeriesRow> {
     let until: Option<String> = row.get(14)?;
     let count: Option<i64> = row.get(15)?;
     let final_at: Option<String> = row.get(16)?;
+    let reminders: String = row.get(17)?;
 
     let rule = match freq {
         Some(freq) => Some(Recurrence {
@@ -75,6 +137,7 @@ fn read_series_row(row: &Row<'_>) -> rusqlite::Result<SeriesRow> {
             color: row.get(6)?,
             linked_task_id: row.get(7)?,
             note: row.get(8)?,
+            reminders: parse_reminders(&reminders),
             created_at: row.get(9)?,
             updated_at: row.get(10)?,
             recurrence: None,
@@ -279,6 +342,7 @@ pub fn validate_and_normalize(mut draft: EventDraft) -> Result<EventDraft, Comma
     }
     draft.color = crate::color::normalize_hex(&draft.color)
         .ok_or_else(|| CommandError::validation("color", "请选择有效颜色。"))?;
+    draft.reminders = normalize_reminders(&draft.reminders)?;
     if draft.all_day {
         let start_date = start.date().format("%Y-%m-%d");
         let end_date = end.date().format("%Y-%m-%d");
@@ -506,11 +570,12 @@ pub fn create(connection: &mut Connection, draft: EventDraft) -> Result<Event, C
         .execute(
             "INSERT INTO events(id,title,start_at,end_at,all_day,category,color,linked_task_id,note,
                                 created_at,updated_at,recurrence_freq,recurrence_interval,
-                                recurrence_by_day,recurrence_until,recurrence_count,recurrence_final_at)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,NULL,?8,?9,?9,?10,?11,?12,?13,?14,?15)",
+                                recurrence_by_day,recurrence_until,recurrence_count,recurrence_final_at,reminders)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,NULL,?8,?9,?9,?10,?11,?12,?13,?14,?15,?16)",
             params![id, draft.title, draft.start_at, draft.end_at, i64::from(draft.all_day),
                     draft.category, draft.color, draft.note, now,
-                    freq, interval, by_day, until, count, final_at],
+                    freq, interval, by_day, until, count, final_at,
+                    reminders_to_json(&draft.reminders)],
         )
         .map_err(sql_write_error)?;
     relink(
@@ -580,14 +645,18 @@ pub fn update(
                 .execute(
                     "UPDATE events SET title=?2,start_at=?3,end_at=?4,all_day=?5,category=?6,color=?7,
                      linked_task_id=?8,note=?9,updated_at=?10,recurrence_freq=?11,recurrence_interval=?12,
-                     recurrence_by_day=?13,recurrence_until=?14,recurrence_count=?15,recurrence_final_at=?16
+                     recurrence_by_day=?13,recurrence_until=?14,recurrence_count=?15,recurrence_final_at=?16,
+                     reminders=?17
                      WHERE id=?1",
                     params![target.id, draft.title, draft.start_at, draft.end_at,
                             i64::from(draft.all_day), draft.category, draft.color,
                             draft.linked_task_id, draft.note, now,
-                            freq, interval, by_day, until, count, final_at],
+                            freq, interval, by_day, until, count, final_at,
+                            reminders_to_json(&draft.reminders)],
                 )
                 .map_err(sql_write_error)?;
+            // 系列开始时刻或提醒变化后，旧的派发去重记录已无意义：删除后重新按新时刻计算。
+            reset_reminder_dispatches(&transaction, &target.id)?;
             if !slots_unchanged(
                 &existing.start_at,
                 &existing.recurrence,
@@ -683,11 +752,12 @@ pub fn update(
                 .execute(
                     "INSERT INTO events(id,title,start_at,end_at,all_day,category,color,linked_task_id,note,
                                         created_at,updated_at,recurrence_freq,recurrence_interval,
-                                        recurrence_by_day,recurrence_until,recurrence_count,recurrence_final_at)
-                     VALUES (?1,?2,?3,?4,?5,?6,?7,NULL,?8,?9,?9,?10,?11,?12,?13,?14,?15)",
+                                        recurrence_by_day,recurrence_until,recurrence_count,recurrence_final_at,reminders)
+                     VALUES (?1,?2,?3,?4,?5,?6,?7,NULL,?8,?9,?9,?10,?11,?12,?13,?14,?15,?16)",
                     params![new_id, new_draft.title, new_draft.start_at, new_draft.end_at,
                             i64::from(new_draft.all_day), new_draft.category, new_draft.color,
-                            new_draft.note, now, freq, interval, by_day, until, count, final_at],
+                            new_draft.note, now, freq, interval, by_day, until, count, final_at,
+                            reminders_to_json(&new_draft.reminders)],
                 )
                 .map_err(sql_write_error)?;
 
@@ -918,6 +988,7 @@ mod tests {
             color: "#4FC9DA".into(),
             linked_task_id: None,
             note: "".into(),
+            reminders: Vec::new(),
             recurrence: None,
         }
     }
@@ -1021,6 +1092,33 @@ mod tests {
         }).unwrap();
 
         assert_eq!(events.iter().map(|event| event.id.as_str()).collect::<Vec<_>>(), vec!["july-a", "july-b"]);
+    }
+
+    #[test]
+    fn reminders_persist_sorted_and_deduplicated_through_create_and_update() {
+        let mut connection = database();
+        // 乱序且含重复的提醒：写库前应被归一化成升序去重。
+        let created = create(&mut connection, EventDraft { reminders: vec![60, 10, 60], ..draft() }).unwrap();
+        assert_eq!(created.reminders, vec![10, 60]);
+
+        update(&mut connection, &whole(&created.id), EventDraft { reminders: vec![0], ..draft() }, EditScope::All).unwrap();
+        let updated = event_by_id(&connection, &created.id).unwrap().unwrap();
+        assert_eq!(updated.reminders, vec![0]);
+
+        // 清空提醒也应被如实写回。
+        update(&mut connection, &whole(&created.id), draft(), EditScope::All).unwrap();
+        let cleared = event_by_id(&connection, &created.id).unwrap().unwrap();
+        assert!(cleared.reminders.is_empty());
+    }
+
+    #[test]
+    fn reminders_reject_negative_out_of_range_and_over_the_count_cap() {
+        let base = draft();
+        assert_eq!(validate_and_normalize(EventDraft { reminders: vec![-1], ..base.clone() }).unwrap_err().field.as_deref(), Some("reminders"));
+        assert_eq!(validate_and_normalize(EventDraft { reminders: vec![super::MAX_REMINDER_MINUTES + 1], ..base.clone() }).unwrap_err().field.as_deref(), Some("reminders"));
+        assert_eq!(validate_and_normalize(EventDraft { reminders: vec![0, 5, 10, 15, 30, 60], ..base.clone() }).unwrap_err().field.as_deref(), Some("reminders"));
+        // 恰好命中上限的合法组合应通过。
+        assert_eq!(validate_and_normalize(EventDraft { reminders: vec![0, 5, 10, 15, 30], ..base }).unwrap().reminders, vec![0, 5, 10, 15, 30]);
     }
 
     #[test]
@@ -1579,6 +1677,7 @@ mod tests {
                 color: "#0BB783".into(),
                 linked_task_id: None,
                 note: String::new(),
+                reminders: Vec::new(),
                 recurrence: Some(weekly(&["MO"], RecurrenceEnd::Never)),
             },
             EditScope::All,
@@ -1627,6 +1726,7 @@ mod tests {
             color: "#0BB783".into(),
             linked_task_id: None,
             note: String::new(),
+            reminders: Vec::new(),
             recurrence,
         }
     }
@@ -3241,6 +3341,7 @@ mod command_tests {
                     color: "#4FC9DA".into(),
                     linked_task_id: None,
                     note: "".into(),
+                    reminders: Vec::new(),
                     recurrence,
                 },
             )
