@@ -52,9 +52,9 @@ B 与 C 都建在 A 之上，B 与 C 之间无依赖（谁先做都行）。
 |---|---|---|
 | A0 | spec 定稿并通过 review | ✅ |
 | A1 | 实现计划（writing-plans）产出 | ✅ |
-| A2 | 引入 `chrono-tz` / `rrule` 依赖 | ⬜ |
+| A2 | 引入 `chrono-tz` / `rrule` 依赖 | ✅ |
 | A3 | 清空重建迁移 + 新 schema + 索引 | ⬜ |
-| A4 | 时区换算层（钟面↔UTC↔本机，DST 边界） | ⬜ |
+| A4 | 时区换算层（钟面↔UTC↔本机，DST 边界） | ✅ |
 | A5 | 完整 RRULE 解析/展开/往返 + RDATE/EXDATE | ⬜ |
 | A6 | 范围查询适配（浮动钟面 / 带时区 UTC 两路） | ⬜ |
 | A7 | 提醒触发时刻按时区计算 | ⬜ |

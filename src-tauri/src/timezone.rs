@@ -1,5 +1,9 @@
 //! 时区换算层：钟面时间 ↔ UTC 瞬时点的双向换算，DST 断层/重叠解析，设备时区探测。
 //! 纯函数、无状态，是 Spec A 时间模型的地基。
+//!
+//! 本模块作为地基先于其消费者（Part 2 RRULE 引擎、Part 3 读写层）落地，此刻公开 API 仅被
+//! 测试引用，故临时允许 dead_code；Part 2 接入 `wall_to_utc`/`format_utc` 等后应移除此豁免。
+#![allow(dead_code)]
 
 use crate::error::CommandError;
 use chrono::{DateTime, Duration, LocalResult, NaiveDateTime, TimeZone, Utc};
