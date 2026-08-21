@@ -21,14 +21,21 @@ export type EventFormDraft = {
   color: EventColor;
   linkedTaskId: string | null;
   note: string;
+  reminders: number[];
   recurrence: Recurrence | null;
 };
 
 export type EventFieldErrors = Partial<
-  Record<'title' | 'startAt' | 'endAt' | 'category' | 'color' | 'linkedTaskId' | 'recurrence', string>
+  Record<'title' | 'startAt' | 'endAt' | 'category' | 'color' | 'linkedTaskId' | 'reminders' | 'recurrence', string>
 >;
 
 const categories: EventCategory[] = ['work', 'important', 'personal', 'learning'];
+
+// The most a reminder may lead the start by: four weeks, in minutes. Kept in
+// lockstep with the backend `MAX_REMINDER_MINUTES`.
+export const MAX_REMINDER_MINUTES = 4 * 7 * 24 * 60;
+// The most reminders a single event may carry, matching the backend cap.
+export const MAX_REMINDERS = 5;
 
 function pad(value: number) {
   return String(value).padStart(2, '0');
@@ -56,6 +63,7 @@ export function createEventDraft(dateIso: string, now: Date): EventFormDraft {
     color: DEFAULT_EVENT_COLOR,
     linkedTaskId: null,
     note: '',
+    reminders: [],
     recurrence: null
   };
 }
@@ -77,6 +85,7 @@ export function eventToForm(event: CalendarEvent): EventFormDraft {
     color: event.color,
     linkedTaskId: event.linkedTaskId,
     note: event.note,
+    reminders: [...event.reminders],
     recurrence: event.recurrence
   };
 }
@@ -91,8 +100,16 @@ export function toEventDraft(form: EventFormDraft): EventDraft {
     color: normalizeHexColor(form.color) as EventColor,
     linkedTaskId: form.linkedTaskId,
     note: form.note,
+    reminders: normalizeReminders(form.reminders),
     recurrence: form.recurrence
   };
+}
+
+/** Sort, de-duplicate, and drop negatives so the draft matches backend storage. */
+function normalizeReminders(reminders: number[]): number[] {
+  return [...new Set(reminders.filter((value) => Number.isFinite(value) && value >= 0))].sort(
+    (left, right) => left - right
+  );
 }
 
 export function validateEventForm(form: EventFormDraft): EventFieldErrors {
@@ -107,6 +124,15 @@ export function validateEventForm(form: EventFormDraft): EventFieldErrors {
   }
   if (!categories.includes(form.category)) return { category: t('eventDraft.errorCategory') };
   if (!normalizeHexColor(form.color)) return { color: t('eventDraft.errorColor') };
+  if (form.reminders.some((value) => value < 0 || value > MAX_REMINDER_MINUTES)) {
+    return { reminders: t('eventDraft.errorReminderRange') };
+  }
+  if (new Set(form.reminders).size !== form.reminders.length) {
+    return { reminders: t('eventDraft.errorReminderDuplicate') };
+  }
+  if (form.reminders.length > MAX_REMINDERS) {
+    return { reminders: t('eventDraft.errorReminderCount', { count: MAX_REMINDERS }) };
+  }
   const recurrenceError = validateRecurrence(form.recurrence, formStartAt(form));
   if (recurrenceError) return { recurrence: recurrenceError };
   return {};

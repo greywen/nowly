@@ -13,6 +13,9 @@ pub struct Event {
     pub color: String,
     pub linked_task_id: Option<String>,
     pub note: String,
+    /// 提前提醒的分钟数偏移量列表，例如 [10, 60] 表示开始前 10 分钟与 60 分钟各提醒一次。
+    #[serde(default)]
+    pub reminders: Vec<i64>,
     pub created_at: String,
     pub updated_at: String,
     pub recurrence: Option<Recurrence>,
@@ -64,6 +67,8 @@ pub struct EventDraft {
     pub color: String,
     pub linked_task_id: Option<String>,
     pub note: String,
+    #[serde(default)]
+    pub reminders: Vec<i64>,
     pub recurrence: Option<Recurrence>,
 }
 
@@ -296,6 +301,7 @@ mod tests {
             color: "#4FC9DA".into(),
             linked_task_id: None,
             note: "".into(),
+            reminders: Vec::new(),
             created_at: "2026-08-01T08:00:00Z".into(),
             updated_at: "2026-08-01T08:00:00Z".into(),
             recurrence: None,

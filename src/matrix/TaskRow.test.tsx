@@ -28,6 +28,7 @@ const linkedEvent: CalendarEvent = {
   color: 'blue',
   linkedTaskId: 't1',
   note: '',
+  reminders: [],
   createdAt: '2026-07-20T09:00:00Z',
   updatedAt: '2026-07-20T09:00:00Z',
   recurrence: null,

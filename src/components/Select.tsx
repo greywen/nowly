@@ -18,9 +18,12 @@ type SelectProps = {
   searchable?: boolean;
   disabled?: boolean;
   errorId?: string;
+  // Keep the label accessible to screen readers but hide it visually, for
+  // compact inline selects that already have a nearby textual label.
+  hideLabel?: boolean;
 };
 
-export function Select({ id, name, label, options, value, onChange, placeholder, searchable = false, disabled = false, errorId }: SelectProps) {
+export function Select({ id, name, label, options, value, onChange, placeholder, searchable = false, disabled = false, errorId, hideLabel = false }: SelectProps) {
   const resolvedPlaceholder = placeholder ?? t('select.placeholder');
   const listboxId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -121,7 +124,7 @@ export function Select({ id, name, label, options, value, onChange, placeholder,
 
   return (
     <div ref={rootRef} className="select-field">
-      <label className="select-label" id={`${id}-label`} htmlFor={id}>{label}</label>
+      <label className={hideLabel ? 'select-label select-label--hidden' : 'select-label'} id={`${id}-label`} htmlFor={id}>{label}</label>
       {name ? <input type="hidden" name={name} value={value} /> : null}
       <button
         ref={triggerRef}

@@ -50,6 +50,8 @@ export type EventDraft = {
   color: EventColor;
   linkedTaskId: string | null;
   note: string;
+  // Minute offsets before the start at which to remind, e.g. [10, 60].
+  reminders: number[];
   recurrence: Recurrence | null;
 };
 
@@ -68,6 +70,8 @@ export type CalendarEvent = {
   color: EventColor;
   linkedTaskId: string | null;
   note: string;
+  // Minute offsets before the start at which to remind, e.g. [10, 60].
+  reminders: number[];
   createdAt: string;
   updatedAt: string;
   recurrence: Recurrence | null;

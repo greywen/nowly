@@ -278,6 +278,9 @@ export const translations: Record<Language, Record<string, string>> = {
     'eventDraft.errorEndTimeBeforeStart': '结束时间不能早于开始时间。',
     'eventDraft.errorCategory': '请选择有效分类。',
     'eventDraft.errorColor': '请选择有效颜色。',
+    'eventDraft.errorReminderRange': '提醒时间最多提前四周。',
+    'eventDraft.errorReminderDuplicate': '提醒时间不能重复。',
+    'eventDraft.errorReminderCount': '最多只能设置 {count} 条提醒。',
 
     // Note draft validation
     'noteDraft.errorTitle': '请输入便签标题。',
@@ -335,9 +338,22 @@ export const translations: Record<Language, Record<string, string>> = {
     'eventModal.noLink': '无关联',
     'eventModal.note': '备注',
     'eventModal.recurrence': '重复',
+    'eventModal.reminders': '提醒',
     'eventModal.save': '保存',
     'eventModal.deleteTitle': '永久删除“{title}”？',
     'eventModal.deleteDesc2': '若存在关联，只解除关联，不删除关联任务。',
+
+    // 提醒
+    'reminder.none': '无提醒',
+    'reminder.add': '添加提醒',
+    'reminder.remove': '删除提醒',
+    'reminder.before': '前',
+    'reminder.valueLabel': '提前数量',
+    'reminder.unitLabel': '提前单位',
+    'reminder.unit.minute': '分钟',
+    'reminder.unit.hour': '小时',
+    'reminder.unit.day': '天',
+    'reminder.unit.week': '周',
 
     // RecurrenceScopeDialog
     'recurrence.editScopeTitle': '编辑重复日程',
@@ -846,6 +862,9 @@ export const translations: Record<Language, Record<string, string>> = {
     'eventDraft.errorEndTimeBeforeStart': 'The end time cannot be before the start time.',
     'eventDraft.errorCategory': 'Please choose a valid category.',
     'eventDraft.errorColor': 'Please choose a valid color.',
+    'eventDraft.errorReminderRange': 'A reminder can lead the start by at most four weeks.',
+    'eventDraft.errorReminderDuplicate': 'Reminders cannot be duplicated.',
+    'eventDraft.errorReminderCount': 'You can set at most {count} reminders.',
 
     // Note draft validation
     'noteDraft.errorTitle': 'Please enter a note title.',
@@ -903,9 +922,22 @@ export const translations: Record<Language, Record<string, string>> = {
     'eventModal.noLink': 'None',
     'eventModal.note': 'Note',
     'eventModal.recurrence': 'Repeat',
+    'eventModal.reminders': 'Reminders',
     'eventModal.save': 'Save',
     'eventModal.deleteTitle': 'Permanently delete "{title}"?',
     'eventModal.deleteDesc2': 'If linked, only the link is removed; the linked task is kept.',
+
+    // Reminders
+    'reminder.none': 'No reminders',
+    'reminder.add': 'Add reminder',
+    'reminder.remove': 'Remove reminder',
+    'reminder.before': 'before',
+    'reminder.valueLabel': 'Lead amount',
+    'reminder.unitLabel': 'Lead unit',
+    'reminder.unit.minute': 'minutes',
+    'reminder.unit.hour': 'hours',
+    'reminder.unit.day': 'days',
+    'reminder.unit.week': 'weeks',
 
     // RecurrenceScopeDialog
     'recurrence.editScopeTitle': 'Edit recurring event',

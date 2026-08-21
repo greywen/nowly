@@ -20,6 +20,7 @@ const MIGRATIONS: &[(i64, Migration)] = &[
     (11, migration_11_focus_sessions),
     (12, migration_12_extension_allowed_hosts),
     (13, migration_13_recurrence),
+    (14, migration_14_reminders),
 ];
 
 pub fn open_database(path: PathBuf) -> Result<Connection> {
@@ -449,6 +450,22 @@ fn migration_13_recurrence(transaction: &Transaction<'_>) -> Result<()> {
     )
 }
 
+// 提醒以「事件开始前多少分钟」的偏移量数组存储，落在 events 行上（整个系列共享一套提醒）。
+// reminder_dispatches 记录已经弹出过的提醒，(event_id, occurrence_start_at, offset_minutes)
+// 唯一，保证同一次提醒只通知一次；外键 CASCADE 让日程删除时自动清理派发记录。
+fn migration_14_reminders(transaction: &Transaction<'_>) -> Result<()> {
+    transaction.execute_batch(
+        "ALTER TABLE events ADD COLUMN reminders TEXT NOT NULL DEFAULT '[]';
+         CREATE TABLE IF NOT EXISTS reminder_dispatches (
+            event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+            occurrence_start_at TEXT NOT NULL,
+            offset_minutes INTEGER NOT NULL,
+            dispatched_at TEXT NOT NULL,
+            PRIMARY KEY (event_id, occurrence_start_at, offset_minutes)
+         );",
+    )
+}
+
 fn migration_10_hex_colors_and_recent_colors(transaction: &Transaction<'_>) -> Result<()> {
     transaction.execute_batch(
         "UPDATE events SET color = CASE lower(color)
@@ -625,7 +642,7 @@ mod tests {
             .unwrap()
             .collect::<Result<_, _>>()
             .unwrap();
-        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
+        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
 
         let event_fks: Vec<(String, String, String)> = connection
             .prepare("PRAGMA foreign_key_list(events)")
@@ -712,7 +729,7 @@ mod tests {
             .collect::<Result<_, _>>()
             .expect("versions collect");
 
-        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
+        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
         for table in [
             "events",
             "tasks",
@@ -868,7 +885,7 @@ mod tests {
             .expect("version query runs")
             .collect::<Result<Vec<_>>>()
             .expect("versions collect");
-        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
+        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
 
         connection
             .execute(
@@ -948,5 +965,62 @@ mod tests {
             })
             .expect("count runs");
         assert_eq!(remaining, 0);
+    }
+
+    #[test]
+    fn migration_14_adds_reminders_column_and_dispatch_table() {
+        let mut connection = Connection::open_in_memory().expect("memory db opens");
+        connection
+            .execute_batch("PRAGMA foreign_keys = ON;")
+            .expect("foreign keys on");
+        migrate(&mut connection).expect("migration succeeds");
+
+        // 新日程默认无提醒。
+        connection
+            .execute(
+                "INSERT INTO events(id,title,start_at,end_at,all_day,category,color,note,created_at,updated_at)
+                 VALUES ('e1','会议','2026-08-03T10:00','2026-08-03T11:00',0,'work','#0BB783','','t','t')",
+                [],
+            )
+            .expect("event inserts with reminder default");
+        let reminders: String = connection
+            .query_row("SELECT reminders FROM events WHERE id='e1'", [], |row| {
+                row.get(0)
+            })
+            .expect("reminders defaults");
+        assert_eq!(reminders, "[]");
+
+        // 派发记录随日程删除级联清理。
+        connection
+            .execute(
+                "INSERT INTO reminder_dispatches(event_id,occurrence_start_at,offset_minutes,dispatched_at)
+                 VALUES ('e1','2026-08-03T10:00',10,'t')",
+                [],
+            )
+            .expect("dispatch inserts");
+        // 同一提醒的第二次派发被主键挡下。
+        let dup = connection.execute(
+            "INSERT INTO reminder_dispatches(event_id,occurrence_start_at,offset_minutes,dispatched_at)
+             VALUES ('e1','2026-08-03T10:00',10,'t')",
+            [],
+        );
+        assert!(dup.is_err(), "重复派发键必须被主键拒绝");
+        // 孤儿派发记录被外键拒绝。
+        let orphan = connection.execute(
+            "INSERT INTO reminder_dispatches(event_id,occurrence_start_at,offset_minutes,dispatched_at)
+             VALUES ('missing','2026-08-03T10:00',10,'t')",
+            [],
+        );
+        assert!(orphan.is_err(), "派发记录必须挂在真实日程上");
+
+        connection
+            .execute("DELETE FROM events WHERE id='e1'", [])
+            .expect("event deletes");
+        let remaining: i64 = connection
+            .query_row("SELECT COUNT(*) FROM reminder_dispatches", [], |row| {
+                row.get(0)
+            })
+            .expect("count runs");
+        assert_eq!(remaining, 0, "派发记录随日程级联删除");
     }
 }

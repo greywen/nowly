@@ -26,6 +26,7 @@ const draft: EventDraft = {
   color: 'blue',
   linkedTaskId: null,
   note: '',
+  reminders: [],
   recurrence: null
 };
 

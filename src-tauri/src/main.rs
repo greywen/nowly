@@ -19,6 +19,7 @@ mod net;
 mod monitors;
 mod notes;
 mod recurrence;
+mod reminders;
 mod settings;
 mod tasks;
 mod wallpaper;
@@ -156,7 +157,7 @@ fn set_app_user_model_id() {
 /// is registered in `set_app_user_model_id`, the toast is delivered and
 /// attributed to Nowly across dev, release, and installed builds.
 #[cfg(target_os = "windows")]
-fn send_focus_completion_notification<R: Runtime>(_app: &AppHandle<R>, title: &str, body: &str) {
+fn send_native_notification<R: Runtime>(_app: &AppHandle<R>, title: &str, body: &str) {
     use tauri_winrt_notification::Toast;
 
     if let Err(error) = Toast::new(APP_USER_MODEL_ID)
@@ -164,16 +165,16 @@ fn send_focus_completion_notification<R: Runtime>(_app: &AppHandle<R>, title: &s
         .text1(body)
         .show()
     {
-        eprintln!("failed to send focus completion notification: {error}");
+        eprintln!("failed to send notification: {error}");
     }
 }
 
 #[cfg(not(target_os = "windows"))]
-fn send_focus_completion_notification<R: Runtime>(app: &AppHandle<R>, title: &str, body: &str) {
+fn send_native_notification<R: Runtime>(app: &AppHandle<R>, title: &str, body: &str) {
     use tauri_plugin_notification::NotificationExt;
 
     if let Err(error) = app.notification().builder().title(title).body(body).show() {
-        eprintln!("failed to send focus completion notification: {error}");
+        eprintln!("failed to send notification: {error}");
     }
 }
 
@@ -207,7 +208,7 @@ fn main() {
                     .ok()
                     .and_then(|mut timer| timer.poll(std::time::Instant::now()));
                 if let Some(snapshot) = completed {
-                    send_focus_completion_notification(
+                    send_native_notification(
                         &timer_handle,
                         &snapshot.notification_title,
                         &snapshot.notification_body,
@@ -215,6 +216,24 @@ fn main() {
                     if let Err(error) = timer_handle.emit("focus-session-completed", snapshot) {
                         eprintln!("failed to emit focus completion: {error}");
                     }
+                }
+            });
+
+            // 日程提醒轮询：每 20 秒展开近期日程，把到点且未派发过的提醒发成系统通知。
+            let reminder_handle = app.handle().clone();
+            std::thread::spawn(move || loop {
+                std::thread::sleep(std::time::Duration::from_secs(20));
+                let now = chrono::Local::now().naive_local();
+                let notifications = match reminder_handle.state::<AppDb>().0.lock() {
+                    Ok(connection) => reminders::poll_due(&connection, now).unwrap_or_default(),
+                    Err(_) => Vec::new(),
+                };
+                for notification in notifications {
+                    send_native_notification(
+                        &reminder_handle,
+                        &notification.title,
+                        &notification.body,
+                    );
                 }
             });
 

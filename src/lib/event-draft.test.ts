@@ -23,6 +23,7 @@ const form: EventFormDraft = {
   color: '#4FC9DA',
   linkedTaskId: null,
   note: '  保留备注空格  ',
+  reminders: [],
   recurrence: null
 };
 
@@ -38,6 +39,7 @@ const event: CalendarEvent = {
   note: '确认范围',
   createdAt: '2026-07-23T09:00:00Z',
   updatedAt: '2026-07-23T09:00:00Z',
+  reminders: [],
   recurrence: null,
   seriesId: null,
   seriesStartAt: null,
@@ -58,6 +60,7 @@ describe('event draft helpers', () => {
       color: '#4FC9DA',
       linkedTaskId: null,
       note: '',
+      reminders: [],
       recurrence: null
     });
   });
@@ -81,6 +84,7 @@ describe('event draft helpers', () => {
       color: '#F06445',
       linkedTaskId: 't1',
       note: '确认范围',
+      reminders: [],
       recurrence: null
     });
     expect(eventToForm({ ...event, recurrence: rule }).recurrence).toEqual(rule);
@@ -96,6 +100,7 @@ describe('event draft helpers', () => {
       color: '#4FC9DA',
       linkedTaskId: null,
       note: '  保留备注空格  ',
+      reminders: [],
       recurrence: null
     });
     expect(toEventDraft({ ...form, allDay: true, startTime: '09:15', endTime: '10:20' })).toMatchObject({
@@ -150,5 +155,20 @@ describe('event draft helpers', () => {
     const allDay = { ...form, allDay: true };
     expect(isEventFormDirty(allDay, { ...allDay, startTime: '01:00', endTime: '02:00' })).toBe(false);
     expect(isEventFormDirty(allDay, { ...allDay, endDate: '2026-07-24' })).toBe(true);
+  });
+
+  it('carries reminders through the form and sorts, de-dupes, and drops negatives in the draft', () => {
+    expect(eventToForm({ ...event, reminders: [30, 10] }).reminders).toEqual([30, 10]);
+    // 保存时归一化：排序、去重、丢弃负值。
+    expect(toEventDraft({ ...form, reminders: [60, 10, 10, -5] }).reminders).toEqual([10, 60]);
+    expect(toEventDraft(form).reminders).toEqual([]);
+  });
+
+  it('rejects out-of-range, duplicate, and over-cap reminders', () => {
+    expect(validateEventForm({ ...form, reminders: [10, 60] })).toEqual({});
+    expect(Object.keys(validateEventForm({ ...form, reminders: [-1] }))).toEqual(['reminders']);
+    expect(Object.keys(validateEventForm({ ...form, reminders: [4 * 7 * 24 * 60 + 1] }))).toEqual(['reminders']);
+    expect(Object.keys(validateEventForm({ ...form, reminders: [10, 10] }))).toEqual(['reminders']);
+    expect(Object.keys(validateEventForm({ ...form, reminders: [0, 5, 10, 15, 30, 60] }))).toEqual(['reminders']);
   });
 });

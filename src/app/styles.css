@@ -573,6 +573,16 @@ button:disabled { cursor: default; opacity: .65; }
 .confirm-dialog__description { color: var(--text-secondary); font-size: 16px; line-height: 1.5; }
 .recurrence-scope { margin: 0; padding: 0; display: grid; gap: 16px; border: 0; }
 .recurrence-scope legend { width: 100%; margin-bottom: 8px; color: var(--text-secondary); font-size: 15.2px; font-weight: 500; }
+.reminder-field { display: grid; gap: 12px; }
+.reminder-field__label { color: var(--text-secondary); font-size: 15.2px; font-weight: 500; line-height: 1.5; }
+.reminder-field__empty { margin: 0; color: var(--text-tertiary); font-size: 13.6px; line-height: 1.5; }
+.reminder-row { display: flex; align-items: flex-end; gap: 12px; }
+.reminder-row__value { width: 88px; flex: 0 0 auto; }
+.reminder-row .select-field { flex: 1 1 auto; min-width: 0; }
+.reminder-row__suffix { flex: 0 0 auto; padding-bottom: 14px; color: var(--text-secondary); font-size: 14.4px; line-height: 1.5; }
+.reminder-row__remove { flex: 0 0 auto; margin-bottom: 4px; }
+.reminder-field__add { justify-self: start; }
+
 .recurrence-field { display: grid; gap: 16px; }
 .recurrence-custom { display: grid; gap: 20px; padding: 16px; border: 1px solid var(--border-default); border-radius: var(--radius-default); }
 .recurrence-weekdays,

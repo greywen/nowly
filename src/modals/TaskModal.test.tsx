@@ -7,7 +7,7 @@ import { TaskModal } from './TaskModal';
 
 const currentEvent: CalendarEvent = {
   id: 'e1', title: '设计评审', startAt: '2026-07-23T14:00', endAt: '2026-07-23T15:00',
-  allDay: false, category: 'work', color: 'blue', linkedTaskId: null, note: '', createdAt: 'x', updatedAt: 'x',
+  allDay: false, category: 'work', color: 'blue', linkedTaskId: null, note: '', reminders: [], createdAt: 'x', updatedAt: 'x',
   recurrence: null, seriesId: null, seriesStartAt: null, occurrenceStartAt: null, isOverridden: false
 };
 const existing: MatrixTask = {
