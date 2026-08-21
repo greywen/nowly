@@ -262,6 +262,50 @@ mod tests {
     }
 
     #[test]
+    fn count_bound_series_stops_after_n() {
+        let spec = SeriesSpec {
+            dtstart_wall: parse_wall("2026-08-01T10:00").unwrap(),
+            tz: None,
+            rrule: Some("FREQ=DAILY;COUNT=3".into()),
+            rdate: Vec::new(),
+            exdate: Vec::new(),
+        };
+        let (s, e) = window("2026-08-01T00:00", "2026-09-01T00:00");
+        let occ = expand(&spec, s, e, MAX_WINDOW_OCCURRENCES).unwrap();
+        assert_eq!(occ.len(), 3);
+    }
+
+    #[test]
+    fn until_bound_series_is_inclusive_of_the_until_date() {
+        let spec = SeriesSpec {
+            dtstart_wall: parse_wall("2026-08-01T10:00").unwrap(),
+            tz: None,
+            rrule: Some("FREQ=DAILY;UNTIL=20260803T100000".into()),
+            rdate: Vec::new(),
+            exdate: Vec::new(),
+        };
+        let (s, e) = window("2026-08-01T00:00", "2026-09-01T00:00");
+        let occ = expand(&spec, s, e, MAX_WINDOW_OCCURRENCES).unwrap();
+        let dates: Vec<String> = occ.iter().map(|o| o.wall.format("%Y-%m-%d").to_string()).collect();
+        assert_eq!(dates, vec!["2026-08-01", "2026-08-02", "2026-08-03"]);
+    }
+
+    #[test]
+    fn infinite_series_is_capped_by_limit() {
+        let spec = SeriesSpec {
+            dtstart_wall: parse_wall("2026-01-01T10:00").unwrap(),
+            tz: None,
+            rrule: Some("FREQ=DAILY".into()),
+            rdate: Vec::new(),
+            exdate: Vec::new(),
+        };
+        // 十年窗口的每日无限系列，被 limit 截断。
+        let (s, e) = window("2026-01-01T00:00", "2036-01-01T00:00");
+        let occ = expand(&spec, s, e, 5).unwrap();
+        assert_eq!(occ.len(), 5);
+    }
+
+    #[test]
     fn single_event_with_rdate_and_exdate() {
         // dtstart 被 exdate 排除，只剩一个 rdate。
         let spec = SeriesSpec {
