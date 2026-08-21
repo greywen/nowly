@@ -152,4 +152,19 @@ mod tests {
         );
         assert_eq!(utc.format(UTC_FORMAT).to_string(), "2026-11-01T05:30Z");
     }
+
+    #[test]
+    fn wall_utc_roundtrip_outside_dst_boundaries() {
+        for (zone, wall_str) in [
+            (Tz::Asia__Shanghai, "2026-08-03T10:00"),
+            (Tz::Asia__Kathmandu, "2026-08-03T10:00"),
+            (Tz::America__New_York, "2026-08-03T10:00"),
+            (Tz::UTC, "2026-08-03T10:00"),
+        ] {
+            let wall = parse_wall(wall_str).unwrap();
+            let instant = wall_to_utc(wall, zone);
+            let back = utc_to_wall(instant, zone);
+            assert_eq!(format_wall(back), wall_str, "zone {}", zone.name());
+        }
+    }
 }
