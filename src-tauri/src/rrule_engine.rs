@@ -1,10 +1,6 @@
 //! RRULE 展开引擎：封装 `rrule` crate，把系列规格在一个窗口内展开成实例列表。
 //! 完整 RFC 5545 RRULE 与 DST 边界由 `rrule` crate 承担；本模块负责钟面/时区的
 //! 桥接与半开窗口过滤。纯函数、无状态，依赖 Part 1 的 `timezone` 模块。
-//!
-//! 本模块作为地基先于其消费者（Part 3 读写层、Spec C 订阅展开）落地，此刻公开 API 仅被
-//! 测试引用，故临时允许 dead_code；Part 3 接入 `expand` 后应移除此豁免。
-#![allow(dead_code)]
 
 use crate::error::CommandError;
 use crate::timezone;
