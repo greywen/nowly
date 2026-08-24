@@ -67,6 +67,16 @@ describe('tauriNowlyRepository', () => {
     await tauriNowlyRepository.listExtensions();
     await tauriNowlyRepository.installExtension(extensionDraft);
     await tauriNowlyRepository.uninstallExtension('x1');
+    const subscriptionDraft = {
+      name: '家庭',
+      url: 'https://example.com/a.ics',
+      color: '#4FC9DA' as const,
+      refreshIntervalMinutes: 15
+    };
+    await tauriNowlyRepository.listCalendarSubscriptions();
+    await tauriNowlyRepository.createCalendarSubscription(subscriptionDraft);
+    await tauriNowlyRepository.updateCalendarSubscription('s1', subscriptionDraft);
+    await tauriNowlyRepository.deleteCalendarSubscription('s1');
 
     expect(invokeMock.mock.calls).toContainEqual(['list_events_in_range', { range }]);
     expect(invokeMock.mock.calls).toContainEqual(['create_event', { draft }]);
@@ -97,6 +107,10 @@ describe('tauriNowlyRepository', () => {
     expect(invokeMock.mock.calls).toContainEqual(['list_extensions']);
     expect(invokeMock.mock.calls).toContainEqual(['install_extension', { draft: extensionDraft }]);
     expect(invokeMock.mock.calls).toContainEqual(['uninstall_extension', { id: 'x1' }]);
+    expect(invokeMock.mock.calls).toContainEqual(['list_calendar_subscriptions']);
+    expect(invokeMock.mock.calls).toContainEqual(['create_calendar_subscription', { draft: subscriptionDraft }]);
+    expect(invokeMock.mock.calls).toContainEqual(['update_calendar_subscription', { id: 's1', draft: subscriptionDraft }]);
+    expect(invokeMock.mock.calls).toContainEqual(['delete_calendar_subscription', { id: 's1' }]);
   });
 
   it('forwards the occurrence target and every edit scope verbatim', async () => {
