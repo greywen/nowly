@@ -3,6 +3,7 @@ import { useNowlyRepository } from '../data/RepositoryContext';
 import type { WeekStart } from '../lib/date';
 import type { CalendarEvent, CalendarView, EditScope, EventDraft, EventTarget } from './calendar-model';
 import { monthRange, rangeFor, resizeEventEndToDate, shiftEventToDate, shiftEventToHour } from './calendar-view';
+import { externalToCalendarEvent } from './subscription-model';
 import { t } from '../i18n';
 
 type EventsResource =
@@ -70,8 +71,13 @@ export function useEvents({
       // shared summary, matrix, and calendar do not flash empty and shift.
       if (!silent) setEvents({ status: 'loading', data: [] });
       try {
-        const data = await repository.listEventsInRange(rangeFor(target.view, target.anchor, weekStart));
-        if (requestId === requestIdRef.current) setEvents({ status: 'ready', data });
+        const targetRange = rangeFor(target.view, target.anchor, weekStart);
+        const [local, external] = await Promise.all([
+          repository.listEventsInRange(targetRange),
+          repository.listExternalEventsInRange(targetRange).catch(() => [])
+        ]);
+        const merged = [...local, ...external.map(externalToCalendarEvent)];
+        if (requestId === requestIdRef.current) setEvents({ status: 'ready', data: merged });
       } catch (error) {
         if (requestId === requestIdRef.current) {
           setEvents({ status: 'error', data: [], message: messageFrom(error) });
