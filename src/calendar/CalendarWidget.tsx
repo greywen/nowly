@@ -101,6 +101,7 @@ type CalendarWidgetProps = {
   onResizeEvent?: (event: CalendarEvent, endIsoDate: string) => void;
   calendarSettings?: CalendarSettings;
   onChangeCalendarSettings?: (settings: CalendarSettings) => void;
+  onOpenSubscriptions?: () => void;
 };
 
 function summaryFor(status: LoadStatus, count: number, view: CalendarView) {
@@ -148,7 +149,8 @@ export function CalendarWidget({
   onMoveEventToHour,
   onResizeEvent,
   calendarSettings,
-  onChangeCalendarSettings
+  onChangeCalendarSettings,
+  onOpenSubscriptions
 }: CalendarWidgetProps) {
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const anchor = anchorIso ? new Date(`${anchorIso}T00:00:00`) : new Date(year, monthIndex, 1);
@@ -837,7 +839,7 @@ export function CalendarWidget({
             <ChevronRight aria-hidden="true" />
           </button>
           {calendarSettings && onChangeCalendarSettings ? (
-            <CalendarSettingsControl settings={calendarSettings} onChange={onChangeCalendarSettings} />
+            <CalendarSettingsControl settings={calendarSettings} onChange={onChangeCalendarSettings} onOpenSubscriptions={onOpenSubscriptions} />
           ) : null}
           <button type="button" className="btn btn-icon btn-primary" aria-label={t('calendar.newEvent')} onClick={onCreateEvent}>
             <Plus aria-hidden="true" />

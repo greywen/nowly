@@ -1,4 +1,4 @@
-import { Check, LayoutGrid, MessageSquarePlus, MonitorDown, Plus, Settings, Store } from 'lucide-react';
+import { Check, LayoutGrid, MonitorDown, Plus, Settings } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import {
   builtinDefinitions,
@@ -8,12 +8,13 @@ import {
 } from '../../widgets/widget-registry';
 import type {
   SandboxExtension,
-  SandboxExtensionDraft
+  SandboxExtensionDraft,
+  UpdateInfo
 } from '../../data/nowly-repository';
 import { useModuleLayout } from '../../widgets/useModuleLayout';
 import { TemplatePickerDialog } from '../../widgets/TemplatePickerDialog';
 import { ModuleMarketDialog } from '../../widgets/ModuleMarketDialog';
-import { FeedbackDialog } from '../../settings/FeedbackDialog';
+import { AboutDialog } from '../../settings/AboutDialog';
 import { ModuleGrid, type ModuleGridItem } from './ModuleGrid';
 import { BlurControl } from '../BlurControl';
 import { DEFAULT_BLUR, useBlur } from '../useBlur';
@@ -35,6 +36,9 @@ type DesktopShellProps = {
   onWallpaperDoubleClick?: () => void;
   onOpenSettings?: () => void;
   overlay?: ReactNode;
+  // The launch-time update check result. When it reports a newer release the
+  // logo button shows a red dot, and the About dialog surfaces the changelog.
+  update?: UpdateInfo | null;
 };
 
 // Render today's accumulated focus time as a compact, human-friendly label for
@@ -59,7 +63,8 @@ export function DesktopShell({
   onSetWallpaper,
   onWallpaperDoubleClick,
   onOpenSettings,
-  overlay
+  overlay,
+  update
 }: DesktopShellProps) {
   const foreground = mode === 'foreground';
   const { layout, move, resize, addWidget, removeWidget, presentIds } =
@@ -68,7 +73,8 @@ export function DesktopShell({
   const [isEditing, setIsEditing] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [marketOpen, setMarketOpen] = useState(false);
-  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const updateAvailable = update?.updateAvailable ?? false;
   const [previewingBlur, setPreviewingBlur] = useState(false);
 
   // Blur persists as a wallpaper-only look. As the wallpaper it softens the
@@ -106,6 +112,17 @@ export function DesktopShell({
         </div>
         <div className="top-actions">
           {foreground ? (
+            <button
+              type="button"
+              className="btn btn-icon about-button"
+              aria-label={t('about.open')}
+              onClick={() => setAboutOpen(true)}
+            >
+              <img src="/logo.png" alt="" className="about-button__logo" aria-hidden="true" />
+              {updateAvailable ? <span className="about-button__dot" aria-hidden="true" /> : null}
+            </button>
+          ) : null}
+          {foreground ? (
             <BlurControl blur={blur} onChange={setBlur} onOpenChange={setPreviewingBlur} />
           ) : null}
           {foreground && isEditing ? (
@@ -130,16 +147,6 @@ export function DesktopShell({
               onClick={() => setIsEditing((current) => !current)}
             >
               {isEditing ? <Check aria-hidden="true" /> : <LayoutGrid aria-hidden="true" />}
-            </button>
-          ) : null}
-          {foreground ? (
-            <button
-              type="button"
-              className="btn btn-icon"
-              aria-label={t('feedback.open')}
-              onClick={() => setFeedbackOpen(true)}
-            >
-              <MessageSquarePlus aria-hidden="true" />
             </button>
           ) : null}
           {foreground ? (
@@ -194,8 +201,8 @@ export function DesktopShell({
         />
       ) : null}
 
-      {foreground && feedbackOpen ? (
-        <FeedbackDialog onClose={() => setFeedbackOpen(false)} />
+      {foreground && aboutOpen ? (
+        <AboutDialog update={update} onClose={() => setAboutOpen(false)} />
       ) : null}
     </div>
   );

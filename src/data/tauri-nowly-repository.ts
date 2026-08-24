@@ -22,6 +22,7 @@ export const tauriNowlyRepository: NowlyRepository = {
   updateNote: (id, draft) => invoke('update_note', { id, draft }),
   deleteNote: (id) => invoke('delete_note', { id }),
   getSettings: () => invoke('get_app_settings'),
+  checkForUpdate: () => invoke('check_for_update'),
   updateSettings: (settings) => invoke('update_app_settings', { settings }),
   listMonitors: () => invoke('list_monitors'),
   listModuleLayout: () => invoke('list_module_layout'),

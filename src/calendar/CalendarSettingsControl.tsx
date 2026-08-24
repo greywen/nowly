@@ -9,13 +9,14 @@ export type CalendarSettings = Pick<AppSettings, 'weekStart' | 'dateFormat' | 's
 type Props = {
   settings: CalendarSettings;
   onChange: (settings: CalendarSettings) => void;
+  onOpenSubscriptions?: () => void;
 };
 
 // Calendar-scoped preferences (week start, date format, weekend visibility)
 // live directly on the calendar as a settings-icon popover instead of the
 // global settings dialog, so they sit next to the view they affect. Changes
 // persist immediately through onChange; there is no separate save step.
-export function CalendarSettingsControl({ settings, onChange }: Props) {
+export function CalendarSettingsControl({ settings, onChange, onOpenSubscriptions }: Props) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -72,6 +73,21 @@ export function CalendarSettingsControl({ settings, onChange }: Props) {
             />
             <span className="form-check-label">{t('calendarSettings.showWeekends')}</span>
           </label>
+          {onOpenSubscriptions ? (
+            <div className="calendar-settings-popup__section">
+              <span className="calendar-settings-popup__section-title">{t('settings.calendarSubscriptions')}</span>
+              <button
+                type="button"
+                className="good-button"
+                onClick={() => {
+                  setOpen(false);
+                  onOpenSubscriptions();
+                }}
+              >
+                {t('settings.manageSubscriptions')}
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>

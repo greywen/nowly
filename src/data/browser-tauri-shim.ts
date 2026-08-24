@@ -225,6 +225,18 @@ export function installBrowserTauriBackend() {
       persist();
     },
 
+    // Software update check. The browser dev shim has no Cargo version and
+    // should not hit the GitHub API on every page load, so it reports the
+    // injected build version with no update available.
+    check_for_update: () => ({
+      currentVersion: typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : '0.0.0',
+      latestVersion: null,
+      updateAvailable: false,
+      releaseNotes: null,
+      releaseUrl: 'https://github.com/greywen/nowly/releases',
+      publishedAt: null
+    }),
+
     // Settings & environment
     get_app_settings: () => store.settings,
     update_app_settings: (a) => {

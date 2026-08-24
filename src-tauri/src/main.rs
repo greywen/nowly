@@ -28,6 +28,7 @@ mod subscription_sync;
 mod subscriptions;
 mod tasks;
 mod timezone;
+mod update;
 mod wallpaper;
 mod window_lifecycle;
 
@@ -416,6 +417,7 @@ fn main() {
             commands::get_app_settings,
             commands::update_app_settings,
             feedback::open_external,
+            update::check_for_update,
             layout::list_module_layout,
             layout::save_module_layout,
             module_state::get_module_state,
