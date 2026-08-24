@@ -462,14 +462,15 @@ export function CalendarWidget({
     const width = ((lastVisible - firstVisible + 1) / visibleCount) * 100;
     // A bar that runs off the right edge of the week keeps that side square and
     // hides the resize handle there (you resize from the true end segment).
-    const resizableHere = resizeEnabled && !continuesAfter;
+    const resizableHere = resizeEnabled && !continuesAfter && !event.subscriptionId;
+    const barMovable = dropEnabled && !event.subscriptionId;
     return (
       <button
         type="button"
         key={occurrenceKey(event)}
         draggable={false}
         aria-label={eventLabel(event)}
-        onPointerDown={dropEnabled ? (pointerEvent) => handleMovePointerDown(pointerEvent, event) : undefined}
+        onPointerDown={barMovable ? (pointerEvent) => handleMovePointerDown(pointerEvent, event) : undefined}
         onClick={() => handleBarClick(event)}
         style={{
           ...colorStyle(event.color),
@@ -479,12 +480,15 @@ export function CalendarWidget({
         }}
         className={
           'event event-bar event--spanning event--colored' +
-          `${dropEnabled ? ' event--movable' : ''}` +
+          `${barMovable ? ' event--movable' : ''}` +
           `${continuesBefore ? ' event-bar--open-start' : ''}` +
           `${continuesAfter ? ' event-bar--open-end' : ''}`
         }
       >
         <span className="event__title">{repeatMark(event)}{event.title}</span>
+        {event.subscriptionId ? (
+          <span className="event__source-badge" aria-label={t('calendar.externalBadge')} />
+        ) : null}
         {resizableHere ? (
           <span
             className="event-bar__resize-handle"
@@ -501,22 +505,26 @@ export function CalendarWidget({
   // A single-day event that flows inside a per-column stack so each cell can
   // vertically center its own events (with an even gap) independently.
   function renderCellEvent(event: CalendarEvent) {
+    const cellMovable = dropEnabled && !event.subscriptionId;
     return (
       <button
         type="button"
         key={occurrenceKey(event)}
         draggable={false}
         aria-label={eventLabel(event)}
-        onPointerDown={dropEnabled ? (pointerEvent) => handleMovePointerDown(pointerEvent, event) : undefined}
+        onPointerDown={cellMovable ? (pointerEvent) => handleMovePointerDown(pointerEvent, event) : undefined}
         onClick={() => handleBarClick(event)}
         style={colorStyle(event.color)}
         className={
           'event event-cell event--colored' +
-          `${dropEnabled ? ' event--movable' : ''}`
+          `${cellMovable ? ' event--movable' : ''}`
         }
       >
         <span className="event__title">{repeatMark(event)}{event.title}</span>
-        {resizeEnabled ? (
+        {event.subscriptionId ? (
+          <span className="event__source-badge" aria-label={t('calendar.externalBadge')} />
+        ) : null}
+        {resizeEnabled && !event.subscriptionId ? (
           <span
             className="event-bar__resize-handle"
             aria-hidden="true"
