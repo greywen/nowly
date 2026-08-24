@@ -44,11 +44,11 @@ describe('KanbanFieldManagerDialog', () => {
     const user = userEvent.setup();
     render(<KanbanFieldManagerDialog {...props()} />);
 
-    expect(screen.getByRole('tab', { name: '优先级', selected: true })).toBeInTheDocument();
-    await user.click(screen.getByRole('tab', { name: '标签' }));
-    expect(screen.getByRole('tab', { name: '标签', selected: true })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '优先级(1)', selected: true })).toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: '标签(1)' }));
+    expect(screen.getByRole('tab', { name: '标签(1)', selected: true })).toBeInTheDocument();
     expect(screen.getByLabelText('标签列表')).toHaveTextContent('设计');
-    await user.click(screen.getByRole('tab', { name: '协作人' }));
+    await user.click(screen.getByRole('tab', { name: '协作人(1)' }));
     expect(screen.getByLabelText('协作人列表')).toHaveTextContent('小明');
   });
 
@@ -77,7 +77,7 @@ describe('KanbanFieldManagerDialog', () => {
   it('collaborators have no color picker', async () => {
     const user = userEvent.setup();
     render(<KanbanFieldManagerDialog {...props()} />);
-    await user.click(screen.getByRole('tab', { name: '协作人' }));
+    await user.click(screen.getByRole('tab', { name: '协作人(1)' }));
     expect(screen.queryByText('颜色')).not.toBeInTheDocument();
   });
 });

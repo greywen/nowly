@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Repeat } from 'lucide-react';
-import { CalendarSettingsControl, type CalendarSettings } from './CalendarSettingsControl';
+import { ChevronLeft, ChevronRight, Plus, Repeat, Settings } from 'lucide-react';
+import type { CalendarSettings } from './CalendarSettingsDialog';
 import {
   buildMonthGrid,
   buildWeekDays,
@@ -100,8 +100,7 @@ type CalendarWidgetProps = {
   onMoveEventToHour?: (event: CalendarEvent, isoDate: string, startHour: number) => void;
   onResizeEvent?: (event: CalendarEvent, endIsoDate: string) => void;
   calendarSettings?: CalendarSettings;
-  onChangeCalendarSettings?: (settings: CalendarSettings) => void;
-  onOpenSubscriptions?: () => void;
+  onOpenSettings?: () => void;
 };
 
 function summaryFor(status: LoadStatus, count: number, view: CalendarView) {
@@ -149,8 +148,7 @@ export function CalendarWidget({
   onMoveEventToHour,
   onResizeEvent,
   calendarSettings,
-  onChangeCalendarSettings,
-  onOpenSubscriptions
+  onOpenSettings
 }: CalendarWidgetProps) {
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const anchor = anchorIso ? new Date(`${anchorIso}T00:00:00`) : new Date(year, monthIndex, 1);
@@ -838,8 +836,10 @@ export function CalendarWidget({
           <button type="button" className="btn btn-icon" aria-label={navLabels.next} onClick={onNextMonth}>
             <ChevronRight aria-hidden="true" />
           </button>
-          {calendarSettings && onChangeCalendarSettings ? (
-            <CalendarSettingsControl settings={calendarSettings} onChange={onChangeCalendarSettings} onOpenSubscriptions={onOpenSubscriptions} />
+          {onOpenSettings ? (
+            <button type="button" className="btn btn-icon" aria-label={t('calendarSettings.label')} onClick={onOpenSettings}>
+              <Settings aria-hidden="true" />
+            </button>
           ) : null}
           <button type="button" className="btn btn-icon btn-primary" aria-label={t('calendar.newEvent')} onClick={onCreateEvent}>
             <Plus aria-hidden="true" />

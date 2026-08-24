@@ -42,9 +42,9 @@ export function isNotesViewMode(value: unknown): value is NotesViewMode {
   return typeof value === 'string' && notesViewModes.includes(value as NotesViewMode);
 }
 
-export function notesViewOptions(): Array<{ view: NotesViewMode; label: string }> {
+export function notesViewOptions(): Array<{ view: NotesViewMode; label: string; description: string }> {
   return [
-    { view: 'list', label: t('notesWidget.viewList') },
-    { view: 'board', label: t('notesWidget.viewBoard') }
+    { view: 'list', label: t('notesWidget.viewList'), description: t('notesWidget.viewListDesc') },
+    { view: 'board', label: t('notesWidget.viewBoard'), description: t('notesWidget.viewBoardDesc') }
   ];
 }

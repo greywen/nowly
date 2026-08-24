@@ -10,7 +10,7 @@ import { NotesManagerDialog } from '../notes/NotesManagerDialog';
 import type { Note, NoteDraft } from '../notes/notes-model';
 import type { AppSettings, MonitorInfo } from '../data/nowly-repository';
 import { SettingsDialog } from '../settings/SettingsDialog';
-import { SubscriptionManagerDialog } from '../settings/SubscriptionManagerDialog';
+import { CalendarSettingsDialog } from '../calendar/CalendarSettingsDialog';
 import type { CalendarSubscription, SubscriptionDraft } from '../calendar/subscription-model';
 
 type Props = {
@@ -117,16 +117,18 @@ export function ModalRoot({
         onClose={onClose}
       />
     ) : null}
-    {modal.type === 'calendar-subscriptions' ? (
-      <SubscriptionManagerDialog
+    {modal.type === 'calendar-settings' ? (
+      <CalendarSettingsDialog
+        settings={{ weekStart: settings.weekStart, dateFormat: settings.dateFormat, showWeekends: settings.showWeekends }}
+        onChange={(next) => void saveSettings({ ...settings, ...next })}
         subscriptions={subscriptions}
         restoreFocusRef={{ current: modal.trigger }}
         onClose={onClose}
-        onChanged={onSubscriptionsChanged}
-        onCreate={createSubscription}
-        onUpdate={updateSubscription}
-        onDelete={deleteSubscription}
-        onRefresh={refreshSubscription}
+        onSubscriptionsChanged={onSubscriptionsChanged}
+        createSubscription={createSubscription}
+        updateSubscription={updateSubscription}
+        deleteSubscription={deleteSubscription}
+        refreshSubscription={refreshSubscription}
       />
     ) : null}
   </>;

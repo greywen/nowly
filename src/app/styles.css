@@ -28,10 +28,12 @@
   --text-muted: #968e7e;
   --text-disabled: #b5b0a1;
   --border-default: #eaeaea;
+  --border-emphasis: #dad3c3;
   --radius-sm: 7.6px;
   --radius-default: 15.2px;
   --radius-pill: 999px;
   --focus-ring: rgba(79, 201, 218, 0.25);
+  --shadow-focus: 0 0 0 4px rgba(79, 201, 218, 0.25);
   --shadow-lg: 0 16px 32px 16px rgba(0, 0, 0, 0.1);
   --shadow-dropdown: 0 0 50px 0 rgba(82, 63, 105, 0.15);
   --shadow-tooltip: 0 0 30px rgba(0, 0, 0, 0.15);
@@ -126,10 +128,10 @@ button:disabled { cursor: default; opacity: .65; }
 /* Calendar settings: an icon button in the calendar toolbar that opens a
    popover holding calendar-scoped preferences (week start, date format,
    weekend visibility) so they sit next to the view they affect. */
-.calendar-settings-control { position: relative; display: inline-flex; }
-.calendar-settings-popup { position: absolute; z-index: 60; top: calc(100% + 8px); right: 0; box-sizing: border-box; width: 260px; padding: 16px; display: grid; gap: 16px; border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-surface); box-shadow: var(--shadow-dropdown); }
-.calendar-settings-popup__section { display: grid; gap: 8px; padding-top: 16px; border-top: 1px solid var(--border-default); }
-.calendar-settings-popup__section-title { color: var(--text-muted); font-size: 13.6px; font-weight: 600; }
+.calendar-settings-dialog { width: min(640px, calc(100vw - 32px)); }
+.calendar-settings { display: grid; gap: 24px; }
+.calendar-settings__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.calendar-settings__checks { padding: 20px; border-radius: var(--radius-default); background: var(--bg-subtle); }
 .module-grid { flex: 1; min-width: 0; min-height: 0; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); grid-template-rows: repeat(8, minmax(0, 1fr)); gap: 24px; }
 .card { min-width: 0; min-height: 0; overflow: hidden; border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-surface); box-shadow: none; }
 .calendar-card, .priority-card, .notes-card { min-height: 0; display: flex; flex-direction: column; }
@@ -352,12 +354,21 @@ button:disabled { cursor: default; opacity: .65; }
 .sticky-note--tilt-1 .sticky-note__tape { left: auto; right: -12px; transform: rotate(45deg); }
 .sticky-note--tilt-3 .sticky-note__tape { left: auto; right: -12px; top: 14px; transform: rotate(45deg); }
 .empty-state { padding: 24px; border: 1px dashed var(--border-default); border-radius: var(--radius-default); text-align: center; }
-.notes-settings-dialog { width: min(400px, calc(100vw - 32px)); }
-.notes-settings__options { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-.notes-settings__tile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 20px 12px; border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-surface); color: var(--text-secondary); font-size: 15.2px; font-weight: 500; }
-.notes-settings__tile:hover { border-color: var(--border-emphasis); background: var(--bg-subtle); }
-.notes-settings__tile.is-active { border-color: var(--color-primary); background: var(--color-primary-light); color: var(--color-primary-active); }
-.notes-settings__tile-icon { width: 24px; height: 24px; }
+.notes-settings-dialog { width: min(480px, calc(100vw - 32px)); }
+.notes-settings { display: grid; gap: 8px; }
+.notes-settings__title { color: var(--text-primary); font-size: 18.4px; font-weight: 600; line-height: 1.4; }
+.notes-settings__intro { margin: 0 0 8px; color: var(--text-muted); font-size: 13.6px; line-height: 1.5; }
+.notes-settings__options { display: grid; gap: 12px; }
+.notes-settings__option { display: flex; width: 100%; align-items: center; gap: 16px; padding: 16px; text-align: left; border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-surface); }
+.notes-settings__option:hover { border-color: var(--border-emphasis); background: var(--bg-subtle); }
+.notes-settings__option.is-active { border-color: var(--color-primary); background: var(--color-primary-light); }
+.notes-settings__option-icon { display: grid; width: 40px; height: 40px; flex: none; place-items: center; border-radius: var(--radius-default); color: var(--text-secondary); background: var(--bg-subtle); }
+.notes-settings__option.is-active .notes-settings__option-icon { color: #fff; background: var(--color-primary); }
+.notes-settings__option-icon svg { width: 20px; height: 20px; }
+.notes-settings__option-text { display: grid; gap: 4px; min-width: 0; flex: 1; }
+.notes-settings__option-label { color: var(--text-primary); font-size: 15.2px; font-weight: 600; line-height: 1.5; }
+.notes-settings__option-desc { color: var(--text-muted); font-size: 13.6px; line-height: 1.5; }
+.notes-settings__option-check { width: 20px; height: 20px; flex: none; color: var(--color-primary-active); }
 .link-btn { padding: 0; border: 0; color: var(--color-primary-active); background: transparent; font-size: 13.6px; font-weight: 600; }
 .module-message { margin-bottom: 12px; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--color-danger-active); background: var(--color-danger-light); border-radius: var(--radius-default); font-size: 13.6px; }
 .module-message__actions { display: flex; align-items: center; gap: 12px; }
@@ -471,6 +482,18 @@ button:disabled { cursor: default; opacity: .65; }
 .good-icon-button svg { width: 18px; height: 18px; flex: none; }
 .good-button:focus-visible,
 .good-icon-button:focus-visible { outline: 0; }
+
+/* Underline tabs (design.md §8.12). The only tab shape in the app: no pill,
+   no filled segment, no card. Every settings surface reuses this block. */
+.good-tabs { display: flex; align-items: stretch; gap: 32px; border-bottom: 2px solid var(--border-default); }
+.good-tabs__tab { box-sizing: border-box; margin-bottom: -2px; padding: 0 0 12px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--text-secondary); font-size: 15.2px; font-weight: 600; line-height: 1.5; white-space: nowrap; }
+.good-tabs__tab:hover:not(:disabled) { color: var(--color-primary); background: transparent; }
+.good-tabs__tab.is-active { color: var(--color-primary); border-bottom-color: var(--color-primary); }
+.good-tabs__tab:disabled { color: var(--text-disabled); }
+.good-tabs__tab:focus-visible { outline: 0; box-shadow: var(--shadow-focus); }
+.good-tabs__count { margin-left: 4px; color: var(--text-muted); font-weight: 500; }
+.good-tabs__tab.is-active .good-tabs__count { color: inherit; }
+.good-tabs__panel { display: grid; gap: 16px; }
 
 .select-field { position: relative; display: grid; gap: 8px; }
 .select-trigger {
@@ -875,9 +898,7 @@ button:disabled { cursor: default; opacity: .65; }
 
 .settings-dialog { width: min(760px, calc(100vw - 32px)); }
 .settings-form { display: grid; gap: 24px; }
-.settings-form section { display: grid; gap: 16px; }
-.settings-form h3 { margin: 0; color: var(--text-primary); font-size: 18.4px; font-weight: 600; line-height: 1.4; }
-.settings-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .settings-checks { padding: 20px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; border-radius: var(--radius-default); background: var(--bg-subtle); }
 
 @media (max-width: 640px) {
@@ -1136,13 +1157,11 @@ button:disabled { cursor: default; opacity: .65; }
 .kanban-multiselect__empty { margin: 0; color: var(--text-muted); font-size: 13.6px; }
 
 /* Field manager */
-.kanban-field { display: flex; gap: 4px; padding: 4px; border-radius: var(--radius-default); background: var(--bg-subtle); }
-.kanban-field__tab { flex: 1; min-height: 36px; padding: 6px 12px; border: 0; border-radius: var(--radius-sm); color: var(--text-secondary); background: transparent; font-size: 15.2px; font-weight: 600; }
-.kanban-field__tab:hover { color: var(--color-primary-active); }
-.kanban-field__tab.is-active { color: #fff; background: var(--color-primary); }
-.kanban-field__form { display: grid; gap: 16px; }
+.kanban-field { display: grid; gap: 24px; }
+.kanban-field__panel { display: grid; gap: 20px; }
+.kanban-field__form { display: grid; gap: 16px; padding: 20px; border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-surface); }
 .kanban-field__form-actions { display: flex; justify-content: flex-end; gap: 8px; }
-.kanban-field__list { margin: 12px 0 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.kanban-field__list { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
 .kanban-field__row { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-surface); }
 .kanban-field__name { min-width: 0; flex: none; color: var(--text-primary); font-size: 15.2px; font-weight: 600; }
 .kanban-field__row .kanban-badge { flex: none; }
@@ -1295,12 +1314,12 @@ button:disabled { cursor: default; opacity: .65; }
 .external-event__label { margin-right: 8px; color: var(--text-muted); }
 .external-event__note { margin: 0; white-space: pre-wrap; color: var(--text-secondary); }
 .external-event__readonly { margin: 4px 0 0; color: var(--text-muted); font-size: 0.85rem; }
-.subscription-form { display: flex; flex-direction: column; gap: 12px; }
+.subscription-form { display: flex; flex-direction: column; gap: 12px; padding: 20px; border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-surface); }
 .subscription-form__actions { display: flex; justify-content: flex-end; gap: 8px; }
 .subscription-form__hint { color: var(--text-muted); font-size: 0.85rem; }
-.subscription-list { list-style: none; margin: 16px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.subscription-list__empty { color: var(--text-muted); }
-.subscription-list__row { display: flex; align-items: center; gap: 10px; }
+.subscription-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.subscription-list__empty { padding: 16px; color: var(--text-muted); font-size: 13.6px; text-align: center; border: 1px dashed var(--border-default); border-radius: var(--radius-default); }
+.subscription-list__row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--border-default); border-radius: var(--radius-default); }
 .subscription-list__dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
 .subscription-list__name { font-weight: 500; }
 .subscription-list__status { margin-left: auto; color: var(--text-muted); font-size: 0.85rem; }
