@@ -445,6 +445,7 @@ fn main() {
             subscriptions::update_calendar_subscription,
             subscriptions::delete_calendar_subscription,
             subscription_sync::refresh_calendar_subscription,
+            subscriptions::list_external_events_in_range,
             kanban::get_kanban_snapshot,
             kanban::create_kanban_lane,
             kanban::update_kanban_lane,

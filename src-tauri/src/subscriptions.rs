@@ -4,7 +4,7 @@
 
 use crate::db::AppDb;
 use crate::error::CommandError;
-use crate::models::{CalendarSubscription, SubscriptionDraft};
+use crate::models::{CalendarSubscription, EventRange, ExternalEvent, SubscriptionDraft};
 use rusqlite::{params, Connection, Row};
 use tauri::State;
 use uuid::Uuid;
@@ -176,6 +176,63 @@ pub fn delete(connection: &mut Connection, id: &str) -> Result<(), CommandError>
     Ok(())
 }
 
+/// 读取与 `[range.start, range.end_at_exclusive)`（设备钟面）重叠的外部事件，
+/// 附带来源订阅的固定色。start_at/end_at 已换算成设备显示钟面。
+pub fn list_external_in_range(
+    connection: &Connection,
+    range: &EventRange,
+) -> Result<Vec<ExternalEvent>, CommandError> {
+    let sql = "SELECT e.id, e.subscription_id, e.title, e.start_at, e.end_at,
+                      e.start_tz, e.end_tz, e.all_day, e.location, e.description, s.color
+               FROM external_events e
+               JOIN calendar_subscriptions s ON s.id = e.subscription_id";
+    let mut statement = connection.prepare(sql).map_err(CommandError::database)?;
+    let rows = statement
+        .query_map([], |row| {
+            let start_tz: Option<String> = row.get(5)?;
+            let end_tz: Option<String> = row.get(6)?;
+            let start_raw: String = row.get(3)?;
+            let end_raw: String = row.get(4)?;
+            Ok(ExternalEvent {
+                id: row.get(0)?,
+                subscription_id: row.get(1)?,
+                title: row.get(2)?,
+                start_at: crate::events::to_display_wall(&start_raw, &start_tz),
+                end_at: crate::events::to_display_wall(&end_raw, &end_tz),
+                start_tz,
+                end_tz,
+                all_day: row.get::<_, i64>(7)? == 1,
+                location: row.get(8)?,
+                description: row.get(9)?,
+                color: row.get(10)?,
+            })
+        })
+        .map_err(CommandError::database)?;
+
+    let mut out = Vec::new();
+    for row in rows {
+        let event = row.map_err(CommandError::database)?;
+        // 设备钟面下与范围重叠：event.start < range.end 且 event.end > range.start。
+        // 全天/单点用 start 落在范围内近似（end==start 时用 >= start 判断）。
+        let overlaps = event.start_at < range.end_at_exclusive
+            && (event.end_at > range.start_at
+                || event.end_at == event.start_at && event.start_at >= range.start_at);
+        if overlaps {
+            out.push(event);
+        }
+    }
+    Ok(out)
+}
+
+#[tauri::command]
+pub fn list_external_events_in_range(
+    db: State<'_, AppDb>,
+    range: EventRange,
+) -> Result<Vec<ExternalEvent>, CommandError> {
+    let connection = db.0.lock().map_err(CommandError::database)?;
+    list_external_in_range(&connection, &range)
+}
+
 #[tauri::command]
 pub fn list_calendar_subscriptions(
     db: State<'_, AppDb>,
@@ -323,5 +380,62 @@ mod tests {
         let mut connection = memory_db();
         let err = update(&mut connection, "nope", draft()).unwrap_err();
         assert_eq!(err.field.as_deref(), Some("id"));
+    }
+
+    fn insert_external(
+        connection: &Connection,
+        sub: &str,
+        id: &str,
+        start_at: &str,
+        end_at: &str,
+        start_tz: Option<&str>,
+    ) {
+        connection
+            .execute(
+                "INSERT INTO external_events
+                    (id,subscription_id,start_at,end_at,start_tz,end_tz,all_day,title,last_synced_at)
+                 VALUES (?1,?2,?3,?4,?5,?5,0,'会议','t')",
+                rusqlite::params![id, sub, start_at, end_at, start_tz],
+            )
+            .unwrap();
+    }
+
+    #[test]
+    fn list_external_in_range_filters_and_attaches_color() {
+        let mut connection = memory_db();
+        let s1 = create(&mut connection, draft()).unwrap();
+        insert_external(&connection, &s1.id, "a", "2026-08-10T10:00", "2026-08-10T11:00", None);
+        insert_external(&connection, &s1.id, "b", "2026-09-20T10:00", "2026-09-20T11:00", None);
+
+        let range = EventRange {
+            start_at: "2026-08-01T00:00".into(),
+            end_at_exclusive: "2026-09-01T00:00".into(),
+        };
+        let events = list_external_in_range(&connection, &range).unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].id, "a");
+        assert_eq!(events[0].color, s1.color);
+        assert_eq!(events[0].subscription_id, s1.id);
+    }
+
+    #[test]
+    fn list_external_in_range_converts_tz_to_device_wall() {
+        let mut connection = memory_db();
+        let s1 = create(&mut connection, draft()).unwrap();
+        insert_external(
+            &connection,
+            &s1.id,
+            "t",
+            "2026-08-10T10:00",
+            "2026-08-10T11:00",
+            Some("Asia/Shanghai"),
+        );
+        let range = EventRange {
+            start_at: "2026-08-01T00:00".into(),
+            end_at_exclusive: "2026-09-01T00:00".into(),
+        };
+        let events = list_external_in_range(&connection, &range).unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].start_tz.as_deref(), Some("Asia/Shanghai"));
     }
 }
