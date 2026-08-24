@@ -91,7 +91,7 @@ function createRepository(overrides: Partial<NowlyRepository> = {}): NowlyReposi
     createKanbanCard: vi.fn(), updateKanbanCard: vi.fn(), deleteKanbanCard: vi.fn(), moveKanbanCard: vi.fn(),
     createKanbanPriority: vi.fn(), updateKanbanPriority: vi.fn(), deleteKanbanPriority: vi.fn(), reorderKanbanPriorities: vi.fn(),
     createKanbanTag: vi.fn(), updateKanbanTag: vi.fn(), deleteKanbanTag: vi.fn(),
-    createKanbanCollaborator: vi.fn(), updateKanbanCollaborator: vi.fn(), deleteKanbanCollaborator: vi.fn(), proxyFetch: vi.fn(), fetchRegistry: vi.fn(), downloadModule: vi.fn(), listCalendarSubscriptions: vi.fn().mockResolvedValue([]), createCalendarSubscription: vi.fn(), updateCalendarSubscription: vi.fn(), deleteCalendarSubscription: vi.fn(),
+    createKanbanCollaborator: vi.fn(), updateKanbanCollaborator: vi.fn(), deleteKanbanCollaborator: vi.fn(), proxyFetch: vi.fn(), fetchRegistry: vi.fn(), downloadModule: vi.fn(), listCalendarSubscriptions: vi.fn().mockResolvedValue([]), createCalendarSubscription: vi.fn(), updateCalendarSubscription: vi.fn(), deleteCalendarSubscription: vi.fn(), listExternalEventsInRange: vi.fn().mockResolvedValue([]),
     ...overrides
   };
 }
@@ -138,6 +138,25 @@ describe('useEvents', () => {
     await waitFor(() => expect([result.current.year, result.current.monthIndex]).toEqual([2027, 0]));
     act(() => result.current.goToPreviousMonth());
     await waitFor(() => expect([result.current.year, result.current.monthIndex]).toEqual([2026, 11]));
+  });
+
+  it('merges external subscription events into the calendar data', async () => {
+    const external = [{
+      id: 'x1', subscriptionId: 's1', title: '订阅会议',
+      startAt: '2026-07-10T18:00', endAt: '2026-07-10T19:00',
+      startTz: null, endTz: null, allDay: false,
+      location: null, description: null, color: '#4FC9DA' as const
+    }];
+    const repository = createRepository({
+      listEventsInRange: vi.fn().mockResolvedValue([]),
+      listExternalEventsInRange: vi.fn().mockResolvedValue(external)
+    });
+    const { result } = renderHook(() => useEvents({ now, onRefreshTasks: vi.fn() }), {
+      wrapper: wrapper(repository)
+    });
+    await waitFor(() => expect(result.current.events.status).toBe('ready'));
+    expect(result.current.events.data).toHaveLength(1);
+    expect(result.current.events.data[0].subscriptionId).toBe('s1');
   });
 
   it('returns to today and retries a failed month read', async () => {
