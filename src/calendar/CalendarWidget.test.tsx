@@ -59,6 +59,17 @@ function duplicateKeyWarnings(spy: { mock: { calls: unknown[][] } }) {
 }
 
 describe('CalendarWidget', () => {
+  it('marks external subscription events with a source badge', () => {
+    const external: CalendarEvent = {
+      ...sampleEvents[0],
+      id: 'x1',
+      title: '订阅会议',
+      subscriptionId: 's1'
+    };
+    render(<CalendarWidget {...baseProps} events={[external]} />);
+    expect(screen.getAllByLabelText('订阅日历').length).toBeGreaterThan(0);
+  });
+
   it('renders overflow dots in the dedicated event-row container', () => {
     const overflowEvent = {
       ...sampleEvents[0],
