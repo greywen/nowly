@@ -151,7 +151,13 @@ pub(crate) fn to_display_wall(wall: &str, tz: &Option<String>) -> String {
 /// （身份键）；为 None 时表示单次事件或系列首实例，直接用行上的 start/end。
 /// 展开实例按系列时长平移后再换算成设备显示钟面。
 fn event_from_series_row(row: &SeriesRow, occurrence_wall: Option<&str>) -> Event {
-    let is_series = row.rrule.is_some();
+    // 空 RRULE 是历史数据/损坏数据，不应把普通日程伪装成重复实例。
+    // 非空但暂时无法转换为简化 Recurrence 的复杂 RRULE 仍保留系列身份，
+    // 以便前端继续走范围保护，而不是误执行整条系列的单次操作。
+    let is_series = row
+        .rrule
+        .as_deref()
+        .is_some_and(|value| !value.trim().is_empty());
     // 计算该实例（系列时区）的起止钟面。
     let (inst_start_wall, inst_end_wall) = match occurrence_wall {
         Some(slot) => {
@@ -1171,6 +1177,21 @@ mod tests {
             crate::timezone::utc_to_wall(instant, crate::timezone::device_tz()),
         );
         assert_eq!(event.start_at, expected);
+    }
+
+    #[test]
+    fn ignores_blank_rrule_when_reading_a_single_event() {
+        let connection = database();
+        connection.execute(
+            "INSERT INTO events(id,title,start_at,end_at,all_day,category,color,note,reminders,created_at,updated_at,rrule)
+             VALUES ('e1','普通日程','2026-08-03T10:00','2026-08-03T11:00',0,'work','#4FC9DA','','[]','t','t','   ')",
+            [],
+        ).unwrap();
+
+        let event = event_by_id(&connection, "e1").unwrap().unwrap();
+        assert_eq!(event.series_id, None);
+        assert_eq!(event.occurrence_start_at, None);
+        assert_eq!(event.recurrence, None);
     }
 
     #[test]
