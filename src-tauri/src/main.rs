@@ -24,6 +24,7 @@ mod reminders;
 mod rrule_bridge;
 mod rrule_engine;
 mod settings;
+mod subscription_sync;
 mod subscriptions;
 mod tasks;
 mod timezone;
@@ -242,6 +243,26 @@ fn main() {
                 }
             });
 
+            // 订阅刷新：启动即全刷一次，之后每 60 秒检查各源是否到期（按各自间隔）。
+            let subscription_handle = app.handle().clone();
+            std::thread::spawn(move || {
+                // 启动即刷一次全部源。
+                if let Ok(mut connection) = subscription_handle.state::<AppDb>().0.lock() {
+                    let _ = subscription_sync::sync_all(&mut connection);
+                }
+                let _ = subscription_handle.emit("calendar-subscriptions-updated", ());
+                loop {
+                    std::thread::sleep(std::time::Duration::from_secs(60));
+                    let refreshed = match subscription_handle.state::<AppDb>().0.lock() {
+                        Ok(mut connection) => subscription_sync::sync_due(&mut connection).is_ok(),
+                        Err(_) => false,
+                    };
+                    if refreshed {
+                        let _ = subscription_handle.emit("calendar-subscriptions-updated", ());
+                    }
+                }
+            });
+
             #[cfg(target_os = "windows")]
             {
                 let handle = app.handle().clone();
@@ -423,6 +444,7 @@ fn main() {
             subscriptions::create_calendar_subscription,
             subscriptions::update_calendar_subscription,
             subscriptions::delete_calendar_subscription,
+            subscription_sync::refresh_calendar_subscription,
             kanban::get_kanban_snapshot,
             kanban::create_kanban_lane,
             kanban::update_kanban_lane,
