@@ -11,6 +11,7 @@ mod extensions;
 mod feedback;
 mod focus;
 mod focus_timer;
+mod ics_parser;
 mod kanban;
 mod layout;
 mod models;
