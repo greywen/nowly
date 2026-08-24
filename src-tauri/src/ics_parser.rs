@@ -7,6 +7,59 @@ use crate::rrule_engine::{self, SeriesSpec};
 use crate::timezone;
 use chrono::{Duration, NaiveDate, NaiveDateTime};
 
+/// 整个订阅源单次同步允许展开的实例总数上限。每条 RRULE 已受
+/// `rrule_engine::MAX_WINDOW_OCCURRENCES` 约束，此上限再从整源角度封顶，
+/// 防止一个塞满带重复规则 VEVENT 的 .ics 把库撑爆。
+pub const MAX_SOURCE_INSTANCES: usize = 10_000;
+
+/// 单次同步允许解析的 VEVENT 块数量上限。
+pub const MAX_SOURCE_VEVENTS: usize = 5_000;
+
+/// 把常见的 Windows 时区名映射到 IANA 名。Outlook 导出的 .ics 常用 Windows
+/// 时区标识（如 "China Standard Time"），而 `chrono-tz` 只认 IANA 名。此表只覆盖
+/// 最常见的一批；命中即用映射结果，未命中再交由调用方按 IANA 解析。
+fn windows_tz_to_iana(name: &str) -> Option<&'static str> {
+    let mapped = match name.trim() {
+        "China Standard Time" => "Asia/Shanghai",
+        "Taipei Standard Time" => "Asia/Taipei",
+        "Tokyo Standard Time" => "Asia/Tokyo",
+        "Korea Standard Time" => "Asia/Seoul",
+        "Singapore Standard Time" => "Asia/Singapore",
+        "India Standard Time" => "Asia/Kolkata",
+        "SE Asia Standard Time" => "Asia/Bangkok",
+        "W. Europe Standard Time" => "Europe/Berlin",
+        "Central Europe Standard Time" => "Europe/Budapest",
+        "Central European Standard Time" => "Europe/Warsaw",
+        "Romance Standard Time" => "Europe/Paris",
+        "GMT Standard Time" => "Europe/London",
+        "Greenwich Standard Time" => "Atlantic/Reykjavik",
+        "Russian Standard Time" => "Europe/Moscow",
+        "E. Australia Standard Time" => "Australia/Brisbane",
+        "AUS Eastern Standard Time" => "Australia/Sydney",
+        "Eastern Standard Time" => "America/New_York",
+        "Central Standard Time" => "America/Chicago",
+        "Mountain Standard Time" => "America/Denver",
+        "Pacific Standard Time" => "America/Los_Angeles",
+        "UTC" => "UTC",
+        _ => return None,
+    };
+    Some(mapped)
+}
+
+/// 把 TZID 参数解析成一个 Nowly 内部时区名（IANA 或 "UTC"）。先按 IANA 直接解析，
+/// 失败再尝试 Windows→IANA 映射。都不认识返回 None（调用方退化为浮动）。
+fn resolve_tzid(name: &str) -> Option<String> {
+    if timezone::parse_tz(name).is_ok() {
+        return Some(name.to_owned());
+    }
+    let mapped = windows_tz_to_iana(name)?;
+    if timezone::parse_tz(mapped).is_ok() {
+        Some(mapped.to_owned())
+    } else {
+        None
+    }
+}
+
 /// 把折行反折：以空格/制表符开头的物理行拼回上一行。返回逻辑行列表。
 fn unfold_lines(text: &str) -> Vec<String> {
     let mut logical: Vec<String> = Vec::new();
@@ -122,10 +175,9 @@ fn parse_ics_datetime(prop: &Property) -> Option<IcsDateTime> {
         });
     }
     let wall = parse_stamp(value)?;
-    // 带 TZID：能解析成 IANA 时区才保留，否则退化为浮动。
-    let tz = prop.param("TZID").and_then(|name| {
-        timezone::parse_tz(name).ok().map(|_| name.to_owned())
-    });
+    // 带 TZID：能解析成 IANA 时区（直接或经 Windows→IANA 映射）才保留，
+    // 否则退化为浮动。
+    let tz = prop.param("TZID").and_then(resolve_tzid);
     Some(IcsDateTime {
         wall,
         tz,
@@ -169,6 +221,11 @@ pub struct VEvent {
     rrule: Option<String>,
     rdate: Vec<NaiveDateTime>,
     exdate: Vec<NaiveDateTime>,
+    /// RECURRENCE-ID 的钟面时间：本 VEVENT 是对某次 occurrence 的覆盖/取消，
+    /// 值为被覆盖 occurrence 在系列时区下的原始钟面。普通事件为 None。
+    recurrence_id: Option<NaiveDateTime>,
+    /// STATUS:CANCELLED 标记该事件（或该次 occurrence）已取消。
+    cancelled: bool,
 }
 
 /// 解析一个逗号分隔的日期时间列表（RDATE/EXDATE），取每项的钟面。解析失败项跳过。
@@ -186,53 +243,103 @@ fn parse_datetime_list(prop: &Property) -> Vec<NaiveDateTime> {
         .collect()
 }
 
-/// 解析整个 .ics 文本为 VEvent 列表。缺 DTSTART 的块跳过。
-pub fn parse_vevents(text: &str) -> Vec<VEvent> {
-    let lines = unfold_lines(text);
-    let mut out = Vec::new();
-    for block in vevent_blocks(&lines) {
-        let mut uid = None;
-        let mut summary = None;
-        let mut location = None;
-        let mut description = None;
-        let mut dtstart = None;
-        let mut dtend = None;
-        let mut rrule = None;
-        let mut rdate = Vec::new();
-        let mut exdate = Vec::new();
-        for line in &block {
-            let Some(prop) = parse_property(line) else {
-                continue;
-            };
-            match prop.name.as_str() {
-                "UID" => uid = Some(prop.value.clone()),
-                "SUMMARY" => summary = Some(unescape_text(&prop.value)),
-                "LOCATION" => location = Some(unescape_text(&prop.value)),
-                "DESCRIPTION" => description = Some(unescape_text(&prop.value)),
-                "DTSTART" => dtstart = parse_ics_datetime(&prop),
-                "DTEND" => dtend = parse_ics_datetime(&prop),
-                "RRULE" => rrule = Some(prop.value.clone()),
-                "RDATE" => rdate.extend(parse_datetime_list(&prop)),
-                "EXDATE" => exdate.extend(parse_datetime_list(&prop)),
-                _ => {}
-            }
-        }
-        let Some(dtstart) = dtstart else {
+/// 解析单个 VEVENT 块为 VEvent。缺 DTSTART 无法成事件，返回 None。
+fn parse_vevent_block(block: &[String]) -> Option<VEvent> {
+    let mut uid = None;
+    let mut summary = None;
+    let mut location = None;
+    let mut description = None;
+    let mut dtstart = None;
+    let mut dtend = None;
+    let mut rrule = None;
+    let mut rdate = Vec::new();
+    let mut exdate = Vec::new();
+    let mut recurrence_id = None;
+    let mut cancelled = false;
+    for line in block {
+        let Some(prop) = parse_property(line) else {
             continue;
         };
-        out.push(VEvent {
-            uid,
-            summary: summary.unwrap_or_else(|| "(无标题)".to_owned()),
-            location,
-            description,
-            dtstart,
-            dtend,
-            rrule,
-            rdate,
-            exdate,
+        match prop.name.as_str() {
+            "UID" => uid = Some(prop.value.clone()),
+            "SUMMARY" => summary = Some(unescape_text(&prop.value)),
+            "LOCATION" => location = Some(unescape_text(&prop.value)),
+            "DESCRIPTION" => description = Some(unescape_text(&prop.value)),
+            "DTSTART" => dtstart = parse_ics_datetime(&prop),
+            "DTEND" => dtend = parse_ics_datetime(&prop),
+            "RRULE" => rrule = Some(prop.value.clone()),
+            "RDATE" => rdate.extend(parse_datetime_list(&prop)),
+            "EXDATE" => exdate.extend(parse_datetime_list(&prop)),
+            "RECURRENCE-ID" => recurrence_id = parse_ics_datetime(&prop).map(|dt| dt.wall),
+            "STATUS" => cancelled = prop.value.trim().eq_ignore_ascii_case("CANCELLED"),
+            _ => {}
+        }
+    }
+    let dtstart = dtstart?;
+    Some(VEvent {
+        uid,
+        summary: summary.unwrap_or_else(|| "(无标题)".to_owned()),
+        location,
+        description,
+        dtstart,
+        dtend,
+        rrule,
+        rdate,
+        exdate,
+        recurrence_id,
+        cancelled,
+    })
+}
+
+/// 解析失败的分类，用于区分“合法空日历”与“非法/不兼容内容”。
+#[derive(Debug)]
+pub struct ParseError {
+    pub message: String,
+}
+
+/// 解析整个 .ics 文本。验证它确实是一份 VCALENDAR，并区分：
+/// - 合法但空的日历（零个 VEVENT）→ Ok(空 Vec)，可安全替换旧数据。
+/// - 有 VEVENT 但全部解析失败（如全部缺 DTSTART）→ Err，保留旧数据。
+/// - 根本不是 VCALENDAR（如登录页 HTML）→ Err，保留旧数据。
+pub fn parse_calendar(text: &str) -> Result<Vec<VEvent>, ParseError> {
+    let lines = unfold_lines(text);
+    // 必须看起来像一份 iCalendar：服务器返回的 HTML 错误页/登录页
+    // 不得被当成“空日历”删掉旧事件。
+    let has_calendar = lines
+        .iter()
+        .any(|l| l.trim().eq_ignore_ascii_case("BEGIN:VCALENDAR"));
+    if !has_calendar {
+        return Err(ParseError {
+            message: "返回内容不是有效的 iCalendar 日历。".to_owned(),
         });
     }
-    out
+    let blocks = vevent_blocks(&lines);
+    let block_count = blocks.len();
+    let mut out = Vec::new();
+    for block in blocks.iter().take(MAX_SOURCE_VEVENTS) {
+        if let Some(event) = parse_vevent_block(block) {
+            out.push(event);
+        }
+    }
+    // 有 VEVENT 块但一个都没解析出来：数据损坏，不能用空结果覆盖旧数据。
+    if block_count > 0 && out.is_empty() {
+        return Err(ParseError {
+            message: "日历事件均无法解析。".to_owned(),
+        });
+    }
+    Ok(out)
+}
+
+/// 解析整个 .ics 文本为 VEvent 列表（宽松版）。不要求 VCALENDAR 包裹，逐块解析、
+/// 失败块跳过。保留给测试与内部复用；生产同步路径用 `parse_calendar`（会区分
+/// 非法内容与空日历，避免用空结果误删旧数据）。
+#[cfg(test)]
+pub fn parse_vevents(text: &str) -> Vec<VEvent> {
+    let lines = unfold_lines(text);
+    vevent_blocks(&lines)
+        .iter()
+        .filter_map(|block| parse_vevent_block(block))
+        .collect()
 }
 
 /// VEvent 在窗口内展开出的一个只读实例。字段对齐 external_events 表列。
@@ -268,15 +375,76 @@ fn event_duration(event: &VEvent) -> Duration {
     }
 }
 
+/// 用 `event` 的时区与时长，按 `start_wall` 起点造一个只读实例。
+fn make_instance(event: &VEvent, start_wall: NaiveDateTime) -> ExternalInstance {
+    let tz = event
+        .dtstart
+        .tz
+        .as_deref()
+        .and_then(|name| timezone::parse_tz(name).ok());
+    let duration = event_duration(event);
+    let end_wall = start_wall + duration;
+    let (start_tz, end_tz, start_utc, end_utc) = if let Some(zone) = tz {
+        let start_utc = timezone::format_utc(timezone::wall_to_utc(start_wall, zone));
+        let end_utc = timezone::format_utc(timezone::wall_to_utc(end_wall, zone));
+        (
+            event.dtstart.tz.clone(),
+            event.dtstart.tz.clone(),
+            Some(start_utc),
+            Some(end_utc),
+        )
+    } else {
+        (None, None, None, None)
+    };
+    ExternalInstance {
+        uid: event.uid.clone(),
+        title: event.summary.clone(),
+        location: event.location.clone(),
+        description: event.description.clone(),
+        start_wall: timezone::format_wall(start_wall),
+        end_wall: timezone::format_wall(end_wall),
+        start_tz,
+        end_tz,
+        start_utc,
+        end_utc,
+        all_day: event.dtstart.all_day,
+    }
+}
+
 /// 把一批 VEvent 在 `[window_start, window_end)`（钟面半开窗口）内展开成只读实例。
-/// 展开委托 rrule_engine；带时区实例带 UTC 缓存。解析不了 RRULE 的 VEvent 跳过。
+///
+/// 处理 iCalendar 的重复例外：同一 UID 下带 RECURRENCE-ID 的 VEVENT 是对主系列某次
+/// occurrence 的覆盖或取消。展开时先按 UID 归组，主系列逐 occurrence 检查是否被覆盖：
+/// - 被 CANCELLED 覆盖 → 跳过该次；
+/// - 被非取消覆盖 → 用覆盖 VEVENT 的时间/内容替换该次；
+/// - 无覆盖 → 正常输出。
+/// 未匹配到主系列的孤儿覆盖（非取消）按独立单次事件输出。整源实例数受 `MAX_SOURCE_INSTANCES` 限制。
 pub fn expand_vevents(
     events: &[VEvent],
     window_start: NaiveDateTime,
     window_end: NaiveDateTime,
 ) -> Vec<ExternalInstance> {
-    let mut out = Vec::new();
+    use std::collections::HashMap;
+
+    // 按 UID 收集覆盖（带 RECURRENCE-ID 的 VEVENT），键为被覆盖 occurrence 的原始钟面。
+    let mut overrides: HashMap<String, HashMap<NaiveDateTime, &VEvent>> = HashMap::new();
     for event in events {
+        if let (Some(uid), Some(rid)) = (event.uid.as_ref(), event.recurrence_id) {
+            overrides.entry(uid.clone()).or_default().insert(rid, event);
+        }
+    }
+
+    let mut out = Vec::new();
+    let mut used: HashMap<(String, NaiveDateTime), ()> = HashMap::new();
+    for event in events {
+        // 覆盖 VEVENT 在下面随主系列处理；此处只展开主系列（无 RECURRENCE-ID）。
+        if event.recurrence_id.is_some() {
+            continue;
+        }
+        // 整个系列被取消：不产生任何实例。
+        if event.cancelled {
+            continue;
+        }
         let tz = event
             .dtstart
             .tz
@@ -297,36 +465,40 @@ pub fn expand_vevents(
         ) else {
             continue;
         };
-        let duration = event_duration(event);
+        let event_overrides = event.uid.as_ref().and_then(|uid| overrides.get(uid));
         for occ in occurrences {
-            let end_wall = occ.wall + duration;
-            let (start_tz, end_tz, start_utc, end_utc) = if let Some(zone) = tz {
-                let start_utc = timezone::format_utc(occ.utc.unwrap_or_else(|| {
-                    timezone::wall_to_utc(occ.wall, zone)
-                }));
-                let end_utc = timezone::format_utc(timezone::wall_to_utc(end_wall, zone));
-                (
-                    event.dtstart.tz.clone(),
-                    event.dtstart.tz.clone(),
-                    Some(start_utc),
-                    Some(end_utc),
-                )
+            if out.len() >= MAX_SOURCE_INSTANCES {
+                return out;
+            }
+            // 该次 occurrence 是否被覆盖？键用系列时区下的原始钟面（= occ.wall）。
+            if let Some(over) = event_overrides.and_then(|map| map.get(&occ.wall)) {
+                if let Some(uid) = event.uid.as_ref() {
+                    used.insert((uid.clone(), occ.wall), ());
+                }
+                if over.cancelled {
+                    continue; // 该次被取消。
+                }
+                out.push(make_instance(over, over.dtstart.wall));
             } else {
-                (None, None, None, None)
-            };
-            out.push(ExternalInstance {
-                uid: event.uid.clone(),
-                title: event.summary.clone(),
-                location: event.location.clone(),
-                description: event.description.clone(),
-                start_wall: timezone::format_wall(occ.wall),
-                end_wall: timezone::format_wall(end_wall),
-                start_tz,
-                end_tz,
-                start_utc,
-                end_utc,
-                all_day: event.dtstart.all_day,
-            });
+                out.push(make_instance(event, occ.wall));
+            }
+        }
+    }
+
+    // 孤儿覆盖：有 RECURRENCE-ID 但没匹配到主系列的任何 occurrence，且非取消。
+    // 落在窗口内则作为独立单次事件输出，避免用户丢失被移动到窗口内的那一次。
+    for event in events {
+        let (Some(uid), Some(rid)) = (event.uid.as_ref(), event.recurrence_id) else {
+            continue;
+        };
+        if event.cancelled || used.contains_key(&(uid.clone(), rid)) {
+            continue;
+        }
+        if event.dtstart.wall >= window_start && event.dtstart.wall < window_end {
+            if out.len() >= MAX_SOURCE_INSTANCES {
+                break;
+            }
+            out.push(make_instance(event, event.dtstart.wall));
         }
     }
     out
@@ -423,9 +595,18 @@ mod tests {
     }
 
     #[test]
-    fn unknown_tzid_falls_back_to_floating() {
-        // 非 IANA 时区名（如 Windows 的 "China Standard Time"）无法解析，退化为浮动。
+    fn windows_tzid_maps_to_iana() {
+        // Outlook 常用 Windows 时区名；映射到 IANA 后保留为带时区事件。
         let prop = parse_property("DTSTART;TZID=China Standard Time:20260810T100000").unwrap();
+        let dt = parse_ics_datetime(&prop).unwrap();
+        assert_eq!(dt.wall, ndt("2026-08-10T10:00"));
+        assert_eq!(dt.tz.as_deref(), Some("Asia/Shanghai"));
+    }
+
+    #[test]
+    fn truly_unknown_tzid_falls_back_to_floating() {
+        // 既非 IANA 也不在 Windows 映射表里的名字，退化为浮动。
+        let prop = parse_property("DTSTART;TZID=Nonexistent Zone:20260810T100000").unwrap();
         let dt = parse_ics_datetime(&prop).unwrap();
         assert_eq!(dt.wall, ndt("2026-08-10T10:00"));
         assert_eq!(dt.tz, None);
@@ -536,5 +717,73 @@ mod tests {
         assert_eq!(instances.len(), 1);
         assert_eq!(instances[0].start_wall, "2026-08-10T10:00");
         assert_eq!(instances[0].end_wall, "2026-08-10T10:00");
+    }
+
+    #[test]
+    fn parse_calendar_rejects_non_calendar_content() {
+        // 服务器返回 HTML 登录页，不能被当成“空日历”。
+        let html = "<!DOCTYPE html><html><body>Sign in</body></html>";
+        assert!(parse_calendar(html).is_err());
+    }
+
+    #[test]
+    fn parse_calendar_allows_a_legitimately_empty_calendar() {
+        let text = "BEGIN:VCALENDAR\r\nPRODID:-//Test//EN\r\nEND:VCALENDAR";
+        let events = parse_calendar(text).unwrap();
+        assert!(events.is_empty());
+    }
+
+    #[test]
+    fn parse_calendar_errors_when_all_events_fail_to_parse() {
+        // 有 VEVENT 块但均缺 DTSTART：视为损坏，不能用空结果覆盖旧数据。
+        let text = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:1\r\nEND:VEVENT\r\nEND:VCALENDAR";
+        assert!(parse_calendar(text).is_err());
+    }
+
+    #[test]
+    fn cancelled_master_series_produces_no_instances() {
+        let text = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:c1\r\nSUMMARY:已取消\r\n\
+                    DTSTART:20260810T100000Z\r\nSTATUS:CANCELLED\r\nEND:VEVENT\r\nEND:VCALENDAR";
+        let events = parse_calendar(text).unwrap();
+        let (s, e) = win("2026-08-01T00:00", "2026-09-01T00:00");
+        assert!(expand_vevents(&events, s, e).is_empty());
+    }
+
+    #[test]
+    fn recurrence_id_override_replaces_that_occurrence() {
+        // 周会每周一 10:00；8/17 那次被改到 14:00。
+        let text = "BEGIN:VCALENDAR\r\n\
+            BEGIN:VEVENT\r\nUID:s1\r\nSUMMARY:周会\r\n\
+            DTSTART:20260810T100000Z\r\nRRULE:FREQ=WEEKLY;BYDAY=MO\r\nEND:VEVENT\r\n\
+            BEGIN:VEVENT\r\nUID:s1\r\nSUMMARY:周会（改期）\r\n\
+            RECURRENCE-ID:20260817T100000Z\r\nDTSTART:20260817T140000Z\r\n\
+            DTEND:20260817T150000Z\r\nEND:VEVENT\r\nEND:VCALENDAR";
+        let events = parse_calendar(text).unwrap();
+        let (s, e) = win("2026-08-01T00:00", "2026-09-01T00:00");
+        let instances = expand_vevents(&events, s, e);
+        // 8/17 不再是 10:00，而是被覆盖为 14:00；不得重复。
+        let at_0817: Vec<_> = instances
+            .iter()
+            .filter(|i| i.start_wall.starts_with("2026-08-17"))
+            .collect();
+        assert_eq!(at_0817.len(), 1);
+        assert_eq!(at_0817[0].start_wall, "2026-08-17T14:00");
+        assert_eq!(at_0817[0].title, "周会（改期）");
+    }
+
+    #[test]
+    fn recurrence_id_cancellation_drops_that_occurrence() {
+        // 8/17 那次被取消：不出现，其余周一保留。
+        let text = "BEGIN:VCALENDAR\r\n\
+            BEGIN:VEVENT\r\nUID:s2\r\nSUMMARY:周会\r\n\
+            DTSTART:20260810T100000Z\r\nRRULE:FREQ=WEEKLY;BYDAY=MO\r\nEND:VEVENT\r\n\
+            BEGIN:VEVENT\r\nUID:s2\r\nRECURRENCE-ID:20260817T100000Z\r\n\
+            DTSTART:20260817T100000Z\r\nSTATUS:CANCELLED\r\nEND:VEVENT\r\nEND:VCALENDAR";
+        let events = parse_calendar(text).unwrap();
+        let (s, e) = win("2026-08-01T00:00", "2026-09-01T00:00");
+        let instances = expand_vevents(&events, s, e);
+        assert!(!instances.iter().any(|i| i.start_wall.starts_with("2026-08-17")));
+        assert!(instances.iter().any(|i| i.start_wall == "2026-08-10T10:00"));
+        assert!(instances.iter().any(|i| i.start_wall == "2026-08-24T10:00"));
     }
 }

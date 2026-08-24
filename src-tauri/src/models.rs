@@ -140,6 +140,9 @@ pub struct CalendarSubscription {
     pub refresh_interval_minutes: i64,
     /// 上次成功同步的时间戳（RFC3339 UTC）；从未同步为 None。
     pub last_synced_at: Option<String>,
+    /// 上次尝试同步的时间戳（RFC3339 UTC），无论成败都更新；从未尝试为 None。
+    /// 刷新间隔按此字段计算，失败也计时，避免失败源每轮都立即重试。
+    pub last_attempted_at: Option<String>,
     /// 上次同步结果：'ok' / 'failed'；从未同步为 None。
     pub last_status: Option<String>,
     /// 上次失败原因（面向用户的简短文案）；成功或从未同步为 None。
@@ -588,6 +591,7 @@ mod tests {
             color: "#4FC9DA".into(),
             refresh_interval_minutes: 15,
             last_synced_at: None,
+            last_attempted_at: None,
             last_status: None,
             last_error: None,
             created_at: "2026-08-01T08:00:00Z".into(),
@@ -597,6 +601,7 @@ mod tests {
         let object = value.as_object().unwrap();
         assert_eq!(object.get("refreshIntervalMinutes"), Some(&json!(15)));
         assert_eq!(object.get("lastSyncedAt"), Some(&Value::Null));
+        assert_eq!(object.get("lastAttemptedAt"), Some(&Value::Null));
         assert_eq!(object.get("lastStatus"), Some(&Value::Null));
         for snake in ["refresh_interval_minutes", "last_synced_at", "last_status", "last_error"] {
             assert!(!object.contains_key(snake), "{snake} 不应出现在契约里");

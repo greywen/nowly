@@ -671,6 +671,7 @@ fn migration_16_calendar_subscriptions(transaction: &Transaction<'_>) -> Result<
             color TEXT NOT NULL,
             refresh_interval_minutes INTEGER NOT NULL DEFAULT 15,
             last_synced_at TEXT,
+            last_attempted_at TEXT,
             last_status TEXT CHECK (last_status IN ('ok','failed')),
             last_error TEXT,
             created_at TEXT NOT NULL,
