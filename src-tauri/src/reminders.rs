@@ -215,6 +215,7 @@ mod tests {
             series_start_at: None,
             occurrence_start_at: None,
             is_overridden: false,
+            subscription_id: None,
         }
     }
 
