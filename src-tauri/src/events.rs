@@ -133,7 +133,7 @@ fn read_series_row(row: &Row<'_>) -> rusqlite::Result<SeriesRow> {
 }
 
 /// 把事件自身时区下的钟面换算成设备时区的显示钟面。浮动/全天原样返回。
-fn to_display_wall(wall: &str, tz: &Option<String>) -> String {
+pub(crate) fn to_display_wall(wall: &str, tz: &Option<String>) -> String {
     let Some(tz_name) = tz else {
         return wall.to_owned();
     };
