@@ -8,6 +8,7 @@ import {
 import { CalendarWidget } from '../calendar/CalendarWidget';
 import { useEvents } from '../calendar/useEvents';
 import type { ModalState } from '../lib/modal-store';
+import type { CalendarSubscription } from '../calendar/subscription-model';
 import { enterForegroundMode, enterWallpaperMode } from '../lib/window-mode';
 import { MatrixWidget } from '../matrix/MatrixWidget';
 import { useTasks } from '../matrix/useTasks';
@@ -66,6 +67,10 @@ export function App() {
   const tasks = tasksFeature.tasks.data;
   const notes = notesFeature.notes.data;
   const [modal, setModal] = useState<ModalState>(null);
+  const [subscriptions, setSubscriptions] = useState<CalendarSubscription[]>([]);
+  const loadSubscriptions = useCallback(() => {
+    void repository.listCalendarSubscriptions().then(setSubscriptions).catch(() => setSubscriptions([]));
+  }, [repository]);
   const [focusStatisticsOpen, setFocusStatisticsOpen] = useState(false);
   const [windowMode, setWindowMode] = useState<WindowMode>('foreground');
   const [isSwitchingWindowMode, setIsSwitchingWindowMode] = useState(false);
@@ -160,7 +165,11 @@ export function App() {
         onToday={eventsFeature.goToToday}
         onCreateEventForDate={(dateIso) => openModalInForeground({ type: 'event-create', dateIso, trigger: null })}
         onOpenDate={(isoDate) => openModalInForeground({ type: 'date', isoDate, trigger: null })}
-        onOpenEvent={(event) => openModalInForeground({ type: 'event-edit', event, trigger: null })}
+        onOpenEvent={(event) =>
+          event.subscriptionId
+            ? openModalInForeground({ type: 'external-detail', event, trigger: null })
+            : openModalInForeground({ type: 'event-edit', event, trigger: null })
+        }
         onMoveEvent={(event, isoDate) => void eventsFeature.moveEvent(event, isoDate)}
         onMoveEventToHour={(event, isoDate, startHour) => void eventsFeature.moveEventToHour(event, isoDate, startHour)}
         onResizeEvent={(event, endIsoDate) => void eventsFeature.resizeEvent(event, endIsoDate)}
@@ -232,8 +241,11 @@ export function App() {
     void listen<WindowMode>('window-mode-changed', (event) => setWindowMode(event.payload)).then(remove => removers.push(remove));
     void listen('open-settings', () => setModal({type:'settings',trigger:null})).then(remove => removers.push(remove));
     void listen('request-overlay-cleanup', () => setModal(null)).then(remove => removers.push(remove));
+    void listen('calendar-subscriptions-updated', () => { loadSubscriptions(); void refreshEvents(); }).then(remove => removers.push(remove));
     return () => removers.forEach(remove => remove());
-  }, []);
+  }, [loadSubscriptions, refreshEvents]);
+
+  useEffect(() => { loadSubscriptions(); }, [loadSubscriptions]);
 
   async function runWindowModeSwitch(switchMode: () => Promise<void>) {
     if (isSwitchingWindowModeRef.current) return;
@@ -324,6 +336,12 @@ export function App() {
         settings={settingsFeature.settings.data}
         monitors={settingsFeature.monitors.data}
         saveSettings={settingsFeature.saveSettings}
+        subscriptions={subscriptions}
+        onSubscriptionsChanged={loadSubscriptions}
+        createSubscription={repository.createCalendarSubscription}
+        updateSubscription={repository.updateCalendarSubscription}
+        deleteSubscription={repository.deleteCalendarSubscription}
+        refreshSubscription={repository.refreshCalendarSubscription}
         recentColors={recentColors}
         onRememberCustomColor={rememberCustomColor}
       />
