@@ -1274,3 +1274,11 @@ button:disabled { cursor: default; opacity: .65; }
 .onboarding__skip { color: var(--text-muted); font-size: 15.2px; font-weight: 500; line-height: 1.5; background: transparent; border: 0; cursor: pointer; padding: 0; }
 .onboarding__skip:hover { color: var(--text-secondary); }
 .onboarding__nav { display: flex; align-items: center; gap: 8px; }
+.external-event { display: flex; flex-direction: column; gap: 10px; }
+.external-event__title { margin: 0; font-size: 1.05rem; }
+.external-event__time { margin: 0; color: var(--text-secondary); }
+.external-event__tz { margin-left: 8px; color: var(--text-muted); font-size: 0.85rem; }
+.external-event__row { margin: 0; }
+.external-event__label { margin-right: 8px; color: var(--text-muted); }
+.external-event__note { margin: 0; white-space: pre-wrap; color: var(--text-secondary); }
+.external-event__readonly { margin: 4px 0 0; color: var(--text-muted); font-size: 0.85rem; }
