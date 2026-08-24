@@ -49,7 +49,7 @@ fn validate_draft(draft: &SubscriptionDraft) -> Result<String, CommandError> {
 }
 
 const SUBSCRIPTION_COLUMNS: &str = "id,name,url,color,refresh_interval_minutes,\
-    last_synced_at,last_status,last_error,created_at,updated_at";
+    last_synced_at,last_status,last_error,created_at,updated_at,last_attempted_at";
 
 fn read_subscription(row: &Row<'_>) -> rusqlite::Result<CalendarSubscription> {
     Ok(CalendarSubscription {
@@ -63,6 +63,7 @@ fn read_subscription(row: &Row<'_>) -> rusqlite::Result<CalendarSubscription> {
         last_error: row.get(7)?,
         created_at: row.get(8)?,
         updated_at: row.get(9)?,
+        last_attempted_at: row.get(10)?,
     })
 }
 

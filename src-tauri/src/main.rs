@@ -244,20 +244,22 @@ fn main() {
             });
 
             // 订阅刷新：启动即全刷一次，之后每 60 秒检查各源是否到期（按各自间隔）。
+            // 网络拉取在数据库锁外执行（见 subscription_sync 阶段锁），不会拖垮其它操作。
             let subscription_handle = app.handle().clone();
             std::thread::spawn(move || {
                 // 启动即刷一次全部源。
-                if let Ok(mut connection) = subscription_handle.state::<AppDb>().0.lock() {
-                    let _ = subscription_sync::sync_all(&mut connection);
-                }
+                let _ = subscription_sync::sync_all_db(subscription_handle.state::<AppDb>().inner());
+                // 无论是否有源，都发一次使前端加载现有订阅与实例。
                 let _ = subscription_handle.emit("calendar-subscriptions-updated", ());
                 loop {
                     std::thread::sleep(std::time::Duration::from_secs(60));
-                    let refreshed = match subscription_handle.state::<AppDb>().0.lock() {
-                        Ok(mut connection) => subscription_sync::sync_due(&mut connection).is_ok(),
-                        Err(_) => false,
-                    };
-                    if refreshed {
+                    // 只有实际尝试了至少一个到期源才通知前端，
+                    // 没有到期源时不发事件，避免每分钟无谓重拉。
+                    let changed = subscription_sync::sync_due_db(
+                        subscription_handle.state::<AppDb>().inner(),
+                    )
+                    .unwrap_or(false);
+                    if changed {
                         let _ = subscription_handle.emit("calendar-subscriptions-updated", ());
                     }
                 }
