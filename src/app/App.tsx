@@ -20,6 +20,7 @@ import { useNotesView } from '../notes/useNotesView';
 import { DesktopShell } from './layout/DesktopShell';
 import { useSettings } from '../settings/useSettings';
 import { useRecentColors } from '../settings/useRecentColors';
+import { useUpdateCheck } from '../settings/useUpdateCheck';
 import { useExtensions } from '../widgets/useExtensions';
 import { getExtensionComponent } from '../widgets/extension-modules';
 import { createModuleHost } from '../widgets/extension-module';
@@ -87,6 +88,7 @@ export function App() {
   const focusStatus = focusTimer.state.status;
 
   const onboarding = useOnboarding();
+  const update = useUpdateCheck();
 
   const now = useCurrentTime();
   const todayIso = localIsoDate(now);
@@ -187,6 +189,7 @@ export function App() {
           showWeekends: settingsFeature.settings.data.showWeekends
         }}
         onChangeCalendarSettings={(next) => void settingsFeature.saveSettings({ ...settingsFeature.settings.data, ...next })}
+        onOpenSubscriptions={() => openModalInForeground({ type: 'calendar-subscriptions', trigger: null })}
       />
     );
   }
@@ -314,6 +317,7 @@ export function App() {
         onWallpaperDoubleClick={() => void runWindowModeSwitch(switchToForeground)}
         onOpenSettings={() => setModal({type:'settings',trigger:null})}
         overlay={windowMode === 'wallpaper' ? <FocusWallpaperOverlay /> : null}
+        update={update}
       />
       {focusStatisticsOpen ? <FocusStatisticsDialog onClose={() => setFocusStatisticsOpen(false)} /> : null}
       <OnboardingGuide

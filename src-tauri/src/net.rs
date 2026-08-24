@@ -19,6 +19,7 @@ const MAX_RESPONSE_BYTES: usize = 1024 * 1024; // 1 MiB
 const MAX_REGISTRY_BYTES: usize = 512 * 1024; // 512 KiB index
 const MAX_MODULE_BYTES: usize = 512 * 1024; // 512 KiB of module source
 const MAX_ICS_BYTES: usize = 1024 * 1024; // 1 MiB 的订阅日历
+const MAX_RELEASE_BYTES: usize = 256 * 1024; // 256 KiB GitHub release payload
 const USER_AGENT: &str = "Nowly-Module-Proxy/1";
 
 #[derive(Debug, Clone, Deserialize)]
@@ -278,6 +279,12 @@ fn fetch_text(url_str: &str, limit: usize) -> Result<String, CommandError> {
 /// 禁重定向 / 限大小 / 超时基线。URL 需已是 https（webcal→https 由调用方完成）。
 pub fn fetch_ics(url: &str) -> Result<String, CommandError> {
     fetch_text(url, MAX_ICS_BYTES)
+}
+
+/// 拉取一个 https 的公开资源（用于软件更新检查，例如 GitHub Releases API）。
+/// 复用同一套 https-only / 拦内网 IP / 禁重定向 / 限大小 / 超时基线。
+pub fn fetch_public_text(url: &str) -> Result<String, CommandError> {
+    fetch_text(url, MAX_RELEASE_BYTES)
 }
 
 #[tauri::command]

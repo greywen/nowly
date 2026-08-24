@@ -115,7 +115,7 @@ describe('DesktopShell', () => {
     expect(onWallpaperDoubleClick).toHaveBeenCalledOnce();
   });
 
-  it('opens the feedback dialog from the topbar while foreground', () => {
+  it('opens the about dialog from the topbar while foreground', () => {
     render(
       <DesktopShell
         mode="foreground"
@@ -126,12 +126,12 @@ describe('DesktopShell', () => {
       />
     );
 
-    expect(screen.queryByRole('dialog', { name: '问题反馈与心愿单' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '问题反馈与心愿单' }));
-    expect(screen.getByRole('dialog', { name: '问题反馈与心愿单' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: '关于' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '关于' }));
+    expect(screen.getByRole('dialog', { name: '关于' })).toBeInTheDocument();
   });
 
-  it('hides the feedback action while running as wallpaper', () => {
+  it('hides the about action while running as wallpaper', () => {
     render(
       <DesktopShell
         mode="wallpaper"
@@ -142,7 +142,7 @@ describe('DesktopShell', () => {
       />
     );
 
-    expect(screen.queryByRole('button', { name: '问题反馈与心愿单' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '关于' })).not.toBeInTheDocument();
   });
 
   it('blurs the whole app content only while running as the wallpaper', () => {

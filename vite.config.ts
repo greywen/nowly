@@ -1,5 +1,12 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
+import pkg from './package.json';
+
+// The app version is the single source of truth in package.json. Inject it as a
+// compile-time constant so the browser dev shim (and any non-Tauri build) can
+// report it without a backend. The desktop app reads its own version from Cargo
+// through the `check_for_update` command instead.
+const appVersion = pkg.version;
 
 // The `mode` is `test` only while Vitest runs. Vitest pre-bundles React's CJS
 // entry and inlines `process.env.NODE_ENV`; left to the default it resolves to
@@ -11,7 +18,10 @@ import react from '@vitejs/plugin-react';
 // keeps its own NODE_ENV.
 export default defineConfig(({ mode }) => ({
   plugins: [react()],
-  define: mode === 'test' ? { 'process.env.NODE_ENV': '"test"' } : {},
+  define: {
+    __APP_VERSION__: JSON.stringify(appVersion),
+    ...(mode === 'test' ? { 'process.env.NODE_ENV': '"test"' } : {})
+  },
   test: {
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
     environment: 'jsdom',

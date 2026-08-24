@@ -38,19 +38,18 @@ export const translations: Record<Language, Record<string, string>> = {
     'shell.openSettings': '打开设置',
     'shell.setWallpaper': '设为壁纸',
 
-    // Feedback / wishlist
-    'feedback.open': '问题反馈与心愿单',
-    'feedback.title': '问题反馈与心愿单',
-    'feedback.intro': '欢迎反馈问题或提交心愿单。可通过以下任一渠道联系我们，点击即可打开。',
-    'feedback.githubLabel': 'GitHub 项目地址',
-    'feedback.emailLabel': '邮件反馈',
-    'feedback.mailSubject': 'Nowly 问题反馈 / 心愿单',
-    'feedback.formatTitle': '反馈格式建议',
-    'feedback.formatType': '类型：问题反馈 或 心愿单',
-    'feedback.formatTitleField': '标题：一句话概括你的问题或想法',
-    'feedback.formatDesc': '描述：详细说明遇到的问题或期望的功能',
-    'feedback.formatSteps': '复现步骤：如为问题，请按顺序列出操作步骤',
-    'feedback.formatEnv': '环境：系统版本、Nowly 版本（如有）',
+    // About
+    'about.open': '关于',
+    'about.title': '关于',
+    'about.versionLabel': '软件版本',
+    'about.updateAvailable': '有新版本',
+    'about.upToDate': '已是最新',
+    'about.download': '前往下载',
+    'about.changelogTitle': '最新更新日志',
+    'about.changelogEmpty': '暂无法获取更新日志，请稍后重试或前往 GitHub 查看。',
+    'about.githubLabel': 'GitHub 项目地址',
+    'about.emailLabel': '邮件反馈',
+    'about.mailSubject': 'Nowly 问题反馈 / 心愿单',
 
     // Onboarding guided tour
     'onboarding.ariaLabel': '使用引导',
@@ -654,19 +653,18 @@ export const translations: Record<Language, Record<string, string>> = {
     'shell.openSettings': 'Open settings',
     'shell.setWallpaper': 'Set as wallpaper',
 
-    // Feedback / wishlist
-    'feedback.open': 'Feedback & wishlist',
-    'feedback.title': 'Feedback & wishlist',
-    'feedback.intro': 'We welcome bug reports and wishlist ideas. Reach us through any channel below — click to open.',
-    'feedback.githubLabel': 'GitHub repository',
-    'feedback.emailLabel': 'Email',
-    'feedback.mailSubject': 'Nowly feedback / wishlist',
-    'feedback.formatTitle': 'Suggested format',
-    'feedback.formatType': 'Type: bug report or wishlist',
-    'feedback.formatTitleField': 'Title: sum up your issue or idea in one line',
-    'feedback.formatDesc': 'Description: detail the problem or the feature you want',
-    'feedback.formatSteps': 'Steps to reproduce: for bugs, list the actions in order',
-    'feedback.formatEnv': 'Environment: OS version, Nowly version (if known)',
+    // About
+    'about.open': 'About',
+    'about.title': 'About',
+    'about.versionLabel': 'Version',
+    'about.updateAvailable': 'Update available',
+    'about.upToDate': 'Up to date',
+    'about.download': 'Download',
+    'about.changelogTitle': 'Latest changelog',
+    'about.changelogEmpty': 'The changelog is unavailable right now. Try again later or check GitHub.',
+    'about.githubLabel': 'GitHub repository',
+    'about.emailLabel': 'Email',
+    'about.mailSubject': 'Nowly feedback / wishlist',
 
     // Onboarding guided tour
     'onboarding.ariaLabel': 'Getting started tour',

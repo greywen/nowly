@@ -128,6 +128,8 @@ button:disabled { cursor: default; opacity: .65; }
    weekend visibility) so they sit next to the view they affect. */
 .calendar-settings-control { position: relative; display: inline-flex; }
 .calendar-settings-popup { position: absolute; z-index: 60; top: calc(100% + 8px); right: 0; box-sizing: border-box; width: 260px; padding: 16px; display: grid; gap: 16px; border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-surface); box-shadow: var(--shadow-dropdown); }
+.calendar-settings-popup__section { display: grid; gap: 8px; padding-top: 16px; border-top: 1px solid var(--border-default); }
+.calendar-settings-popup__section-title { color: var(--text-muted); font-size: 13.6px; font-weight: 600; }
 .module-grid { flex: 1; min-width: 0; min-height: 0; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); grid-template-rows: repeat(8, minmax(0, 1fr)); gap: 24px; }
 .card { min-width: 0; min-height: 0; overflow: hidden; border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-surface); box-shadow: none; }
 .calendar-card, .priority-card, .notes-card { min-height: 0; display: flex; flex-direction: column; }
@@ -842,10 +844,24 @@ button:disabled { cursor: default; opacity: .65; }
 .notes-manager-list .note-content { margin: 2px 0 0; display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; }
 .good-button svg { width: 18px; height: 18px; flex: none; }
 
-.feedback-dialog { width: min(560px, calc(100vw - 32px)); }
-.feedback-dialog__actions { width: 100%; display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
-.feedback-info { display: grid; gap: 24px; }
-.feedback-info__intro { margin: 0; color: var(--text-secondary); font-size: 16px; font-weight: 400; line-height: 1.5; }
+.about-dialog { width: min(560px, calc(100vw - 32px)); }
+.about-dialog__actions { width: 100%; display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.about-info { display: grid; gap: 24px; }
+.about-version { display: grid; gap: 12px; padding: 20px; border-radius: var(--radius-default); background: var(--bg-subtle); }
+.about-version__row { display: flex; align-items: center; gap: 12px; }
+.about-version__label { color: var(--text-tertiary); font-size: 13.6px; font-weight: 500; line-height: 1.5; }
+.about-version__value { color: var(--text-primary); font-size: 17.2px; font-weight: 600; line-height: 1.5; font-variant-numeric: tabular-nums; }
+.about-version__badge { padding: 4px 12px; border-radius: var(--radius-pill); background: var(--color-danger-light); color: var(--color-danger-active); font-size: 13.6px; font-weight: 600; line-height: 1.5; }
+.about-version__latest { padding: 4px 12px; border-radius: var(--radius-pill); background: var(--color-success-light); color: #6f8617; font-size: 13.6px; font-weight: 600; line-height: 1.5; }
+.about-version__download { align-self: start; display: inline-flex; align-items: center; gap: 8px; }
+.about-version__download svg { width: 18px; height: 18px; }
+.about-changelog { display: grid; gap: 8px; }
+.about-changelog__title { margin: 0; color: var(--text-primary); font-size: 15.2px; font-weight: 600; line-height: 1.5; }
+.about-changelog__body { margin: 0; max-height: 220px; overflow: auto; padding: 16px; border-radius: var(--radius-default); border: 1px solid var(--border-default); background: var(--bg-surface); color: var(--text-secondary); font-family: var(--font-sans); font-size: 15.2px; font-weight: 400; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+.about-changelog__empty { margin: 0; padding: 16px; border-radius: var(--radius-default); background: var(--bg-subtle); color: var(--text-muted); font-size: 15.2px; font-weight: 400; line-height: 1.5; }
+.about-button { position: relative; }
+.about-button__logo { width: 22px; height: 22px; object-fit: contain; border-radius: var(--radius-sm); }
+.about-button__dot { position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--color-danger); box-shadow: 0 0 0 2px var(--bg-page); }
 .feedback-channels { display: grid; gap: 12px; }
 .feedback-channel { display: flex; align-items: center; gap: 16px; padding: 16px; text-align: left; border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-surface); }
 .feedback-channel:hover { border-color: var(--color-primary); background: var(--bg-subtle); }
@@ -856,9 +872,6 @@ button:disabled { cursor: default; opacity: .65; }
 .feedback-channel__label { color: var(--text-tertiary); font-size: 13.6px; font-weight: 500; line-height: 1.5; }
 .feedback-channel__value { overflow: hidden; color: var(--text-primary); font-size: 15.2px; font-weight: 600; line-height: 1.5; text-overflow: ellipsis; white-space: nowrap; }
 .feedback-channel:hover .feedback-channel__value { color: var(--color-primary); }
-.feedback-format { display: grid; gap: 8px; padding: 20px; border-radius: var(--radius-default); background: var(--bg-subtle); }
-.feedback-format__title { margin: 0; color: var(--text-primary); font-size: 15.2px; font-weight: 600; line-height: 1.5; }
-.feedback-format__list { margin: 0; padding-left: 20px; display: grid; gap: 4px; color: var(--text-secondary); font-size: 15.2px; font-weight: 400; line-height: 1.5; }
 
 .settings-dialog { width: min(760px, calc(100vw - 32px)); }
 .settings-form { display: grid; gap: 24px; }
