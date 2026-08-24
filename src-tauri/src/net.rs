@@ -1,7 +1,7 @@
 use crate::error::CommandError;
 use serde::{Deserialize, Serialize};
 use std::io::Read;
-use std::net::IpAddr;
+use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
 use std::time::Duration;
 
 // The trusted network boundary for sandboxed modules and the module market.
@@ -88,14 +88,24 @@ fn is_public_ip(ip: &IpAddr) -> bool {
                 || v4.is_link_local()
                 || v4.is_broadcast()
                 || v4.is_documentation()
+                || v4.is_multicast()
                 || v4.is_unspecified()
                 || v4.octets()[0] == 0
                 // Carrier-grade NAT 100.64.0.0/10
-                || (v4.octets()[0] == 100 && (v4.octets()[1] & 0xc0) == 64))
+                || (v4.octets()[0] == 100 && (v4.octets()[1] & 0xc0) == 64)
+                // Reserved 240.0.0.0/4
+                || v4.octets()[0] >= 240)
         }
         IpAddr::V6(v6) => {
+            // IPv4-mapped (::ffff:0:0/96) and IPv4-compatible addresses must be
+            // re-checked against the embedded v4 range, otherwise an attacker
+            // can smuggle 127.0.0.1 through as ::ffff:127.0.0.1.
+            if let Some(v4) = v6.to_ipv4() {
+                return is_public_ip(&IpAddr::V4(v4));
+            }
             !(v6.is_loopback()
                 || v6.is_unspecified()
+                || v6.is_multicast()
                 // Unique local fc00::/7
                 || (v6.segments()[0] & 0xfe00) == 0xfc00
                 // Link-local fe80::/10
@@ -104,16 +114,54 @@ fn is_public_ip(ip: &IpAddr) -> bool {
     }
 }
 
-fn blocking_client() -> Result<reqwest::blocking::Client, CommandError> {
-    reqwest::blocking::Client::builder()
+// Resolve `host:port` to socket addresses and keep only public ones. Rejects
+// the request when the host does not resolve or every resolved address is
+// private / loopback / link-local. Returning the concrete addresses lets the
+// caller pin the connection to exactly what was validated, which closes the
+// DNS-rebinding window between this check and the actual connect.
+fn resolve_public_addrs(host: &str, port: u16) -> Result<Vec<SocketAddr>, CommandError> {
+    // Literal IPs are validated directly; hostnames go through DNS.
+    if let Ok(ip) = host.parse::<IpAddr>() {
+        if !is_public_ip(&ip) {
+            return Err(CommandError::validation("url", "禁止访问内网地址。"));
+        }
+        return Ok(vec![SocketAddr::new(ip, port)]);
+    }
+    let resolved: Vec<SocketAddr> = (host, port)
+        .to_socket_addrs()
+        .map_err(|_| CommandError::validation("url", "无法解析该域名。"))?
+        .collect();
+    if resolved.is_empty() {
+        return Err(CommandError::validation("url", "无法解析该域名。"));
+    }
+    // Every resolved address must be public. If any resolves to a private range
+    // we refuse outright rather than trying to connect to the public subset —
+    // that keeps a rebinding attacker from mixing one public and one internal
+    // answer.
+    if resolved.iter().any(|addr| !is_public_ip(&addr.ip())) {
+        return Err(CommandError::validation("url", "禁止访问内网地址。"));
+    }
+    Ok(resolved)
+}
+
+// Build a client whose DNS is pinned to the pre-validated addresses for `url`.
+// reqwest will only connect to those addresses, so a hostname cannot be re-
+// resolved to an internal IP after validation.
+fn pinned_client(url: &reqwest::Url) -> Result<reqwest::blocking::Client, CommandError> {
+    let host = url
+        .host_str()
+        .ok_or_else(|| CommandError::validation("url", "请求地址缺少域名。"))?;
+    let port = url.port_or_known_default().unwrap_or(443);
+    let addrs = resolve_public_addrs(host, port)?;
+    let mut builder = reqwest::blocking::Client::builder()
         .timeout(REQUEST_TIMEOUT)
         .connect_timeout(REQUEST_TIMEOUT)
         // Refuse redirects: a permitted host must not be able to bounce us to an
         // internal address or an out-of-allow-list domain.
         .redirect(reqwest::redirect::Policy::none())
-        .user_agent(USER_AGENT)
-        .build()
-        .map_err(CommandError::system)
+        .user_agent(USER_AGENT);
+    builder = builder.resolve_to_addrs(host, &addrs);
+    builder.build().map_err(CommandError::system)
 }
 
 // Read at most `limit` bytes from the response body; anything larger is an
@@ -146,7 +194,7 @@ fn run_proxy_fetch(request: ProxyFetchRequest) -> Result<ProxyFetchResponse, Com
         }
     };
 
-    let client = blocking_client()?;
+    let client = pinned_client(&url)?;
     let mut builder = client.request(method, url);
     // Forward a conservative subset of headers. Hop-by-hop and identity headers
     // are dropped so a module cannot spoof cookies, auth, or the host.
@@ -215,14 +263,7 @@ fn fetch_text(url_str: &str, limit: usize) -> Result<String, CommandError> {
     if url.scheme() != "https" {
         return Err(CommandError::validation("url", "仅允许 https 地址。"));
     }
-    if let Some(host) = url.host_str() {
-        if let Ok(ip) = host.parse::<IpAddr>() {
-            if !is_public_ip(&ip) {
-                return Err(CommandError::validation("url", "禁止访问内网地址。"));
-            }
-        }
-    }
-    let client = blocking_client()?;
+    let client = pinned_client(&url)?;
     let response = client
         .get(url)
         .send()
@@ -303,6 +344,43 @@ mod tests {
         assert!(!is_public_ip(&"::1".parse().unwrap()));
         assert!(!is_public_ip(&"fc00::1".parse().unwrap()));
         assert!(!is_public_ip(&"fe80::1".parse().unwrap()));
+    }
+
+    #[test]
+    fn rejects_multicast_and_reserved_ranges() {
+        assert!(!is_public_ip(&"224.0.0.1".parse().unwrap()));
+        assert!(!is_public_ip(&"240.0.0.1".parse().unwrap()));
+        assert!(!is_public_ip(&"ff02::1".parse().unwrap()));
+    }
+
+    #[test]
+    fn ipv4_mapped_ipv6_is_reclassified_as_the_embedded_v4() {
+        // ::ffff:127.0.0.1 must be rejected as loopback, not treated as a
+        // generic public v6 address.
+        assert!(!is_public_ip(&"::ffff:127.0.0.1".parse().unwrap()));
+        assert!(!is_public_ip(&"::ffff:10.0.0.1".parse().unwrap()));
+        assert!(is_public_ip(&"::ffff:8.8.8.8".parse().unwrap()));
+    }
+
+    #[test]
+    fn resolve_rejects_hostnames_that_map_to_loopback() {
+        // localhost resolves to 127.0.0.1 / ::1 — both private, so resolution
+        // must refuse rather than hand back a connectable address.
+        let err = resolve_public_addrs("localhost", 443).unwrap_err();
+        assert_eq!(err.field.as_deref(), Some("url"));
+    }
+
+    #[test]
+    fn resolve_accepts_public_ip_literal() {
+        let addrs = resolve_public_addrs("8.8.8.8", 443).unwrap();
+        assert_eq!(addrs.len(), 1);
+        assert_eq!(addrs[0].port(), 443);
+    }
+
+    #[test]
+    fn resolve_rejects_private_ip_literal() {
+        let err = resolve_public_addrs("127.0.0.1", 443).unwrap_err();
+        assert_eq!(err.field.as_deref(), Some("url"));
     }
 
     #[test]
