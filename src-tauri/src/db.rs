@@ -22,6 +22,7 @@ const MIGRATIONS: &[(i64, Migration)] = &[
     (13, migration_13_recurrence),
     (14, migration_14_reminders),
     (15, migration_15_ics_rebuild),
+    (16, migration_16_calendar_subscriptions),
 ];
 
 pub fn open_database(path: PathBuf) -> Result<Connection> {
@@ -661,6 +662,48 @@ fn migration_5_event_task_foreign_keys(transaction: &Transaction<'_>) -> Result<
     Ok(())
 }
 
+fn migration_16_calendar_subscriptions(transaction: &Transaction<'_>) -> Result<()> {
+    transaction.execute_batch(
+        "CREATE TABLE calendar_subscriptions (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            url TEXT NOT NULL,
+            color TEXT NOT NULL,
+            refresh_interval_minutes INTEGER NOT NULL DEFAULT 15,
+            last_synced_at TEXT,
+            last_status TEXT CHECK (last_status IN ('ok','failed')),
+            last_error TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+         );
+
+         CREATE TABLE external_events (
+            id TEXT PRIMARY KEY,
+            subscription_id TEXT NOT NULL
+                REFERENCES calendar_subscriptions(id) ON DELETE CASCADE,
+            uid TEXT,
+            start_at TEXT NOT NULL,
+            end_at TEXT NOT NULL,
+            start_tz TEXT,
+            end_tz TEXT,
+            start_utc TEXT,
+            end_utc TEXT,
+            all_day INTEGER NOT NULL CHECK (all_day IN (0, 1)),
+            title TEXT NOT NULL,
+            location TEXT,
+            description TEXT,
+            last_synced_at TEXT NOT NULL
+         );
+
+         CREATE INDEX idx_external_events_subscription
+            ON external_events(subscription_id);
+         CREATE INDEX idx_external_events_range
+            ON external_events(start_at, end_at);
+         CREATE INDEX idx_external_events_start_utc
+            ON external_events(start_utc) WHERE start_utc IS NOT NULL;",
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::{migrate, open_database, MIGRATIONS};
@@ -723,7 +766,7 @@ mod tests {
             .unwrap()
             .collect::<Result<_, _>>()
             .unwrap();
-        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
 
         let event_fks: Vec<(String, String, String)> = connection
             .prepare("PRAGMA foreign_key_list(events)")
@@ -812,7 +855,7 @@ mod tests {
             .collect::<Result<_, _>>()
             .expect("versions collect");
 
-        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
         for table in [
             "events",
             "tasks",
@@ -1096,7 +1139,7 @@ mod tests {
             .unwrap()
             .collect::<Result<_, _>>()
             .unwrap();
-        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
 
         // 新列存在。
         let columns: Vec<String> = connection
@@ -1144,5 +1187,51 @@ mod tests {
             })
             .unwrap();
         assert_eq!(linked, None);
+    }
+
+    #[test]
+    fn migration_16_creates_subscription_tables() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        migrate_through(&mut connection, 16).unwrap();
+
+        // 两张表存在。
+        for table in ["calendar_subscriptions", "external_events"] {
+            let count: i64 = connection
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1",
+                    [table],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(count, 1, "{table} 应存在");
+        }
+
+        // external_events 对 calendar_subscriptions 有级联删除外键。
+        connection
+            .execute_batch("PRAGMA foreign_keys = ON;")
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO calendar_subscriptions
+                    (id,name,url,color,refresh_interval_minutes,created_at,updated_at)
+                 VALUES ('s1','家庭','https://example.com/a.ics','#4FC9DA',15,'t','t')",
+                [],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO external_events
+                    (id,subscription_id,start_at,end_at,all_day,title,last_synced_at)
+                 VALUES ('x1','s1','2026-08-10T10:00','2026-08-10T11:00',0,'会议','t')",
+                [],
+            )
+            .unwrap();
+        connection
+            .execute("DELETE FROM calendar_subscriptions WHERE id='s1'", [])
+            .unwrap();
+        let remaining: i64 = connection
+            .query_row("SELECT COUNT(*) FROM external_events", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(remaining, 0, "删除订阅应级联删除其外部事件");
     }
 }
