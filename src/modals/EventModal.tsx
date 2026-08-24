@@ -84,7 +84,9 @@ export function EventModal({ mode,tasks,restoreFocusRef,onClose,onSaved,onDelete
 
   const startAt=`${form.startDate}T${form.startTime}`;
   const rule=form.recurrence;
-  const recurringInstance=mode.type==='edit'&&mode.event.seriesId!==null;
+  // 后端只有在 RRULE 成功解析后才会提供可编辑的重复规则；孤立的 seriesId
+  //（例如历史数据或损坏 RRULE）不能把单次日程带入重复范围流程。
+  const recurringInstance=mode.type==='edit'&&Boolean(mode.event.seriesId&&mode.event.recurrence);
   // 与后端 `slots_unchanged` 同一条件：完整 start_at 加规则，日期平移也要算变更。
   const slotsChanged=mode.type==='edit'&&(mode.event.startAt!==`${form.startDate}T${form.allDay?'00:00':form.startTime}`||!sameRecurrence(mode.event.recurrence,form.recurrence));
   const changePreset=(next:RecurrencePreset)=>{ setPreset(next); update('recurrence',presetToRecurrence(next,startAt)); };

@@ -248,6 +248,23 @@ describe('EventModal', () => {
     await waitFor(()=>expect(deleteEvent).toHaveBeenCalledWith(editable, 'all'));
   });
 
+  it('does not ask for a scope when a non-recurring event carries a stale series id', async () => {
+    const user=userEvent.setup();
+    const staleSeriesId = { ...editable, seriesId:'stale-series', recurrence:null, rrule:'invalid' };
+    const updateEvent=vi.fn().mockResolvedValue(undefined); const deleteEvent=vi.fn().mockResolvedValue(undefined);
+    render(<EventModal {...props({ mode:{type:'edit',event:staleSeriesId}, updateEvent, deleteEvent })} />);
+    await user.type(screen.getByLabelText('日程标题'), '改');
+    await user.click(screen.getByRole('button', { name:'保存' }));
+    expect(screen.queryByRole('dialog', { name:'编辑重复日程' })).toBeNull();
+    await waitFor(()=>expect(updateEvent).toHaveBeenCalledWith(staleSeriesId, expect.anything(), 'all'));
+
+    await user.click(screen.getByRole('button', { name:'删除日程' }));
+    expect(screen.queryByRole('dialog', { name:'删除重复日程' })).toBeNull();
+    expect(screen.getByRole('dialog', { name:'永久删除“设计评审”？'})).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name:'永久删除' }));
+    await waitFor(()=>expect(deleteEvent).toHaveBeenCalledWith(staleSeriesId, 'all'));
+  });
+
   it('hides the this-and-following scope on the first occurrence of the series', async () => {
     const user=userEvent.setup();
     render(<EventModal {...props({ mode:{type:'edit',event:recurring} })} />);
