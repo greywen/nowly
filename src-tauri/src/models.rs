@@ -155,6 +155,25 @@ pub struct SubscriptionDraft {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ExternalEvent {
+    pub id: String,
+    pub subscription_id: String,
+    pub title: String,
+    /// 设备显示时区下的钟面起止（后端已换算），"%Y-%m-%dT%H:%M"。
+    pub start_at: String,
+    pub end_at: String,
+    /// 来源事件的具名时区；浮动/全天为 None。供只读详情标注。
+    pub start_tz: Option<String>,
+    pub end_tz: Option<String>,
+    pub all_day: bool,
+    pub location: Option<String>,
+    pub description: Option<String>,
+    /// 来源订阅的固定色（hex）。
+    pub color: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AppSettings {
     pub wallpaper_enabled: bool,
     pub launch_at_login: bool,
@@ -324,7 +343,7 @@ pub struct SandboxExtensionDraft {
 #[cfg(test)]
 mod tests {
     use super::{
-        CalendarSubscription, EditScope, Event, EventDraft, EventTarget, NoteDraft,
+        CalendarSubscription, EditScope, Event, EventDraft, EventTarget, ExternalEvent, NoteDraft,
         SubscriptionDraft, TaskDraft,
     };
     use crate::recurrence::{Freq, Recurrence, RecurrenceEnd};
@@ -591,5 +610,30 @@ mod tests {
         assert_eq!(draft.name, "工作");
         assert_eq!(draft.url, "webcal://example.com/w.ics");
         assert_eq!(draft.refresh_interval_minutes, 30);
+    }
+
+    #[test]
+    fn external_event_serializes_in_camel_case() {
+        let ev = ExternalEvent {
+            id: "x1".into(),
+            subscription_id: "s1".into(),
+            title: "会议".into(),
+            start_at: "2026-08-10T18:00".into(),
+            end_at: "2026-08-10T19:00".into(),
+            start_tz: Some("Asia/Shanghai".into()),
+            end_tz: Some("Asia/Shanghai".into()),
+            all_day: false,
+            location: Some("会议室".into()),
+            description: None,
+            color: "#4FC9DA".into(),
+        };
+        let value = serde_json::to_value(&ev).expect("serializes");
+        let object = value.as_object().unwrap();
+        assert_eq!(object.get("subscriptionId"), Some(&json!("s1")));
+        assert_eq!(object.get("startTz"), Some(&json!("Asia/Shanghai")));
+        assert_eq!(object.get("allDay"), Some(&Value::Bool(false)));
+        for snake in ["subscription_id", "start_at", "start_tz", "all_day"] {
+            assert!(!object.contains_key(snake), "{snake} 不应出现在契约里");
+        }
     }
 }
