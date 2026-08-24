@@ -23,7 +23,8 @@ export const sampleEvents: CalendarEvent[] = [
     seriesId: null,
     seriesStartAt: null,
     occurrenceStartAt: null,
-    isOverridden: false
+    isOverridden: false,
+    subscriptionId: null
   },
   {
     id: 'event-2',
@@ -45,7 +46,8 @@ export const sampleEvents: CalendarEvent[] = [
     seriesId: null,
     seriesStartAt: null,
     occurrenceStartAt: null,
-    isOverridden: false
+    isOverridden: false,
+    subscriptionId: null
   },
   {
     id: 'event-3',
@@ -67,7 +69,8 @@ export const sampleEvents: CalendarEvent[] = [
     seriesId: null,
     seriesStartAt: null,
     occurrenceStartAt: null,
-    isOverridden: false
+    isOverridden: false,
+    subscriptionId: null
   }
 ];
 

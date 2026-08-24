@@ -38,6 +38,7 @@ function event(id: string, startAt: string, endAt: string, allDay = false): Cale
     seriesId: null,
     seriesStartAt: null,
     occurrenceStartAt: null,
+    subscriptionId: null,
     isOverridden: false
   };
 }

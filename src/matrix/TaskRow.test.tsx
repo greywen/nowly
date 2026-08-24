@@ -38,6 +38,7 @@ const linkedEvent: CalendarEvent = {
   seriesId: null,
   seriesStartAt: null,
   occurrenceStartAt: null,
+  subscriptionId: null,
   isOverridden: false
 };
 

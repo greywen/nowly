@@ -33,6 +33,10 @@ pub struct Event {
     /// 该实例原本应发生的时刻，即例外的身份键；单次日程为 None。
     pub occurrence_start_at: Option<String>,
     pub is_overridden: bool,
+    /// 本地事件恒为 None；仅订阅来源的 ExternalEvent 才有值。为保持前端
+    /// CalendarEvent 契约统一，本地事件也序列化出显式 null。
+    #[serde(default)]
+    pub subscription_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -371,6 +375,7 @@ mod tests {
             series_start_at: None,
             occurrence_start_at: None,
             is_overridden: false,
+            subscription_id: None,
         }
     }
 

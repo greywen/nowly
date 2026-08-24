@@ -28,6 +28,7 @@ function event(overrides: Partial<CalendarEvent>): CalendarEvent {
     startTz: null,
     endTz: null,
     rrule: null,
+    subscriptionId: null,
     ...overrides
   };
 }

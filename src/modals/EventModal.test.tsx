@@ -7,7 +7,7 @@ import { EventModal } from './EventModal';
 
 const now = () => new Date(2026, 6, 23, 9, 42);
 const task: MatrixTask = { id:'t1', title:'发布 Nowly', quadrant:'important_urgent', dueAt:null, priority:1, completed:false, linkedEventId:null, note:'', createdAt:'x', updatedAt:'x' };
-const existing: CalendarEvent = { id:'e1', title:'设计评审', startAt:'2026-07-23T14:00', endAt:'2026-07-23T15:00', allDay:false, category:'important', color:'red', linkedTaskId:'t1', note:'确认范围', reminders:[], createdAt:'x', updatedAt:'x', recurrence:null, startTz:null, endTz:null, rrule:null, seriesId:null, seriesStartAt:null, occurrenceStartAt:null, isOverridden:false };
+const existing: CalendarEvent = { id:'e1', title:'设计评审', startAt:'2026-07-23T14:00', endAt:'2026-07-23T15:00', allDay:false, category:'important', color:'red', linkedTaskId:'t1', note:'确认范围', reminders:[], createdAt:'x', updatedAt:'x', recurrence:null, startTz:null, endTz:null, rrule:null, seriesId:null, seriesStartAt:null, occurrenceStartAt:null, subscriptionId:null, isOverridden:false };
 // 既有 fixture 的 `color:'red'` 已通不过十六进制校验，编辑保存需要一个合法颜色。
 const editable: CalendarEvent = { ...existing, color:'#F06445' };
 const weeklyRule: Recurrence = { freq:'weekly', interval:1, byDay:['MO'], end:{ kind:'never' } };

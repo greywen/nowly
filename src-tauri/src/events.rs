@@ -201,6 +201,7 @@ fn event_from_series_row(row: &SeriesRow, occurrence_wall: Option<&str>) -> Even
             .map(str::to_owned)
             .or_else(|| is_series.then(|| row.start_wall.clone())),
         is_overridden: false,
+        subscription_id: None,
     }
 }
 
