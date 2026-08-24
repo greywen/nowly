@@ -95,6 +95,12 @@ export type CalendarEvent = {
   // Non-null when this event comes from a read-only calendar subscription; the
   // value is the source subscription id. Local events are always null.
   subscriptionId: string | null;
+  // Read-only structured fields from a subscription source, shown in the
+  // external detail popup. Absent for local events (the backend never sends
+  // them). Kept separate from `note` so location and description are never
+  // conflated by string splitting.
+  externalLocation?: string | null;
+  externalDescription?: string | null;
 };
 
 export type CalendarDay = {

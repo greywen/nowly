@@ -58,9 +58,17 @@ export function SubscriptionManagerDialog({
     setBusy(true); setFormError('');
     const draft: SubscriptionDraft = { name: trimmed, url: url.trim(), color, refreshIntervalMinutes: interval };
     try {
-      if (editingId) await onUpdate(editingId, draft);
-      else await onCreate(draft);
-      resetForm(); onChanged();
+      if (editingId) {
+        await onUpdate(editingId, draft);
+        onChanged();
+      } else {
+        // Sync the new source right away so its events appear without waiting
+        // for the background poll; onRefresh reloads events + status on return.
+        const created = await onCreate(draft);
+        await onRefresh(created.id);
+        onChanged();
+      }
+      resetForm();
     } catch (error) {
       setFormError(errorMessage(error));
     } finally { setBusy(false); }
