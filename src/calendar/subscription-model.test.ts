@@ -27,7 +27,9 @@ describe('externalToCalendarEvent', () => {
     expect(event.recurrence).toBeNull();
     expect(event.linkedTaskId).toBeNull();
     expect(event.reminders).toEqual([]);
-    // note 承载地点/描述，供只读详情展示。
-    expect(event.note).toContain('会议室');
+    // 地点/描述作为独立字段承载，note 保持为空，避免字符串拼接混淆二者。
+    expect(event.note).toBe('');
+    expect(event.externalLocation).toBe('会议室');
+    expect(event.externalDescription).toBe('议程');
   });
 });

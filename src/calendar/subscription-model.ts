@@ -40,11 +40,9 @@ export type ExternalEvent = {
 
 // External subscription events reuse the calendar rendering pipeline, so map
 // each into a read-only CalendarEvent. They carry no recurrence/link/reminder
-// semantics; `note` holds location + description for the read-only detail popup.
+// semantics; location and description are kept as dedicated fields for the
+// read-only detail popup. `note` stays empty so nothing conflates the two.
 export function externalToCalendarEvent(external: ExternalEvent): CalendarEvent {
-  const noteParts = [external.location, external.description].filter(
-    (part): part is string => !!part && part.length > 0
-  );
   return {
     id: external.id,
     title: external.title,
@@ -56,7 +54,7 @@ export function externalToCalendarEvent(external: ExternalEvent): CalendarEvent 
     category: 'personal' as EventCategory,
     color: external.color,
     linkedTaskId: null,
-    note: noteParts.join('\n'),
+    note: '',
     reminders: [],
     createdAt: '',
     updatedAt: '',
@@ -68,6 +66,8 @@ export function externalToCalendarEvent(external: ExternalEvent): CalendarEvent 
     seriesStartAt: null,
     occurrenceStartAt: null,
     isOverridden: false,
-    subscriptionId: external.subscriptionId
+    subscriptionId: external.subscriptionId,
+    externalLocation: external.location,
+    externalDescription: external.description
   };
 }

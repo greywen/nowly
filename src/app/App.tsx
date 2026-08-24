@@ -71,6 +71,14 @@ export function App() {
   const loadSubscriptions = useCallback(() => {
     void repository.listCalendarSubscriptions().then(setSubscriptions).catch(() => setSubscriptions([]));
   }, [repository]);
+  // After a subscription is created, edited, deleted, or manually refreshed the
+  // external_events table may have changed, so reload both the source list and
+  // the calendar events; otherwise removed/updated events linger until the next
+  // range change or the ~1-minute background poll.
+  const onSubscriptionsChanged = useCallback(() => {
+    loadSubscriptions();
+    void refreshEvents();
+  }, [loadSubscriptions, refreshEvents]);
   const [focusStatisticsOpen, setFocusStatisticsOpen] = useState(false);
   const [windowMode, setWindowMode] = useState<WindowMode>('foreground');
   const [isSwitchingWindowMode, setIsSwitchingWindowMode] = useState(false);
@@ -337,7 +345,7 @@ export function App() {
         monitors={settingsFeature.monitors.data}
         saveSettings={settingsFeature.saveSettings}
         subscriptions={subscriptions}
-        onSubscriptionsChanged={loadSubscriptions}
+        onSubscriptionsChanged={onSubscriptionsChanged}
         createSubscription={repository.createCalendarSubscription}
         updateSubscription={repository.updateCalendarSubscription}
         deleteSubscription={repository.deleteCalendarSubscription}
