@@ -43,6 +43,7 @@ function event(id: string, linkedTaskId: string | null = null): CalendarEvent {
     seriesId: null,
     seriesStartAt: null,
     occurrenceStartAt: null,
+    subscriptionId: null,
     isOverridden: false
   };
 }

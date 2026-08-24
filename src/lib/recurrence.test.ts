@@ -30,6 +30,7 @@ const base: CalendarEvent = {
   seriesId: null,
   seriesStartAt: null,
   occurrenceStartAt: null,
+  subscriptionId: null,
   isOverridden: false
 };
 

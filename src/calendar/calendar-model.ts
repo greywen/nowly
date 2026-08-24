@@ -92,6 +92,9 @@ export type CalendarEvent = {
   // The slot this instance was originally due at, i.e. the exception identity.
   occurrenceStartAt: string | null;
   isOverridden: boolean;
+  // Non-null when this event comes from a read-only calendar subscription; the
+  // value is the source subscription id. Local events are always null.
+  subscriptionId: string | null;
 };
 
 export type CalendarDay = {
