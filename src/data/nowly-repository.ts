@@ -5,6 +5,7 @@ import type {
   EventRange,
   EventTarget
 } from '../calendar/calendar-model';
+import type { CalendarSubscription, SubscriptionDraft } from '../calendar/subscription-model';
 import type {
   KanbanCard,
   KanbanCardDraft,
@@ -123,6 +124,10 @@ export type NowlyRepository = {
   createEvent(draft: EventDraft): Promise<CalendarEvent>;
   updateEvent(target: EventTarget, draft: EventDraft, scope: EditScope): Promise<void>;
   deleteEvent(target: EventTarget, scope: EditScope): Promise<void>;
+  listCalendarSubscriptions: () => Promise<CalendarSubscription[]>;
+  createCalendarSubscription: (draft: SubscriptionDraft) => Promise<CalendarSubscription>;
+  updateCalendarSubscription: (id: string, draft: SubscriptionDraft) => Promise<CalendarSubscription>;
+  deleteCalendarSubscription: (id: string) => Promise<void>;
   listTasks(): Promise<MatrixTask[]>;
   createTask(draft: TaskDraft): Promise<MatrixTask>;
   updateTask(id: string, draft: TaskDraft): Promise<MatrixTask>;
