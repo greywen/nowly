@@ -485,14 +485,13 @@ button:disabled { cursor: default; opacity: .65; }
 
 /* Underline tabs (design.md §8.12). The only tab shape in the app: no pill,
    no filled segment, no card. Every settings surface reuses this block. */
-.good-tabs { display: flex; align-items: stretch; gap: 32px; border-bottom: 2px solid var(--border-default); }
-.good-tabs__tab { box-sizing: border-box; margin-bottom: -2px; padding: 0 0 12px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--text-secondary); font-size: 15.2px; font-weight: 600; line-height: 1.5; white-space: nowrap; }
-.good-tabs__tab:hover:not(:disabled) { color: var(--color-primary); background: transparent; }
-.good-tabs__tab.is-active { color: var(--color-primary); border-bottom-color: var(--color-primary); }
+.good-tabs { display: flex; align-items: stretch; gap: 32px; }
+.good-tabs__tab { box-sizing: border-box; padding: 0 0 12px; border: 0; border-bottom: 3px solid transparent; border-radius: 0; background: transparent; color: var(--text-muted); font-size: 15.2px; font-weight: 600; line-height: 1.5; white-space: nowrap; }
+.good-tabs__tab:hover:not(:disabled) { color: var(--text-primary); background: transparent; }
+.good-tabs__tab.is-active { color: var(--text-primary); border-bottom-color: var(--color-primary); }
 .good-tabs__tab:disabled { color: var(--text-disabled); }
 .good-tabs__tab:focus-visible { outline: 0; box-shadow: var(--shadow-focus); }
-.good-tabs__count { margin-left: 4px; color: var(--text-muted); font-weight: 500; }
-.good-tabs__tab.is-active .good-tabs__count { color: inherit; }
+.good-tabs__count { margin-left: 4px; }
 .good-tabs__panel { display: grid; gap: 16px; }
 
 .select-field { position: relative; display: grid; gap: 8px; }
