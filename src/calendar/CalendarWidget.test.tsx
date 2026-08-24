@@ -107,7 +107,7 @@ describe('CalendarWidget', () => {
       <CalendarWidget
         {...baseProps}
         calendarSettings={{ weekStart: 'monday', dateFormat: 'localized', showWeekends: true }}
-        onChangeCalendarSettings={vi.fn()}
+        onOpenSettings={vi.fn()}
       />
     );
     // Monday-first, weekends shown: 7 columns, first label is 一.
@@ -121,7 +121,7 @@ describe('CalendarWidget', () => {
       <CalendarWidget
         {...baseProps}
         calendarSettings={{ weekStart: 'sunday', dateFormat: 'localized', showWeekends: true }}
-        onChangeCalendarSettings={vi.fn()}
+        onOpenSettings={vi.fn()}
       />
     );
     weekdayCells = container.querySelectorAll('.weekdays span');
@@ -132,7 +132,7 @@ describe('CalendarWidget', () => {
       <CalendarWidget
         {...baseProps}
         calendarSettings={{ weekStart: 'monday', dateFormat: 'localized', showWeekends: false }}
-        onChangeCalendarSettings={vi.fn()}
+        onOpenSettings={vi.fn()}
       />
     );
     weekdayCells = container.querySelectorAll('.weekdays span');
@@ -146,7 +146,7 @@ describe('CalendarWidget', () => {
       <CalendarWidget
         {...baseProps}
         calendarSettings={{ weekStart: 'monday', dateFormat: 'iso', showWeekends: true }}
-        onChangeCalendarSettings={vi.fn()}
+        onOpenSettings={vi.fn()}
       />
     );
     expect(screen.getByRole('heading', { name: '2026-07' })).toBeInTheDocument();

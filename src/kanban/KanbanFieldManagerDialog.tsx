@@ -4,6 +4,7 @@ import type { HexColor } from '../lib/color';
 import { type RefObject, useId, useMemo, useState } from 'react';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Dialog } from '../components/Dialog';
+import { TabPanel, Tabs, type TabItem } from '../components/Tabs';
 import { colorStyle, isPresetColor } from '../lib/color';
 import { collaboratorUsage, priorityUsage, tagUsage } from './kanban-view';
 import { DEFAULT_KANBAN_COLOR, kanbanColorPresets } from './kanban-model';
@@ -190,6 +191,12 @@ export function KanbanFieldManagerDialog({
     collaborators: t('kanbanField.collaborators')
   };
 
+  const tabs: TabItem<FieldTab>[] = [
+    { id: 'priorities', label: tabLabels.priorities, count: snapshot.priorities.length },
+    { id: 'tags', label: tabLabels.tags, count: snapshot.tags.length },
+    { id: 'collaborators', label: tabLabels.collaborators, count: snapshot.collaborators.length }
+  ];
+
   const deleteImpact = (usage: number) =>
     tab === 'priorities'
       ? t('kanbanField.deletePriorityImpact', { count: usage })
@@ -212,119 +219,115 @@ export function KanbanFieldManagerDialog({
           </button>
         }
       >
-        <div className="kanban-field" role="tablist" aria-label={t('kanbanField.fieldType')}>
-          {(['priorities', 'tags', 'collaborators'] as FieldTab[]).map((key) => (
-            <button
-              key={key}
-              type="button"
-              role="tab"
-              aria-selected={tab === key}
-              className={`kanban-field__tab${tab === key ? ' is-active' : ''}`}
-              onClick={() => switchTab(key)}
+        <div className="kanban-field">
+          <Tabs
+            idPrefix="kanban-field"
+            label={t('kanbanField.fieldType')}
+            items={tabs}
+            value={tab}
+            onChange={switchTab}
+          />
+          <TabPanel idPrefix="kanban-field" tabId={tab} active className="kanban-field__panel">
+            <form
+              className="kanban-field__form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void submit();
+              }}
             >
-              {tabLabels[key]}
-            </button>
-          ))}
+              <div className="good-field">
+                <label htmlFor="kanban-field-name">{editingId ? t('kanbanField.edit', { label: tabLabels[tab] }) : t('kanbanField.add', { label: tabLabels[tab] })}</label>
+                <input
+                  id="kanban-field-name"
+                  className="good-input"
+                  autoComplete="off"
+                  value={name}
+                  disabled={busy}
+                  onChange={(event) => setName(event.target.value)}
+                />
+              </div>
+              {hasColor ? (
+                <ColorPicker legend={t('kanbanField.color')} name="kanban-field-color" value={color} presets={kanbanColorPresets()} recentColors={recentColors} disabled={busy} onChange={setColor} onRememberColor={onRememberCustomColor} />
+              ) : null}
+              {formError ? <div role="alert" className="dialog-error">{formError}</div> : null}
+              <div className="kanban-field__form-actions">
+                {editingId ? (
+                  <button type="button" className="good-button" disabled={busy} onClick={resetForm}>
+                    {t('kanbanField.cancelEdit')}
+                  </button>
+                ) : null}
+                <button type="submit" className="good-button good-button--primary" disabled={busy}>
+                  {editingId ? t('kanbanField.saveEdit') : t('kanbanField.addAction', { label: tabLabels[tab] })}
+                </button>
+              </div>
+            </form>
+
+            <ul className="kanban-field__list" aria-label={t('kanbanField.list', { label: tabLabels[tab] })}>
+              {rows.length === 0 ? (
+                <li className="kanban-field__empty">{t('kanbanField.empty', { label: tabLabels[tab] })}</li>
+              ) : (
+                rows.map((row, index) => (
+                  <li key={row.id} className="kanban-field__row">
+                    {row.color ? (
+                      <span
+                        className="kanban-badge"
+                        style={colorStyle(row.color)}
+                        aria-hidden="true"
+                      >
+                        {row.name}
+                      </span>
+                    ) : (
+                      <span className="kanban-field__name">{row.name}</span>
+                    )}
+                    <span className="kanban-field__usage">{t('kanbanField.usage', { count: row.usage })}</span>
+                    <span className="kanban-field__tools">
+                      {tab === 'priorities' ? (
+                        <>
+                          <button
+                            type="button"
+                            className="good-icon-button"
+                            aria-label={t('kanbanField.moveUp', { name: row.name })}
+                            disabled={busy || index === 0}
+                            onClick={() => void move(row.id, -1)}
+                          >
+                            ↑
+                          </button>
+                          <button
+                            type="button"
+                            className="good-icon-button"
+                            aria-label={t('kanbanField.moveDown', { name: row.name })}
+                            disabled={busy || index === rows.length - 1}
+                            onClick={() => void move(row.id, 1)}
+                          >
+                            ↓
+                          </button>
+                        </>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="good-icon-button"
+                        aria-label={t('kanbanField.editItem', { name: row.name })}
+                        disabled={busy}
+                        onClick={() => beginEdit(row.color ? { id: row.id, name: row.name, color: row.color } : { id: row.id, name: row.name })}
+                      >
+                        <Pencil aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        className="good-icon-button"
+                        aria-label={t('kanbanField.deleteItem', { name: row.name })}
+                        disabled={busy}
+                        onClick={() => setConfirmDelete({ id: row.id, name: row.name, usage: row.usage })}
+                      >
+                        <Trash2 aria-hidden="true" />
+                      </button>
+                    </span>
+                  </li>
+                ))
+              )}
+            </ul>
+          </TabPanel>
         </div>
-
-        <form
-          className="kanban-field__form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void submit();
-          }}
-        >
-          <div className="good-field">
-            <label htmlFor="kanban-field-name">{editingId ? t('kanbanField.edit', { label: tabLabels[tab] }) : t('kanbanField.add', { label: tabLabels[tab] })}</label>
-            <input
-              id="kanban-field-name"
-              className="good-input"
-              autoComplete="off"
-              value={name}
-              disabled={busy}
-              onChange={(event) => setName(event.target.value)}
-            />
-          </div>
-          {hasColor ? (
-            <ColorPicker legend={t('kanbanField.color')} name="kanban-field-color" value={color} presets={kanbanColorPresets()} recentColors={recentColors} disabled={busy} onChange={setColor} onRememberColor={onRememberCustomColor} />
-          ) : null}
-          {formError ? <div role="alert" className="dialog-error">{formError}</div> : null}
-          <div className="kanban-field__form-actions">
-            {editingId ? (
-              <button type="button" className="good-button" disabled={busy} onClick={resetForm}>
-                {t('kanbanField.cancelEdit')}
-              </button>
-            ) : null}
-            <button type="submit" className="good-button good-button--primary" disabled={busy}>
-              {editingId ? t('kanbanField.saveEdit') : t('kanbanField.addAction', { label: tabLabels[tab] })}
-            </button>
-          </div>
-        </form>
-
-        <ul className="kanban-field__list" aria-label={t('kanbanField.list', { label: tabLabels[tab] })}>
-          {rows.length === 0 ? (
-            <li className="kanban-field__empty">{t('kanbanField.empty', { label: tabLabels[tab] })}</li>
-          ) : (
-            rows.map((row, index) => (
-              <li key={row.id} className="kanban-field__row">
-                {row.color ? (
-                  <span
-                    className="kanban-badge"
-                    style={colorStyle(row.color)}
-                    aria-hidden="true"
-                  >
-                    {row.name}
-                  </span>
-                ) : (
-                  <span className="kanban-field__name">{row.name}</span>
-                )}
-                <span className="kanban-field__usage">{t('kanbanField.usage', { count: row.usage })}</span>
-                <span className="kanban-field__tools">
-                  {tab === 'priorities' ? (
-                    <>
-                      <button
-                        type="button"
-                        className="good-icon-button"
-                        aria-label={t('kanbanField.moveUp', { name: row.name })}
-                        disabled={busy || index === 0}
-                        onClick={() => void move(row.id, -1)}
-                      >
-                        ↑
-                      </button>
-                      <button
-                        type="button"
-                        className="good-icon-button"
-                        aria-label={t('kanbanField.moveDown', { name: row.name })}
-                        disabled={busy || index === rows.length - 1}
-                        onClick={() => void move(row.id, 1)}
-                      >
-                        ↓
-                      </button>
-                    </>
-                  ) : null}
-                  <button
-                    type="button"
-                    className="good-icon-button"
-                    aria-label={t('kanbanField.editItem', { name: row.name })}
-                    disabled={busy}
-                    onClick={() => beginEdit(row.color ? { id: row.id, name: row.name, color: row.color } : { id: row.id, name: row.name })}
-                  >
-                    <Pencil aria-hidden="true" />
-                  </button>
-                  <button
-                    type="button"
-                    className="good-icon-button"
-                    aria-label={t('kanbanField.deleteItem', { name: row.name })}
-                    disabled={busy}
-                    onClick={() => setConfirmDelete({ id: row.id, name: row.name, usage: row.usage })}
-                  >
-                    <Trash2 aria-hidden="true" />
-                  </button>
-                </span>
-              </li>
-            ))
-          )}
-        </ul>
       </Dialog>
 
       {confirmDelete ? (

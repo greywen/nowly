@@ -2,7 +2,6 @@ import { Plus, Settings } from 'lucide-react';
 import { type DragEvent, useRef, useState } from 'react';
 import { laneCardCount, totalCardCount } from './kanban-view';
 import { KanbanLane } from './KanbanLane';
-import { KanbanMenu } from './KanbanMenu';
 import { KanbanLaneDialog } from './KanbanLaneDialog';
 import { KanbanTaskDialog } from './KanbanTaskDialog';
 import { KanbanFieldManagerDialog } from './KanbanFieldManagerDialog';
@@ -91,8 +90,6 @@ export function KanbanWidget({ todayIso, recentColors = [], onRememberCustomColo
     onDragEnd();
   }
 
-  const boardMenuItems = [{ label: t('kanbanWidget.manageFields'), onSelect: () => setDialog({ type: 'fields' }) }];
-
   // ----- dialog resolution ----------------------------------------------------
   const editingLane =
     dialog?.type === 'lane-edit' ? data.lanes.find((lane) => lane.id === dialog.laneId) ?? null : null;
@@ -112,7 +109,17 @@ export function KanbanWidget({ todayIso, recentColors = [], onRememberCustomColo
           <p>{t('kanbanWidget.cardCount', { count: totalCardCount(data) })}</p>
         </div>
         <div className="toolbar-actions">
-          <KanbanMenu label={t('kanbanWidget.boardMenu')} items={boardMenuItems} triggerIcon={Settings} />
+          <button
+            type="button"
+            className="btn btn-icon"
+            aria-label={t('kanbanWidget.boardMenu')}
+            onClick={(event) => {
+              rememberTrigger(event);
+              setDialog({ type: 'fields' });
+            }}
+          >
+            <Settings aria-hidden="true" />
+          </button>
           <button
             type="button"
             className="btn btn-icon btn-primary"

@@ -59,15 +59,16 @@ function renderWidget(repo: NowlyRepository) {
 }
 
 describe('KanbanWidget', () => {
-  it('shows the header with add-lane and a settings menu carrying manage-fields', async () => {
+  it('shows the header with add-lane and a settings button that opens field management', async () => {
     const user = userEvent.setup();
     renderWidget(repository());
     expect(await screen.findByText('3 张任务')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '添加泳道' })).toBeInTheDocument();
-    // Manage-fields lives in the board settings menu, not directly in the header.
-    expect(screen.queryByRole('button', { name: '管理字段' })).not.toBeInTheDocument();
+    // The settings gear opens the field dialog directly; there is no intermediate menu.
     await user.click(screen.getByRole('button', { name: '看板设置' }));
-    expect(screen.getByRole('menuitem', { name: '管理字段' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem')).not.toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: '看板设置' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '优先级(0)' })).toHaveAttribute('aria-selected', 'true');
   });
 
   it('renders each lane with an accessible add-card button and a single scroll viewport', async () => {

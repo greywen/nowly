@@ -30,6 +30,7 @@ describe('NotesWidget', () => {
     expect(screen.queryByRole('radio',{name:'便利贴视图'})).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button',{name:'便签显示设置'}));
+    expect(screen.getByRole('dialog',{name:'便签设置'})).toBeInTheDocument();
     expect(screen.getByRole('radio',{name:'列表视图'})).toHaveAttribute('aria-checked','true');
     const boardOption = screen.getByRole('radio',{name:'便利贴视图'});
     expect(boardOption).toHaveAttribute('aria-checked','false');

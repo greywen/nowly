@@ -77,6 +77,7 @@ export const translations: Record<Language, Record<string, string>> = {
 
     // CalendarSettingsControl
     'calendarSettings.label': '日历设置',
+    'calendarSettings.basic': '基础设置',
     'calendarSettings.weekStart': '每周开始日',
     'calendarSettings.monday': '周一',
     'calendarSettings.sunday': '周日',
@@ -221,7 +222,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'kanbanField.priorities': '优先级',
     'kanbanField.tags': '标签',
     'kanbanField.collaborators': '协作人',
-    'kanbanField.title': '管理字段',
+    'kanbanField.title': '看板设置',
     'kanbanField.close': '关闭',
     'kanbanField.fieldType': '字段类型',
     'kanbanField.edit': '编辑{label}',
@@ -272,9 +273,9 @@ export const translations: Record<Language, Record<string, string>> = {
     'kanbanTask.dueDate': '截止日期',
     'kanbanTask.priority': '优先级',
     'kanbanTask.tags': '标签',
-    'kanbanTask.tagsEmpty': '还没有标签，可在“管理字段”中新增。',
+    'kanbanTask.tagsEmpty': '还没有标签，可在“看板设置”中新增。',
     'kanbanTask.collaborators': '协作人',
-    'kanbanTask.collaboratorsEmpty': '还没有协作人，可在“管理字段”中新增。',
+    'kanbanTask.collaboratorsEmpty': '还没有协作人，可在“看板设置”中新增。',
     'kanbanTask.deleteTitle': '永久删除“{title}”？',
 
     // Kanban card draft validation
@@ -282,7 +283,6 @@ export const translations: Record<Language, Record<string, string>> = {
     'kanbanDraft.errorDueDate': '请选择有效截止日期。',
 
     // Kanban widget
-    'kanbanWidget.manageFields': '管理字段',
     'kanbanWidget.cardCount': '{count} 张任务',
     'kanbanWidget.addLane': '添加泳道',
     'kanbanWidget.boardMenu': '看板设置',
@@ -462,6 +462,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'notesWidget.newNote': '新增便签',
     'notesWidget.count': '{count} 条便签',
     'notesWidget.settings': '便签显示设置',
+    'notesWidget.settingsDialogTitle': '便签设置',
     'notesWidget.settingsTitle': '便签显示方式',
     'notesWidget.settingsIntro': '选择便签在模块中的展示方式。',
     'notesWidget.viewListDesc': '以紧凑列表逐条展示便签。',
@@ -692,6 +693,7 @@ export const translations: Record<Language, Record<string, string>> = {
 
     // CalendarSettingsControl
     'calendarSettings.label': 'Calendar settings',
+    'calendarSettings.basic': 'General',
     'calendarSettings.weekStart': 'Week starts on',
     'calendarSettings.monday': 'Monday',
     'calendarSettings.sunday': 'Sunday',
@@ -836,7 +838,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'kanbanField.priorities': 'Priorities',
     'kanbanField.tags': 'Tags',
     'kanbanField.collaborators': 'Collaborators',
-    'kanbanField.title': 'Manage fields',
+    'kanbanField.title': 'Board settings',
     'kanbanField.close': 'Close',
     'kanbanField.fieldType': 'Field type',
     'kanbanField.edit': 'Edit {label}',
@@ -887,9 +889,9 @@ export const translations: Record<Language, Record<string, string>> = {
     'kanbanTask.dueDate': 'Due date',
     'kanbanTask.priority': 'Priority',
     'kanbanTask.tags': 'Tags',
-    'kanbanTask.tagsEmpty': 'No tags yet. Add them in "Manage fields".',
+    'kanbanTask.tagsEmpty': 'No tags yet. Add them in "Board settings".',
     'kanbanTask.collaborators': 'Collaborators',
-    'kanbanTask.collaboratorsEmpty': 'No collaborators yet. Add them in "Manage fields".',
+    'kanbanTask.collaboratorsEmpty': 'No collaborators yet. Add them in "Board settings".',
     'kanbanTask.deleteTitle': 'Permanently delete "{title}"?',
 
     // Kanban card draft validation
@@ -897,7 +899,6 @@ export const translations: Record<Language, Record<string, string>> = {
     'kanbanDraft.errorDueDate': 'Please choose a valid due date.',
 
     // Kanban widget
-    'kanbanWidget.manageFields': 'Manage fields',
     'kanbanWidget.cardCount': '{count, plural, one {# task} other {# tasks}}',
     'kanbanWidget.addLane': 'Add lane',
     'kanbanWidget.boardMenu': 'Board settings',
@@ -1073,6 +1074,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'notesWidget.viewAll': 'View all notes',
     'notesWidget.count': '{count, plural, one {# note} other {# notes}}',
     'notesWidget.settings': 'Notes display settings',
+    'notesWidget.settingsDialogTitle': 'Notes settings',
     'notesWidget.settingsTitle': 'Notes layout',
     'notesWidget.settingsIntro': 'Choose how notes appear in the module.',
     'notesWidget.switchView': 'Switch notes layout',

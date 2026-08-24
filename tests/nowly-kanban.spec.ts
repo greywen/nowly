@@ -246,11 +246,10 @@ test('creates a task in a lane and shows only the fields that have values', asyn
   await expect(card.locator('.kanban-card__meta')).toHaveCount(0);
 });
 
-test('manages global fields from the board menu and applies them to a card', async ({ page }) => {
+test('manages global fields from the board settings dialog and applies them to a card', async ({ page }) => {
   await addKanbanModule(page);
 
-  await page.getByRole('button', { name: '看板更多操作' }).click();
-  await page.getByRole('menuitem', { name: '管理字段' }).click();
+  await page.getByRole('button', { name: '看板设置' }).click();
   await page.getByLabel('新增优先级').fill('高');
   await page.getByRole('button', { name: '添加优先级' }).click();
   await expect(page.getByRole('list', { name: '优先级列表' })).toContainText('高');

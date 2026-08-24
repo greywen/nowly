@@ -188,8 +188,7 @@ export function App() {
           dateFormat: settingsFeature.settings.data.dateFormat,
           showWeekends: settingsFeature.settings.data.showWeekends
         }}
-        onChangeCalendarSettings={(next) => void settingsFeature.saveSettings({ ...settingsFeature.settings.data, ...next })}
-        onOpenSubscriptions={() => openModalInForeground({ type: 'calendar-subscriptions', trigger: null })}
+        onOpenSettings={() => openModalInForeground({ type: 'calendar-settings', trigger: null })}
       />
     );
   }
