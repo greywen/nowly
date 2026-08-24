@@ -128,6 +128,33 @@ pub struct EventRange {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CalendarSubscription {
+    pub id: String,
+    pub name: String,
+    pub url: String,
+    pub color: String,
+    pub refresh_interval_minutes: i64,
+    /// 上次成功同步的时间戳（RFC3339 UTC）；从未同步为 None。
+    pub last_synced_at: Option<String>,
+    /// 上次同步结果：'ok' / 'failed'；从未同步为 None。
+    pub last_status: Option<String>,
+    /// 上次失败原因（面向用户的简短文案）；成功或从未同步为 None。
+    pub last_error: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubscriptionDraft {
+    pub name: String,
+    pub url: String,
+    pub color: String,
+    pub refresh_interval_minutes: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AppSettings {
     pub wallpaper_enabled: bool,
     pub launch_at_login: bool,
@@ -296,7 +323,10 @@ pub struct SandboxExtensionDraft {
 
 #[cfg(test)]
 mod tests {
-    use super::{EditScope, Event, EventDraft, EventTarget, NoteDraft, TaskDraft};
+    use super::{
+        CalendarSubscription, EditScope, Event, EventDraft, EventTarget, NoteDraft,
+        SubscriptionDraft, TaskDraft,
+    };
     use crate::recurrence::{Freq, Recurrence, RecurrenceEnd};
     use serde_json::{json, Value};
 
@@ -523,5 +553,43 @@ mod tests {
         .unwrap();
         assert_eq!(draft.start_at, "2026-07-23T14:00");
         assert_eq!(draft.linked_task_id, None);
+    }
+
+    #[test]
+    fn subscription_serializes_in_camel_case() {
+        let sub = CalendarSubscription {
+            id: "s1".into(),
+            name: "家庭".into(),
+            url: "https://example.com/a.ics".into(),
+            color: "#4FC9DA".into(),
+            refresh_interval_minutes: 15,
+            last_synced_at: None,
+            last_status: None,
+            last_error: None,
+            created_at: "2026-08-01T08:00:00Z".into(),
+            updated_at: "2026-08-01T08:00:00Z".into(),
+        };
+        let value = serde_json::to_value(&sub).expect("serializes");
+        let object = value.as_object().unwrap();
+        assert_eq!(object.get("refreshIntervalMinutes"), Some(&json!(15)));
+        assert_eq!(object.get("lastSyncedAt"), Some(&Value::Null));
+        assert_eq!(object.get("lastStatus"), Some(&Value::Null));
+        for snake in ["refresh_interval_minutes", "last_synced_at", "last_status", "last_error"] {
+            assert!(!object.contains_key(snake), "{snake} 不应出现在契约里");
+        }
+    }
+
+    #[test]
+    fn subscription_draft_deserializes_camel_case() {
+        let draft: SubscriptionDraft = serde_json::from_value(json!({
+            "name": "工作",
+            "url": "webcal://example.com/w.ics",
+            "color": "#F08C7A",
+            "refreshIntervalMinutes": 30
+        }))
+        .expect("draft parses");
+        assert_eq!(draft.name, "工作");
+        assert_eq!(draft.url, "webcal://example.com/w.ics");
+        assert_eq!(draft.refresh_interval_minutes, 30);
     }
 }
