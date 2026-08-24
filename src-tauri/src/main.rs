@@ -23,6 +23,7 @@ mod reminders;
 mod rrule_bridge;
 mod rrule_engine;
 mod settings;
+mod subscriptions;
 mod tasks;
 mod timezone;
 mod wallpaper;
@@ -417,6 +418,10 @@ fn main() {
             events::create_event,
             events::update_event,
             events::delete_event,
+            subscriptions::list_calendar_subscriptions,
+            subscriptions::create_calendar_subscription,
+            subscriptions::update_calendar_subscription,
+            subscriptions::delete_calendar_subscription,
             kanban::get_kanban_snapshot,
             kanban::create_kanban_lane,
             kanban::update_kanban_lane,
