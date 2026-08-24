@@ -10,6 +10,7 @@ export const tauriNowlyRepository: NowlyRepository = {
   createCalendarSubscription: (draft) => invoke('create_calendar_subscription', { draft }),
   updateCalendarSubscription: (id, draft) => invoke('update_calendar_subscription', { id, draft }),
   deleteCalendarSubscription: (id) => invoke('delete_calendar_subscription', { id }),
+  refreshCalendarSubscription: (id) => invoke('refresh_calendar_subscription', { id }),
   listExternalEventsInRange: (range) => invoke('list_external_events_in_range', { range }),
   listTasks: () => invoke('list_tasks'),
   createTask: (draft) => invoke('create_task', { draft }),

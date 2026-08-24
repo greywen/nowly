@@ -5,10 +5,10 @@ import { Select } from '../components/Select';
 import type { AppSettings, MonitorInfo } from '../data/nowly-repository';
 import { t, useTranslation, type Language } from '../i18n';
 
-type Props={settings:AppSettings;monitors?:MonitorInfo[];onClose():void;onSave(settings:AppSettings):Promise<AppSettings>};
+type Props={settings:AppSettings;monitors?:MonitorInfo[];onClose():void;onSave(settings:AppSettings):Promise<AppSettings>;onOpenSubscriptions?():void};
 function errorMessage(error:unknown){return typeof error==='object'&&error!==null&&'message'in error&&typeof error.message==='string'?error.message:t('settings.saveError')}
 
-export function SettingsDialog({settings,monitors=[],onClose,onSave}:Props){
+export function SettingsDialog({settings,monitors=[],onClose,onSave,onOpenSubscriptions}:Props){
  // Language switches in real time via the i18n store, independent of the save
  // button, so the whole UI updates the moment the user picks a language.
  const {language,setLanguage}=useTranslation();
@@ -32,6 +32,7 @@ export function SettingsDialog({settings,monitors=[],onClose,onSave}:Props){
    <section><h3>{t('settings.desktopStartup')}</h3>{monitors.length?<Select id="settings-monitor" label={t('settings.targetMonitor')} value={resolvedMonitorId??''} options={monitors.map(item=>({value:item.id,label:`${item.name}${item.isPrimary?t('settings.primaryMonitor'):''} · ${item.width}×${item.height} · ${Math.round(item.scaleFactor*100)}%`}))} onChange={value=>setDraft({...draft,targetMonitorId:value})}/>:null}<div className="settings-checks">
     <Check label={t('settings.restoreWallpaper')} checked={draft.wallpaperEnabled} onChange={toggle('wallpaperEnabled')}/><Check label={t('settings.launchAtLogin')} checked={draft.launchAtLogin} onChange={toggle('launchAtLogin')}/>
    </div></section>
+   <section><h3>{t('settings.calendarSubscriptions')}</h3><button type="button" className="good-button" onClick={()=>onOpenSubscriptions?.()}>{t('settings.manageSubscriptions')}</button></section>
    {error?<div className="dialog-error" role="alert">{error}</div>:null}
   </div>
  </Dialog>;

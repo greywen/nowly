@@ -19,7 +19,13 @@ const operations = {
   deleteNote: vi.fn().mockResolvedValue(undefined),
   monitors: [],
   settings: {wallpaperEnabled:false,launchAtLogin:false,targetMonitorId:null,density:'balanced' as const,weekStart:'monday' as const,dateFormat:'localized' as const,showWeekends:true,calendarEnabled:true,matrixEnabled:true,notesEnabled:true},
-  saveSettings: vi.fn()
+  saveSettings: vi.fn(),
+  subscriptions: [],
+  onSubscriptionsChanged: vi.fn(),
+  createSubscription: vi.fn(),
+  updateSubscription: vi.fn(),
+  deleteSubscription: vi.fn(),
+  refreshSubscription: vi.fn()
 };
 
 function base(overrides: Record<string, unknown> = {}) {

@@ -128,6 +128,7 @@ export type NowlyRepository = {
   createCalendarSubscription: (draft: SubscriptionDraft) => Promise<CalendarSubscription>;
   updateCalendarSubscription: (id: string, draft: SubscriptionDraft) => Promise<CalendarSubscription>;
   deleteCalendarSubscription: (id: string) => Promise<void>;
+  refreshCalendarSubscription: (id: string) => Promise<void>;
   listExternalEventsInRange: (range: EventRange) => Promise<ExternalEvent[]>;
   listTasks(): Promise<MatrixTask[]>;
   createTask(draft: TaskDraft): Promise<MatrixTask>;

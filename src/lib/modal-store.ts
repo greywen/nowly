@@ -12,4 +12,6 @@ export type ModalState =
   | { type: 'note-edit'; note: Note; trigger: HTMLElement | null; parentManager?: boolean }
   | { type: 'notes-manager'; trigger: HTMLElement | null }
   | { type: 'settings'; trigger: HTMLElement | null }
+  | { type: 'external-detail'; event: CalendarEvent; trigger: HTMLElement | null }
+  | { type: 'calendar-subscriptions'; trigger: HTMLElement | null }
   | null;

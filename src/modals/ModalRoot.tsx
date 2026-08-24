@@ -1,4 +1,5 @@
 import { DateDetailDialog } from '../calendar/DateDetailDialog';
+import { ExternalEventDialog } from '../calendar/ExternalEventDialog';
 import type { CalendarEvent, EditScope, EventDraft } from '../calendar/calendar-model';
 import type { ModalState } from '../lib/modal-store';
 import type { MatrixTask, TaskDraft } from '../matrix/matrix-model';
@@ -9,6 +10,8 @@ import { NotesManagerDialog } from '../notes/NotesManagerDialog';
 import type { Note, NoteDraft } from '../notes/notes-model';
 import type { AppSettings, MonitorInfo } from '../data/nowly-repository';
 import { SettingsDialog } from '../settings/SettingsDialog';
+import { SubscriptionManagerDialog } from '../settings/SubscriptionManagerDialog';
+import type { CalendarSubscription, SubscriptionDraft } from '../calendar/subscription-model';
 
 type Props = {
   modal: ModalState;
@@ -33,6 +36,12 @@ type Props = {
   settings: AppSettings;
   monitors: MonitorInfo[];
   saveSettings(settings: AppSettings): Promise<AppSettings>;
+  subscriptions: CalendarSubscription[];
+  onSubscriptionsChanged(): void;
+  createSubscription(draft: SubscriptionDraft): Promise<CalendarSubscription>;
+  updateSubscription(id: string, draft: SubscriptionDraft): Promise<CalendarSubscription>;
+  deleteSubscription(id: string): Promise<void>;
+  refreshSubscription(id: string): Promise<void>;
   recentColors?: string[];
   onRememberCustomColor?: (color: string) => Promise<void> | void;
 };
@@ -41,7 +50,9 @@ export function ModalRoot({
   modal, events, tasks, onClose, onChangeModal,
   createEvent, updateEvent, deleteEvent, onSaved, onDeleted,
   createTask, updateTask, deleteTask, onTaskSaved, onTaskDeleted,
-  notes, createNote, updateNote, deleteNote, settings, monitors, saveSettings, recentColors = [], onRememberCustomColor
+  notes, createNote, updateNote, deleteNote, settings, monitors, saveSettings,
+  subscriptions, onSubscriptionsChanged, createSubscription, updateSubscription, deleteSubscription, refreshSubscription,
+  recentColors = [], onRememberCustomColor
 }: Props) {
   if (!modal) return null;
   const isEventChild = modal.type === 'event-create' || modal.type === 'event-edit';
@@ -97,6 +108,26 @@ export function ModalRoot({
     ) : null}
     {modal.type === 'notes-manager' ? <NotesManagerDialog notes={notes} restoreFocusRef={{current:modal.trigger}} onClose={onClose} onCreate={(trigger)=>onChangeModal({type:'note-create',trigger,parentManager:true})} onEdit={(note,trigger)=>onChangeModal({type:'note-edit',note,trigger,parentManager:true})} /> : null}
     {modal.type === 'note-create' || modal.type === 'note-edit' ? <NoteModal mode={modal.type === 'note-create' ? {type:'create'} : {type:'edit',note:modal.note}} restoreFocusRef={{current:modal.trigger}} onClose={()=>modal.parentManager?onChangeModal({type:'notes-manager',trigger:modal.trigger}):onClose()} onSaved={()=>undefined} onDeleted={()=>undefined} createNote={createNote} updateNote={updateNote} deleteNote={deleteNote} recentColors={recentColors} onRememberCustomColor={onRememberCustomColor} /> : null}
-    {modal.type === 'settings' ? <SettingsDialog settings={settings} monitors={monitors} onClose={onClose} onSave={saveSettings} /> : null}
+    {modal.type === 'settings' ? <SettingsDialog settings={settings} monitors={monitors} onClose={onClose} onSave={saveSettings} onOpenSubscriptions={() => onChangeModal({ type:'calendar-subscriptions', trigger:null })} /> : null}
+    {modal.type === 'external-detail' ? (
+      <ExternalEventDialog
+        event={modal.event}
+        sourceName={subscriptions.find((s) => s.id === modal.event.subscriptionId)?.name ?? ''}
+        restoreFocusRef={{ current: modal.trigger }}
+        onClose={onClose}
+      />
+    ) : null}
+    {modal.type === 'calendar-subscriptions' ? (
+      <SubscriptionManagerDialog
+        subscriptions={subscriptions}
+        restoreFocusRef={{ current: modal.trigger }}
+        onClose={onClose}
+        onChanged={onSubscriptionsChanged}
+        onCreate={createSubscription}
+        onUpdate={updateSubscription}
+        onDelete={deleteSubscription}
+        onRefresh={refreshSubscription}
+      />
+    ) : null}
   </>;
 }
