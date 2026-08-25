@@ -518,12 +518,11 @@ button:disabled { cursor: default; opacity: .65; }
 .select-trigger:disabled { color: var(--text-disabled); pointer-events: none; opacity: .65; }
 
 .select-popup {
-  position: absolute;
-  z-index: 60;
-  top: calc(100% + 8px);
-  left: 0;
+  /* Fixed positioning (anchored to the trigger's viewport rect via inline
+     styles) lets the popup escape the modal/dialog body overflow clipping. */
+  position: fixed;
+  z-index: 110;
   box-sizing: border-box;
-  width: 100%;
   max-height: min(320px, calc(100vh - 32px));
   padding: 12px;
   overflow: hidden;
@@ -532,7 +531,6 @@ button:disabled { cursor: default; opacity: .65; }
   background: var(--bg-surface);
   box-shadow: var(--shadow-dropdown);
 }
-.select-popup--above { top: auto; bottom: calc(100% + 8px); }
 .select-search {
   box-sizing: border-box;
   width: 100%;

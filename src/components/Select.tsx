@@ -1,5 +1,5 @@
 import { Check, ChevronDown } from 'lucide-react';
-import { type KeyboardEvent, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { type KeyboardEvent, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { t } from '../i18n';
 
 export type SelectOption = {
@@ -28,12 +28,14 @@ export function Select({ id, name, label, options, value, onChange, placeholder,
   const listboxId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const popupRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
   const [placeAbove, setPlaceAbove] = useState(false);
   const [popupMaxHeight, setPopupMaxHeight] = useState(320);
+  const [popupRect, setPopupRect] = useState<{ left: number; top: number; bottom: number; width: number } | null>(null);
   const selected = options.find((option) => option.value === value);
   const filteredOptions = useMemo(
     () => options.filter((option) => option.label.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())),
@@ -41,12 +43,16 @@ export function Select({ id, name, label, options, value, onChange, placeholder,
   );
   const activeOption = filteredOptions[activeIndex];
 
-  useEffect(() => {
+  // Measure before paint so the fixed-position popup never flashes at the
+  // viewport's full width before it is anchored to the trigger.
+  useLayoutEffect(() => {
     if (!open) return;
     function measurePlacement() {
       const rect = triggerRef.current?.getBoundingClientRect();
       if (!rect) return;
-      const modalBody = rootRef.current?.closest('.good-modal-body');
+      // Prefer a scrollable modal body as the vertical boundary, but fall back
+      // to a plain dialog body so selects inside either container stay bounded.
+      const modalBody = rootRef.current?.closest('.good-modal-body, .good-dialog__body');
       const boundary = modalBody?.getBoundingClientRect();
       const topBoundary = Math.max(16, boundary?.top ?? 16);
       const bottomBoundary = Math.min(window.innerHeight - 16, boundary?.bottom ?? window.innerHeight - 16);
@@ -55,20 +61,27 @@ export function Select({ id, name, label, options, value, onChange, placeholder,
       const above = spaceBelow < 240 && spaceAbove > spaceBelow;
       setPlaceAbove(above);
       setPopupMaxHeight(Math.max(96, Math.min(320, above ? spaceAbove : spaceBelow)));
+      // Anchor the popup with viewport coordinates so it can escape the
+      // modal body's overflow clipping via position: fixed.
+      setPopupRect({ left: rect.left, top: rect.bottom, bottom: rect.top, width: rect.width });
     }
     measurePlacement();
     window.addEventListener('resize', measurePlacement);
+    window.addEventListener('scroll', measurePlacement, true);
     const selectedIndex = filteredOptions.findIndex((option) => option.value === value);
     setActiveIndex(selectedIndex >= 0 ? selectedIndex : 0);
     if (searchable) requestAnimationFrame(() => searchRef.current?.focus());
 
     function dismiss(event: PointerEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) close(false);
+      const target = event.target as Node;
+      if (rootRef.current?.contains(target) || popupRef.current?.contains(target)) return;
+      close(false);
     }
     document.addEventListener('pointerdown', dismiss);
     return () => {
       document.removeEventListener('pointerdown', dismiss);
       window.removeEventListener('resize', measurePlacement);
+      window.removeEventListener('scroll', measurePlacement, true);
     };
   }, [open]);
 
@@ -146,7 +159,22 @@ export function Select({ id, name, label, options, value, onChange, placeholder,
         <ChevronDown aria-hidden="true" />
       </button>
       {open ? (
-        <div className={`select-popup${placeAbove ? ' select-popup--above' : ''}`} style={{ maxHeight: `${popupMaxHeight}px` }}>
+        <div
+          ref={popupRef}
+          className={`select-popup${placeAbove ? ' select-popup--above' : ''}`}
+          style={{
+            maxHeight: `${popupMaxHeight}px`,
+            ...(popupRect
+              ? {
+                  left: `${popupRect.left}px`,
+                  width: `${popupRect.width}px`,
+                  ...(placeAbove
+                    ? { bottom: `${window.innerHeight - popupRect.bottom + 8}px` }
+                    : { top: `${popupRect.top + 8}px` })
+                }
+              : { visibility: 'hidden' })
+          }}
+        >
           {searchable ? (
             <input
               className="select-search"
