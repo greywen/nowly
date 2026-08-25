@@ -36,3 +36,8 @@ Thumbs.db
 # Local agent artifacts
 .superpowers/
 docs/
+
+# Draft modules for the preview workbench (keep the example + readme tracked)
+dev-modules/*
+!dev-modules/example.js
+!dev-modules/README.md

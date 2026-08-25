@@ -9,6 +9,8 @@ Nowly 的自定义模块是**一个自描述的 `.js` 文件**。用户可以在
 
 这份规范告诉你如何写出一个**合法、可发布、样式合规**的模块。请完整阅读后再动手。
 
+**配套文件：** [style.md](./style.md)（`nm-*` 令牌与语义类）· [size.md](./size.md)（尺寸与断点）· [preview.md](./preview.md)（实时预览工作台）· [install/AGENTS.md](./install/AGENTS.md)（给 AI 工具的入口与工作流）。
+
 ---
 
 ## 0. 硬性约束（最容易踩的坑）

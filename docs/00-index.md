@@ -46,6 +46,14 @@ cargo test --manifest-path src-tauri/Cargo.toml    # Rust 测试
 - [Nowly 日程重复规则设计规格](./superpowers/specs/2026-08-20-nowly-recurring-events-design.md)
 - [Nowly 模块系统 v2 与模块技能包设计规格](./superpowers/specs/2026-08-25-nowly-module-system-v2-design.md)
 
+## Custom Modules
+
+- [编写 Nowly 自定义模块（技能包主规范）](./custom-modules/SKILL.md)
+- [nm-* 样式参考](./custom-modules/style.md)
+- [尺寸与断点](./custom-modules/size.md)
+- [实时预览工作台](./custom-modules/preview.md)
+- [给 AI 工具的入口](./custom-modules/install/AGENTS.md)
+
 ## Prototypes
 
 - [Nowly 最终 UI/UX HTML 原型](./prototypes/nowly-final-uiux.html)

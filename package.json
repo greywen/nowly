@@ -32,6 +32,7 @@
     "e2e": "playwright test",
     "tauri": "tauri",
     "module:css": "node scripts/generate-module-css.mjs",
+    "module:preview": "vite --open /preview.html",
     "test:tooling": "node --test scripts/generate-module-css.test.mjs registry/lint.test.mjs",
     "registry:lint": "node --test registry/lint.test.mjs",
     "registry:validate": "node registry/validate.mjs"
