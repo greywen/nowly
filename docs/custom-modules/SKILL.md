@@ -20,6 +20,8 @@ Nowly 的自定义模块是**一个自描述的 `.js` 文件**。用户可以在
 3. **不能访问父页面 DOM、`localStorage`、`cookie`、Tauri。** 你的世界只有传进来的 `host` 和 `root` 两个对象。
 4. **不能加载远程脚本、字体、图片。** CSP 会拦截。要显示图标就用文字或内联 SVG。
 5. **渲染靠手动操作 DOM。** 你拿到一个 `root` 元素，用 `document.createElement` 往里塞节点。
+6. **颜色只能用 `var(--nm-*)` 令牌，禁止任何 `#` / `rgb()` / `hsl()` 字面量。** 校验器会拒绝含颜色字面量的模块。沙箱已注入一份从应用 `styles.css` 生成的样式表，令牌与 `nm-*` 语义类可直接用，详见 [style.md](./style.md)。
+7. **循环必须有明确边界。** `while (true)` / `for (;;)` 会被校验器拒绝，且死循环会冻结整个应用（用户只能去任务管理器杀进程）。
 
 违反其中任何一条，模块要么安装失败，要么运行时报错。
 
@@ -112,144 +114,78 @@ const res = await host.fetch('https://api.open-meteo.com/v1/forecast?...', {
 
 ## 3. 视觉样式规范（严格对齐 `design.md`）
 
-沙箱注入了一套基础样式，但你仍需主动对齐 Nowly 的设计语言。**沙箱看不到父页面的 CSS 变量**，所以要把下面的字面值直接内联到你的样式里。
+沙箱注入了一份从应用 `styles.css` 生成的样式表，`--nm-*` 令牌与 `nm-*` 语义类可直接用。**不要写颜色字面量**，一律用令牌或语义类对齐 Nowly 的设计语言。
 
 ### 3.1 禁止动效（强制）
 
 **不要用任何 `transition`、`animation`、旋转、缩放、位移、淡入淡出、加载动画。** 所有状态即时切换。这是 Nowly 的铁律。
 
-### 3.2 颜色（直接用这些值）
+### 3.2 颜色：只用令牌
 
-| 用途 | 色值 |
-|---|---|
-| 主色（按钮 / 链接 / 选中） | `#4FC9DA` |
-| 主色 hover | `#69D1E0` |
-| 主色 active | `#30A6B6` |
-| 主色浅背景 | `#DDF8FC` |
-| 成功 | `#B8D935` |
-| 警告 | `#E8C444` |
-| 危险 / 删除 | `#F06445` |
-| 页面标题文字 | `#211F1C` |
-| 正文文字 | `#716D66` |
-| 弱说明 / 占位 | `#968E7E` |
-| 卡片 / 表面背景 | `#FFFFFF` |
-| 浅灰背景 | `#F8F6F2` |
-| 边框 | `#EAEAEA` |
+沙箱注入了一份从应用 `styles.css` 生成的样式表。**不要写颜色字面量**——一律用 `var(--nm-*)` 令牌，否则校验器拒绝安装，且未来主题化无法覆盖你的模块。
+
+常用令牌：`--nm-color-primary`、`--nm-text-primary`、`--nm-text-secondary`、`--nm-text-muted`、`--nm-bg-surface`、`--nm-bg-subtle`、`--nm-border-default`。完整清单与 `nm-*` 语义类见 [style.md](./style.md)。
+
+最省力的做法是直接套 `nm-*` 语义类（`.nm-card` / `.nm-title` / `.nm-btn` / `.nm-btn--primary` / `.nm-input` 等），它们已对齐设计规范，无需手写样式。
 
 ### 3.3 其它
 
-- **圆角**：按钮、输入框、卡片统一用 `15.2px`；小标签 `7.6px`；胶囊 `999px`。
-- **字体**：`Inter, "Microsoft YaHei", "PingFang SC", Helvetica, Arial, sans-serif`。
+- **圆角**：按钮、输入框、卡片统一用 `var(--nm-radius-default)`；小标签 `var(--nm-radius-sm)`；胶囊 `var(--nm-radius-pill)`。
+- **字体**：`var(--nm-font-sans)`（body 已默认套用，通常无需再设）。
 - **字号**：正文 `16px`，次级 `15.2px`，说明 `13.6px`，卡片标题 `18.4–20px`。
 - **间距**：以 `4px` 为基准，常用 `8px / 12px / 16px / 24px`。
-- **按钮**：高度 `40px`，内边距 `8px 24px`，字重 `500`。
-- **焦点环**：`0 0 0 4px rgba(79, 201, 218, 0.25)`。
-- **阴影**：普通卡片不加阴影，靠 `1px solid #EAEAEA` 边框建立层级。
+- **按钮**：高度 `40px`，内边距 `8px 24px`，字重 `500`（`.nm-btn` 已内置）。
+- **焦点环**：`var(--nm-shadow-focus)`。
+- **阴影**：普通卡片不加阴影，靠 `1px solid var(--nm-border-default)` 边框建立层级。
+
+### 3.4 尺寸与断点
+
+模块视口即卡片尺寸。三档断点与格数换算见 [size.md](./size.md)。
 
 ---
 
-## 4. 完整起始模板
+## 4. 起始模板
 
-复制这个骨架开始写。它演示了状态持久化、今天日期、以及合规样式。
+三个可直接复制的模板，都通过校验、样式合规：
+
+- [templates/minimal.js](./templates/minimal.js) — 纯展示
+- [templates/stateful.js](./templates/stateful.js) — 持久化 + 按钮
+- [templates/network.js](./templates/network.js) — `host.fetch` 联网
+
+最小模板：套 `nm-*` 类，不手写颜色，不设字体（body 已默认）。
 
 ```js
 /**
  * @nowly-module 1
- * @id           my-counter
- * @name         计数器
+ * @id           my-module
+ * @name         我的模块
  * @version      1.0.0
  * @author       yourname
- * @description  一个带持久化的简单计数器
- * @permissions  state, today
- * @minSize      3x3
- * @defaultSize  4x4
- */
-Nowly.defineModule(async ({ host, root }) => {
-  let state = (await host.loadState()) || { count: 0 };
-
-  function button(label, onClick) {
-    const el = document.createElement('button');
-    el.textContent = label;
-    el.style.font = 'inherit';
-    el.style.height = '40px';
-    el.style.padding = '8px 24px';
-    el.style.border = '1px solid #4FC9DA';
-    el.style.borderRadius = '15.2px';
-    el.style.background = '#4FC9DA';
-    el.style.color = '#FFFFFF';
-    el.style.fontWeight = '500';
-    el.style.cursor = 'pointer';
-    el.onclick = onClick;
-    return el;
-  }
-
-  function render() {
-    root.innerHTML = '';
-    root.style.fontFamily =
-      'Inter, "Microsoft YaHei", "PingFang SC", Helvetica, Arial, sans-serif';
-    root.style.color = '#211F1C';
-
-    if (host.todayIso) {
-      const date = document.createElement('p');
-      date.textContent = '今天：' + host.todayIso;
-      date.style.margin = '0 0 12px';
-      date.style.color = '#968E7E';
-      date.style.fontSize = '13.6px';
-      root.appendChild(date);
-    }
-
-    const value = document.createElement('p');
-    value.textContent = '计数：' + state.count;
-    value.style.margin = '0 0 16px';
-    value.style.fontSize = '20px';
-    value.style.fontWeight = '600';
-    root.appendChild(value);
-
-    const row = document.createElement('div');
-    row.style.display = 'flex';
-    row.style.gap = '8px';
-    row.appendChild(button('+1', async () => {
-      state = { count: state.count + 1 };
-      await host.saveState(state);
-      render();
-    }));
-    row.appendChild(button('重置', async () => {
-      state = { count: 0 };
-      await host.saveState(state);
-      render();
-    }));
-    root.appendChild(row);
-  }
-
-  render();
-});
-```
-
-### 联网模块示例（片段）
-
-```js
-/**
- * @nowly-module 1
- * @id           weather-widget
- * @name         天气
- * @version      1.0.0
- * @permissions  state, network
- * @network      api.open-meteo.com
+ * @description  一句话描述
+ * @permissions  today
+ * @minSize      2x2
  * @defaultSize  4x3
  */
 Nowly.defineModule(async ({ host, root }) => {
-  root.textContent = '加载中…';
-  try {
-    const res = await host.fetch(
-      'https://api.open-meteo.com/v1/forecast?latitude=31.23&longitude=121.47&current=temperature_2m'
-    );
-    const temp = res.json?.current?.temperature_2m;
-    root.textContent = temp != null ? ('当前气温：' + temp + '°C') : '暂无数据';
-  } catch (error) {
-    root.textContent = '获取失败：' + error.message;
-  }
+  const card = document.createElement('div');
+  card.className = 'nm-card';
+
+  const title = document.createElement('p');
+  title.className = 'nm-title';
+  title.textContent = '你好，Nowly';
+
+  const today = document.createElement('p');
+  today.className = 'nm-muted';
+  today.style.margin = '8px 0 0';
+  today.textContent = host.todayIso ? '今天：' + host.todayIso : '';
+
+  card.appendChild(title);
+  card.appendChild(today);
+  root.appendChild(card);
 });
 ```
+
+持久化与联网的完整写法见上面链接的 `stateful.js` 与 `network.js`。
 
 ---
 
@@ -301,6 +237,8 @@ Nowly.defineModule(async ({ host, root }) => {
 - [ ] 用了 `host.fetch` 就声明了 `network` 权限并在 `@network` 列出所有域名。
 - [ ] 没有加载远程脚本 / 字体 / 图片。
 - [ ] 没有任何 `transition` / `animation` / 动效。
-- [ ] 颜色、圆角、字体、间距对齐第 3 节的值。
+- [ ] 没有颜色字面量（`#` / `rgb()` / `hsl()`）；颜色一律 `var(--nm-*)` 或套 `nm-*` 类。
+- [ ] 没有无界循环（`while (true)` / `for (;;)`）；所有循环有明确边界。
+- [ ] 圆角、字体、间距对齐第 3 节的令牌。
 - [ ] `host.fetch` 和 `host.loadState` 都做了错误处理（`try/catch`），失败时给用户可读提示。
 - [ ] 在 `root` 上手动渲染，没有假设父页面存在任何元素。
