@@ -10,6 +10,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { lintModuleSource } from './lint.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const registryPath = join(here, 'registry.json');
@@ -148,6 +149,11 @@ for (const entry of registry.modules) {
   // Dangerous-pattern scan.
   const hits = dangerousPatterns(source);
   if (hits.length > 0) fail(id, `suspicious patterns: ${hits.join(', ')}`);
+
+  // Checklist lint (color literals, unbounded loops, remote resources).
+  for (const issue of lintModuleSource(source)) {
+    fail(id, `lint ${issue.rule} at line ${issue.line}: ${issue.message}`);
+  }
 }
 
 if (errors.length > 0) {
