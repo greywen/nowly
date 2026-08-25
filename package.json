@@ -30,7 +30,10 @@
     "test": "cross-env NODE_ENV=test vitest run",
     "test:watch": "cross-env NODE_ENV=test vitest",
     "e2e": "playwright test",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "module:css": "node scripts/generate-module-css.mjs",
+    "registry:lint": "node --test registry/lint.test.mjs",
+    "registry:validate": "node registry/validate.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "latest",
