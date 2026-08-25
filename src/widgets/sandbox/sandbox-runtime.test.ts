@@ -26,6 +26,15 @@ describe('buildSandboxDocument', () => {
     expect(doc).toContain("connect-src 'none'");
   });
 
+  it('injects the generated nm-* stylesheet and drops the old drifted values', () => {
+    const doc = buildSandboxDocument('');
+    expect(doc).toContain('--nm-text-primary: #211f1c');
+    expect(doc).toContain('.nm-btn');
+    // The old hardcoded drift must be gone.
+    expect(doc).not.toContain('#1f2733');
+    expect(doc).not.toContain('border-radius: 8px');
+  });
+
   it('escapes a closing script tag so the source cannot break out', () => {
     // Malicious/careless source containing </script> must not terminate the
     // injected <script> element early.

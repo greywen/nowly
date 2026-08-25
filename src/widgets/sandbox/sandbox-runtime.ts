@@ -1,4 +1,5 @@
 import { SANDBOX_CHANNEL } from './sandbox-protocol';
+import { NOWLY_MODULE_CSS } from './nowly-module-css';
 
 // The script that runs *inside* the sandboxed iframe. It is injected as source
 // text into the iframe document, so it must be self-contained plain JS (no
@@ -100,31 +101,6 @@ export const SANDBOX_RUNTIME = `(() => {
   }
 })();`;
 
-// Base styles injected into the sandbox document so extensions inherit the app's
-// look without reaching into the parent. Kept minimal and animation-free.
-const SANDBOX_STYLES = `
-  :root { color-scheme: light; }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; }
-  body {
-    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    color: #1f2733;
-    background: transparent;
-    font-size: 14px;
-  }
-  #root { padding: 16px; height: 100%; }
-  button {
-    font: inherit;
-    border: 1px solid #d7dde5;
-    background: #fff;
-    color: #1f2733;
-    border-radius: 8px;
-    padding: 6px 12px;
-    cursor: pointer;
-  }
-  button:hover { background: #f2f5f8; }
-`;
-
 // A locked-down Content-Security-Policy for the sandbox document. It permits the
 // inline runtime/extension scripts and inline styles we inject, but blocks all
 // network egress (no fetch, XHR, websockets, remote scripts, images, or frames)
@@ -155,7 +131,7 @@ export function buildSandboxDocument(extensionSource: string): string {
 <head>
 <meta charset="utf-8" />
 <meta http-equiv="Content-Security-Policy" content="${SANDBOX_CSP}" />
-<style>${SANDBOX_STYLES}</style>
+<style>${NOWLY_MODULE_CSS}</style>
 </head>
 <body>
 <div id="root"></div>
