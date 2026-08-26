@@ -86,8 +86,51 @@ Nowly.defineModule(async ({ host, root }) => {
 | `host.fetch(url, options?)` | `network` | 代理网络请求，仅放行 `@network` 白名单内的域名 |
 | `host.isVisible()` | 无 | 返回当前是否可见（在视野内且窗口前台）。同步读当前状态 |
 | `host.onVisibilityChange(fn)` | 无 | 注册可见性回调，`fn(visible)` 在状态变化时触发，注册时也立即触发一次当前值。返回一个取消注册的函数 |
+| `host.surface` | 无 | 当前面：`'main'`（卡片）或 `'dialog'`（弹框）。同一份源码在两个面各跑一份 |
+| `host.openDialog(title?)` | 无 | 请求宿主打开弹框面。可传标题，显示在弹框标题栏。已打开时重复请求被忽略 |
+| `host.closeDialog()` | 无 | 请求宿主关闭弹框面。任一面都可调用 |
+| `host.onStateChanged(fn)` | `state` | 注册状态变更回调。另一个面 `saveState` 成功后触发 `fn()`，用于重新 `loadState` 刷新。返回取消注册的函数 |
 
 所有调用被限流为**每秒最多 30 次**，超出会被拒绝。
+
+### 弹框面（突破卡片边界）
+
+`2x2` 卡片约 195×143px，放不下设置面板。模块可以调用 `host.openDialog()` 请求宿主打开一个**弹框面**：宿主渲染一个 Dialog 外壳（含关闭按钮、Esc 关闭、焦点管理），里面加载**同一份模块源码**的第二个实例。两个面靠 `host.surface` 区分自己是 `'main'` 还是 `'dialog'`，据此渲染不同内容。
+
+两个面共享同一 `moduleId`，因此读写**同一行状态**。一个面 `saveState` 后，宿主会向另一个面广播状态变更——收到的那一面用 `host.onStateChanged` 重新 `loadState` 刷新，否则弹框改完设置主面仍显示旧值。
+
+```js
+Nowly.defineModule(async ({ host, root }) => {
+  async function render() {
+    const state = (await host.loadState()) || { count: 0 };
+    root.textContent = '';
+    if (host.surface === 'dialog') {
+      // 弹框面：完整设置面板
+      const btn = document.createElement('button');
+      btn.className = 'nm-btn';
+      btn.textContent = '加一';
+      btn.addEventListener('click', async () => {
+        await host.saveState({ count: state.count + 1 });
+        await render();
+      });
+      root.appendChild(btn);
+    } else {
+      // 主面：紧凑展示 + 打开设置的入口
+      const value = document.createElement('p');
+      value.textContent = '计数：' + state.count;
+      const open = document.createElement('button');
+      open.className = 'nm-btn';
+      open.textContent = '设置';
+      open.addEventListener('click', () => host.openDialog('模块设置'));
+      root.appendChild(value);
+      root.appendChild(open);
+    }
+  }
+  // 另一个面保存后刷新本面，避免显示过期状态。
+  host.onStateChanged(() => { void render(); });
+  await render();
+});
+```
 
 ### 可见性与 `@motion animated`（耗电治理，强制）
 
