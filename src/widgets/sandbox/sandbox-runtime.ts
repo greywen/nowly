@@ -1,5 +1,6 @@
 import { SANDBOX_CHANNEL } from './sandbox-protocol';
 import { NOWLY_MODULE_CSS } from './nowly-module-css';
+import { SANDBOX_WIDGETS } from './sandbox-widgets';
 
 // The script that runs *inside* the sandboxed iframe. It is injected as source
 // text into the iframe document, so it must be self-contained plain JS (no
@@ -163,6 +164,7 @@ export function buildSandboxDocument(extensionSource: string): string {
 <body>
 <div id="root"></div>
 <script>${escapeScript(SANDBOX_RUNTIME)}</script>
+<script>${escapeScript(SANDBOX_WIDGETS)}</script>
 <script>${escapeScript(extensionSource)}</script>
 </body>
 </html>`;

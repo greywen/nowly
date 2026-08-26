@@ -43,6 +43,19 @@ describe('buildSandboxDocument', () => {
     expect(doc).toContain("'visibility'");
   });
 
+  it('injects the optional widget factories after the runtime', () => {
+    const doc = buildSandboxDocument('');
+    // The widgets augment window.Nowly with Select/Tabs/DatePicker/etc. They
+    // must appear after the runtime that creates the Nowly global, and before
+    // the extension source that may call them.
+    expect(doc).toContain('N.Select');
+    expect(doc).toContain('N.DatePicker');
+    const runtimeAt = doc.indexOf('window.Nowly = {');
+    const widgetsAt = doc.indexOf('N.Select');
+    expect(runtimeAt).toBeGreaterThan(-1);
+    expect(widgetsAt).toBeGreaterThan(runtimeAt);
+  });
+
   it('escapes a closing script tag so the source cannot break out', () => {
     // Malicious/careless source containing </script> must not terminate the
     // injected <script> element early.

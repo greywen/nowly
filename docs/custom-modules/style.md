@@ -25,6 +25,18 @@
 - `.nm-empty` 空状态
 - `.nm-msg` / `.nm-msg--danger` 消息条
 
+## 可选部件（原生 JS，随样式表注入）
+
+`Nowly` 命名空间除 `defineModule` 外，还提供五个键盘可达的部件工厂，样式已内置。用它们可避免自己实现「能点但键盘不可达」的控件。详细用法见 SKILL.md §3.5。
+
+- `Nowly.Select({ label, options, value, onChange })` 下拉选择（`role=combobox` + `listbox`）
+- `Nowly.Tabs({ tabs, value, onChange })` 标签页（`role=tablist`，方向键滚动选择）
+- `Nowly.DatePicker({ label, value, onChange })` 日期选择（`role=grid` 月历，方向键导航）
+- `Nowly.TimePicker({ label, value, step, onChange })` 时间选择（按 `step` 分钟列出）
+- `Nowly.ColorPicker({ label, value, swatches, onChange })` 颜色选择（`role=radiogroup` 色板）
+
+每个部件返回一个 DOM 元素，`append` 到你的容器即可，并带 `nowlyGetValue()` / `nowlySetValue(v)` 便于受控使用。部件相关类：`.nm-field-label` / `.nm-select*` / `.nm-tabs*` / `.nm-datepicker*` / `.nm-colorpicker*`，无需手写。
+
 ## 规矩
 
 - 只用 `var(--nm-*)`，不写 `#`、`rgb()`、`hsl()`。
