@@ -96,7 +96,6 @@ export function NotesWidget({
                 <span className="sticky-note__tape" aria-hidden="true" />
                 <span className="sticky-note__title">{note.title}</span>
                 <span className="sticky-note__content">{note.content}</span>
-                <span className="sticky-note__fold" aria-hidden="true" />
               </button>
             ))}
           </div>
