@@ -29,6 +29,12 @@ export const SANDBOX_RUNTIME = `(() => {
   // their rAF loops when not visible — the runtime just relays the flag.
   var visible = true;
   var visibilityListeners = [];
+  // Which surface this frame is ('main' or 'dialog'), and listeners for the
+  // host's 'stateChanged' broadcast. Both surfaces share one moduleId (one
+  // state row), so when one saves, the host tells the other to reload — see
+  // spec §11 Q3.
+  var surface = 'main';
+  var stateChangedListeners = [];
 
   function call(method, args) {
     return new Promise(function (resolve, reject) {
@@ -50,6 +56,29 @@ export const SANDBOX_RUNTIME = `(() => {
       todayIso: init.todayIso,
       loadState: function () { return call('loadState', []); },
       saveState: function (value) { return call('saveState', [value]); }
+    };
+    host.surface = surface;
+    // Ask the host to open/close the dialog surface. The host mounts a second
+    // iframe loading this same source (surface: 'dialog'); closing tears it
+    // down. Either surface may call these; redundant requests are ignored.
+    host.openDialog = function (title) {
+      parent.postMessage(
+        { channel: CHANNEL, kind: 'openDialog', title: typeof title === 'string' ? title : undefined },
+        '*'
+      );
+    };
+    host.closeDialog = function () {
+      parent.postMessage({ channel: CHANNEL, kind: 'closeDialog' }, '*');
+    };
+    // Register for the host's post-save broadcast so this surface can reload
+    // state after the other surface changed it.
+    host.onStateChanged = function (fn) {
+      if (typeof fn !== 'function') return function () {};
+      stateChangedListeners.push(fn);
+      return function () {
+        var i = stateChangedListeners.indexOf(fn);
+        if (i !== -1) stateChangedListeners.splice(i, 1);
+      };
     };
     host.isVisible = function () { return visible; };
     host.onVisibilityChange = function (fn) {
@@ -101,10 +130,18 @@ export const SANDBOX_RUNTIME = `(() => {
       return;
     }
 
+    if (data.kind === 'stateChanged') {
+      for (var j = 0; j < stateChangedListeners.length; j++) {
+        try { stateChangedListeners[j](); } catch (e) {}
+      }
+      return;
+    }
+
     if (data.kind === 'init') {
       if (typeof userModule !== 'function') return;
       if (typeof data.errorPrefix === 'string') errorPrefix = data.errorPrefix;
       if (typeof data.visible === 'boolean') visible = data.visible;
+      if (data.surface === 'dialog' || data.surface === 'main') surface = data.surface;
       var host = makeHost(data);
       var root = document.getElementById('root');
       try {

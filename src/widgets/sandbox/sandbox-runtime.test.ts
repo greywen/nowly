@@ -56,6 +56,18 @@ describe('buildSandboxDocument', () => {
     expect(widgetsAt).toBeGreaterThan(runtimeAt);
   });
 
+  it('wires the dialog surface API into the guest host', () => {
+    const doc = buildSandboxDocument('');
+    // The guest runtime exposes host.surface, host.openDialog/closeDialog, and
+    // host.onStateChanged, and handles the 'stateChanged' broadcast so a save
+    // on one surface refreshes the other. See spec §11 Q3.
+    expect(doc).toContain('openDialog');
+    expect(doc).toContain('closeDialog');
+    expect(doc).toContain('onStateChanged');
+    expect(doc).toContain("'stateChanged'");
+    expect(doc).toContain('surface');
+  });
+
   it('escapes a closing script tag so the source cannot break out', () => {
     // Malicious/careless source containing </script> must not terminate the
     // injected <script> element early.
