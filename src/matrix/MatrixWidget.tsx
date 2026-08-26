@@ -1,4 +1,4 @@
-import { Plus, X } from 'lucide-react';
+import { Plus, Settings, X } from 'lucide-react';
 import { type DragEvent, useState } from 'react';
 import type { CalendarEvent } from '../calendar/calendar-model';
 import type { MatrixTask, Quadrant } from './matrix-model';
@@ -25,6 +25,7 @@ type MatrixWidgetProps = {
   pendingTaskIds: Set<string>;
   onRetry: () => void;
   onCreateTask: () => void;
+  onOpenSettings?: () => void;
   onOpenTask: (task: MatrixTask, trigger: HTMLElement) => void;
   onToggleTask: (task: MatrixTask, completed: boolean) => void;
   onMoveTask?: (task: MatrixTask, quadrant: Quadrant) => void;
@@ -43,6 +44,7 @@ export function MatrixWidget({
   pendingTaskIds,
   onRetry,
   onCreateTask,
+  onOpenSettings,
   onOpenTask,
   onToggleTask,
   onMoveTask,
@@ -89,6 +91,11 @@ export function MatrixWidget({
   return (
     <div className="widget-content">
       <div className="card-header card-header--actions-only">
+        {onOpenSettings ? (
+          <button type="button" className="btn btn-icon" aria-label={t('taskSettings.title')} onClick={onOpenSettings}>
+            <Settings aria-hidden="true" />
+          </button>
+        ) : null}
         <button type="button" className="btn btn-icon" aria-label={t('matrix.newTask')} onClick={onCreateTask}>
           <Plus aria-hidden="true" />
         </button>

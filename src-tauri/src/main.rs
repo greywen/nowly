@@ -13,12 +13,11 @@ mod feedback;
 mod focus;
 mod focus_timer;
 mod ics_parser;
-mod kanban;
 mod layout;
 mod models;
 mod module_state;
-mod net;
 mod monitors;
+mod net;
 mod notes;
 mod recurrence;
 mod reminders;
@@ -27,7 +26,7 @@ mod rrule_engine;
 mod settings;
 mod subscription_sync;
 mod subscriptions;
-mod tasks;
+mod task_workspace;
 mod timezone;
 mod update;
 mod wallpaper;
@@ -137,9 +136,8 @@ fn set_app_user_model_id() {
                 display_name.len() * std::mem::size_of::<u16>(),
             )
         };
-        let status = unsafe {
-            RegSetValueExW(key, w!("DisplayName"), Some(0), REG_SZ, Some(display_bytes))
-        };
+        let status =
+            unsafe { RegSetValueExW(key, w!("DisplayName"), Some(0), REG_SZ, Some(display_bytes)) };
         if status != ERROR_SUCCESS {
             eprintln!("failed to set AppUserModelId DisplayName: {status:?}");
         }
@@ -191,11 +189,15 @@ fn main() {
     set_app_user_model_id();
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main_window(app)))
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            show_main_window(app)
+        }))
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_autostart::Builder::new()
-            .args(["--background"])
-            .build())
+        .plugin(
+            tauri_plugin_autostart::Builder::new()
+                .args(["--background"])
+                .build(),
+        )
         .setup(|app| {
             let app_dir = app
                 .path()
@@ -206,8 +208,8 @@ fn main() {
             // has a stable, discoverable place to read drafts from.
             std::fs::create_dir_all(app_dir.join("dev-modules"))
                 .expect("failed to create dev-modules dir");
-            let connection = open_database(app_dir.join("nowly.sqlite"))
-                .expect("failed to open database");
+            let connection =
+                open_database(app_dir.join("nowly.sqlite")).expect("failed to open database");
             app.manage(AppDb(Mutex::new(connection)));
             app.manage(Mutex::new(window_lifecycle::WindowLifecycle::default()));
             app.manage(Mutex::new(focus_timer::FocusTimerCoordinator::default()));
@@ -254,7 +256,8 @@ fn main() {
             let subscription_handle = app.handle().clone();
             std::thread::spawn(move || {
                 // 启动即刷一次全部源。
-                let _ = subscription_sync::sync_all_db(subscription_handle.state::<AppDb>().inner());
+                let _ =
+                    subscription_sync::sync_all_db(subscription_handle.state::<AppDb>().inner());
                 // 无论是否有源，都发一次使前端加载现有订阅与实例。
                 let _ = subscription_handle.emit("calendar-subscriptions-updated", ());
                 loop {
@@ -333,25 +336,33 @@ fn main() {
                         }
                     }
                     "quit" => {
-                        if let Ok(mut timer) = app.state::<focus_timer::ManagedFocusTimer>().lock() {
+                        if let Ok(mut timer) = app.state::<focus_timer::ManagedFocusTimer>().lock()
+                        {
                             timer.cancel();
                         }
                         app.exit(0);
-                    },
+                    }
                     _ => {}
                 })
                 .build(app)?;
 
             if std::env::args().any(|arg| arg == "--background") {
                 if let Some(window) = app.get_webview_window("main") {
-                    let wallpaper_enabled = app.state::<AppDb>().0.lock().ok()
+                    let wallpaper_enabled = app
+                        .state::<AppDb>()
+                        .0
+                        .lock()
+                        .ok()
                         .and_then(|connection| settings::read_app_settings(&connection).ok())
                         .is_some_and(|settings| settings.wallpaper_enabled);
                     #[cfg(target_os = "windows")]
                     if wallpaper_enabled {
                         match wallpaper::enter_wallpaper_webview(&window) {
                             Ok(_) => {
-                                if let Ok(mut lifecycle) = app.state::<Mutex<window_lifecycle::WindowLifecycle>>().lock() {
+                                if let Ok(mut lifecycle) = app
+                                    .state::<Mutex<window_lifecycle::WindowLifecycle>>()
+                                    .lock()
+                                {
                                     lifecycle.enter_wallpaper();
                                 }
                             }
@@ -362,7 +373,10 @@ fn main() {
                         }
                     } else {
                         let _ = window.hide();
-                        if let Ok(mut lifecycle) = app.state::<Mutex<window_lifecycle::WindowLifecycle>>().lock() {
+                        if let Ok(mut lifecycle) = app
+                            .state::<Mutex<window_lifecycle::WindowLifecycle>>()
+                            .lock()
+                        {
                             lifecycle.hide_to_tray();
                         }
                     }
@@ -381,39 +395,75 @@ fn main() {
                     api.prevent_close();
                     let _ = window.emit("request-overlay-cleanup", ());
                     let app = window.app_handle();
-                    let wallpaper_enabled = app.state::<AppDb>().0.lock().ok()
+                    let wallpaper_enabled = app
+                        .state::<AppDb>()
+                        .0
+                        .lock()
+                        .ok()
                         .and_then(|connection| settings::read_app_settings(&connection).ok())
                         .is_some_and(|settings| settings.wallpaper_enabled);
                     if wallpaper_enabled {
                         if let Some(webview) = app.get_webview_window("main") {
                             if wallpaper::enter_wallpaper_webview(&webview).is_ok() {
-                                if let Ok(mut lifecycle) = app.state::<Mutex<window_lifecycle::WindowLifecycle>>().lock() {
+                                if let Ok(mut lifecycle) = app
+                                    .state::<Mutex<window_lifecycle::WindowLifecycle>>()
+                                    .lock()
+                                {
                                     lifecycle.enter_wallpaper();
                                 }
-                                let _ = window.emit("window-mode-changed", window_lifecycle::WindowMode::Wallpaper);
+                                let _ = window.emit(
+                                    "window-mode-changed",
+                                    window_lifecycle::WindowMode::Wallpaper,
+                                );
                                 return;
                             }
                         }
                         eprintln!("failed to restore wallpaper on close; hiding to tray");
                     }
-                    if let Ok(mut lifecycle) = app.state::<Mutex<window_lifecycle::WindowLifecycle>>().lock() {
+                    if let Ok(mut lifecycle) = app
+                        .state::<Mutex<window_lifecycle::WindowLifecycle>>()
+                        .lock()
+                    {
                         lifecycle.hide_to_tray();
                     }
                     if let Err(error) = window.hide() {
                         eprintln!("failed to hide window to tray: {error}");
                     }
-                    let _ = window.emit("window-mode-changed", window_lifecycle::WindowMode::HiddenToTray);
+                    let _ = window.emit(
+                        "window-mode-changed",
+                        window_lifecycle::WindowMode::HiddenToTray,
+                    );
                 }
                 tauri::WindowEvent::Destroyed => wallpaper::notify_window_destroyed(window),
                 _ => {}
             }
         })
         .invoke_handler(tauri::generate_handler![
-            tasks::list_tasks,
-            tasks::create_task,
-            tasks::update_task,
-            tasks::delete_task,
-            tasks::set_task_completed,
+            task_workspace::get_task_workspace_snapshot,
+            task_workspace::create_task,
+            task_workspace::update_task,
+            task_workspace::delete_task,
+            task_workspace::set_task_completed,
+            task_workspace::move_task_to_lane,
+            task_workspace::move_task_to_priority,
+            task_workspace::move_task_to_date,
+            task_workspace::set_task_view_memberships,
+            task_workspace::set_task_view_linking,
+            task_workspace::create_task_lane,
+            task_workspace::update_task_lane,
+            task_workspace::delete_task_lane,
+            task_workspace::reorder_task_lanes,
+            task_workspace::set_default_task_lane,
+            task_workspace::set_completion_task_lane,
+            task_workspace::create_task_tag,
+            task_workspace::update_task_tag,
+            task_workspace::archive_task_tag,
+            task_workspace::delete_task_tag,
+            task_workspace::create_task_collaborator,
+            task_workspace::update_task_collaborator,
+            task_workspace::archive_task_collaborator,
+            task_workspace::delete_task_collaborator,
+            task_workspace::set_task_view_preferences,
             notes::list_notes,
             monitors::list_monitors,
             notes::create_note,
@@ -457,25 +507,6 @@ fn main() {
             subscriptions::delete_calendar_subscription,
             subscription_sync::refresh_calendar_subscription,
             subscriptions::list_external_events_in_range,
-            kanban::get_kanban_snapshot,
-            kanban::create_kanban_lane,
-            kanban::update_kanban_lane,
-            kanban::delete_kanban_lane,
-            kanban::reorder_kanban_lanes,
-            kanban::create_kanban_card,
-            kanban::update_kanban_card,
-            kanban::delete_kanban_card,
-            kanban::move_kanban_card,
-            kanban::create_kanban_priority,
-            kanban::update_kanban_priority,
-            kanban::delete_kanban_priority,
-            kanban::reorder_kanban_priorities,
-            kanban::create_kanban_tag,
-            kanban::update_kanban_tag,
-            kanban::delete_kanban_tag,
-            kanban::create_kanban_collaborator,
-            kanban::update_kanban_collaborator,
-            kanban::delete_kanban_collaborator,
             wallpaper::enter_wallpaper_mode,
             wallpaper::enter_foreground_mode,
             window_lifecycle::get_window_mode

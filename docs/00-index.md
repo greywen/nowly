@@ -68,6 +68,7 @@ cargo test --manifest-path src-tauri/Cargo.toml    # Rust 测试
 - [Nowly 设置与窗口生命周期实施计划](./superpowers/plans/2026-07-29-nowly-window-lifecycle.md)
 - [Nowly Windows 系统集成实施计划](./superpowers/plans/2026-07-29-nowly-windows-integration.md)
 - [Nowly 发布验证实施计划](./superpowers/plans/2026-07-29-nowly-release-verification.md)
+- [Nowly 统一任务与跨视图联动实施文档](./superpowers/plans/2026-08-26-nowly-unified-task-views.md)
 - [Nowly Windows 发布验证记录](./release/windows-verification.md)
 - [Nowly MVP Implementation Plan](./superpowers/plans/2026-07-23-nowly-mvp.md)
 - [Nowly Final UI/UX HTML Implementation Plan](./superpowers/plans/2026-07-29-nowly-final-uiux-html.md)

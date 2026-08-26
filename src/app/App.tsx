@@ -11,8 +11,9 @@ import type { ModalState } from '../lib/modal-store';
 import type { CalendarSubscription } from '../calendar/subscription-model';
 import { enterForegroundMode, enterWallpaperMode } from '../lib/window-mode';
 import { MatrixWidget } from '../matrix/MatrixWidget';
-import { useTasks } from '../matrix/useTasks';
 import { KanbanWidget } from '../kanban/KanbanWidget';
+import { TaskWorkspaceProvider, useTaskWorkspace } from '../tasks/TaskWorkspaceContext';
+import { useWorkspaceTasks } from '../tasks/useWorkspaceTasks';
 import { ModalRoot } from '../modals/ModalRoot';
 import { NotesWidget } from '../notes/NotesWidget';
 import { useNotes } from '../notes/useNotes';
@@ -50,7 +51,7 @@ function localIsoDate(date = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
-export function App() {
+function AppContent() {
   useTranslation();
   const repository = useNowlyRepository();
   const settingsFeature = useSettings();
@@ -59,7 +60,9 @@ export function App() {
   const refreshTasks = useCallback(() => refreshTasksRef.current(), []);
   const refreshEvents = useCallback(() => refreshEventsRef.current(), []);
   const eventsFeature = useEvents({ onRefreshTasks: refreshTasks, weekStart: settingsFeature.settings.data.weekStart });
-  const tasksFeature = useTasks({ onRefreshEvents: refreshEvents });
+  const tasksFeature = useWorkspaceTasks({ onRefreshEvents: refreshEvents });
+  const taskWorkspace = useTaskWorkspace();
+  const workspaceTasks = taskWorkspace.workspace.data.tasks;
   const notesFeature = useNotes();
   const notesView = useNotesView();
   const extensionsFeature = useExtensions();
@@ -164,6 +167,7 @@ export function App() {
         monthIndex={eventsFeature.monthIndex}
         todayIso={todayIso}
         events={events}
+        tasks={workspaceTasks}
         status={eventsFeature.events.status}
         errorMessage={eventsFeature.events.status === 'error' ? eventsFeature.events.message : undefined}
         view={eventsFeature.view}
@@ -181,6 +185,8 @@ export function App() {
             ? openModalInForeground({ type: 'external-detail', event, trigger: null })
             : openModalInForeground({ type: 'event-edit', event, trigger: null })
         }
+        onOpenTask={(task) => openModalInForeground({ type:'workspace-task-edit', task, trigger:null })}
+        onMoveTaskToDate={(task, dueDate) => void taskWorkspace.moveTaskToDate(task.id, dueDate)}
         onMoveEvent={(event, isoDate) => void eventsFeature.moveEvent(event, isoDate)}
         onMoveEventToHour={(event, isoDate, startHour) => void eventsFeature.moveEventToHour(event, isoDate, startHour)}
         onResizeEvent={(event, endIsoDate) => void eventsFeature.resizeEvent(event, endIsoDate)}
@@ -190,6 +196,7 @@ export function App() {
           showWeekends: settingsFeature.settings.data.showWeekends
         }}
         onOpenSettings={() => openModalInForeground({ type: 'calendar-settings', trigger: null })}
+        onOpenTaskSettings={() => openModalInForeground({ type: 'task-settings', trigger: null })}
       />
     );
   }
@@ -205,6 +212,7 @@ export function App() {
         pendingTaskIds={tasksFeature.pendingTaskIds}
         onRetry={() => void tasksFeature.retryTasks()}
         onCreateTask={() => openModalInForeground({ type:'task-create', dueDate:null, trigger:null })}
+        onOpenSettings={() => openModalInForeground({ type:'task-settings', trigger:null })}
         onOpenTask={(task, trigger) => openModalInForeground({ type:'task-edit', task, trigger })}
         onToggleTask={(task, completed) => void tasksFeature.setTaskCompleted(task, completed)}
         onMoveTask={(task, quadrant) => void tasksFeature.moveTask(task, quadrant)}
@@ -229,7 +237,15 @@ export function App() {
       />
     );
   }
-  modules.kanban = <KanbanWidget todayIso={todayIso} recentColors={recentColors} onRememberCustomColor={rememberCustomColor} />;
+  modules.kanban = (
+    <KanbanWidget
+      todayIso={todayIso}
+      events={events}
+      onEventsChanged={refreshEvents}
+      recentColors={recentColors}
+      onRememberCustomColor={rememberCustomColor}
+    />
+  );
   modules.focusTimer = <FocusTimerWidget mode={windowMode} onOpenStatistics={() => setFocusStatisticsOpen(true)} onEnterWallpaper={() => void runWindowModeSwitch(switchToWallpaper)} />;
   // The developer module (channel A) is a dev-only tool for previewing drafts
   // on the real grid. `import.meta.env.DEV` is true under `tauri dev` and false
@@ -337,6 +353,7 @@ export function App() {
         modal={modal}
         events={events}
         tasks={tasks}
+        workspaceTasks={workspaceTasks}
         onClose={() => setModal(null)}
         onChangeModal={setModal}
         createEvent={eventsFeature.createEvent}
@@ -349,6 +366,7 @@ export function App() {
         deleteTask={tasksFeature.deleteTask}
         onTaskSaved={() => undefined}
         onTaskDeleted={() => undefined}
+        onTaskEventsChanged={async () => { await refreshEvents(); }}
         notes={notes}
         createNote={notesFeature.createNote}
         updateNote={notesFeature.updateNote}
@@ -366,5 +384,13 @@ export function App() {
         onRememberCustomColor={rememberCustomColor}
       />
     </>
+  );
+}
+
+export function App() {
+  return (
+    <TaskWorkspaceProvider>
+      <AppContent />
+    </TaskWorkspaceProvider>
   );
 }

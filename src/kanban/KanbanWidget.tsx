@@ -5,7 +5,12 @@ import { KanbanLane } from './KanbanLane';
 import { KanbanLaneDialog } from './KanbanLaneDialog';
 import { KanbanTaskDialog } from './KanbanTaskDialog';
 import { KanbanFieldManagerDialog } from './KanbanFieldManagerDialog';
+import { useWorkspaceKanban } from '../tasks/useWorkspaceKanban';
+import { useOptionalTaskWorkspace, useTaskWorkspace } from '../tasks/TaskWorkspaceContext';
+import { UnifiedTaskDialog } from '../tasks/UnifiedTaskDialog';
+import { TaskSettingsDialog } from '../tasks/TaskSettingsDialog';
 import { useKanban } from './useKanban';
+import type { CalendarEvent } from '../calendar/calendar-model';
 import { t } from '../i18n';
 
 // Drag payloads carried in component state (dataTransfer is unreliable in the
@@ -23,8 +28,44 @@ type DialogState =
   | { type: 'fields' }
   | null;
 
-export function KanbanWidget({ todayIso, recentColors = [], onRememberCustomColor }: { todayIso: string; recentColors?: string[]; onRememberCustomColor?: (color: string) => Promise<void> | void }) {
+type KanbanWidgetProps = {
+  todayIso: string;
+  events?: CalendarEvent[];
+  onEventsChanged?: () => Promise<unknown> | void;
+  recentColors?: string[];
+  onRememberCustomColor?: (color: string) => Promise<void> | void;
+};
+
+type KanbanFeature = ReturnType<typeof useWorkspaceKanban> | ReturnType<typeof useKanban>;
+
+export function KanbanWidget(props: KanbanWidgetProps) {
+  const workspace = useOptionalTaskWorkspace();
+  return workspace ? <WorkspaceKanbanWidget {...props} /> : <LegacyKanbanWidget {...props} />;
+}
+
+function WorkspaceKanbanWidget(props: KanbanWidgetProps) {
+  const kanban = useWorkspaceKanban();
+  const workspace = useTaskWorkspace();
+  return <KanbanWidgetContent {...props} kanban={kanban} workspace={workspace} />;
+}
+
+function LegacyKanbanWidget(props: KanbanWidgetProps) {
   const kanban = useKanban();
+  return <KanbanWidgetContent {...props} kanban={kanban} />;
+}
+
+function KanbanWidgetContent({
+  todayIso,
+  events = [],
+  onEventsChanged,
+  recentColors = [],
+  onRememberCustomColor,
+  kanban,
+  workspace
+}: KanbanWidgetProps & {
+  kanban: KanbanFeature;
+  workspace?: ReturnType<typeof useTaskWorkspace>;
+}) {
   const { snapshot, dragError } = kanban;
   const data = snapshot.data;
   const [dialog, setDialog] = useState<DialogState>(null);
@@ -215,32 +256,62 @@ export function KanbanWidget({ todayIso, recentColors = [], onRememberCustomColo
         />
       ) : null}
       {dialog?.type === 'card-create' && creatingCardLane ? (
-        <KanbanTaskDialog
-          mode={{ type: 'create', laneId: creatingCardLane.id, laneName: creatingCardLane.name }}
-          priorities={data.priorities}
-          tags={data.tags}
-          collaborators={data.collaborators}
-          restoreFocusRef={restoreFocusRef}
-          onClose={closeDialog}
-          createCard={kanban.createCard}
-          updateCard={kanban.updateCard}
-          deleteCard={kanban.deleteCard}
-        />
+        workspace ? (
+          <UnifiedTaskDialog
+            mode={{ type: 'create', originView: 'kanban', dueDate: null, laneId: creatingCardLane.id }}
+            events={events}
+            restoreFocusRef={restoreFocusRef}
+            onClose={closeDialog}
+            onEventsChanged={onEventsChanged}
+          />
+        ) : (
+          <KanbanTaskDialog
+            mode={{ type: 'create', laneId: creatingCardLane.id, laneName: creatingCardLane.name }}
+            priorities={data.priorities}
+            tags={data.tags}
+            collaborators={data.collaborators}
+            restoreFocusRef={restoreFocusRef}
+            onClose={closeDialog}
+            createCard={kanban.createCard}
+            updateCard={kanban.updateCard}
+            deleteCard={kanban.deleteCard}
+          />
+        )
       ) : null}
       {dialog?.type === 'card-edit' && editingCard ? (
-        <KanbanTaskDialog
-          mode={{ type: 'edit', card: editingCard }}
-          priorities={data.priorities}
-          tags={data.tags}
-          collaborators={data.collaborators}
+        workspace ? (
+          <UnifiedTaskDialog
+            mode={{
+              type: 'edit',
+              task: workspace.workspace.data.tasks.find((task) => task.id === editingCard.id)!
+            }}
+            events={events}
+            restoreFocusRef={restoreFocusRef}
+            onClose={closeDialog}
+            onEventsChanged={onEventsChanged}
+          />
+        ) : (
+          <KanbanTaskDialog
+            mode={{ type: 'edit', card: editingCard }}
+            priorities={data.priorities}
+            tags={data.tags}
+            collaborators={data.collaborators}
+            restoreFocusRef={restoreFocusRef}
+            onClose={closeDialog}
+            createCard={kanban.createCard}
+            updateCard={kanban.updateCard}
+            deleteCard={kanban.deleteCard}
+          />
+        )
+      ) : null}
+      {dialog?.type === 'fields' ? workspace ? (
+        <TaskSettingsDialog
           restoreFocusRef={restoreFocusRef}
           onClose={closeDialog}
-          createCard={kanban.createCard}
-          updateCard={kanban.updateCard}
-          deleteCard={kanban.deleteCard}
+          recentColors={recentColors}
+          onRememberCustomColor={onRememberCustomColor}
         />
-      ) : null}
-      {dialog?.type === 'fields' ? (
+      ) : (
         <KanbanFieldManagerDialog
           snapshot={data}
           restoreFocusRef={restoreFocusRef}

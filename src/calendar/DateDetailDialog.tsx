@@ -1,9 +1,10 @@
-import { X } from 'lucide-react';
+import { ListTodo, X } from 'lucide-react';
 import { type RefObject, useId } from 'react';
 import { Dialog } from '../components/Dialog';
 import { formatChineseDate } from '../lib/date';
 import { occurrenceKey } from '../lib/recurrence';
 import type { MatrixTask } from '../matrix/matrix-model';
+import type { Task } from '../tasks/task-model';
 import {
   eventCategoryLabel,
   type CalendarEvent
@@ -13,13 +14,14 @@ import { t } from '../i18n';
 type DateDetailDialogProps = {
   isoDate: string;
   events: CalendarEvent[];
-  tasks: MatrixTask[];
+  tasks: Array<MatrixTask | Task>;
   isTopLayer: boolean;
   restoreFocusRef?: RefObject<HTMLElement | null>;
   onClose: () => void;
   onCreateEvent: (date: string) => void;
   onCreateTask?: (date: string, trigger: HTMLElement) => void;
   onEditEvent: (event: CalendarEvent, trigger: HTMLElement) => void;
+  onEditTask?: (task: Task, trigger: HTMLElement) => void;
 };
 
 function localDate(isoDate: string) {
@@ -50,11 +52,15 @@ export function DateDetailDialog({
   onClose,
   onCreateEvent,
   onCreateTask,
-  onEditEvent
+  onEditEvent,
+  onEditTask
 }: DateDetailDialogProps) {
   const titleId = useId();
   const dateEvents = sortEvents(events.filter((event) => event.startAt.startsWith(isoDate)));
   const taskTitles = new Map(tasks.map((task) => [task.id, task.title]));
+  const dateTasks = tasks.filter((task): task is Task =>
+    'dueDate' in task && task.dueDate === isoDate && task.views.includes('calendar')
+  );
   const title = formatChineseDate(localDate(isoDate));
 
   return (
@@ -84,6 +90,7 @@ export function DateDetailDialog({
       }
     >
       <p className="date-detail-dialog__summary">{t('dateDetail.summary', { count: dateEvents.length })}</p>
+      <h3 className="date-detail-dialog__section-title">{t('dateDetail.eventsSection')}</h3>
       {dateEvents.length === 0 ? (
         <div className="date-detail-dialog__empty">{t('dateDetail.empty')}</div>
       ) : (
@@ -111,6 +118,27 @@ export function DateDetailDialog({
               </li>
             );
           })}
+        </ul>
+      )}
+      <h3 className="date-detail-dialog__section-title">{t('dateDetail.tasksSection')}</h3>
+      {dateTasks.length === 0 ? (
+        <div className="date-detail-dialog__empty">{t('dateDetail.tasksEmpty')}</div>
+      ) : (
+        <ul aria-label={t('dateDetail.dayTasks')} className="date-detail-dialog__list">
+          {dateTasks.map((task) => (
+            <li key={task.id}>
+              <button
+                type="button"
+                aria-label={t('dateDetail.taskLabel', { title: task.title })}
+                className={`date-detail-dialog__event date-detail-dialog__task${task.completed ? ' is-completed' : ''}`}
+                onClick={(event) => onEditTask?.(task, event.currentTarget)}
+              >
+                <ListTodo aria-hidden="true" />
+                <span className="date-detail-dialog__event-copy"><strong>{task.title}</strong></span>
+                <span className="date-detail-dialog__category">{t('dateDetail.taskBadge')}</span>
+              </button>
+            </li>
+          ))}
         </ul>
       )}
     </Dialog>

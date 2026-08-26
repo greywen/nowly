@@ -80,4 +80,30 @@ describe('KanbanFieldManagerDialog', () => {
     await user.click(screen.getByRole('tab', { name: '协作人(1)' }));
     expect(screen.queryByText('颜色')).not.toBeInTheDocument();
   });
+
+  it('disables linking immediately and confirms before rebuilding memberships', async () => {
+    const user = userEvent.setup();
+    const onSetLinking = vi.fn().mockResolvedValue(undefined);
+    const { rerender } = render(
+      <KanbanFieldManagerDialog
+        {...props({ linkingEnabled: true, onSetLinking })}
+      />
+    );
+
+    await user.click(screen.getByRole('checkbox', { name: '开启视图联动' }));
+    expect(onSetLinking).toHaveBeenCalledWith(false);
+
+    rerender(
+      <KanbanFieldManagerDialog
+        {...props({ linkingEnabled: false, onSetLinking })}
+      />
+    );
+    await user.click(screen.getByRole('checkbox', { name: '开启视图联动' }));
+    expect(onSetLinking).not.toHaveBeenCalledWith(true);
+
+    const confirm = screen.getByRole('dialog', { name: '重新开启视图联动？' });
+    expect(within(confirm).getByText(/重新构建视图显示关系/)).toBeInTheDocument();
+    await user.click(within(confirm).getByRole('button', { name: '开启并重新协调' }));
+    expect(onSetLinking).toHaveBeenCalledWith(true);
+  });
 });

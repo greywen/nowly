@@ -155,6 +155,12 @@ export const translations: Record<Language, Record<string, string>> = {
     'dateDetail.empty': '当天暂无日程',
     'dateDetail.dayEvents': '当日日程',
     'dateDetail.linkedTask': '关联任务：{title}',
+    'dateDetail.eventsSection': '日程',
+    'dateDetail.tasksSection': '任务',
+    'dateDetail.tasksEmpty': '当天暂无任务',
+    'dateDetail.dayTasks': '当日任务',
+    'dateDetail.taskLabel': '任务：{title}',
+    'dateDetail.taskBadge': '任务',
 
     // Event categories
     'category.work': '工作',
@@ -217,9 +223,21 @@ export const translations: Record<Language, Record<string, string>> = {
     'kanbanCard.task': '任务：{title}',
     'kanbanCard.collaborators': '协作人：{names}',
 
+    // Unified task settings
+    'taskSettings.title': '任务设置',
+    'taskSettings.linkingTab': '视图联动',
+    'taskSettings.linkingTitle': '自动协调任务视图',
+    'taskSettings.linkingDescription': '开启后，有优先分类的任务自动显示在四象限，有截止日期的任务自动显示在日历，所有任务显示在看板。',
+    'taskSettings.linkingToggle': '开启视图联动',
+    'taskSettings.manualModeHint': '联动已关闭。修改日期或优先分类不会自动新增视图，可在任务弹窗的“显示在”中手动选择。',
+    'taskSettings.enableTitle': '重新开启视图联动？',
+    'taskSettings.enableDescription': '系统会按每个任务当前的优先分类和截止日期重新构建视图显示关系，手动选择的关系可能被替换。任务字段不会丢失。',
+    'taskSettings.enableConfirm': '开启并重新协调',
+
     // Kanban field manager
     'kanbanField.errorName': '请输入名称。',
     'kanbanField.priorities': '优先级',
+    'kanbanField.fixedPrioritiesNote': '四象限优先分类为固定值，不可新增、删除、重命名或排序。',
     'kanbanField.tags': '标签',
     'kanbanField.collaborators': '协作人',
     'kanbanField.title': '看板设置',
@@ -343,7 +361,9 @@ export const translations: Record<Language, Record<string, string>> = {
     'matrix.retryCompletion': '重试完成状态',
     'matrix.dismissError': '关闭错误提示',
     'matrix.loading': '正在读取本地任务',
-    'matrix.quadrantCount': '{label} {count} 个任务',
+    'matrix.quadrantCount': '{label}：剩余 {remaining} / 共 {total} 个任务',
+    'matrix.filterLabel': '按标签筛选任务',
+    'matrix.filterAll': '全部',
     'matrix.empty': '暂无任务',
     'matrix.readError': '无法读取本地任务，请重试。',
 
@@ -456,6 +476,13 @@ export const translations: Record<Language, Record<string, string>> = {
     'taskModal.staleLink': '已关联其他月份日程',
     'taskModal.completed': '已完成',
     'taskModal.note': '备注',
+    'taskModal.lane': '看板泳道',
+    'taskModal.views': '显示在',
+    'taskModal.viewKanban': '看板',
+    'taskModal.viewMatrix': '四象限',
+    'taskModal.viewCalendar': '日历',
+    'calendar.taskLabel': '任务：{title}',
+    'calendar.taskBadge': '任务',
     'taskModal.deleteTitle': '永久删除“{title}”？',
     'taskModal.deleteDesc2': '若存在关联，只解除关联，不删除关联日程。',
 
@@ -796,6 +823,12 @@ export const translations: Record<Language, Record<string, string>> = {
     'dateDetail.empty': 'No events on this day',
     'dateDetail.dayEvents': 'Events for the day',
     'dateDetail.linkedTask': 'Linked task: {title}',
+    'dateDetail.eventsSection': 'Events',
+    'dateDetail.tasksSection': 'Tasks',
+    'dateDetail.tasksEmpty': 'No tasks on this day',
+    'dateDetail.dayTasks': 'Tasks for the day',
+    'dateDetail.taskLabel': 'Task: {title}',
+    'dateDetail.taskBadge': 'Task',
 
     // Event categories
     'category.work': 'Work',
@@ -858,9 +891,21 @@ export const translations: Record<Language, Record<string, string>> = {
     'kanbanCard.task': 'Task: {title}',
     'kanbanCard.collaborators': 'Collaborators: {names}',
 
+    // Unified task settings
+    'taskSettings.title': 'Task settings',
+    'taskSettings.linkingTab': 'View linking',
+    'taskSettings.linkingTitle': 'Coordinate task views automatically',
+    'taskSettings.linkingDescription': 'When enabled, tasks with a priority appear in the matrix, tasks with a due date appear in the calendar, and every task appears on the board.',
+    'taskSettings.linkingToggle': 'Enable view linking',
+    'taskSettings.manualModeHint': 'Linking is off. Changing a due date or priority will not add views automatically; choose views manually in the task dialog.',
+    'taskSettings.enableTitle': 'Enable view linking again?',
+    'taskSettings.enableDescription': 'Nowly will rebuild view memberships from each task’s current priority and due date. Manual memberships may be replaced, but task fields will not be lost.',
+    'taskSettings.enableConfirm': 'Enable and coordinate',
+
     // Kanban field manager
     'kanbanField.errorName': 'Please enter a name.',
     'kanbanField.priorities': 'Priorities',
+    'kanbanField.fixedPrioritiesNote': 'The four quadrant priorities are fixed and cannot be added, deleted, renamed, or reordered.',
     'kanbanField.tags': 'Tags',
     'kanbanField.collaborators': 'Collaborators',
     'kanbanField.title': 'Board settings',
@@ -984,7 +1029,9 @@ export const translations: Record<Language, Record<string, string>> = {
     'matrix.retryCompletion': 'Retry status update',
     'matrix.dismissError': 'Dismiss error',
     'matrix.loading': 'Loading tasks…',
-    'matrix.quadrantCount': '{label}: {count, plural, one {# task} other {# tasks}}',
+    'matrix.quadrantCount': '{label}: {remaining} of {total} tasks remaining',
+    'matrix.filterLabel': 'Filter tasks by tag',
+    'matrix.filterAll': 'All',
     'matrix.empty': 'No tasks',
     'matrix.readError': 'Unable to read local tasks. Please try again.',
 
@@ -1097,6 +1144,13 @@ export const translations: Record<Language, Record<string, string>> = {
     'taskModal.staleLink': 'Linked to an event in another month',
     'taskModal.completed': 'Done',
     'taskModal.note': 'Note',
+    'taskModal.lane': 'Board lane',
+    'taskModal.views': 'Show in',
+    'taskModal.viewKanban': 'Board',
+    'taskModal.viewMatrix': 'Matrix',
+    'taskModal.viewCalendar': 'Calendar',
+    'calendar.taskLabel': 'Task: {title}',
+    'calendar.taskBadge': 'Task',
     'taskModal.deleteTitle': 'Permanently delete "{title}"?',
     'taskModal.deleteDesc2': 'If linked, only the link is removed; the linked event is kept.',
 

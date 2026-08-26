@@ -148,7 +148,8 @@ describe('App startup and window behavior', () => {
     await user.click(screen.getByRole('button', { name:'保存任务' }));
     await waitFor(() => expect(createTask).toHaveBeenCalled());
     await waitFor(() => expect(screen.queryByRole('dialog', { name:'新建任务' })).not.toBeInTheDocument());
-    expect(listTasks).toHaveBeenCalledTimes(2);
+    // The unified workspace updates the shared snapshot from the returned task.
+    expect(listTasks).toHaveBeenCalledOnce();
 
     await user.click(screen.getByRole('button', { name:'编辑任务：发布 Nowly' }));
     expect(screen.getByRole('dialog', { name:'编辑任务' })).toBeInTheDocument();
