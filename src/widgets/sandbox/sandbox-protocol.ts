@@ -23,6 +23,13 @@ const METHOD_PERMISSION: Record<SandboxMethod, SandboxPermission> = {
   fetch: 'network'
 };
 
+// Which surface a guest frame is rendering. A module runs in the `main` card by
+// default; when it asks to open a settings/detail panel that cannot fit inside
+// the card (2x2 is ~195x143px), the host mounts a *second* iframe loading the
+// same source and marks it `dialog` via init. The module branches on this to
+// draw its main content or its dialog content. See spec §11 Q3 / §12 step 6.
+export type SandboxSurface = 'main' | 'dialog';
+
 // Parent -> guest: sent once the guest reports ready. Carries the only ambient
 // context a module gets, filtered by its granted permissions. `todayIso` is
 // present only when the `today` permission was granted.
@@ -31,6 +38,9 @@ export type SandboxInit = {
   kind: 'init';
   moduleId: string;
   permissions: SandboxPermission[];
+  // Which surface this frame is: the main card or the host-rendered dialog.
+  // Absent is treated as 'main' so older callers keep their behavior.
+  surface?: SandboxSurface;
   todayIso?: string;
   // Hosts the guest may reach via `host.fetch`. Present only when the `network`
   // permission was granted; the runtime exposes `fetch` based on `permissions`.
@@ -54,6 +64,36 @@ export type SandboxVisibility = {
   channel: typeof SANDBOX_CHANNEL;
   kind: 'visibility';
   visible: boolean;
+};
+
+// Guest -> parent: ask the host to open the dialog surface. The host mounts a
+// second iframe loading the same module source, marked `surface: 'dialog'` at
+// init. `title` (optional) is shown in the dialog chrome header. A module that
+// is already the dialog surface may still send this; the host ignores redundant
+// opens.
+export type SandboxOpenDialog = {
+  channel: typeof SANDBOX_CHANNEL;
+  kind: 'openDialog';
+  title?: string;
+};
+
+// Guest -> parent: ask the host to close the dialog surface. Typically sent by
+// the dialog surface itself ("Done"/"Cancel"), but the main surface may also
+// request it. The host tears the dialog iframe down and revokes its Blob URL.
+export type SandboxCloseDialog = {
+  channel: typeof SANDBOX_CHANNEL;
+  kind: 'closeDialog';
+};
+
+// Parent -> guest: this module's persisted state changed on another surface.
+// Both surfaces share one `moduleId` and therefore one state row, so after the
+// dialog saves its settings the host broadcasts this to the main surface (and
+// vice versa) so the receiver can re-run `loadState` and refresh — otherwise a
+// change made in the dialog would leave the card showing stale values. See spec
+// §11 Q3.
+export type SandboxStateChanged = {
+  channel: typeof SANDBOX_CHANNEL;
+  kind: 'stateChanged';
 };
 
 // Guest -> parent: an RPC call for one of the allowed host methods. This is the
@@ -113,6 +153,22 @@ export function isSandboxVisibility(data: unknown): data is SandboxVisibility {
     message.kind === 'visibility' &&
     typeof message.visible === 'boolean'
   );
+}
+
+export function isSandboxOpenDialog(data: unknown): data is SandboxOpenDialog {
+  if (typeof data !== 'object' || data === null) return false;
+  const message = data as Record<string, unknown>;
+  return (
+    message.channel === SANDBOX_CHANNEL &&
+    message.kind === 'openDialog' &&
+    (message.title === undefined || typeof message.title === 'string')
+  );
+}
+
+export function isSandboxCloseDialog(data: unknown): data is SandboxCloseDialog {
+  if (typeof data !== 'object' || data === null) return false;
+  const message = data as Record<string, unknown>;
+  return message.channel === SANDBOX_CHANNEL && message.kind === 'closeDialog';
 }
 
 // A simple sliding-window rate limiter. A misbehaving extension that floods the

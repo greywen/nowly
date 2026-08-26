@@ -4,6 +4,8 @@ import {
   SANDBOX_CHANNEL,
   createRateLimiter,
   handleSandboxRequest,
+  isSandboxCloseDialog,
+  isSandboxOpenDialog,
   isSandboxReady,
   isSandboxRequest,
   isSandboxVisibility,
@@ -59,6 +61,28 @@ describe('isSandboxVisibility', () => {
     expect(isSandboxVisibility({ channel: SANDBOX_CHANNEL, kind: 'ready' })).toBe(false);
     expect(isSandboxVisibility({ channel: 'other', kind: 'visibility', visible: true })).toBe(false);
     expect(isSandboxVisibility(null)).toBe(false);
+  });
+});
+
+describe('isSandboxOpenDialog', () => {
+  it('recognizes only the open-dialog request on the channel', () => {
+    expect(isSandboxOpenDialog({ channel: SANDBOX_CHANNEL, kind: 'openDialog' })).toBe(true);
+    // An optional title is allowed but not required.
+    expect(isSandboxOpenDialog({ channel: SANDBOX_CHANNEL, kind: 'openDialog', title: '设置' })).toBe(true);
+    // A non-string title is rejected so the host never renders junk chrome.
+    expect(isSandboxOpenDialog({ channel: SANDBOX_CHANNEL, kind: 'openDialog', title: 5 })).toBe(false);
+    expect(isSandboxOpenDialog({ channel: SANDBOX_CHANNEL, kind: 'closeDialog' })).toBe(false);
+    expect(isSandboxOpenDialog({ channel: 'other', kind: 'openDialog' })).toBe(false);
+    expect(isSandboxOpenDialog(null)).toBe(false);
+  });
+});
+
+describe('isSandboxCloseDialog', () => {
+  it('recognizes only the close-dialog request on the channel', () => {
+    expect(isSandboxCloseDialog({ channel: SANDBOX_CHANNEL, kind: 'closeDialog' })).toBe(true);
+    expect(isSandboxCloseDialog({ channel: SANDBOX_CHANNEL, kind: 'openDialog' })).toBe(false);
+    expect(isSandboxCloseDialog({ channel: 'other', kind: 'closeDialog' })).toBe(false);
+    expect(isSandboxCloseDialog(null)).toBe(false);
   });
 });
 
