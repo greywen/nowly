@@ -35,6 +35,14 @@ describe('buildSandboxDocument', () => {
     expect(doc).not.toContain('border-radius: 8px');
   });
 
+  it('wires the visibility API into the guest host', () => {
+    const doc = buildSandboxDocument('');
+    // The guest runtime exposes host.onVisibilityChange and handles the
+    // 'visibility' message so animated modules can pause when off-screen.
+    expect(doc).toContain('onVisibilityChange');
+    expect(doc).toContain("'visibility'");
+  });
+
   it('escapes a closing script tag so the source cannot break out', () => {
     // Malicious/careless source containing </script> must not terminate the
     // injected <script> element early.

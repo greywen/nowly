@@ -33,6 +33,8 @@ shasum -a 256 registry/modules/你的-id.js
   "description": "一句话描述",
   "permissions": ["state", "today"],
   "network": [],
+  "license": "MIT",
+  "motion": "static",
   "minW": 3,
   "minH": 2,
   "defaultW": 4,
@@ -51,6 +53,8 @@ shasum -a 256 registry/modules/你的-id.js
 | `version` | 是 | semver，更新时必须比上一版高 |
 | `permissions` | 是 | 与清单头 `@permissions` 一致 |
 | `network` | 是 | 与清单头 `@network` 一致；无联网填 `[]` |
+| `license` | 是 | 许可证标识（如 `MIT`）。去中心化分发下可能引入第三方代码，许可信息必须随索引可见 |
+| `motion` | 否 | `static`（默认）或 `animated`，须与清单头 `@motion` 一致 |
 | `sourceUrl` | 是 | https 地址，指向模块源码 |
 | `sha256` | 是 | 源码的 sha256，App 下载后会校验，不匹配拒装 |
 

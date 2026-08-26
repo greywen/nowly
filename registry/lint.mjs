@@ -25,6 +25,23 @@ const RULES = [
   }
 ];
 
+// A module that declares `@motion animated` opts into continuous motion, which
+// is only allowed when it pauses off-screen. The runtime relays visibility via
+// `host.onVisibilityChange`; a module that never calls it cannot honor the
+// pause obligation, so we reject it. Static modules (the default) never animate
+// and need no such code.
+function motionVisibilityIssue(source) {
+  const header = source.match(/^\s*\/\*\*([\s\S]*?)\*\//);
+  const motion = header && /@motion\s+animated\b/i.test(header[1]);
+  if (!motion) return null;
+  if (/onVisibilityChange/.test(source)) return null;
+  return {
+    rule: 'motion-visibility',
+    line: 1,
+    message: '@motion animated must call host.onVisibilityChange to pause off-screen'
+  };
+}
+
 export function lintModuleSource(source) {
   const issues = [];
   const lines = source.split('\n');
@@ -33,5 +50,7 @@ export function lintModuleSource(source) {
       if (re.test(lines[i])) issues.push({ rule, line: i + 1, message });
     }
   }
+  const motion = motionVisibilityIssue(source);
+  if (motion) issues.push(motion);
   return issues;
 }

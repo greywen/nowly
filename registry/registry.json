@@ -7,6 +7,8 @@
       "version": "1.0.1",
       "author": "nowly",
       "description": "显示今天的日期与一个本地走动的时钟，演示无联网的纯展示模块",
+      "license": "MIT",
+      "motion": "static",
       "permissions": ["today"],
       "network": [],
       "minW": 3,

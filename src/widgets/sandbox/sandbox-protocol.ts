@@ -38,6 +38,22 @@ export type SandboxInit = {
   // Localized prefix shown before a runtime error message. Passed in from the
   // host because the sandboxed runtime cannot reach the i18n tables itself.
   errorPrefix?: string;
+  // The module's initial visibility. Modules that animate must pause when this
+  // is false and resume when a later `visibility` message flips it true. Absent
+  // is treated as visible.
+  visible?: boolean;
+};
+
+// Parent -> guest: the module's on-screen visibility changed. Nowly is a
+// resident desktop app; a module's requestAnimationFrame loop runs on the same
+// render thread as the app, so an off-screen animation keeps waking the GPU for
+// nothing. The host observes the iframe (intersection + document visibility +
+// focus mode) and pushes the combined state here; animated modules must honor
+// it. See docs/superpowers/specs/2026-08-25-nowly-module-system-v2-design.md §7.
+export type SandboxVisibility = {
+  channel: typeof SANDBOX_CHANNEL;
+  kind: 'visibility';
+  visible: boolean;
 };
 
 // Guest -> parent: an RPC call for one of the allowed host methods. This is the
@@ -87,6 +103,16 @@ export function isSandboxReady(data: unknown): data is SandboxReady {
   if (typeof data !== 'object' || data === null) return false;
   const message = data as Record<string, unknown>;
   return message.channel === SANDBOX_CHANNEL && message.kind === 'ready';
+}
+
+export function isSandboxVisibility(data: unknown): data is SandboxVisibility {
+  if (typeof data !== 'object' || data === null) return false;
+  const message = data as Record<string, unknown>;
+  return (
+    message.channel === SANDBOX_CHANNEL &&
+    message.kind === 'visibility' &&
+    typeof message.visible === 'boolean'
+  );
 }
 
 // A simple sliding-window rate limiter. A misbehaving extension that floods the

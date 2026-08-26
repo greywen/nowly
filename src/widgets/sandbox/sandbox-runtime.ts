@@ -22,6 +22,12 @@ export const SANDBOX_RUNTIME = `(() => {
   var nextId = 1;
   var userModule = null;
   var errorPrefix = 'Extension error: ';
+  // Visibility state and the module's registered listeners. The host pushes
+  // 'visibility' messages when the module scrolls out of view, the window is
+  // minimized/backgrounded, or focus mode starts. Animated modules must pause
+  // their rAF loops when not visible — the runtime just relays the flag.
+  var visible = true;
+  var visibilityListeners = [];
 
   function call(method, args) {
     return new Promise(function (resolve, reject) {
@@ -43,6 +49,18 @@ export const SANDBOX_RUNTIME = `(() => {
       todayIso: init.todayIso,
       loadState: function () { return call('loadState', []); },
       saveState: function (value) { return call('saveState', [value]); }
+    };
+    host.isVisible = function () { return visible; };
+    host.onVisibilityChange = function (fn) {
+      if (typeof fn !== 'function') return function () {};
+      visibilityListeners.push(fn);
+      // Deliver the current state immediately so a module can set its initial
+      // running/paused state without waiting for the next transition.
+      try { fn(visible); } catch (e) {}
+      return function () {
+        var i = visibilityListeners.indexOf(fn);
+        if (i !== -1) visibilityListeners.splice(i, 1);
+      };
     };
     if (init.permissions && init.permissions.indexOf('network') !== -1) {
       host.fetch = function (url, options) {
@@ -74,9 +92,18 @@ export const SANDBOX_RUNTIME = `(() => {
       return;
     }
 
+    if (data.kind === 'visibility') {
+      visible = data.visible === true;
+      for (var i = 0; i < visibilityListeners.length; i++) {
+        try { visibilityListeners[i](visible); } catch (e) {}
+      }
+      return;
+    }
+
     if (data.kind === 'init') {
       if (typeof userModule !== 'function') return;
       if (typeof data.errorPrefix === 'string') errorPrefix = data.errorPrefix;
+      if (typeof data.visible === 'boolean') visible = data.visible;
       var host = makeHost(data);
       var root = document.getElementById('root');
       try {

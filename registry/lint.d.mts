@@ -3,7 +3,7 @@
 // lint.mjs (also consumed by validate.mjs and the node:test suite).
 
 export type LintIssue = {
-  rule: 'color-literal' | 'unbounded-loop' | 'remote-resource';
+  rule: 'color-literal' | 'unbounded-loop' | 'remote-resource' | 'motion-visibility';
   line: number;
   message: string;
 };

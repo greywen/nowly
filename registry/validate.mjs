@@ -41,7 +41,8 @@ function parseManifest(source) {
     name: tags.get('name') ?? '',
     version: tags.get('version') ?? '',
     permissions: list(tags.get('permissions')),
-    network: list(tags.get('network')).map((h) => h.toLowerCase())
+    network: list(tags.get('network')).map((h) => h.toLowerCase()),
+    motion: (tags.get('motion') ?? 'static').toLowerCase()
   };
 }
 
@@ -92,6 +93,14 @@ for (const entry of registry.modules) {
 
   if (!entry.name) fail(id, 'missing name');
   if (!SEMVER.test(entry.version ?? '')) fail(id, `invalid version "${entry.version}"`);
+  // license is required: decentralized distribution can pull in third-party
+  // code, so the license must be visible right in the index.
+  if (typeof entry.license !== 'string' || entry.license.trim() === '') {
+    fail(id, 'missing license (required for every registry entry)');
+  }
+  if (entry.motion != null && entry.motion !== 'static' && entry.motion !== 'animated') {
+    fail(id, `invalid motion "${entry.motion}" (use static or animated)`);
+  }
   if (typeof entry.sourceUrl !== 'string' || !entry.sourceUrl.startsWith('https://')) {
     fail(id, 'sourceUrl must be an https URL');
   }
@@ -143,6 +152,12 @@ for (const entry of registry.modules) {
     const manifestHosts = [...manifest.network].sort().join(',');
     if (entryHosts !== manifestHosts) {
       fail(id, `network hosts mismatch: entry [${entryHosts}] vs manifest [${manifestHosts}]`);
+    }
+    // motion must agree between the index and the manifest header, so the
+    // install-time risk disclosure matches what the module actually declares.
+    const entryMotion = entry.motion ?? 'static';
+    if (entryMotion !== manifest.motion) {
+      fail(id, `motion mismatch: entry [${entryMotion}] vs manifest [${manifest.motion}]`);
     }
   }
 

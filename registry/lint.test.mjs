@@ -44,3 +44,46 @@ test('reports line numbers', () => {
   const issues = lintModuleSource('a();\nwhile (true) {}\n');
   assert.equal(issues[0].line, 2);
 });
+
+test('flags @motion animated without a visibility response', () => {
+  const src = [
+    '/**',
+    ' * @nowly-module 1',
+    ' * @id anim',
+    ' * @name 动画',
+    ' * @version 1.0.0',
+    ' * @motion animated',
+    ' */',
+    'Nowly.defineModule(({ root }) => { requestAnimationFrame(function loop(){ loop(); }); });'
+  ].join('\n');
+  assert.ok(rules(src).includes('motion-visibility'));
+});
+
+test('allows @motion animated that calls onVisibilityChange', () => {
+  const src = [
+    '/**',
+    ' * @nowly-module 1',
+    ' * @id anim',
+    ' * @name 动画',
+    ' * @version 1.0.0',
+    ' * @motion animated',
+    ' */',
+    'Nowly.defineModule(({ host, root }) => {',
+    '  host.onVisibilityChange(function (v) { /* pause when !v */ });',
+    '});'
+  ].join('\n');
+  assert.ok(!rules(src).includes('motion-visibility'));
+});
+
+test('does not require visibility response for static modules', () => {
+  const src = [
+    '/**',
+    ' * @nowly-module 1',
+    ' * @id calm',
+    ' * @name 静态',
+    ' * @version 1.0.0',
+    ' */',
+    'Nowly.defineModule(({ root }) => { root.textContent = "hi"; });'
+  ].join('\n');
+  assert.ok(!rules(src).includes('motion-visibility'));
+});

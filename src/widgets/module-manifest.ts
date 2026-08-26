@@ -26,6 +26,11 @@ export type ModuleManifest = {
   description: string;
   permissions: SandboxPermission[];
   network: string[];
+  // Whether the module's content area runs continuous motion. `static` (the
+  // default) means instant state changes only; `animated` opts into the
+  // conditionally-allowed motion described in design.md §10, and obligates the
+  // module to pause when not visible (enforced by the validator).
+  motion: 'static' | 'animated';
   minW: number;
   minH: number;
   defaultW: number;
@@ -110,6 +115,12 @@ export function parseModuleManifest(source: string): ModuleManifest {
     throw new ManifestError('hosts-without-network');
   }
 
+  const motionRaw = (tags.get('motion') ?? 'static').toLowerCase();
+  if (motionRaw !== 'static' && motionRaw !== 'animated') {
+    throw new ManifestError('bad-motion');
+  }
+  const motion = motionRaw as 'static' | 'animated';
+
   const min = parseSize(tags.get('minsize')) ?? [2, 2];
   const def = parseSize(tags.get('defaultsize')) ?? [4, 4];
 
@@ -121,6 +132,7 @@ export function parseModuleManifest(source: string): ModuleManifest {
     description: tags.get('description') ?? '',
     permissions,
     network,
+    motion,
     minW: min[0],
     minH: min[1],
     defaultW: def[0],

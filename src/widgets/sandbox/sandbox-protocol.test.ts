@@ -6,6 +6,7 @@ import {
   handleSandboxRequest,
   isSandboxReady,
   isSandboxRequest,
+  isSandboxVisibility,
   type SandboxGrant,
   type SandboxRequest
 } from './sandbox-protocol';
@@ -46,6 +47,18 @@ describe('isSandboxReady', () => {
     expect(isSandboxReady({ channel: SANDBOX_CHANNEL, kind: 'ready' })).toBe(true);
     expect(isSandboxReady({ channel: SANDBOX_CHANNEL, kind: 'request' })).toBe(false);
     expect(isSandboxReady({ channel: 'other', kind: 'ready' })).toBe(false);
+  });
+});
+
+describe('isSandboxVisibility', () => {
+  it('recognizes only the visibility message on the channel', () => {
+    expect(isSandboxVisibility({ channel: SANDBOX_CHANNEL, kind: 'visibility', visible: true })).toBe(true);
+    expect(isSandboxVisibility({ channel: SANDBOX_CHANNEL, kind: 'visibility', visible: false })).toBe(true);
+    // Missing/invalid visible flag, wrong kind, or wrong channel are rejected.
+    expect(isSandboxVisibility({ channel: SANDBOX_CHANNEL, kind: 'visibility' })).toBe(false);
+    expect(isSandboxVisibility({ channel: SANDBOX_CHANNEL, kind: 'ready' })).toBe(false);
+    expect(isSandboxVisibility({ channel: 'other', kind: 'visibility', visible: true })).toBe(false);
+    expect(isSandboxVisibility(null)).toBe(false);
   });
 });
 

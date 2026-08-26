@@ -8,9 +8,11 @@ import {
   isSandboxReady,
   isSandboxRequest,
   type SandboxGrant,
-  type SandboxInit
+  type SandboxInit,
+  type SandboxVisibility
 } from '../widgets/sandbox/sandbox-protocol';
 import { createSandboxUrl } from '../widgets/sandbox/sandbox-runtime';
+import { observeVisibility } from '../widgets/sandbox/sandbox-visibility';
 import { t } from '../i18n';
 
 // Renders a draft module inside the very same isolated iframe the desktop app
@@ -34,6 +36,8 @@ export function PreviewSandbox({
   height: number;
 }) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const visibleRef = useRef(true);
+  const readyRef = useRef(false);
   // A fresh Blob URL per source so editing a draft remounts cleanly. Revoked on
   // unmount / source change to avoid leaking object URLs.
   const url = useMemo(() => createSandboxUrl(source), [source]);
@@ -42,9 +46,17 @@ export function PreviewSandbox({
   useEffect(() => {
     const iframe = iframeRef.current;
     if (!iframe) return;
+    readyRef.current = false;
 
     const allow = createRateLimiter(30, 1000);
     const grant: SandboxGrant = { permissions, allow, allowedHosts };
+
+    const stopObserving = observeVisibility(iframe, (visible) => {
+      visibleRef.current = visible;
+      if (!readyRef.current) return;
+      const message: SandboxVisibility = { channel: SANDBOX_CHANNEL, kind: 'visibility', visible };
+      iframe?.contentWindow?.postMessage(message, '*');
+    });
 
     async function onMessage(event: MessageEvent) {
       if (event.source !== iframe?.contentWindow) return;
@@ -58,8 +70,10 @@ export function PreviewSandbox({
           permissions,
           errorPrefix: t('sandbox.runError'),
           ...(permissions.includes('today') ? { todayIso: host.todayIso } : {}),
-          ...(permissions.includes('network') ? { allowedHosts } : {})
+          ...(permissions.includes('network') ? { allowedHosts } : {}),
+          visible: visibleRef.current
         };
+        readyRef.current = true;
         iframe?.contentWindow?.postMessage(init, '*');
         return;
       }
@@ -71,7 +85,10 @@ export function PreviewSandbox({
     }
 
     window.addEventListener('message', onMessage);
-    return () => window.removeEventListener('message', onMessage);
+    return () => {
+      window.removeEventListener('message', onMessage);
+      stopObserving();
+    };
   }, [host, permissions, allowedHosts, url]);
 
   return (

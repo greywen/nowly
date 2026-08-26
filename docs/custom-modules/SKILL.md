@@ -65,6 +65,7 @@ Nowly.defineModule(async ({ host, root }) => {
 | `@network` | 声明 network 时**必填** | 允许访问的域名，逗号分隔。`host.fetch` 只放行这些域名 |
 | `@minSize` | 否 | 最小尺寸 `宽x高`（格数），默认 `2x2` |
 | `@defaultSize` | 否 | 初始尺寸 `宽x高`（格数），默认 `4x4`。宽 2–12，高 2–8 |
+| `@motion` | 否 | `static`（默认）或 `animated`。声明 `animated` 表示内容区有持续动效，安装时会告知用户，且**必须**响应可见性暂停（见 §2、§10 修订） |
 
 清单头必须是文件**最顶部**的第一个 `/** ... */` 块注释（前面只能有空白）。
 
@@ -83,8 +84,29 @@ Nowly.defineModule(async ({ host, root }) => {
 | `host.loadState()` | `state` | 返回上次保存的状态（已 JSON 解析），没有则返回 `null` |
 | `host.saveState(value)` | `state` | 保存状态，`value` 必须可 JSON 序列化。覆盖上一次的值 |
 | `host.fetch(url, options?)` | `network` | 代理网络请求，仅放行 `@network` 白名单内的域名 |
+| `host.isVisible()` | 无 | 返回当前是否可见（在视野内且窗口前台）。同步读当前状态 |
+| `host.onVisibilityChange(fn)` | 无 | 注册可见性回调，`fn(visible)` 在状态变化时触发，注册时也立即触发一次当前值。返回一个取消注册的函数 |
 
 所有调用被限流为**每秒最多 30 次**，超出会被拒绝。
+
+### 可见性与 `@motion animated`（耗电治理，强制）
+
+Nowly 是常驻桌面应用，模块的渲染跑在与应用**共享的渲染线程**上。一个滚出视野还在跑 `requestAnimationFrame` 的模块会持续唤醒 GPU / 风扇。因此：
+
+- 只有声明 `@motion animated` 的模块才允许在内容区做持续动效（逐帧 rAF）。默认 `static` 模块不得有任何补间/循环动画。
+- 声明 `animated` 的模块**必须**用 `host.onVisibilityChange` 在不可见时暂停动画循环、可见时恢复。校验器会拒绝「声明了 animated 却没有 `onVisibilityChange`」的模块。
+- 「不可见」包含三种情形，宿主统一下发：模块滚出视野、应用窗口最小化/切后台、进入专注模式。
+
+```js
+let raf = 0;
+function frame() { /* 逐帧绘制 */ raf = requestAnimationFrame(frame); }
+host.onVisibilityChange(function (visible) {
+  if (visible) { if (!raf) raf = requestAnimationFrame(frame); }
+  else { cancelAnimationFrame(raf); raf = 0; }
+});
+```
+
+注意：时钟走字、倒计时每秒重绘这类**离散**更新（`setInterval` 每秒一次）不算持续动效，属 `static`，无需声明 `animated`。
 
 ### `host.fetch` 详解
 
@@ -153,6 +175,7 @@ const res = await host.fetch('https://api.open-meteo.com/v1/forecast?...', {
 - [templates/minimal.js](./templates/minimal.js) — 纯展示
 - [templates/stateful.js](./templates/stateful.js) — 持久化 + 按钮
 - [templates/network.js](./templates/network.js) — `host.fetch` 联网
+- [templates/animated.js](./templates/animated.js) — `@motion animated` + 可见性暂停
 
 最小模板：套 `nm-*` 类，不手写颜色，不设字体（body 已默认）。
 
@@ -241,6 +264,7 @@ Nowly.defineModule(async ({ host, root }) => {
 - [ ] 没有任何 `transition` / `animation` / 动效。
 - [ ] 没有颜色字面量（`#` / `rgb()` / `hsl()`）；颜色一律 `var(--nm-*)` 或套 `nm-*` 类。
 - [ ] 没有无界循环（`while (true)` / `for (;;)`）；所有循环有明确边界。
+- [ ] 若声明了 `@motion animated`，已用 `host.onVisibilityChange` 在不可见时暂停动画；默认 `static` 模块无任何持续动效。
 - [ ] 圆角、字体、间距对齐第 3 节的令牌。
 - [ ] `host.fetch` 和 `host.loadState` 都做了错误处理（`try/catch`），失败时给用户可读提示。
 - [ ] 在 `root` 上手动渲染，没有假设父页面存在任何元素。

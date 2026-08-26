@@ -3,14 +3,17 @@ import type { ModuleHost } from '../extension-module';
 import type { SandboxPermission } from '../../data/nowly-repository';
 import {
   SANDBOX_CHANNEL,
+  SANDBOX_CHANNEL as CHANNEL,
   createRateLimiter,
   handleSandboxRequest,
   isSandboxReady,
   isSandboxRequest,
   type SandboxGrant,
-  type SandboxInit
+  type SandboxInit,
+  type SandboxVisibility
 } from './sandbox-protocol';
 import { createSandboxUrl } from './sandbox-runtime';
+import { observeVisibility } from './sandbox-visibility';
 import { t } from '../../i18n';
 
 // Runs a third-party extension inside an isolated iframe. The extension code
@@ -36,6 +39,11 @@ export function SandboxModule({
   allowedHosts?: string[];
 }) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  // Latest visibility reading and whether the guest is ready to receive it. The
+  // observer may fire before the frame signals ready, so we cache the flag and
+  // fold the current value into `init`, then post updates only once ready.
+  const visibleRef = useRef(true);
+  const readyRef = useRef(false);
   // A fresh Blob URL per source. Revoked on unmount / source change so we don't
   // leak object URLs.
   const url = useMemo(() => createSandboxUrl(source), [source]);
@@ -44,10 +52,20 @@ export function SandboxModule({
   useEffect(() => {
     const iframe = iframeRef.current;
     if (!iframe) return;
+    readyRef.current = false;
 
     // One rate limiter per mounted frame: at most 30 host calls per second.
     const allow = createRateLimiter(30, 1000);
     const grant: SandboxGrant = { permissions, allow, allowedHosts };
+
+    // Track on-screen + foreground state; relay to the guest once it is ready
+    // so animated modules can pause off-screen.
+    const stopObserving = observeVisibility(iframe, (visible) => {
+      visibleRef.current = visible;
+      if (!readyRef.current) return;
+      const message: SandboxVisibility = { channel: CHANNEL, kind: 'visibility', visible };
+      iframe?.contentWindow?.postMessage(message, '*');
+    });
 
     async function onMessage(event: MessageEvent) {
       // Only trust messages from *this* iframe. Because the frame is sandboxed
@@ -67,8 +85,12 @@ export function SandboxModule({
           ...(permissions.includes('today') ? { todayIso: host.todayIso } : {}),
           // Hand the allow-list to the guest runtime so it can expose `fetch`
           // only when network was granted.
-          ...(permissions.includes('network') ? { allowedHosts } : {})
+          ...(permissions.includes('network') ? { allowedHosts } : {}),
+          // Fold in the current visibility so the module starts in the right
+          // running/paused state.
+          visible: visibleRef.current
         };
+        readyRef.current = true;
         iframe?.contentWindow?.postMessage(init, '*');
         return;
       }
@@ -80,8 +102,11 @@ export function SandboxModule({
     }
 
     window.addEventListener('message', onMessage);
-    return () => window.removeEventListener('message', onMessage);
-  }, [host, permissions]);
+    return () => {
+      window.removeEventListener('message', onMessage);
+      stopObserving();
+    };
+  }, [host, permissions, allowedHosts, url]);
 
   return (
     <div className="widget-content sandbox-module">
