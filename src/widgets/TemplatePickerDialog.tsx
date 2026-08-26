@@ -4,6 +4,7 @@ import { Dialog } from '../components/Dialog';
 import type { SandboxExtension, SandboxExtensionDraft } from '../data/nowly-repository';
 import {
   builtinDefinitions,
+  devModuleDefinition,
   extensionDefinitions,
   kanbanDefinition,
   sandboxExtensionToDefinition,
@@ -85,7 +86,16 @@ export function TemplatePickerDialog({
   onInstallExtension,
   onUninstallExtension
 }: Props) {
-  const builtinModules = [...builtinDefinitions, kanbanDefinition, ...extensionDefinitions];
+  // The developer module is a dev-only preview tool; gate it on the same
+  // `import.meta.env.DEV` flag App uses to render it, so the picker never
+  // offers end users a module they cannot use. Read in the render body (not at
+  // module load) so the flag is honored per render.
+  const builtinModules = [
+    ...builtinDefinitions,
+    kanbanDefinition,
+    ...extensionDefinitions,
+    ...(import.meta.env.DEV ? [devModuleDefinition] : [])
+  ];
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   // A pending network-module install waiting on the risk dialog confirmation.
