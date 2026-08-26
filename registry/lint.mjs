@@ -42,6 +42,53 @@ function motionVisibilityIssue(source) {
   };
 }
 
+// Buttons whose only content is an icon (an <svg>) with no accessible name are
+// invisible to screen readers. We accept an accessible name from any of: an
+// aria-label / aria-labelledby / title attribute on the button, a <title>
+// inside the svg, or readable text sitting next to the icon. Anything else with
+// an <svg> and no text is flagged. This scans the whole source because the
+// button can span multiple lines.
+function iconButtonIssues(source) {
+  const issues = [];
+  const re = /<button\b([^>]*)>([\s\S]*?)<\/button>/gi;
+  let m;
+  while ((m = re.exec(source)) !== null) {
+    const attrs = m[1];
+    const inner = m[2];
+    if (!/<svg\b/i.test(inner)) continue; // not an icon button
+    const labelledByAttr = /\b(?:aria-label|aria-labelledby|title)\s*=/i.test(attrs);
+    const svgTitle = /<title\b[^>]*>[\s\S]*?<\/title>/i.test(inner);
+    const readableText = inner.replace(/<[^>]*>/g, '').replace(/\s+/g, '') !== '';
+    if (labelledByAttr || svgTitle || readableText) continue;
+    const line = source.slice(0, m.index).split('\n').length;
+    issues.push({
+      rule: 'icon-button-label',
+      line,
+      message: 'icon-only button needs an aria-label (or visible text/svg <title>)'
+    });
+  }
+  return issues;
+}
+
+// Upper bound on module source size. The spec leaves the exact number open
+// ("节点数或源码体积的合理上限"); we bound source bytes rather than live DOM
+// nodes because the linter is static and cannot execute the module to count
+// nodes. 256 KiB is generous for a self-contained module that inlines its SVG
+// icons and even a small helper library, but it catches a whole framework or a
+// generated blob accidentally pasted in — code that is too large for a human
+// reviewer to actually audit, which is the point of the ceiling.
+const MAX_SOURCE_BYTES = 256 * 1024;
+
+function domSizeIssue(source) {
+  const bytes = Buffer.byteLength(source, 'utf8');
+  if (bytes <= MAX_SOURCE_BYTES) return null;
+  return {
+    rule: 'dom-size',
+    line: 1,
+    message: `module source is ${bytes} bytes, over the ${MAX_SOURCE_BYTES}-byte ceiling`
+  };
+}
+
 export function lintModuleSource(source) {
   const issues = [];
   const lines = source.split('\n');
@@ -52,5 +99,8 @@ export function lintModuleSource(source) {
   }
   const motion = motionVisibilityIssue(source);
   if (motion) issues.push(motion);
+  issues.push(...iconButtonIssues(source));
+  const domSize = domSizeIssue(source);
+  if (domSize) issues.push(domSize);
   return issues;
 }

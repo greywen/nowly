@@ -72,7 +72,7 @@ node registry/validate.mjs
 
 ## 审核清单（maintainer）
 
-CI 自动校验：schema、id 唯一、semver 递增、清单与索引一致、sha256 匹配、危险模式扫描。
+CI 自动校验：schema、id 唯一、semver 递增、清单与索引一致、sha256 匹配、危险模式扫描，以及源码静态检查——颜色字面量（须用 `var(--nm-*)`）、无界循环字面量（`while (true)` / `for (;;)`）、远程资源引用（`https://` 出现在 `src=` / `@import` / `importScripts`；`host.fetch` 的 URL 不算）、图标按钮缺 `aria-label`、`@motion animated` 缺可见性响应、源码体积上限（256 KiB）。命中即拒绝安装。
 
 CI 通过后，maintainer 人工确认：
 

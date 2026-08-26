@@ -87,3 +87,63 @@ test('does not require visibility response for static modules', () => {
   ].join('\n');
   assert.ok(!rules(src).includes('motion-visibility'));
 });
+
+test('flags an icon-only button with no accessible name', () => {
+  const src = 'root.innerHTML = `<button class="nm-btn-icon"><svg viewBox="0 0 24 24"><path d="M1 1"/></svg></button>`;';
+  assert.ok(rules(src).includes('icon-button-label'));
+});
+
+test('flags an icon-only button written across lines', () => {
+  const src = [
+    'root.innerHTML = `',
+    '  <button>',
+    '    <svg viewBox="0 0 24 24"><path d="M1 1"/></svg>',
+    '  </button>',
+    '`;'
+  ].join('\n');
+  assert.ok(rules(src).includes('icon-button-label'));
+});
+
+test('allows an icon button with aria-label', () => {
+  const src = 'root.innerHTML = `<button aria-label="设置"><svg><path d="M1 1"/></svg></button>`;';
+  assert.ok(!rules(src).includes('icon-button-label'));
+});
+
+test('allows an icon button with aria-labelledby', () => {
+  const src = 'root.innerHTML = `<button aria-labelledby="lbl"><svg><path/></svg></button>`;';
+  assert.ok(!rules(src).includes('icon-button-label'));
+});
+
+test('allows an icon button whose svg carries a title', () => {
+  const src = 'root.innerHTML = `<button><svg><title>设置</title><path/></svg></button>`;';
+  assert.ok(!rules(src).includes('icon-button-label'));
+});
+
+test('allows a button with readable text next to its icon', () => {
+  const src = 'root.innerHTML = `<button><svg><path/></svg> 保存</button>`;';
+  assert.ok(!rules(src).includes('icon-button-label'));
+});
+
+test('allows a text-only button', () => {
+  const src = 'root.innerHTML = `<button class="nm-btn">保存</button>`;';
+  assert.ok(!rules(src).includes('icon-button-label'));
+});
+
+test('reports the line where the icon button starts', () => {
+  const src = [
+    'a();',
+    'root.innerHTML = `<button><svg><path/></svg></button>`;'
+  ].join('\n');
+  const issue = lintModuleSource(src).find((i) => i.rule === 'icon-button-label');
+  assert.equal(issue.line, 2);
+});
+
+test('flags source that exceeds the size ceiling', () => {
+  const bloat = 'root.textContent = "' + 'x'.repeat(300 * 1024) + '";';
+  assert.ok(rules(bloat).includes('dom-size'));
+});
+
+test('allows a normally sized module', () => {
+  const src = 'Nowly.defineModule(({ root }) => { root.textContent = "hi"; });';
+  assert.ok(!rules(src).includes('dom-size'));
+});
