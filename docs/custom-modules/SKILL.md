@@ -24,6 +24,8 @@ Nowly 的自定义模块是**一个自描述的 `.js` 文件**。用户可以在
 5. **渲染靠手动操作 DOM。** 你拿到一个 `root` 元素，用 `document.createElement` 往里塞节点。
 6. **颜色只能用 `var(--nm-*)` 令牌，禁止任何 `#` / `rgb()` / `hsl()` 字面量。** 校验器会拒绝含颜色字面量的模块。沙箱已注入一份从应用 `styles.css` 生成的样式表，令牌与 `nm-*` 语义类可直接用，详见 [style.md](./style.md)。
 7. **循环必须有明确边界。** `while (true)` / `for (;;)` 会被校验器拒绝，且死循环会冻结整个应用（用户只能去任务管理器杀进程）。
+8. **纯图标按钮必须带 `aria-label`。** 只含内联 `<svg>`、没有可读文字的 `<button>`，必须加 `aria-label`（或 `aria-labelledby`、`title`，或 svg 内 `<title>`）说明用途，否则读屏软件读不出，校验器会拒绝。带文字的按钮无需额外标注。
+9. **源码体积有上限（256 KiB）。** 单个模块文件超过 256 KiB 会被拒绝。第三方库只能内联、图标用内联 SVG，但要克制——真需要大体积依赖的功能不适合做成沙箱模块。
 
 违反其中任何一条，模块要么安装失败，要么运行时报错。
 
@@ -343,6 +345,8 @@ Nowly.defineModule(async ({ host, root }) => {
 - [ ] 没有任何 `transition` / `animation` / 动效。
 - [ ] 没有颜色字面量（`#` / `rgb()` / `hsl()`）；颜色一律 `var(--nm-*)` 或套 `nm-*` 类。
 - [ ] 没有无界循环（`while (true)` / `for (;;)`）；所有循环有明确边界。
+- [ ] 纯图标按钮（只含 `<svg>`、无可读文字）都带了 `aria-label`（或 `aria-labelledby` / `title` / svg 内 `<title>`）。
+- [ ] 模块源码未超过 256 KiB（第三方库内联也要克制体积）。
 - [ ] 若声明了 `@motion animated`，已用 `host.onVisibilityChange` 在不可见时暂停动画；默认 `static` 模块无任何持续动效。
 - [ ] 圆角、字体、间距对齐第 3 节的令牌。
 - [ ] `host.fetch` 和 `host.loadState` 都做了错误处理（`try/catch`），失败时给用户可读提示。
