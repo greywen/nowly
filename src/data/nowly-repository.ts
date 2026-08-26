@@ -37,8 +37,8 @@ export type AppSettings = {
 export type ModuleLayoutEntry = { id: string; x: number; y: number; w: number; h: number };
 
 // A work-in-progress module file discovered under the app's dev-modules/
-// directory. The desktop backend reads %APPDATA%/nowly/dev-modules/*.js at
-// runtime so the in-app workbench (preview channel A) can render drafts that an
+// directory. The desktop backend reads %APPDATA%/com.nowly.app/dev-modules/*.js
+// at runtime so the in-app workbench (preview channel A) can render drafts that an
 // AI tool wrote to a machine-stable path. `source` is the raw file text; the
 // full path stays on the backend.
 export type DevModuleFile = { name: string; source: string };
@@ -170,6 +170,10 @@ export type NowlyRepository = {
   // so lightweight test doubles need not implement it; the workbench treats a
   // missing method as "no drafts".
   listDevModules?(): Promise<DevModuleFile[]>;
+  // Absolute path of the app-data dev-modules/ directory, resolved on the
+  // backend (OS-specific) and shown in the workbench empty state. Optional for
+  // the same reason as listDevModules.
+  devModulesDir?(): Promise<string>;
   getModuleState(moduleId: string): Promise<string | null>;
   setModuleState(moduleId: string, state: string): Promise<void>;
   createFocusSession(session: FocusSession): Promise<FocusSession>;

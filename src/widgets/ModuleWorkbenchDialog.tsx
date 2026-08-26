@@ -12,7 +12,8 @@ import { t } from '../i18n';
 
 // The in-app module workbench (channel A). It mirrors the standalone preview
 // page (channel B) but lives inside the desktop app and sources drafts from the
-// user's real `%APPDATA%/nowly/dev-modules/` directory via `list_dev_modules`,
+// user's real app-data `dev-modules/` directory (Windows:
+// `%APPDATA%/com.nowly.app/dev-modules/`) via `list_dev_modules`,
 // rather than Vite's compile-time glob. Left: the draft list plus this build's
 // lint results. Right: a real-pixel preview at the selected gear, remounted
 // whenever the file on disk changes. See spec §9 (通道 A).
@@ -52,6 +53,7 @@ function todayIso(): string {
 export function ModuleWorkbenchDialog({ onClose }: { onClose(): void }) {
   const repository = useNowlyRepository();
   const [drafts, setDrafts] = useState<Draft[] | null>(null);
+  const [dir, setDir] = useState<string>('');
   const [selectedName, setSelectedName] = useState<string | null>(null);
   const [presetId, setPresetId] = useState<string>(DEFAULT_PRESET_ID);
 
@@ -75,6 +77,25 @@ export function ModuleWorkbenchDialog({ onClose }: { onClose(): void }) {
     const timer = setInterval(() => void refresh(), POLL_MS);
     return () => clearInterval(timer);
   }, [refresh]);
+
+  // The drop-here directory is OS-specific, so we ask the backend once for its
+  // resolved absolute path and show it in the empty state. A missing method
+  // (browser shim / test doubles) just leaves the path blank.
+  useEffect(() => {
+    if (!repository.devModulesDir) return;
+    let cancelled = false;
+    void repository
+      .devModulesDir()
+      .then((path) => {
+        if (!cancelled) setDir(path);
+      })
+      .catch(() => {
+        /* leave the path blank; the generic empty message still shows */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [repository]);
 
   const selected = useMemo(() => {
     if (!drafts || drafts.length === 0) return undefined;
@@ -117,7 +138,10 @@ export function ModuleWorkbenchDialog({ onClose }: { onClose(): void }) {
           {drafts === null ? (
             <p className="module-workbench__hint">{t('workbench.loading')}</p>
           ) : drafts.length === 0 ? (
-            <p className="module-workbench__hint">{t('workbench.empty')}</p>
+            <div className="module-workbench__hint">
+              <p>{t('workbench.empty')}</p>
+              {dir ? <code className="module-workbench__path">{dir}</code> : null}
+            </div>
           ) : (
             <ul className="module-workbench__list" aria-label={t('workbench.draftList')}>
               {drafts.map((draft) => {

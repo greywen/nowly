@@ -3,7 +3,7 @@
 有两条预览通道，共用同一套沙箱 iframe（null origin、`allow-scripts`、网络封锁 CSP、注入的 `nm-*` 样式表）、同一份内存 host、同一套尺寸档位与 lint。在哪条通道跑通，装进桌面 App 里都一模一样。
 
 - **通道 B（给 AI，本页主体）**：独立网页 `npm run module:preview`，不依赖 Tauri，可用 Playwright 截图自查。写模块时的主力。
-- **通道 A（给用户）**：App 内「模块工作台」对话框，读你机器上真实的 `%APPDATA%/nowly/dev-modules/*.js`。见文末「通道 A」一节。
+- **通道 A（给用户）**：App 内「模块工作台」对话框，读你机器上真实的 app 数据目录下的 `dev-modules/*.js`（Windows 是 `%APPDATA%/com.nowly.app/dev-modules/`）。见文末「通道 A」一节。
 
 ## 通道 B：独立预览页
 
@@ -53,7 +53,7 @@ npx playwright test module-preview --project=1366x768
 
 装机版没有仓库、也没有 Vite 编译期的 `dev-modules/` 目录，但你仍想在**真实 App 环境**里看草稿。通道 A 就是为此存在：
 
-1. 把草稿 `.js` 写到 `%APPDATA%/nowly/dev-modules/`（这个路径跨机器稳定，不依赖仓库位置——AI 工具照此生成即可）。
+1. 把草稿 `.js` 写到 app 数据目录下的 `dev-modules/`（Windows 是 `%APPDATA%/com.nowly.app/dev-modules/`；macOS 是 `~/Library/Application Support/com.nowly.app/dev-modules/`；Linux 是 `~/.local/share/com.nowly.app/dev-modules/`）。这个路径跨机器稳定，不依赖仓库位置。**不确定路径？打开工作台，草稿为空时它会直接显示当前机器上的绝对路径**——AI 工具照抄即可。
 2. 在 App 里进入编辑模式 → 「添加模块」→ 「我的模块」区顶部点「模块工作台」。
 3. 左栏列出该目录下的草稿，右侧按所选档位真实比例预览，左下角实时显示 lint。
 

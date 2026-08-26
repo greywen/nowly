@@ -202,6 +202,10 @@ fn main() {
                 .app_data_dir()
                 .expect("failed to resolve app data dir");
             std::fs::create_dir_all(&app_dir).expect("failed to create app data dir");
+            // Ensure the dev-modules draft directory exists so the workbench
+            // has a stable, discoverable place to read drafts from.
+            std::fs::create_dir_all(app_dir.join("dev-modules"))
+                .expect("failed to create dev-modules dir");
             let connection = open_database(app_dir.join("nowly.sqlite"))
                 .expect("failed to open database");
             app.manage(AppDb(Mutex::new(connection)));
@@ -424,6 +428,7 @@ fn main() {
             module_state::get_module_state,
             module_state::set_module_state,
             dev_modules::list_dev_modules,
+            dev_modules::dev_modules_dir_path,
             extensions::list_extensions,
             extensions::install_extension,
             extensions::uninstall_extension,

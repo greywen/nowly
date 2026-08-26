@@ -338,12 +338,11 @@ button:disabled { cursor: default; opacity: .65; }
 .note-title { display: flex; align-items: center; gap: 8px; color: var(--text-primary); font-size: 15.2px; font-weight: 600; }
 .note-icon { font-size: 16px; line-height: 1; }
 .note-content { margin: 4px 0; color: var(--text-secondary); font-size: 13.6px; }
-/* Sticky-board view: the same notes pinned to the panel like paper notes on a
-   wall. Tilt, tape and folded corner are static decoration; nothing animates. */
+/* Sticky-board view: static tilt and edge pins create depth without motion. */
 .notes-board { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 32px 28px; padding: 20px 18px 24px; }
-.sticky-note { position: relative; min-height: 136px; padding: 20px 16px 26px; display: flex; flex-direction: column; gap: 2px; border: 1px solid transparent; border-radius: var(--radius-sm); background-color: #fdfaf1; background-image: repeating-linear-gradient(180deg, transparent 0 23px, rgba(33, 31, 28, .06) 23px 24px); box-shadow: 0 1.6px 12px 4px rgba(0, 0, 0, .05); font-family: "Ink Free", "Segoe Script", "Bradley Hand", KaiTi, var(--font-sans); text-align: left; overflow: visible; }
-.sticky-note:hover { border-color: var(--selected-color); }
-.sticky-note__icon { position: absolute; z-index: 1; font-size: 28px; line-height: 1; }
+.sticky-note { --note-tilt: 0deg; position: relative; min-height: 136px; padding: 20px 16px 26px; display: flex; flex-direction: column; gap: 2px; border: 1px solid rgba(64, 61, 56, .08); border-radius: var(--radius-sm); background-color: #fdfaf1; background-image: repeating-linear-gradient(180deg, transparent 0 23px, rgba(33, 31, 28, .06) 23px 24px); box-shadow: 0 2px 3px rgba(33, 31, 28, .14), 0 12px 24px rgba(33, 31, 28, .13); font-family: "Ink Free", "Segoe Script", "Bradley Hand", KaiTi, var(--font-sans); text-align: left; overflow: visible; transform: rotate(var(--note-tilt)); }
+.sticky-note:hover { border-color: var(--selected-color); box-shadow: 0 3px 5px rgba(33, 31, 28, .16), 0 16px 30px rgba(33, 31, 28, .17); }
+.sticky-note__icon { position: absolute; z-index: 1; font-size: 28px; line-height: 1; filter: drop-shadow(0 2px 2px rgba(33, 31, 28, .24)); }
 .sticky-note__icon--top-left { top: -14px; left: 18%; }
 .sticky-note__icon--top-center { top: -14px; left: 50%; transform: translateX(-50%); }
 .sticky-note__icon--top-right { top: -14px; right: 18%; }
@@ -353,11 +352,10 @@ button:disabled { cursor: default; opacity: .65; }
 .sticky-note__icon--bottom-center { bottom: -14px; left: 50%; transform: translateX(-50%); }
 .sticky-note__icon--bottom-left { bottom: -14px; left: 18%; }
 .sticky-note__icon--left-center { top: 50%; left: -14px; transform: translateY(-50%); }
-.sticky-note__title { color: var(--selected-color-fg); font-size: 17.2px; font-weight: 600; line-height: 24px; overflow-wrap: anywhere; }
-.sticky-note__content { order: 3; display: -webkit-box; overflow: hidden; color: var(--text-secondary); font-size: 15.2px; line-height: 24px; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow-wrap: anywhere; }
+.sticky-note__title { position: relative; z-index: 1; color: var(--selected-color-fg); font-size: 17.2px; font-weight: 600; line-height: 24px; overflow-wrap: anywhere; }
+.sticky-note__content { position: relative; z-index: 1; order: 3; display: -webkit-box; overflow: hidden; color: var(--text-secondary); font-size: 15.2px; line-height: 24px; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow-wrap: anywhere; }
 /* Tape sticks across a paper corner and slightly overhangs the sheet. */
 .sticky-note__tape { position: absolute; top: 10px; left: -12px; width: 54px; height: 16px; background: var(--selected-color); opacity: .32; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .5); transform: rotate(-45deg); }
-.sticky-note__fold { position: absolute; right: 0; bottom: 0; width: 24px; height: 24px; border-bottom-right-radius: var(--radius-sm); background: linear-gradient(135deg, rgba(33, 31, 28, .09) 0 50%, var(--bg-surface) 50% 100%); }
 .sticky-note--style-0 { background-color: #fdfaf1; background-image: repeating-linear-gradient(180deg, transparent 0 23px, rgba(33, 31, 28, .06) 23px 24px); }
 .sticky-note--style-1 { background-color: #fcfbf7; background-image: linear-gradient(rgba(0, 0, 0, .03) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 0, 0, .03) 1px, transparent 1px); background-size: 14px 14px, 14px 14px; }
 .sticky-note--style-2 { background-color: #fffef9; background-image: linear-gradient(175deg, rgba(79, 201, 218, .12), rgba(255, 255, 255, .1)); }
@@ -371,10 +369,10 @@ button:disabled { cursor: default; opacity: .65; }
 .sticky-note--style-3, .sticky-note--style-4 { padding-right: 40px; }
 .sticky-note--style-5, .sticky-note--style-6, .sticky-note--style-7 { padding-bottom: 40px; }
 .sticky-note--style-8 { padding-left: 40px; }
-.sticky-note--tilt-0 { transform: rotate(-1.4deg); }
-.sticky-note--tilt-1 { transform: rotate(1.1deg); }
-.sticky-note--tilt-2 { transform: rotate(-.6deg); }
-.sticky-note--tilt-3 { transform: rotate(1.8deg); }
+.sticky-note--tilt-0 { --note-tilt: -1.4deg; }
+.sticky-note--tilt-1 { --note-tilt: 1.1deg; }
+.sticky-note--tilt-2 { --note-tilt: -.6deg; }
+.sticky-note--tilt-3 { --note-tilt: 1.8deg; }
 .sticky-note--tilt-1 .sticky-note__tape { left: auto; right: -12px; transform: rotate(45deg); }
 .sticky-note--tilt-3 .sticky-note__tape { left: auto; right: -12px; top: 14px; transform: rotate(45deg); }
 .empty-state { padding: 24px; border: 1px dashed var(--border-default); border-radius: var(--radius-default); text-align: center; }
@@ -1025,6 +1023,7 @@ button:disabled { cursor: default; opacity: .65; }
 .module-workbench { display: grid; grid-template-columns: 280px 1fr; gap: 20px; min-height: 480px; }
 .module-workbench__sidebar { display: grid; grid-template-rows: 1fr auto; gap: 16px; min-height: 0; border-right: 1px solid var(--border-default); padding-right: 20px; }
 .module-workbench__hint { margin: 0; padding: 24px 0; color: var(--text-muted); font-size: 15.2px; line-height: 1.5; text-align: center; }
+.module-workbench__path { display: block; margin-top: 8px; padding: 8px 12px; border-radius: var(--radius-sm); background: var(--bg-subtle); color: var(--text-secondary); font-size: 13.6px; word-break: break-all; }
 .module-workbench__list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; align-content: start; overflow-y: auto; }
 .module-workbench__draft { display: grid; gap: 2px; width: 100%; padding: 12px; border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-surface); text-align: left; cursor: pointer; }
 .module-workbench__draft:hover { border-color: var(--color-primary); }

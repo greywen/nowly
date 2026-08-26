@@ -28,9 +28,10 @@ const dirty = clean.replace(
 // No manifest header at all — parses to a manifest error.
 const headerless = 'Nowly.defineModule(({ root }) => { root.textContent = "x"; });';
 
-function repositoryWith(files: DevModuleFile[]): NowlyRepository {
+function repositoryWith(files: DevModuleFile[], dir?: string): NowlyRepository {
   return {
-    listDevModules: vi.fn().mockResolvedValue(files)
+    listDevModules: vi.fn().mockResolvedValue(files),
+    devModulesDir: dir ? vi.fn().mockResolvedValue(dir) : undefined
   } as unknown as NowlyRepository;
 }
 
@@ -61,6 +62,14 @@ describe('ModuleWorkbenchDialog', () => {
     expect(
       await screen.findByText(/dev-modules 目录下没有草稿/)
     ).toBeInTheDocument();
+  });
+
+  it('shows the backend-resolved dev-modules directory in the empty state', async () => {
+    // The exact path is OS-specific; the workbench must display whatever the
+    // backend resolved rather than hardcoding a platform path.
+    const dir = 'C:\\Users\\me\\AppData\\Roaming\\com.nowly.app\\dev-modules';
+    renderWorkbench(repositoryWith([], dir));
+    expect(await screen.findByText(new RegExp('com\\.nowly\\.app'))).toBeInTheDocument();
   });
 
   it('lists drafts by their manifest name and file name', async () => {

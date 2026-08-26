@@ -6,9 +6,10 @@ use tauri::Manager;
 // A work-in-progress module file discovered under the app's `dev-modules/`
 // directory. This is the desktop counterpart to channel B's compile-time glob:
 // there, Vite inlines `dev-modules/*.js` from the repo at build time; here, the
-// installed app reads the user's real `%APPDATA%/nowly/dev-modules/` at runtime
-// so the in-app workbench (channel A) can preview drafts an AI tool wrote to a
-// path that is stable across machines. See docs/custom-modules/preview.md.
+// installed app reads the user's real app-data `dev-modules/` at runtime
+// (Windows: `%APPDATA%/com.nowly.app/dev-modules/`) so the in-app workbench
+// (channel A) can preview drafts an AI tool wrote to a path that is stable
+// across machines. See docs/custom-modules/preview.md.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DevModule {
@@ -49,14 +50,31 @@ pub fn read_dev_modules(dir: &Path) -> Result<Vec<DevModule>, CommandError> {
     Ok(modules)
 }
 
-#[tauri::command]
-pub fn list_dev_modules(app: tauri::AppHandle) -> Result<Vec<DevModule>, CommandError> {
-    let dir = app
+// Resolve the app-data `dev-modules/` directory. Shared by both the list
+// command and the path command so they can never disagree on where drafts live.
+fn dev_modules_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, CommandError> {
+    Ok(app
         .path()
         .app_data_dir()
         .map_err(CommandError::system)?
-        .join("dev-modules");
-    read_dev_modules(&dir)
+        .join("dev-modules"))
+}
+
+#[tauri::command]
+pub fn list_dev_modules(app: tauri::AppHandle) -> Result<Vec<DevModule>, CommandError> {
+    read_dev_modules(&dev_modules_dir(&app)?)
+}
+
+// Return the absolute path of the app-data `dev-modules/` directory as a string.
+// The workbench shows it in its empty state so the user (or an AI tool) knows
+// exactly where to drop drafts. Resolved on the backend rather than hardcoded in
+// the UI because the location is OS-specific and must stay correct on every
+// platform. Creates the directory if missing so the shown path always exists.
+#[tauri::command]
+pub fn dev_modules_dir_path(app: tauri::AppHandle) -> Result<String, CommandError> {
+    let dir = dev_modules_dir(&app)?;
+    std::fs::create_dir_all(&dir).map_err(CommandError::system)?;
+    Ok(dir.to_string_lossy().into_owned())
 }
 
 #[cfg(test)]
