@@ -264,6 +264,10 @@ export function installBrowserTauriBackend() {
       persist();
       return store.moduleLayout;
     },
+    // Draft modules live on the real filesystem (%APPDATA%/nowly/dev-modules),
+    // which the browser shim cannot read. The standalone preview page (channel
+    // B) covers browser-based previewing, so here we just report no drafts.
+    list_dev_modules: () => [],
     get_module_state: (a) => store.moduleState[a.moduleId as string] ?? null,
     set_module_state: (a) => {
       store.moduleState[a.moduleId as string] = a.state as string;

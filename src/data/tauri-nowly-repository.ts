@@ -25,6 +25,7 @@ export const tauriNowlyRepository: NowlyRepository = {
   checkForUpdate: () => invoke('check_for_update'),
   updateSettings: (settings) => invoke('update_app_settings', { settings }),
   listMonitors: () => invoke('list_monitors'),
+  listDevModules: () => invoke('list_dev_modules'),
   listModuleLayout: () => invoke('list_module_layout'),
   saveModuleLayout: (layout) => invoke('save_module_layout', { layout }),
   getModuleState: (moduleId) => invoke('get_module_state', { moduleId }),

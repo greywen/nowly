@@ -314,6 +314,7 @@ export const translations: Record<Language, Record<string, string>> = {
     // Note draft validation
     'noteDraft.errorTitle': '请输入便签标题。',
     'noteDraft.errorColor': '请选择有效颜色。',
+    'noteDraft.errorIcon': '请选择有效图标。',
 
     // Task draft validation / meta
     'taskDraft.errorTitle': '请输入任务标题。',
@@ -426,8 +427,20 @@ export const translations: Record<Language, Record<string, string>> = {
     'noteModal.title': '便签标题',
     'noteModal.content': '便签内容',
     'noteModal.color': '便签颜色',
+    'noteModal.icon': '便签图标',
     'noteModal.pinned': '置顶便签',
     'noteModal.deleteTitle': '永久删除“{title}”？',
+
+    'noteIcon.none': '无图标',
+    'noteIcon.smile': '微笑',
+    'noteIcon.grin': '大笑',
+    'noteIcon.love': '心动',
+    'noteIcon.cool': '酷',
+    'noteIcon.laugh': '欢乐',
+    'noteIcon.spark': '闪光',
+    'noteIcon.star': '星标',
+    'noteIcon.heart': '心形',
+    'noteIcon.sad': '难过',
 
     // TaskModal
     'taskModal.createTitle': '新建任务',
@@ -588,6 +601,22 @@ export const translations: Record<Language, Record<string, string>> = {
     'market.integrityError': '模块文件校验失败，可能已被篡改，已阻止安装。',
     'market.by': '作者：{author}',
     'market.network': '联网',
+
+    // Module workbench (channel A preview)
+    'workbench.title': '模块工作台',
+    'workbench.close': '关闭',
+    'workbench.loading': '正在读取草稿模块…',
+    'workbench.empty': 'dev-modules 目录下没有草稿。把 .js 文件写到 %APPDATA%/nowly/dev-modules/ 即可预览。',
+    'workbench.draftList': '草稿模块',
+    'workbench.manifestError': '清单错误',
+    'workbench.manifestErrorBody': '清单头缺失或非法。',
+    'workbench.lintResults': '校验结果',
+    'workbench.lintPass': '校验：通过',
+    'workbench.lintCount': '校验：{count} 项问题',
+    'workbench.lintLine': ' 第 {line} 行：',
+    'workbench.selectDraft': '选择一个草稿模块开始预览。',
+    'workbench.sizeGroup': '预览尺寸',
+    'workbench.open': '模块工作台',
 
     // Install risk dialog
     'risk.title': '此模块会联网',
@@ -930,6 +959,7 @@ export const translations: Record<Language, Record<string, string>> = {
     // Note draft validation
     'noteDraft.errorTitle': 'Please enter a note title.',
     'noteDraft.errorColor': 'Please choose a valid color.',
+    'noteDraft.errorIcon': 'Please choose a valid icon.',
 
     // Task draft validation / meta
     'taskDraft.errorTitle': 'Please enter a task title.',
@@ -1042,8 +1072,20 @@ export const translations: Record<Language, Record<string, string>> = {
     'noteModal.title': 'Note title',
     'noteModal.content': 'Note content',
     'noteModal.color': 'Note color',
+    'noteModal.icon': 'Note icon',
     'noteModal.pinned': 'Pin note',
     'noteModal.deleteTitle': 'Permanently delete "{title}"?',
+
+    'noteIcon.none': 'No icon',
+    'noteIcon.smile': 'Smile',
+    'noteIcon.grin': 'Grin',
+    'noteIcon.love': 'Love',
+    'noteIcon.cool': 'Cool',
+    'noteIcon.laugh': 'Laugh',
+    'noteIcon.spark': 'Spark',
+    'noteIcon.star': 'Star',
+    'noteIcon.heart': 'Heart',
+    'noteIcon.sad': 'Sad',
 
     // TaskModal
     'taskModal.createTitle': 'New task',
@@ -1202,6 +1244,22 @@ export const translations: Record<Language, Record<string, string>> = {
     'market.integrityError': 'Module integrity check failed; the file may have been tampered with. Installation blocked.',
     'market.by': 'By {author}',
     'market.network': 'Network',
+
+    // Module workbench (channel A preview)
+    'workbench.title': 'Module workbench',
+    'workbench.close': 'Close',
+    'workbench.loading': 'Reading draft modules…',
+    'workbench.empty': 'No drafts under dev-modules. Write a .js file to %APPDATA%/nowly/dev-modules/ to preview it.',
+    'workbench.draftList': 'Draft modules',
+    'workbench.manifestError': 'Manifest error',
+    'workbench.manifestErrorBody': 'The manifest header is missing or invalid.',
+    'workbench.lintResults': 'Lint results',
+    'workbench.lintPass': 'Lint: passed',
+    'workbench.lintCount': 'Lint: {count} issue(s)',
+    'workbench.lintLine': ' line {line}: ',
+    'workbench.selectDraft': 'Select a draft module to preview it.',
+    'workbench.sizeGroup': 'Preview size',
+    'workbench.open': 'Module workbench',
 
     // Install risk dialog
     'risk.title': 'This module accesses the network',

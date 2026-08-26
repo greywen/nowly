@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
-import { Check, Minus, Plus, Trash2, Upload, X } from 'lucide-react';
+import { Check, FlaskConical, Minus, Plus, Trash2, Upload, X } from 'lucide-react';
 import { Dialog } from '../components/Dialog';
+import { ModuleWorkbenchDialog } from './ModuleWorkbenchDialog';
 import type { SandboxExtension, SandboxExtensionDraft } from '../data/nowly-repository';
 import {
   builtinDefinitions,
@@ -88,6 +89,7 @@ export function TemplatePickerDialog({
   const builtinModules = [...builtinDefinitions, kanbanDefinition, ...extensionDefinitions];
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const [workbenchOpen, setWorkbenchOpen] = useState(false);
   // A pending network-module install waiting on the risk dialog confirmation.
   const [pendingRisk, setPendingRisk] = useState<
     { info: InstallRiskInfo; draft: SandboxExtensionDraft } | null
@@ -167,6 +169,14 @@ export function TemplatePickerDialog({
         <section className="template-picker__group">
           <div className="template-picker__group-head">
             <h3>{t('template.myModules')}</h3>
+            <button
+              type="button"
+              className="good-button"
+              onClick={() => setWorkbenchOpen(true)}
+            >
+              <FlaskConical aria-hidden="true" />
+              {t('workbench.open')}
+            </button>
           </div>
           <p className="template-picker__empty">{t('template.uploadComingSoon')}</p>
           {sandboxExtensions.length === 0 ? null : (
@@ -202,6 +212,8 @@ export function TemplatePickerDialog({
           onCancel={() => setPendingRisk(null)}
         />
       ) : null}
+
+      {workbenchOpen ? <ModuleWorkbenchDialog onClose={() => setWorkbenchOpen(false)} /> : null}
     </Dialog>
   );
 }
