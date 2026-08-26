@@ -4,6 +4,7 @@
 mod color;
 mod commands;
 mod db;
+mod dev_modules;
 mod error;
 mod event_exceptions;
 mod events;
@@ -422,6 +423,7 @@ fn main() {
             layout::save_module_layout,
             module_state::get_module_state,
             module_state::set_module_state,
+            dev_modules::list_dev_modules,
             extensions::list_extensions,
             extensions::install_extension,
             extensions::uninstall_extension,
