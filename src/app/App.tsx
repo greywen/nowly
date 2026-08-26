@@ -25,6 +25,7 @@ import { useExtensions } from '../widgets/useExtensions';
 import { getExtensionComponent } from '../widgets/extension-modules';
 import { createModuleHost } from '../widgets/extension-module';
 import { SandboxModule } from '../widgets/sandbox/SandboxModule';
+import { DevModuleWidget } from '../widgets/DevModuleWidget';
 import { SANDBOX_ID_PREFIX } from '../widgets/widget-registry';
 import { useNowlyRepository } from '../data/RepositoryContext';
 import { useCurrentTime } from './useCurrentTime';
@@ -230,6 +231,14 @@ export function App() {
   }
   modules.kanban = <KanbanWidget todayIso={todayIso} recentColors={recentColors} onRememberCustomColor={rememberCustomColor} />;
   modules.focusTimer = <FocusTimerWidget mode={windowMode} onOpenStatistics={() => setFocusStatisticsOpen(true)} onEnterWallpaper={() => void runWindowModeSwitch(switchToWallpaper)} />;
+  // The developer module (channel A) is a dev-only tool for previewing drafts
+  // on the real grid. `import.meta.env.DEV` is true under `tauri dev` and false
+  // in a built app, matching the backend's `cfg!(debug_assertions)` gate so it
+  // never ships to end users. It is added to the placeable set the same way in
+  // `buildDefinitions`.
+  if (import.meta.env.DEV) {
+    modules.devModule = <DevModuleWidget />;
+  }
   // Installed user modules run their uploaded source in an isolated
   // iframe, gated by the permissions they declared at install time.
   for (const extension of extensionsFeature.extensions) {
