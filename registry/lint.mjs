@@ -79,8 +79,14 @@ function iconButtonIssues(source) {
 // reviewer to actually audit, which is the point of the ceiling.
 const MAX_SOURCE_BYTES = 256 * 1024;
 
+// TextEncoder is a web + Node global, so this works in the browser (preview
+// page channel B, and the bundled in-app workbench channel A) as well as in
+// Node (the registry validator and tests). Buffer would be Node-only and crash
+// the browser bundles that import this module.
+const UTF8 = new TextEncoder();
+
 function domSizeIssue(source) {
-  const bytes = Buffer.byteLength(source, 'utf8');
+  const bytes = UTF8.encode(source).length;
   if (bytes <= MAX_SOURCE_BYTES) return null;
   return {
     rule: 'dom-size',

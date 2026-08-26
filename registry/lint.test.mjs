@@ -147,3 +147,22 @@ test('allows a normally sized module', () => {
   const src = 'Nowly.defineModule(({ root }) => { root.textContent = "hi"; });';
   assert.ok(!rules(src).includes('dom-size'));
 });
+
+// The linter runs in the browser too (preview page channel B and the in-app
+// workbench channel A both import it), where Node's `Buffer` does not exist.
+// Measuring source size must use a cross-environment API, so guard against a
+// regression to `Buffer.byteLength` by running the size check with `Buffer`
+// removed from the global scope.
+test('measures source size without relying on Node Buffer', () => {
+  const saved = globalThis.Buffer;
+  // eslint-disable-next-line no-global-assign
+  globalThis.Buffer = undefined;
+  try {
+    const bloat = 'root.textContent = "' + 'x'.repeat(300 * 1024) + '";';
+    assert.ok(rules(bloat).includes('dom-size'));
+    const small = 'root.textContent = "hi";';
+    assert.ok(!rules(small).includes('dom-size'));
+  } finally {
+    globalThis.Buffer = saved;
+  }
+});
