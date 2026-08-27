@@ -95,7 +95,13 @@ mod tests {
         let connection = database();
         set(&connection, "focusTimer", "\"a\"").unwrap();
         set(&connection, "vocabulary", "\"b\"").unwrap();
-        assert_eq!(get(&connection, "focusTimer").unwrap().as_deref(), Some("\"a\""));
-        assert_eq!(get(&connection, "vocabulary").unwrap().as_deref(), Some("\"b\""));
+        assert_eq!(
+            get(&connection, "focusTimer").unwrap().as_deref(),
+            Some("\"a\"")
+        );
+        assert_eq!(
+            get(&connection, "vocabulary").unwrap().as_deref(),
+            Some("\"b\"")
+        );
     }
 }

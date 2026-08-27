@@ -6,7 +6,7 @@ import type { MatrixTask } from '../matrix/matrix-model';
 import { EventModal } from './EventModal';
 
 const now = () => new Date(2026, 6, 23, 9, 42);
-const task: MatrixTask = { id:'t1', title:'发布 Nowly', quadrant:'important_urgent', dueAt:null, priority:1, completed:false, linkedEventId:null, note:'', createdAt:'x', updatedAt:'x' };
+const task: MatrixTask = { id:'t1', title:'发布 Nowly', quadrant:'important_urgent', dueAt:null, priority:1, completed:false, linkedEventId:null, note:'', tags:[], createdAt:'x', updatedAt:'x' };
 const existing: CalendarEvent = { id:'e1', title:'设计评审', startAt:'2026-07-23T14:00', endAt:'2026-07-23T15:00', allDay:false, category:'important', color:'red', linkedTaskId:'t1', note:'确认范围', reminders:[], createdAt:'x', updatedAt:'x', recurrence:null, startTz:null, endTz:null, rrule:null, seriesId:null, seriesStartAt:null, occurrenceStartAt:null, subscriptionId:null, isOverridden:false };
 // 既有 fixture 的 `color:'red'` 已通不过十六进制校验，编辑保存需要一个合法颜色。
 const editable: CalendarEvent = { ...existing, color:'#F06445' };
@@ -169,14 +169,14 @@ describe('EventModal', () => {
 
   it('blocks saving an invalid recurrence and surfaces the error', async () => {
     const user=userEvent.setup(); const createEvent=vi.fn().mockResolvedValue(existing);
-    const { container }=render(<EventModal {...props({ createEvent })} />);
+    render(<EventModal {...props({ createEvent })} />);
     await user.type(screen.getByLabelText('日程标题'), '健身');
     await pick(user, '重复', '自定义');
     fireEvent.change(screen.getByLabelText('重复间隔'), { target:{ value:'0' } });
     await user.click(screen.getByRole('button', { name:'保存' }));
     expect(createEvent).not.toHaveBeenCalled();
     // 不断言文案：校验文案键由 Task 17 补齐，现在 t() 会回退为键名。
-    expect(container.querySelector('#event-recurrence-error')).not.toBeNull();
+    expect(document.querySelector('#event-recurrence-error')).not.toBeNull();
   });
 
   it('keeps the recurrence rule when only a non-time field changes', async () => {
@@ -209,10 +209,10 @@ describe('EventModal', () => {
 
   it('warns about cleared adjustments only when the whole series really moves', async () => {
     const user=userEvent.setup();
-    const { container }=render(<EventModal {...props({ mode:{type:'edit',event:recurring} })} />);
+    render(<EventModal {...props({ mode:{type:'edit',event:recurring} })} />);
     await user.click(screen.getByRole('button', { name:'开始日期' }));
     // 同为周一 10:00，只有日期变了：只比 HH:MM 的判定会漏报。
-    await user.click(container.querySelector('[data-date="2026-08-03"]') as HTMLElement);
+    await user.click(document.querySelector('[data-date="2026-08-03"]') as HTMLElement);
     await user.click(screen.getByRole('button', { name:'保存' }));
     await user.click(await screen.findByRole('radio', { name:'全部' }));
     expect(screen.getByText('该日程已有的单次调整将被清除。')).toBeInTheDocument();

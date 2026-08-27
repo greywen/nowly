@@ -2,6 +2,14 @@ export type Quadrant = 'important_urgent' | 'important_not_urgent' | 'not_import
 
 export type TaskPriority = 1 | 2 | 3;
 
+// A tag resolved for display alongside a task. Colors are canonical HEX values,
+// mirroring the kanban tag chips.
+export type MatrixTaskTag = {
+  id: string;
+  name: string;
+  color: string;
+};
+
 export type MatrixTask = {
   id: string;
   title: string;
@@ -11,11 +19,14 @@ export type MatrixTask = {
   completed: boolean;
   linkedEventId: string | null;
   note: string;
+  tags: MatrixTaskTag[];
   createdAt: string;
   updatedAt: string;
 };
 
-export type TaskDraft = Omit<MatrixTask, 'id' | 'createdAt' | 'updatedAt'>;
+// Tags are resolved for display, not edited through the matrix draft, so they
+// are excluded here alongside the identity/audit fields.
+export type TaskDraft = Omit<MatrixTask, 'id' | 'createdAt' | 'updatedAt' | 'tags'>;
 
 export const quadrantOrder: Quadrant[] = [
   'important_urgent',

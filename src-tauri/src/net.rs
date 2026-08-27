@@ -50,8 +50,8 @@ pub struct ProxyFetchResponse {
 // Reject any URL whose host is not in the allow-list, is not https, or resolves
 // to a non-public address. Returns the validated `reqwest::Url`.
 fn validate_url(raw: &str, allowed_hosts: &[String]) -> Result<reqwest::Url, CommandError> {
-    let url = reqwest::Url::parse(raw)
-        .map_err(|_| CommandError::validation("url", "请求地址无效。"))?;
+    let url =
+        reqwest::Url::parse(raw).map_err(|_| CommandError::validation("url", "请求地址无效。"))?;
     // Only https egress. http is refused so credentials and data are never sent
     // in cleartext, and to shrink the SSRF surface.
     if url.scheme() != "https" {
@@ -167,7 +167,10 @@ fn pinned_client(url: &reqwest::Url) -> Result<reqwest::blocking::Client, Comman
 
 // Read at most `limit` bytes from the response body; anything larger is an
 // error rather than an unbounded allocation.
-fn read_capped(response: reqwest::blocking::Response, limit: usize) -> Result<String, CommandError> {
+fn read_capped(
+    response: reqwest::blocking::Response,
+    limit: usize,
+) -> Result<String, CommandError> {
     let mut reader = response.take(limit as u64 + 1);
     let mut buffer: Vec<u8> = Vec::new();
     reader
@@ -259,16 +262,15 @@ fn short_reqwest_error(error: &reqwest::Error) -> String {
 // allow-list — instead the caller passes the max size, and the same https-only /
 // no-private-IP / no-redirect rules apply.
 fn fetch_text(url_str: &str, limit: usize) -> Result<String, CommandError> {
-    let url = reqwest::Url::parse(url_str)
-        .map_err(|_| CommandError::validation("url", "地址无效。"))?;
+    let url =
+        reqwest::Url::parse(url_str).map_err(|_| CommandError::validation("url", "地址无效。"))?;
     if url.scheme() != "https" {
         return Err(CommandError::validation("url", "仅允许 https 地址。"));
     }
     let client = pinned_client(&url)?;
-    let response = client
-        .get(url)
-        .send()
-        .map_err(|error| CommandError::validation("url", &format!("请求失败：{}", short_reqwest_error(&error))))?;
+    let response = client.get(url).send().map_err(|error| {
+        CommandError::validation("url", &format!("请求失败：{}", short_reqwest_error(&error)))
+    })?;
     if !response.status().is_success() {
         return Err(CommandError::validation("url", "远端返回错误状态。"));
     }
@@ -312,32 +314,29 @@ mod tests {
 
     #[test]
     fn rejects_non_https() {
-        let err = validate_url("http://api.example.com/x", &hosts(&["api.example.com"]))
-            .unwrap_err();
+        let err =
+            validate_url("http://api.example.com/x", &hosts(&["api.example.com"])).unwrap_err();
         assert_eq!(err.field.as_deref(), Some("url"));
     }
 
     #[test]
     fn rejects_host_not_in_allow_list() {
-        let err = validate_url("https://evil.com/x", &hosts(&["api.example.com"]))
-            .unwrap_err();
+        let err = validate_url("https://evil.com/x", &hosts(&["api.example.com"])).unwrap_err();
         assert_eq!(err.field.as_deref(), Some("url"));
     }
 
     #[test]
     fn accepts_allowed_host_case_insensitively() {
-        let url = validate_url("https://API.Example.com/data", &hosts(&["api.example.com"]))
-            .unwrap();
+        let url =
+            validate_url("https://API.Example.com/data", &hosts(&["api.example.com"])).unwrap();
         assert_eq!(url.host_str(), Some("api.example.com"));
     }
 
     #[test]
     fn rejects_private_ip_literal() {
-        let err = validate_url("https://127.0.0.1/x", &hosts(&["127.0.0.1"]))
-            .unwrap_err();
+        let err = validate_url("https://127.0.0.1/x", &hosts(&["127.0.0.1"])).unwrap_err();
         assert_eq!(err.field.as_deref(), Some("url"));
-        let err = validate_url("https://192.168.1.1/x", &hosts(&["192.168.1.1"]))
-            .unwrap_err();
+        let err = validate_url("https://192.168.1.1/x", &hosts(&["192.168.1.1"])).unwrap_err();
         assert_eq!(err.field.as_deref(), Some("url"));
     }
 

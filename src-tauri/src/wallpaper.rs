@@ -242,7 +242,9 @@ mod platform {
     use std::sync::{Mutex, OnceLock};
     use std::time::Duration;
     use windows::core::{w, BOOL};
-    use windows::Win32::Foundation::{CloseHandle, COLORREF, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
+    use windows::Win32::Foundation::{
+        CloseHandle, COLORREF, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM,
+    };
     use windows::Win32::Graphics::Gdi::{
         GetMonitorInfoW, MapWindowPoints, MonitorFromWindow, ScreenToClient, HMONITOR, MONITORINFO,
         MONITOR_DEFAULTTONEAREST,
@@ -254,22 +256,22 @@ mod platform {
     use windows::Win32::System::Threading::{
         GetCurrentThreadId, OpenProcess, PROCESS_VM_OPERATION, PROCESS_VM_READ, PROCESS_VM_WRITE,
     };
-    use windows::Win32::UI::Input::KeyboardAndMouse::GetDoubleClickTime;
     use windows::Win32::UI::Accessibility::{SetWinEventHook, UnhookWinEvent, HWINEVENTHOOK};
     use windows::Win32::UI::Controls::LVHITTESTINFO;
+    use windows::Win32::UI::Input::KeyboardAndMouse::GetDoubleClickTime;
     use windows::Win32::UI::Shell::{SHAppBarMessage, ABM_GETSTATE, ABS_AUTOHIDE, APPBARDATA};
     use windows::Win32::UI::WindowsAndMessaging::{
-        CallNextHookEx, DispatchMessageW, EnumChildWindows, EnumWindows, FindWindowExW, FindWindowW,
-        GetAncestor, GetClassNameW, GetClientRect, GetMessageW, GetSystemMetrics,
+        CallNextHookEx, DispatchMessageW, EnumChildWindows, EnumWindows, FindWindowExW,
+        FindWindowW, GetAncestor, GetClassNameW, GetClientRect, GetMessageW, GetSystemMetrics,
         GetWindowLongPtrW, GetWindowRect, GetWindowThreadProcessId, IsWindowVisible,
-        PostThreadMessageW, SendMessageTimeoutW, SendMessageW,
-        SetForegroundWindow, SetLayeredWindowAttributes, SetParent, SetWindowLongPtrW,
-        SetWindowPos, SetWindowsHookExW, ShowWindow, TranslateMessage, UnhookWindowsHookEx,
-        WindowFromPoint, EVENT_OBJECT_HIDE, EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_SHOW,
-        GA_ROOT, GWL_EXSTYLE, GWL_STYLE, HWND_BOTTOM, LWA_ALPHA, MSG, SEND_MESSAGE_TIMEOUT_FLAGS,
-        SMTO_NORMAL, SM_CXDOUBLECLK, SM_CYDOUBLECLK, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE,
-        SWP_NOSIZE, SWP_SHOWWINDOW, SW_RESTORE, MSLLHOOKSTRUCT, WH_MOUSE_LL, WINEVENT_OUTOFCONTEXT,
-        WM_LBUTTONDOWN, WM_QUIT, WS_EX_LAYERED, WS_EX_NOREDIRECTIONBITMAP,
+        PostThreadMessageW, SendMessageTimeoutW, SendMessageW, SetForegroundWindow,
+        SetLayeredWindowAttributes, SetParent, SetWindowLongPtrW, SetWindowPos, SetWindowsHookExW,
+        ShowWindow, TranslateMessage, UnhookWindowsHookEx, WindowFromPoint, EVENT_OBJECT_HIDE,
+        EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_SHOW, GA_ROOT, GWL_EXSTYLE, GWL_STYLE,
+        HWND_BOTTOM, LWA_ALPHA, MSG, MSLLHOOKSTRUCT, SEND_MESSAGE_TIMEOUT_FLAGS, SMTO_NORMAL,
+        SM_CXDOUBLECLK, SM_CYDOUBLECLK, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
+        SWP_SHOWWINDOW, SW_RESTORE, WH_MOUSE_LL, WINEVENT_OUTOFCONTEXT, WM_LBUTTONDOWN, WM_QUIT,
+        WS_EX_LAYERED, WS_EX_NOREDIRECTIONBITMAP,
     };
 
     const CREATE_WORKERW_MESSAGE: u32 = 0x052C;
@@ -1064,9 +1066,7 @@ mod platform {
             let root = if hwnd_is_null(root) { target } else { root };
             let root_class = class_name(root);
             let target_class = class_name(target);
-            println!(
-                "desktop watch: hit target_class={target_class:?} root_class={root_class:?}"
-            );
+            println!("desktop watch: hit target_class={target_class:?} root_class={root_class:?}");
             // Only the live desktop counts. Progman/WorkerW host the wallpaper
             // and desktop icons; anything else (Explorer folders, other apps)
             // must be ignored.
@@ -1206,7 +1206,8 @@ mod platform {
             let slot = activation_handler()
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner());
-            slot.as_ref().map(|handler| handler as *const ActivationHandler)
+            slot.as_ref()
+                .map(|handler| handler as *const ActivationHandler)
         };
         // Run on a separate thread so the low-level hook returns promptly.
         if handler.is_some() {
@@ -1268,28 +1269,26 @@ mod platform {
         }
 
         let (tx, rx) = std::sync::mpsc::channel::<Option<(isize, u32)>>();
-        std::thread::spawn(move || {
-            unsafe {
-                let hook = match SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_hook_proc), None, 0) {
-                    Ok(hook) => hook,
-                    Err(error) => {
-                        eprintln!("failed to install desktop mouse hook: {error}");
-                        let _ = tx.send(None);
-                        return;
-                    }
-                };
-                let thread_id = GetCurrentThreadId();
-                println!("desktop watch: mouse hook installed on thread {thread_id}");
-                let _ = tx.send(Some((hook.0 as isize, thread_id)));
-
-                let mut message = MSG::default();
-                while GetMessageW(&mut message, None, 0, 0).as_bool() {
-                    let _ = TranslateMessage(&message);
-                    DispatchMessageW(&message);
+        std::thread::spawn(move || unsafe {
+            let hook = match SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_hook_proc), None, 0) {
+                Ok(hook) => hook,
+                Err(error) => {
+                    eprintln!("failed to install desktop mouse hook: {error}");
+                    let _ = tx.send(None);
+                    return;
                 }
+            };
+            let thread_id = GetCurrentThreadId();
+            println!("desktop watch: mouse hook installed on thread {thread_id}");
+            let _ = tx.send(Some((hook.0 as isize, thread_id)));
 
-                let _ = UnhookWindowsHookEx(hook);
+            let mut message = MSG::default();
+            while GetMessageW(&mut message, None, 0, 0).as_bool() {
+                let _ = TranslateMessage(&message);
+                DispatchMessageW(&message);
             }
+
+            let _ = UnhookWindowsHookEx(hook);
         });
 
         match rx.recv() {
@@ -1357,9 +1356,7 @@ fn pin_webview_scale<R: tauri::Runtime>(
             if let Err(error) = controller.SetRasterizationScale(scale) {
                 eprintln!("failed to set webview rasterization scale: {error}");
             }
-            if let Err(error) =
-                controller.SetShouldDetectMonitorScaleChanges(detect_changes)
-            {
+            if let Err(error) = controller.SetShouldDetectMonitorScaleChanges(detect_changes) {
                 eprintln!("failed to set webview scale detection: {error}");
             }
         }
@@ -1383,7 +1380,9 @@ fn current_scale_factor<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) -> 
 pub fn enter_wallpaper_webview<R: tauri::Runtime>(
     window: &tauri::WebviewWindow<R>,
 ) -> Result<String, String> {
-    let hwnd = window.hwnd().map_err(|error| format!("failed to get webview window handle: {error}"))?;
+    let hwnd = window
+        .hwnd()
+        .map_err(|error| format!("failed to get webview window handle: {error}"))?;
     // Capture the target monitor's scale before reparenting freezes detection.
     let scale = current_scale_factor(window);
     let message = platform::enter_wallpaper(hwnd)?;
@@ -1448,12 +1447,20 @@ pub fn enter_wallpaper_mode(
     #[cfg(target_os = "windows")]
     {
         use tauri::Manager;
-        let target_monitor_id = db.0.lock().map_err(crate::error::CommandError::database)
-            .and_then(|connection| crate::settings::read_app_settings(&connection).map_err(crate::error::CommandError::database))?.target_monitor_id;
+        let target_monitor_id =
+            db.0.lock()
+                .map_err(crate::error::CommandError::database)
+                .and_then(|connection| {
+                    crate::settings::read_app_settings(&connection)
+                        .map_err(crate::error::CommandError::database)
+                })?
+                .target_monitor_id;
         crate::monitors::position_target(&window, target_monitor_id.as_deref())?;
-        let webview = window.get_webview_window("main")
+        let webview = window
+            .get_webview_window("main")
             .ok_or_else(|| crate::error::CommandError::system("main window not found"))?;
-        let message = enter_wallpaper_webview(&webview).map_err(crate::error::CommandError::system)?;
+        let message =
+            enter_wallpaper_webview(&webview).map_err(crate::error::CommandError::system)?;
         {
             let mut connection = db.0.lock().map_err(crate::error::CommandError::database)?;
             let mut settings = crate::settings::read_app_settings(&connection)
@@ -1462,8 +1469,15 @@ pub fn enter_wallpaper_mode(
             crate::settings::write_app_settings(&mut connection, &settings)
                 .map_err(crate::error::CommandError::database)?;
         }
-        lifecycle.lock().map_err(crate::error::CommandError::system)?.enter_wallpaper();
-        window.emit("window-mode-changed", crate::window_lifecycle::WindowMode::Wallpaper)
+        lifecycle
+            .lock()
+            .map_err(crate::error::CommandError::system)?
+            .enter_wallpaper();
+        window
+            .emit(
+                "window-mode-changed",
+                crate::window_lifecycle::WindowMode::Wallpaper,
+            )
             .map_err(crate::error::CommandError::system)?;
         println!("{message}");
         Ok(message)
@@ -1473,7 +1487,9 @@ pub fn enter_wallpaper_mode(
     {
         let _ = window;
         let _ = (db, lifecycle);
-        Err(crate::error::CommandError::system("wallpaper mode is only supported on Windows"))
+        Err(crate::error::CommandError::system(
+            "wallpaper mode is only supported on Windows",
+        ))
     }
 }
 
@@ -1485,11 +1501,20 @@ pub fn enter_foreground_mode(
     #[cfg(target_os = "windows")]
     {
         use tauri::Manager;
-        let webview = window.get_webview_window("main")
+        let webview = window
+            .get_webview_window("main")
             .ok_or_else(|| crate::error::CommandError::system("main window not found"))?;
-        let message = enter_foreground_webview(&webview).map_err(crate::error::CommandError::system)?;
-        lifecycle.lock().map_err(crate::error::CommandError::system)?.enter_foreground();
-        window.emit("window-mode-changed", crate::window_lifecycle::WindowMode::Foreground)
+        let message =
+            enter_foreground_webview(&webview).map_err(crate::error::CommandError::system)?;
+        lifecycle
+            .lock()
+            .map_err(crate::error::CommandError::system)?
+            .enter_foreground();
+        window
+            .emit(
+                "window-mode-changed",
+                crate::window_lifecycle::WindowMode::Foreground,
+            )
             .map_err(crate::error::CommandError::system)?;
         println!("{message}");
         Ok(message)
@@ -1499,7 +1524,9 @@ pub fn enter_foreground_mode(
     {
         let _ = window;
         let _ = lifecycle;
-        Err(crate::error::CommandError::system("foreground mode switching is only supported on Windows"))
+        Err(crate::error::CommandError::system(
+            "foreground mode switching is only supported on Windows",
+        ))
     }
 }
 

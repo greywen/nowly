@@ -2,34 +2,64 @@ use serde::Serialize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub enum WindowMode { Foreground, Wallpaper, HiddenToTray }
+pub enum WindowMode {
+    Foreground,
+    Wallpaper,
+    HiddenToTray,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CloseAction { Wallpaper, HideToTray }
+pub enum CloseAction {
+    Wallpaper,
+    HideToTray,
+}
 
 #[derive(Debug)]
-pub struct WindowLifecycle { mode: WindowMode }
+pub struct WindowLifecycle {
+    mode: WindowMode,
+}
 
 impl Default for WindowLifecycle {
-    fn default() -> Self { Self { mode: WindowMode::Foreground } }
+    fn default() -> Self {
+        Self {
+            mode: WindowMode::Foreground,
+        }
+    }
 }
 
 impl WindowLifecycle {
-    pub fn mode(&self) -> WindowMode { self.mode }
-    pub fn enter_foreground(&mut self) { self.mode = WindowMode::Foreground; }
-    pub fn enter_wallpaper(&mut self) { self.mode = WindowMode::Wallpaper; }
-    pub fn hide_to_tray(&mut self) { self.mode = WindowMode::HiddenToTray; }
-    pub fn close_action(enabled: bool) -> CloseAction {
-        if enabled { CloseAction::Wallpaper } else { CloseAction::HideToTray }
+    pub fn mode(&self) -> WindowMode {
+        self.mode
     }
-    pub fn wallpaper_failed(&mut self) { self.hide_to_tray(); }
+    pub fn enter_foreground(&mut self) {
+        self.mode = WindowMode::Foreground;
+    }
+    pub fn enter_wallpaper(&mut self) {
+        self.mode = WindowMode::Wallpaper;
+    }
+    pub fn hide_to_tray(&mut self) {
+        self.mode = WindowMode::HiddenToTray;
+    }
+    pub fn close_action(enabled: bool) -> CloseAction {
+        if enabled {
+            CloseAction::Wallpaper
+        } else {
+            CloseAction::HideToTray
+        }
+    }
+    pub fn wallpaper_failed(&mut self) {
+        self.hide_to_tray();
+    }
 }
 
 #[tauri::command]
 pub fn get_window_mode(
     lifecycle: tauri::State<'_, std::sync::Mutex<WindowLifecycle>>,
 ) -> Result<WindowMode, crate::error::CommandError> {
-    Ok(lifecycle.lock().map_err(crate::error::CommandError::system)?.mode())
+    Ok(lifecycle
+        .lock()
+        .map_err(crate::error::CommandError::system)?
+        .mode())
 }
 
 #[cfg(test)]
@@ -49,7 +79,10 @@ mod tests {
     #[test]
     fn close_decision_uses_persisted_wallpaper_preference() {
         assert_eq!(WindowLifecycle::close_action(true), CloseAction::Wallpaper);
-        assert_eq!(WindowLifecycle::close_action(false), CloseAction::HideToTray);
+        assert_eq!(
+            WindowLifecycle::close_action(false),
+            CloseAction::HideToTray
+        );
     }
 
     #[test]
@@ -62,6 +95,9 @@ mod tests {
 
     #[test]
     fn mode_serializes_as_stable_camel_case_value() {
-        assert_eq!(serde_json::to_string(&WindowMode::HiddenToTray).unwrap(), "\"hiddenToTray\"");
+        assert_eq!(
+            serde_json::to_string(&WindowMode::HiddenToTray).unwrap(),
+            "\"hiddenToTray\""
+        );
     }
 }

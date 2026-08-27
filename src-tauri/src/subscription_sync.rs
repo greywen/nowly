@@ -231,10 +231,7 @@ pub fn sync_due_db(db: &AppDb) -> Result<bool, CommandError> {
 }
 
 #[tauri::command]
-pub fn refresh_calendar_subscription(
-    db: State<'_, AppDb>,
-    id: String,
-) -> Result<(), CommandError> {
+pub fn refresh_calendar_subscription(db: State<'_, AppDb>, id: String) -> Result<(), CommandError> {
     // ① 短锁读 URL 并确认存在。
     let url: String = {
         let connection = db.0.lock().map_err(CommandError::database)?;

@@ -19,7 +19,10 @@ fn is_allowed_target(target: &str) -> bool {
 #[tauri::command]
 pub fn open_external(target: String) -> Result<(), CommandError> {
     if !is_allowed_target(&target) {
-        return Err(CommandError::validation("target", "仅允许打开 https 链接或邮件地址。"));
+        return Err(CommandError::validation(
+            "target",
+            "仅允许打开 https 链接或邮件地址。",
+        ));
     }
     open_target(&target)
 }
@@ -62,7 +65,9 @@ fn open_target(target: &str) -> Result<(), CommandError> {
 
 #[cfg(not(windows))]
 fn open_target(_target: &str) -> Result<(), CommandError> {
-    Err(CommandError::system("opening external targets is only supported on Windows"))
+    Err(CommandError::system(
+        "opening external targets is only supported on Windows",
+    ))
 }
 
 #[cfg(test)]

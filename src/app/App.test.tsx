@@ -148,7 +148,8 @@ describe('App startup and window behavior', () => {
     await user.click(screen.getByRole('button', { name:'保存任务' }));
     await waitFor(() => expect(createTask).toHaveBeenCalled());
     await waitFor(() => expect(screen.queryByRole('dialog', { name:'新建任务' })).not.toBeInTheDocument());
-    // The unified workspace updates the shared snapshot from the returned task.
+    // The unified workspace updates its shared snapshot from the returned task;
+    // it must not issue a second task read after every successful write.
     expect(listTasks).toHaveBeenCalledOnce();
 
     await user.click(screen.getByRole('button', { name:'编辑任务：发布 Nowly' }));
@@ -174,7 +175,7 @@ describe('App startup and window behavior', () => {
 
   it('creates notes and opens the all-notes manager', async () => {
     const user = userEvent.setup();
-    const note = { id:'n1', title:'产品原则', content:'保持简单', color:'purple' as const, pinned:true, createdAt:'x', updatedAt:'x' };
+    const note = { id:'n1', title:'产品原则', content:'保持简单', color:'#4F55DA' as const, pinned:true, styleVariant:4, icon:'smile' as const, createdAt:'x', updatedAt:'x' };
     const listNotes = vi.fn().mockResolvedValueOnce([]).mockResolvedValue([note]);
     const createNote = vi.fn().mockResolvedValue(note);
     renderApp(createRepository({listNotes, createNote}));

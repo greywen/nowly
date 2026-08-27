@@ -2,7 +2,7 @@ import type { KanbanCard, KanbanPriority, KanbanSnapshot } from '../kanban/kanba
 import type { MatrixTask, TaskDraft as MatrixTaskDraft, TaskPriority as LegacyTaskPriority } from '../matrix/matrix-model';
 import { DESIGN_COLORS, type HexColor } from '../lib/color';
 import { quadrantLabel } from '../matrix/matrix-model';
-import type { Task, TaskDraft, TaskPriority, TaskView, TaskWorkspaceSnapshot } from './task-model';
+import type { Task, TaskDraft, TaskPriority, TaskTag, TaskView, TaskWorkspaceSnapshot } from './task-model';
 
 const priorityColors: Record<TaskPriority, HexColor> = {
   important_urgent: DESIGN_COLORS.danger,
@@ -17,8 +17,13 @@ export function legacyPriority(priority: TaskPriority): LegacyTaskPriority {
   return 3;
 }
 
-export function taskToMatrixTask(task: Task, _tags: unknown[] = []): MatrixTask | null {
+export function taskToMatrixTask(task: Task, tags: TaskTag[] = []): MatrixTask | null {
   if (!task.priority || !task.views.includes('matrix')) return null;
+  const tagById = new Map(tags.map((tag) => [tag.id, tag]));
+  const resolvedTags = task.tagIds
+    .map((id) => tagById.get(id))
+    .filter((tag): tag is TaskTag => tag !== undefined)
+    .map((tag) => ({ id: tag.id, name: tag.name, color: tag.color }));
   return {
     id: task.id,
     title: task.title,
@@ -28,6 +33,7 @@ export function taskToMatrixTask(task: Task, _tags: unknown[] = []): MatrixTask 
     completed: task.completed,
     linkedEventId: task.linkedEventId,
     note: task.description,
+    tags: resolvedTags,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt
   };
@@ -35,7 +41,7 @@ export function taskToMatrixTask(task: Task, _tags: unknown[] = []): MatrixTask 
 
 export function matrixTasksFromWorkspace(snapshot: TaskWorkspaceSnapshot): MatrixTask[] {
   return snapshot.tasks
-    .map((task) => taskToMatrixTask(task))
+    .map((task) => taskToMatrixTask(task, snapshot.tags))
     .filter((task): task is MatrixTask => task !== null);
 }
 

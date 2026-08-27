@@ -1,6 +1,6 @@
 import { Plus, Settings } from 'lucide-react';
 import { useState } from 'react';
-import { DEFAULT_NOTES_VIEW, type Note, type NotesViewMode } from './notes-model';
+import { DEFAULT_NOTES_VIEW, NOTE_STYLE_VARIANT_COUNT, noteIconSymbol, type Note, type NotesViewMode } from './notes-model';
 import { NotesSettingsDialog } from './NotesSettingsDialog';
 import { colorStyle } from '../lib/color';
 import { t } from '../i18n';
@@ -22,6 +22,17 @@ type NotesWidgetProps = {
 // Sticky notes hang at a few fixed angles so the board reads as paper instead
 // of a card grid. The tilt is static; nothing animates.
 const BOARD_TILTS = 4;
+const ICON_ANCHORS = [
+  'left-center',
+  'bottom-right',
+  'right-top',
+  'top-right',
+  'left-center',
+  'right-top',
+  'right-bottom',
+  'top-left',
+  'bottom-right'
+] as const;
 
 export function NotesWidget({
   notes,
@@ -36,6 +47,18 @@ export function NotesWidget({
 }: NotesWidgetProps) {
   const sortedNotes = [...notes].sort((left, right) => Number(right.pinned) - Number(left.pinned));
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  function styleVariantFor(note: Note): number {
+    return Math.abs(note.styleVariant) % NOTE_STYLE_VARIANT_COUNT;
+  }
+
+  function iconFor(note: Note): string {
+    return noteIconSymbol(note.icon);
+  }
+
+  function iconAnchorFor(note: Note): string {
+    return ICON_ANCHORS[styleVariantFor(note)];
+  }
 
   return (
     <div className="widget-content">
@@ -90,10 +113,11 @@ export function NotesWidget({
                 key={note.id}
                 type="button"
                 onClick={(event) => onOpenNote(note, event.currentTarget)}
-                className={`sticky-note sticky-note--tilt-${index % BOARD_TILTS}`}
+                className={`sticky-note sticky-note--tilt-${index % BOARD_TILTS} sticky-note--style-${styleVariantFor(note)}`}
                 style={colorStyle(note.color)}
               >
-                <span className="sticky-note__tape" aria-hidden="true" />
+                {iconFor(note) ? null : <span className="sticky-note__tape" aria-hidden="true" />}
+                {iconFor(note) ? <span className={`sticky-note__icon sticky-note__icon--${iconAnchorFor(note)}`} aria-hidden="true">{iconFor(note)}</span> : null}
                 <span className="sticky-note__title">{note.title}</span>
                 <span className="sticky-note__content">{note.content}</span>
               </button>
@@ -109,7 +133,7 @@ export function NotesWidget({
                 className="note"
                 style={colorStyle(note.color)}
               >
-                <div className="note-title">{note.title}</div>
+                <div className="note-title">{iconFor(note) ? <span className="note-icon" aria-hidden="true">{iconFor(note)}</span> : null}{note.title}</div>
                 <div className="note-content">{note.content}</div>
               </button>
             ))}

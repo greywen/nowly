@@ -17,8 +17,7 @@ use serde::Serialize;
 // frontend treats as "no update info", so the About dialog still shows the
 // current version offline.
 
-const LATEST_RELEASE_API: &str =
-    "https://api.github.com/repos/greywen/nowly/releases/latest";
+const LATEST_RELEASE_API: &str = "https://api.github.com/repos/greywen/nowly/releases/latest";
 const RELEASES_PAGE_URL: &str = "https://github.com/greywen/nowly/releases";
 
 #[derive(Debug, Clone, Serialize)]
@@ -48,11 +47,10 @@ fn parse_version(raw: &str) -> (u64, u64, u64) {
         .or_else(|| trimmed.strip_prefix('V'))
         .unwrap_or(trimmed);
     // Drop any pre-release/build metadata so "1.2.3-beta.1" compares as 1.2.3.
-    let core = without_v
-        .split(['-', '+'])
-        .next()
-        .unwrap_or(without_v);
-    let mut parts = core.split('.').map(|part| part.trim().parse::<u64>().unwrap_or(0));
+    let core = without_v.split(['-', '+']).next().unwrap_or(without_v);
+    let mut parts = core
+        .split('.')
+        .map(|part| part.trim().parse::<u64>().unwrap_or(0));
     let major = parts.next().unwrap_or(0);
     let minor = parts.next().unwrap_or(0);
     let patch = parts.next().unwrap_or(0);

@@ -12,7 +12,7 @@ const currentEvent: CalendarEvent = {
 };
 const existing: MatrixTask = {
   id: 't1', title: '发布 Nowly', quadrant: 'important_urgent', dueAt: '2026-07-23', priority: 1,
-  completed: false, linkedEventId: 'e1', note: '发布前检查', createdAt: 'x', updatedAt: 'x'
+  completed: false, linkedEventId: 'e1', note: '发布前检查', tags: [], createdAt: 'x', updatedAt: 'x'
 };
 
 function props(overrides: Record<string, unknown> = {}) {

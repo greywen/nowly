@@ -64,7 +64,11 @@ pub fn rrule_to_recurrence(text: &str) -> Option<Recurrence> {
                     by_day.push(code.to_owned());
                 }
             }
-            "COUNT" => end = RecurrenceEnd::Count { count: value.parse().ok()? },
+            "COUNT" => {
+                end = RecurrenceEnd::Count {
+                    count: value.parse().ok()?,
+                }
+            }
             "UNTIL" => {
                 // 取日期部分 `YYYYMMDD`，还原成 `YYYY-MM-DD`。
                 let date = value.get(0..8)?;
@@ -126,7 +130,9 @@ mod tests {
             freq: Freq::Monthly,
             interval: 1,
             by_day: vec![],
-            end: RecurrenceEnd::Until { date: "2026-09-30".into() },
+            end: RecurrenceEnd::Until {
+                date: "2026-09-30".into(),
+            },
         };
         // UNTIL 以日期末尾 23:59 的 UTC 标记（分钟精度）表达，保证包含当天。
         assert_eq!(
@@ -156,6 +162,11 @@ mod tests {
     #[test]
     fn until_parses_back_to_date() {
         let parsed = rrule_to_recurrence("FREQ=MONTHLY;UNTIL=20260930T235900Z").unwrap();
-        assert_eq!(parsed.end, RecurrenceEnd::Until { date: "2026-09-30".into() });
+        assert_eq!(
+            parsed.end,
+            RecurrenceEnd::Until {
+                date: "2026-09-30".into()
+            }
+        );
     }
 }

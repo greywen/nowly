@@ -42,6 +42,42 @@ describe('NotesWidget', () => {
     expect(screen.getByTestId('notes-board')).toBeInTheDocument();
     expect(screen.queryByTestId('notes-list')).not.toBeInTheDocument();
     expect(screen.getByText('产品原则')).toBeInTheDocument();
+    expect(screen.getByText('⭐')).toBeInTheDocument();
+    expect(screen.getByRole('button',{name:/产品原则/})).toHaveClass('sticky-note--style-2');
+  });
+  it('pins board icons to a stable edge anchor for each note style', () => {
+    const notes = Array.from({length:9},(_,styleVariant)=>({
+      ...sampleNotes[0], id:`note-${styleVariant}`, title:`便签 ${styleVariant}`,
+      styleVariant, icon:'star' as const
+    }));
+    render(<NotesWidget notes={notes} status="ready" view="board" {...props} />);
+
+    expect(screen.getAllByText('⭐').map(icon=>icon.className)).toEqual([
+      'sticky-note__icon sticky-note__icon--left-center',
+      'sticky-note__icon sticky-note__icon--bottom-right',
+      'sticky-note__icon sticky-note__icon--right-top',
+      'sticky-note__icon sticky-note__icon--top-right',
+      'sticky-note__icon sticky-note__icon--left-center',
+      'sticky-note__icon sticky-note__icon--right-top',
+      'sticky-note__icon sticky-note__icon--right-bottom',
+      'sticky-note__icon sticky-note__icon--top-left',
+      'sticky-note__icon sticky-note__icon--bottom-right'
+    ]);
+
+    expect(screen.getByRole('button',{name:/便签 0/}).querySelector('.sticky-note__tape')).not.toBeInTheDocument();
+  });
+  it('keeps the tape when a board note has no icon', () => {
+    render(<NotesWidget notes={[{...sampleNotes[0],icon:''}]} status="ready" view="board" {...props} />);
+    expect(screen.getByRole('button',{name:/产品原则/}).querySelector('.sticky-note__tape')).toBeInTheDocument();
+  });
+  it('keeps board notes static and free of folded corners', () => {
+    const notes = Array.from({length:9},(_,styleVariant)=>(
+      {...sampleNotes[0],id:`style-${styleVariant}`,title:`样式 ${styleVariant}`,styleVariant}
+    ));
+    render(<NotesWidget notes={notes} status="ready" view="board" {...props} />);
+
+    expect(screen.getAllByRole('button',{name:/样式/}).every(note=>!note.classList.contains('sticky-note--floating'))).toBe(true);
+    expect(document.querySelectorAll('.sticky-note__fold')).toHaveLength(0);
   });
   it('hides the settings gear when the host does not support switching', () => {
     render(<NotesWidget notes={sampleNotes} status="ready" {...props} />);

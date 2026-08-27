@@ -162,8 +162,14 @@ mod tests {
         assert_eq!(
             modules,
             vec![
-                DevModule { name: "a.js".into(), source: "// a".into() },
-                DevModule { name: "b.js".into(), source: "// b".into() },
+                DevModule {
+                    name: "a.js".into(),
+                    source: "// a".into()
+                },
+                DevModule {
+                    name: "b.js".into(),
+                    source: "// b".into()
+                },
             ]
         );
         let _ = std::fs::remove_dir_all(&dir);

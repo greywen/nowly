@@ -30,6 +30,7 @@ function task(id: string, overrides: Partial<MatrixTask> = {}): MatrixTask {
   return {
     id,
     ...draft,
+    tags: [],
     createdAt: '2026-07-23T09:00:00Z',
     updatedAt: '2026-07-23T09:00:00Z',
     ...overrides

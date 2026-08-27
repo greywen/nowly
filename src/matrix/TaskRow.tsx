@@ -38,14 +38,26 @@ export function TaskRow({ task, today, pending, dragging = false, onToggle, onOp
         />
       </label>
       <div className="task-row__copy">
-        <button
-          type="button"
-          className="task-row__title"
-          aria-label={t('taskRow.edit', { title: task.title })}
-          onClick={(event) => onOpen(task, event.currentTarget)}
-        >
-          {task.title}
-        </button>
+        <div className="task-row__headline">
+          <button
+            type="button"
+            className="task-row__title"
+            aria-label={t('taskRow.edit', { title: task.title })}
+            onClick={(event) => onOpen(task, event.currentTarget)}
+          >
+            {task.title}
+          </button>
+          {task.tags.length > 0 ? (
+            <span className="task-row__tags">
+              {task.tags.map((tag) => (
+                <span key={tag.id} className="task-tag" style={{ color: tag.color }}>
+                  <span className="task-tag__hash" aria-hidden="true">#</span>
+                  {tag.name}
+                </span>
+              ))}
+            </span>
+          ) : null}
+        </div>
         <span className="task-row__meta">{formatTaskMeta(task, today)}</span>
       </div>
     </div>
