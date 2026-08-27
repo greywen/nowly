@@ -83,6 +83,38 @@ describe('Select', () => {
     el.nowlySetValue('b');
     expect(el.nowlyGetValue()).toBe('b');
   });
+
+  // Regression: on a real (slow) mouse click the trigger's blur fired before
+  // the option's click, and a queued setTimeout closed the listbox first, so
+  // the click never landed and the value never changed. Options preventDefault
+  // on mousedown to keep focus on the trigger; blur must not fire mid-click.
+  it('keeps the option clickable when mousedown would blur the trigger', () => {
+    const N = loadWidgets();
+    const onChange = vi.fn();
+    const el = N.Select({
+      options: [
+        { value: 'a', label: 'A' },
+        { value: 'b', label: 'B' }
+      ],
+      value: 'a',
+      onChange
+    });
+    document.body.appendChild(el);
+
+    const trigger = el.querySelector('[role="combobox"]') as HTMLElement;
+    trigger.click();
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+
+    const options = Array.from(el.querySelectorAll('[role="option"]')) as HTMLElement[];
+    // The option cancels mousedown so the trigger never loses focus.
+    const down = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+    options[1].dispatchEvent(down);
+    expect(down.defaultPrevented).toBe(true);
+
+    options[1].click();
+    expect(onChange).toHaveBeenCalledWith('b');
+    expect(el.nowlyGetValue()).toBe('b');
+  });
 });
 
 describe('Tabs', () => {

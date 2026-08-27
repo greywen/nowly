@@ -62,8 +62,7 @@ describe('KanbanWidget', () => {
   it('shows the header with add-lane and a settings button that opens field management', async () => {
     const user = userEvent.setup();
     renderWidget(repository());
-    expect(await screen.findByText('3 张任务')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '添加泳道' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: '添加泳道' })).toBeInTheDocument();
     // The settings gear opens the field dialog directly; there is no intermediate menu.
     await user.click(screen.getByRole('button', { name: '看板设置' }));
     expect(screen.queryByRole('menuitem')).not.toBeInTheDocument();

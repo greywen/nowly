@@ -66,8 +66,11 @@ describe('DevModuleWidget', () => {
 
   it('lists drafts in the selector by manifest name', async () => {
     renderWidget(repositoryWith([{ name: 'clock.js', source: clean }]));
-    const select = await screen.findByRole('combobox', { name: '选择草稿模块' });
-    expect(within(select).getByRole('option', { name: /时钟/ })).toBeInTheDocument();
+    // FilterSelect renders a trigger button; opening it reveals the options.
+    const trigger = await screen.findByRole('button', { name: '选择草稿模块' });
+    await userEvent.click(trigger);
+    const listbox = await screen.findByRole('listbox', { name: '选择草稿模块' });
+    expect(within(listbox).getByRole('option', { name: /时钟/ })).toBeInTheDocument();
   });
 
   it('renders the selected draft in a sandboxed iframe', async () => {
@@ -96,17 +99,22 @@ describe('DevModuleWidget', () => {
   });
 
   it('switches the previewed draft when another is chosen', async () => {
+    // A second draft with a distinct manifest name so the two options are
+    // distinguishable in the picker.
+    const timer = clean.replace('@name 时钟', '@name 计时器').replace('@id clock', '@id timer');
     renderWidget(
       repositoryWith([
         { name: 'clock.js', source: clean },
-        { name: 'bad.js', source: dirty }
+        { name: 'timer.js', source: timer }
       ])
     );
-    // clock.js auto-selects first (sorted by name: bad.js < clock.js, so bad is
-    // first). Pick clock explicitly and confirm its frame appears.
-    const select = await screen.findByRole('combobox', { name: '选择草稿模块' });
-    await userEvent.selectOptions(select, 'clock.js');
-    expect(await screen.findByTitle('时钟')).toBeInTheDocument();
+    // clock.js auto-selects first (sorted by name). Pick the timer explicitly
+    // and confirm its frame appears.
+    const trigger = await screen.findByRole('button', { name: '选择草稿模块' });
+    await userEvent.click(trigger);
+    const listbox = await screen.findByRole('listbox', { name: '选择草稿模块' });
+    await userEvent.click(within(listbox).getByRole('option', { name: /计时器/ }));
+    expect(await screen.findByTitle('计时器')).toBeInTheDocument();
   });
 
   it('does not throw when the runtime cannot read drafts', async () => {

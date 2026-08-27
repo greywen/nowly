@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNowlyRepository } from '../data/RepositoryContext';
 import type { DevModuleFile } from '../data/nowly-repository';
 import { SandboxModule } from './sandbox/SandboxModule';
+import { FilterSelect, type FilterOption } from '../components/FilterSelect';
 import { createPreviewHost } from '../preview/preview-host';
 import { parseModuleManifest, ManifestError, type ModuleManifest } from './module-manifest';
 import { lintModuleSource, type LintIssue } from '../../registry/lint.mjs';
@@ -126,18 +127,15 @@ export function DevModuleWidget() {
           <h2>{t('widget.devModule.name')}</h2>
         </div>
         {drafts && drafts.length > 0 ? (
-          <select
-            className="dev-module__select"
-            aria-label={t('devModule.selectLabel')}
+          <FilterSelect
+            ariaLabel={t('devModule.selectLabel')}
+            options={drafts.map<FilterOption>((draft) => ({
+              value: draft.name,
+              label: (draft.manifest?.name ?? draft.name) + (draft.error ? ' ⚠' : '')
+            }))}
             value={selected?.name ?? ''}
-            onChange={(event) => setSelectedName(event.target.value)}
-          >
-            {drafts.map((draft) => (
-              <option key={draft.name} value={draft.name}>
-                {(draft.manifest?.name ?? draft.name) + (draft.error ? ' ⚠' : '')}
-              </option>
-            ))}
-          </select>
+            onChange={setSelectedName}
+          />
         ) : null}
       </div>
 

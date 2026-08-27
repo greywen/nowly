@@ -84,6 +84,12 @@ export const SANDBOX_WIDGETS = `(() => {
           item.textContent = opt.label;
           if (index === activeIndex) item.setAttribute('data-active', 'true');
           item.addEventListener('mouseenter', function () { setActive(index); });
+          // Keep focus on the trigger during the press: a real (slow) click
+          // separates mousedown from mouseup, and letting the button blur here
+          // queues the blur-close timer, which tears the popup down before the
+          // option's click can fire. preventDefault stops the focus shift so
+          // the click always lands. (Synthetic fast clicks hid this race.)
+          item.addEventListener('mousedown', function (e) { e.preventDefault(); });
           item.addEventListener('click', function () { choose(index); });
           listbox.appendChild(item);
         })(options[i], i);

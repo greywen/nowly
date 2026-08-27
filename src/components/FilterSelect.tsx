@@ -1,5 +1,6 @@
 import { Check, ChevronDown } from 'lucide-react';
-import { type KeyboardEvent, useEffect, useId, useRef, useState } from 'react';
+import { type KeyboardEvent, useId, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 export type FilterOption = {
   value: string;
@@ -9,8 +10,9 @@ export type FilterOption = {
 };
 
 type FilterSelectProps = {
-  // The muted caption shown before the trigger, e.g. "Status".
-  label: string;
+  // The muted caption shown before the trigger, e.g. "Status". Omit to render
+  // the trigger with no leading caption.
+  label?: string;
   options: FilterOption[];
   value: string;
   onChange: (value: string) => void;
@@ -25,23 +27,63 @@ type FilterSelectProps = {
 export function FilterSelect({ label, options, value, onChange, ariaLabel }: FilterSelectProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const popupRef = useRef<HTMLDivElement>(null);
   const listboxId = useId();
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [placeAbove, setPlaceAbove] = useState(false);
+  const [popupMaxHeight, setPopupMaxHeight] = useState(320);
+  const [popupRect, setPopupRect] = useState<{ left: number; top: number; bottom: number; width: number } | null>(null);
 
   const selected = options.find((option) => option.value === value) ?? options[0];
 
-  useEffect(() => {
+  // Measure before paint so the fixed-position popup anchors to the trigger's
+  // viewport rect instead of flashing at its natural spot.
+  //
+  // Why a portal + fixed (not just absolute or fixed in place): the module body
+  // (`.module-frame__body`) sets `container: module / size`, i.e.
+  // `container-type: size`, which applies layout containment. That makes the
+  // body BOTH a clipping box (`overflow: hidden`) AND the containing block for
+  // absolute *and* fixed descendants. So an in-tree popup — absolute or fixed —
+  // is anchored to and clipped by the body, and a short module cuts it off.
+  // Portaling the popup to `document.body` removes it from that containing /
+  // clipping ancestor entirely; then `position: fixed` with viewport coords
+  // places it correctly over everything (same approach as ColorPicker).
+  useLayoutEffect(() => {
     if (!open) return;
     const index = options.findIndex((option) => option.value === value);
     setActiveIndex(index >= 0 ? index : 0);
+
+    function measurePlacement() {
+      const rect = triggerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const topBoundary = 16;
+      const bottomBoundary = window.innerHeight - 16;
+      const spaceBelow = bottomBoundary - rect.bottom - 8;
+      const spaceAbove = rect.top - topBoundary - 8;
+      // Prefer opening downward. Only flip above when the popup genuinely can't
+      // fit below (less than the minimum height) and there's more room on top.
+      const minHeight = 96;
+      const above = spaceBelow < minHeight && spaceAbove > spaceBelow;
+      setPlaceAbove(above);
+      setPopupMaxHeight(Math.max(96, Math.min(320, above ? spaceAbove : spaceBelow)));
+      setPopupRect({ left: rect.left, top: rect.bottom, bottom: rect.top, width: rect.width });
+    }
+    measurePlacement();
+    window.addEventListener('resize', measurePlacement);
+    window.addEventListener('scroll', measurePlacement, true);
+
     function dismiss(event: PointerEvent) {
       const target = event.target as Node;
-      if (rootRef.current?.contains(target)) return;
+      if (rootRef.current?.contains(target) || popupRef.current?.contains(target)) return;
       close(false);
     }
     document.addEventListener('pointerdown', dismiss);
-    return () => document.removeEventListener('pointerdown', dismiss);
+    return () => {
+      document.removeEventListener('pointerdown', dismiss);
+      window.removeEventListener('resize', measurePlacement);
+      window.removeEventListener('scroll', measurePlacement, true);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -86,7 +128,7 @@ export function FilterSelect({ label, options, value, onChange, ariaLabel }: Fil
 
   return (
     <div ref={rootRef} className="filter-select">
-      <span className="filter-select__label">{label}</span>
+      {label ? <span className="filter-select__label">{label}</span> : null}
       <button
         ref={triggerRef}
         type="button"
@@ -101,25 +143,46 @@ export function FilterSelect({ label, options, value, onChange, ariaLabel }: Fil
         <span style={selected?.color ? { color: selected.color } : undefined}>{selected?.label}</span>
         <ChevronDown aria-hidden="true" />
       </button>
-      {open ? (
-        <div className="filter-select__popup" id={listboxId} role="listbox" aria-label={ariaLabel}>
-          {options.map((option, index) => (
-            <button
-              key={option.value}
-              type="button"
-              className="filter-select__option"
-              role="option"
-              aria-selected={option.value === value}
-              data-active={index === activeIndex || undefined}
-              onMouseEnter={() => setActiveIndex(index)}
-              onClick={() => choose(option)}
+      {open
+        ? createPortal(
+            <div
+              ref={popupRef}
+              className={`filter-select__popup${placeAbove ? ' filter-select__popup--above' : ''}`}
+              id={listboxId}
+              role="listbox"
+              aria-label={ariaLabel}
+              style={{
+                maxHeight: `${popupMaxHeight}px`,
+                ...(popupRect
+                  ? {
+                      left: `${popupRect.left}px`,
+                      width: `${popupRect.width}px`,
+                      ...(placeAbove
+                        ? { bottom: `${window.innerHeight - popupRect.bottom + 8}px` }
+                        : { top: `${popupRect.top + 8}px` })
+                    }
+                  : { visibility: 'hidden' })
+              }}
             >
-              <span style={option.color ? { color: option.color } : undefined}>{option.label}</span>
-              {option.value === value ? <Check aria-hidden="true" /> : null}
-            </button>
-          ))}
-        </div>
-      ) : null}
+              {options.map((option, index) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  className="filter-select__option"
+                  role="option"
+                  aria-selected={option.value === value}
+                  data-active={index === activeIndex || undefined}
+                  onMouseEnter={() => setActiveIndex(index)}
+                  onClick={() => choose(option)}
+                >
+                  <span style={option.color ? { color: option.color } : undefined}>{option.label}</span>
+                  {option.value === value ? <Check aria-hidden="true" /> : null}
+                </button>
+              ))}
+            </div>,
+            document.body
+          )
+        : null}
     </div>
   );
 }

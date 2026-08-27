@@ -1,6 +1,6 @@
 import { Plus, Settings } from 'lucide-react';
 import { type DragEvent, useMemo, useRef, useState } from 'react';
-import { laneCardCount, totalCardCount } from './kanban-view';
+import { laneCardCount } from './kanban-view';
 import { KanbanLane } from './KanbanLane';
 import { KanbanLaneDialog } from './KanbanLaneDialog';
 import { KanbanTaskDialog } from './KanbanTaskDialog';
@@ -186,9 +186,6 @@ function KanbanWidgetContent({
   return (
     <div className="widget-content kanban-widget">
       <div className="card-header">
-        <div className="heading-group">
-          <p>{t('kanbanWidget.cardCount', { count: totalCardCount(data) })}</p>
-        </div>
         {data.priorities.length > 0 || data.tags.length > 0 || data.collaborators.length > 0 ? (
           <nav className="filter-bar" aria-label={t('kanbanWidget.boardMenu')}>
             {data.priorities.length > 0 ? (

@@ -328,7 +328,7 @@ button:disabled { cursor: default; opacity: .65; }
 .filter-select__trigger:hover { color: var(--color-primary-active); }
 .filter-select__trigger[aria-expanded="true"] { color: var(--color-primary-active); }
 .filter-select__trigger:focus-visible { outline: 0; box-shadow: 0 0 0 4px var(--focus-ring); border-radius: var(--radius-sm); }
-.filter-select__popup { position: absolute; z-index: 60; top: calc(100% + 8px); left: 0; min-width: 180px; max-height: 320px; padding: 12px; overflow-y: auto; border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-surface); box-shadow: var(--shadow-dropdown); }
+.filter-select__popup { position: fixed; z-index: 110; box-sizing: border-box; min-width: 180px; padding: 12px; overflow-y: auto; border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-surface); box-shadow: var(--shadow-dropdown); }
 .filter-select__option { width: 100%; padding: 8px 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text-secondary); font-size: 0.95rem; font-weight: 500; line-height: 1.5; text-align: left; cursor: pointer; }
 .filter-select__option:hover,
 .filter-select__option[data-active="true"] { color: var(--color-primary-active); background: var(--bg-subtle); }
@@ -1061,7 +1061,6 @@ button:disabled { cursor: default; opacity: .65; }
 /* Developer module (channel A: dev-only in-grid preview of dev-modules drafts) */
 .dev-module { display: grid; grid-template-rows: auto 1fr auto; min-height: 0; }
 .dev-module__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.dev-module__select { max-width: 60%; padding: 4px 8px; border: 1px solid var(--border-default); border-radius: var(--radius-sm); background: var(--bg-surface); color: var(--text-primary); font-size: 0.85rem; }
 .dev-module__body { padding: 0; min-height: 0; overflow: hidden; }
 .dev-module__hint { margin: 0; padding: 24px 16px; color: var(--text-muted); font-size: 0.95rem; line-height: 1.5; text-align: center; }
 .dev-module__path { display: block; margin-top: 8px; padding: 8px 12px; border-radius: var(--radius-sm); background: var(--bg-subtle); color: var(--text-secondary); font-size: 0.85rem; word-break: break-all; text-align: left; }

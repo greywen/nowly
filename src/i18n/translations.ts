@@ -301,7 +301,6 @@ export const translations: Record<Language, Record<string, string>> = {
     'kanbanDraft.errorDueDate': '请选择有效截止日期。',
 
     // Kanban widget
-    'kanbanWidget.cardCount': '{count} 张任务',
     'kanbanWidget.addLane': '添加泳道',
     'kanbanWidget.boardMenu': '看板设置',
     'kanbanWidget.errorLoad': '无法读取看板数据。',
@@ -981,7 +980,6 @@ export const translations: Record<Language, Record<string, string>> = {
     'kanbanDraft.errorDueDate': 'Please choose a valid due date.',
 
     // Kanban widget
-    'kanbanWidget.cardCount': '{count, plural, one {# task} other {# tasks}}',
     'kanbanWidget.addLane': 'Add lane',
     'kanbanWidget.boardMenu': 'Board settings',
     'kanbanWidget.errorLoad': 'Unable to load board data.',
