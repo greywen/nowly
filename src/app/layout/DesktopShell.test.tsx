@@ -164,6 +164,7 @@ describe('DesktopShell', () => {
     rerender(
       <DesktopShell
         mode="wallpaper"
+        hideTopbarInWallpaper={false}
         time="09:41"
         dateText="2026年7月23日 星期四"
         summary="summary"
@@ -174,6 +175,33 @@ describe('DesktopShell', () => {
     // Wallpaper mode blurs the topbar and workspace together.
     expect(screen.getByRole('banner').style.filter).toBe('blur(8px)');
     expect(screen.getByRole('main').style.filter).toBe('blur(8px)');
+  });
+
+  it('hides the topbar as wallpaper by default and shows it in foreground', () => {
+    const { rerender } = render(
+      <DesktopShell
+        mode="wallpaper"
+        time="09:41"
+        dateText="2026年7月23日 星期四"
+        summary="summary"
+        modules={modules()}
+      />
+    );
+
+    // As the wallpaper the topbar is gone, leaving a clean dashboard.
+    expect(screen.queryByRole('banner')).not.toBeInTheDocument();
+
+    // Bringing the app to the foreground restores it.
+    rerender(
+      <DesktopShell
+        mode="foreground"
+        time="09:41"
+        dateText="2026年7月23日 星期四"
+        summary="summary"
+        modules={modules()}
+      />
+    );
+    expect(screen.getByRole('banner')).toBeInTheDocument();
   });
 
   it('previews the blur live on the workspace while the slider is open in foreground', () => {

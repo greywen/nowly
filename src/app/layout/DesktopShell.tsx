@@ -35,6 +35,9 @@ type DesktopShellProps = {
   onSetWallpaper?: () => void;
   onWallpaperDoubleClick?: () => void;
   onOpenSettings?: () => void;
+  // Hide the topbar while running as the desktop wallpaper. Defaults on so the
+  // wallpaper reads as a clean dashboard; the bar returns in the foreground.
+  hideTopbarInWallpaper?: boolean;
   overlay?: ReactNode;
   // The launch-time update check result. When it reports a newer release the
   // logo button shows a red dot, and the About dialog surfaces the changelog.
@@ -63,10 +66,14 @@ export function DesktopShell({
   onSetWallpaper,
   onWallpaperDoubleClick,
   onOpenSettings,
+  hideTopbarInWallpaper = true,
   overlay,
   update
 }: DesktopShellProps) {
   const foreground = mode === 'foreground';
+  // In wallpaper mode the topbar is optional: hiding it leaves a clean
+  // dashboard, while a double-click anywhere still returns to the foreground.
+  const showTopbar = foreground || !hideTopbarInWallpaper;
   const { layout, move, resize, addWidget, removeWidget, presentIds } =
     useModuleLayout(definitions);
   const { blur, setBlur } = useBlur();
@@ -102,9 +109,10 @@ export function DesktopShell({
     <div
       data-testid="desktop-root"
       onDoubleClickCapture={foreground ? undefined : onWallpaperDoubleClick}
-      className="app-shell"
+      className={`app-shell${showTopbar ? '' : ' app-shell--no-topbar'}`}
     >
       <WallpaperLayer />
+      {showTopbar ? (
       <header className="topbar" style={topbarStyle}>
         <div className="date-copy">
           <strong>{dateText}</strong>
@@ -168,6 +176,7 @@ export function DesktopShell({
           ) : null}
         </div>
       </header>
+      ) : null}
       <main className="workspace" data-guide="workspace" style={workspaceStyle}>
         <ModuleGrid
           items={items}

@@ -1,8 +1,9 @@
 import { Plus, Settings, X } from 'lucide-react';
 import { type DragEvent, useMemo, useState } from 'react';
 import type { CalendarEvent } from '../calendar/calendar-model';
-import type { MatrixTask, MatrixTaskTag, Quadrant } from './matrix-model';
-import { quadrantLabel, quadrantOrder } from './matrix-model';
+import type { MatrixTask, MatrixTaskTag, Quadrant, TaskPriority } from './matrix-model';
+import { priorityLabel, quadrantLabel, quadrantOrder } from './matrix-model';
+import { FilterSelect, type FilterOption } from '../components/FilterSelect';
 import { TaskRow } from './TaskRow';
 import { t } from '../i18n';
 
@@ -60,6 +61,8 @@ export function MatrixWidget({
   // The active tag filter. `null` means "show every task"; otherwise only tasks
   // carrying the selected tag id are visible across all quadrants.
   const [activeTagId, setActiveTagId] = useState<string | null>(null);
+  // The active priority filter. `null` means "any priority".
+  const [activePriority, setActivePriority] = useState<TaskPriority | null>(null);
 
   const draggingTask = draggingId ? tasks.find((task) => task.id === draggingId) ?? null : null;
 
@@ -73,9 +76,33 @@ export function MatrixWidget({
     return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
   }, [tasks]);
 
+  // The distinct priorities present on the current tasks, in high→low order, so
+  // the filter only offers priorities that would actually match something.
+  const availablePriorities = useMemo<TaskPriority[]>(() => {
+    const present = new Set<TaskPriority>();
+    for (const task of tasks) present.add(task.priority);
+    return ([1, 2, 3] as TaskPriority[]).filter((priority) => present.has(priority));
+  }, [tasks]);
+
   // If the active tag disappears (e.g. after edits), fall back to showing all.
   const effectiveTagId = activeTagId && availableTags.some((tag) => tag.id === activeTagId) ? activeTagId : null;
-  const visibleTasks = effectiveTagId ? tasks.filter((task) => task.tags.some((tag) => tag.id === effectiveTagId)) : tasks;
+  const effectivePriority =
+    activePriority && availablePriorities.includes(activePriority) ? activePriority : null;
+  const visibleTasks = tasks.filter(
+    (task) =>
+      (effectiveTagId === null || task.tags.some((tag) => tag.id === effectiveTagId)) &&
+      (effectivePriority === null || task.priority === effectivePriority)
+  );
+
+  const tagOptions: FilterOption[] = [
+    { value: '', label: t('filter.showAll') },
+    ...availableTags.map((tag) => ({ value: tag.id, label: `#${tag.name}`, color: tag.color }))
+  ];
+  const priorityOptions: FilterOption[] = [
+    { value: '', label: t('filter.showAll') },
+    ...availablePriorities.map((priority) => ({ value: String(priority), label: priorityLabel(priority) }))
+  ];
+  const hasFilters = availableTags.length > 0 || availablePriorities.length > 0;
 
   function onTaskDragStart(event: DragEvent<HTMLElement>, task: MatrixTask) {
     if (event.dataTransfer) {
@@ -107,44 +134,42 @@ export function MatrixWidget({
 
   return (
     <div className="widget-content">
-      <div className="card-header card-header--actions-only">
-        {onOpenSettings ? (
-          <button type="button" className="btn btn-icon" aria-label={t('taskSettings.title')} onClick={onOpenSettings}>
-            <Settings aria-hidden="true" />
+      <div className="card-header">
+        {hasFilters ? (
+          <nav className="filter-bar" aria-label={t('matrix.filterLabel')}>
+            {availablePriorities.length > 0 ? (
+              <FilterSelect
+                label={t('matrix.filterPriority')}
+                ariaLabel={t('matrix.filterByPriority')}
+                options={priorityOptions}
+                value={effectivePriority === null ? '' : String(effectivePriority)}
+                onChange={(next) => setActivePriority(next === '' ? null : (Number(next) as TaskPriority))}
+              />
+            ) : null}
+            {availableTags.length > 0 ? (
+              <FilterSelect
+                label={t('matrix.filterTag')}
+                ariaLabel={t('matrix.filterByTag')}
+                options={tagOptions}
+                value={effectiveTagId ?? ''}
+                onChange={(next) => setActiveTagId(next === '' ? null : next)}
+              />
+            ) : null}
+          </nav>
+        ) : (
+          <span />
+        )}
+        <div className="toolbar-actions">
+          {onOpenSettings ? (
+            <button type="button" className="btn btn-icon" aria-label={t('taskSettings.title')} onClick={onOpenSettings}>
+              <Settings aria-hidden="true" />
+            </button>
+          ) : null}
+          <button type="button" className="btn btn-icon" aria-label={t('matrix.newTask')} onClick={onCreateTask}>
+            <Plus aria-hidden="true" />
           </button>
-        ) : null}
-        <button type="button" className="btn btn-icon" aria-label={t('matrix.newTask')} onClick={onCreateTask}>
-          <Plus aria-hidden="true" />
-        </button>
+        </div>
       </div>
-      {availableTags.length > 0 ? (
-        <nav className="matrix-filter" aria-label={t('matrix.filterLabel')}>
-          <button
-            type="button"
-            className={`matrix-filter__chip${effectiveTagId === null ? ' matrix-filter__chip--active' : ''}`}
-            aria-pressed={effectiveTagId === null}
-            onClick={() => setActiveTagId(null)}
-          >
-            {t('matrix.filterAll')}
-          </button>
-          {availableTags.map((tag) => {
-            const active = effectiveTagId === tag.id;
-            return (
-              <button
-                key={tag.id}
-                type="button"
-                className={`matrix-filter__chip${active ? ' matrix-filter__chip--active' : ''}`}
-                style={{ color: tag.color }}
-                aria-pressed={active}
-                onClick={() => setActiveTagId(active ? null : tag.id)}
-              >
-                <span className="matrix-filter__hash" aria-hidden="true">#</span>
-                {tag.name}
-              </button>
-            );
-          })}
-        </nav>
-      ) : null}
       <div className="panel-body matrix-body">
         {status === 'error' ? (
           <div className="module-message" role="alert">

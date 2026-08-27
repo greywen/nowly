@@ -33,8 +33,9 @@ const SEMANTIC_CLASSES = `
   scroll-behavior: auto !important;
 }
 html, body { margin: 0; height: 100%; }
+html { font-size: 13px; }
 body {
-  font: 400 16px/1.5 var(--nm-font-sans);
+  font: 400 1rem/1.5 var(--nm-font-sans);
   color: var(--nm-text-secondary);
   background: transparent;
 }
@@ -45,46 +46,52 @@ body {
   border-radius: var(--nm-radius-default);
   background: var(--nm-bg-surface);
 }
-.nm-title { margin: 0; color: var(--nm-text-primary); font-size: 18.4px; font-weight: 600; }
-.nm-text { margin: 0; color: var(--nm-text-secondary); font-size: 16px; }
-.nm-muted { color: var(--nm-text-muted); font-size: 13.6px; }
+.nm-title { margin: 0; color: var(--nm-text-primary); font-size: 1.15rem; font-weight: 600; }
+.nm-text { margin: 0; color: var(--nm-text-secondary); font-size: 1rem; }
+.nm-muted { color: var(--nm-text-muted); font-size: 0.85rem; }
 .nm-btn {
   height: 40px; min-height: 40px; padding: 8px 24px;
   border: 1px solid transparent; border-radius: var(--nm-radius-default);
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  font: inherit; font-size: 16px; font-weight: 500; cursor: pointer;
+  font: inherit; font-size: 1rem; font-weight: 500; cursor: pointer;
   color: var(--nm-text-strong); background: var(--nm-bg-subtle);
 }
+.nm-btn:hover { color: var(--nm-color-primary); background: var(--nm-bg-secondary); }
 .nm-btn:focus-visible { outline: none; box-shadow: var(--nm-shadow-focus); }
+.nm-btn:disabled { opacity: .65; cursor: default; }
 .nm-btn--primary { color: #ffffff; background: var(--nm-color-primary); border-color: var(--nm-color-primary); }
-.nm-btn--primary:hover { background: var(--nm-color-primary-hover); }
-.nm-btn--primary:active { background: var(--nm-color-primary-active); }
+.nm-btn--primary:hover { color: #ffffff; background: var(--nm-color-primary-hover); border-color: var(--nm-color-primary-hover); }
+.nm-btn--primary:active { background: var(--nm-color-primary-active); border-color: var(--nm-color-primary-active); }
 .nm-btn--danger { color: #ffffff; background: var(--nm-color-danger); border-color: var(--nm-color-danger); }
-.nm-btn--danger:active { background: var(--nm-color-danger-active); }
+.nm-btn--danger:hover { color: #ffffff; background: var(--nm-color-danger-active); border-color: var(--nm-color-danger-active); }
+.nm-btn--danger:active { background: var(--nm-color-danger-active); border-color: var(--nm-color-danger-active); }
+.nm-btn-icon { width: 40px; min-width: 40px; padding: 0; color: var(--nm-text-secondary); background: transparent; border-color: transparent; }
+.nm-btn-icon:hover { color: var(--nm-color-primary); background: var(--nm-bg-subtle); }
+.nm-btn-icon svg { width: 18px; height: 18px; flex: none; }
 .nm-input {
   height: 40px; padding: 8px 12px; width: 100%;
   border: 1px solid var(--nm-border-default); border-radius: var(--nm-radius-default);
-  font: inherit; font-size: 16px; color: var(--nm-text-primary); background: var(--nm-bg-surface);
+  font: inherit; font-size: 1rem; color: var(--nm-text-primary); background: var(--nm-bg-surface);
 }
 .nm-input:focus-visible { outline: none; border-color: var(--nm-color-primary); box-shadow: var(--nm-shadow-focus); }
 .nm-tag {
   padding: 2px 8px; border-radius: var(--nm-radius-pill);
-  font-size: 13.6px; font-weight: 600;
+  font-size: 0.85rem; font-weight: 600;
   color: var(--nm-text-secondary); background: var(--nm-bg-subtle);
 }
 .nm-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
-.nm-empty { display: grid; place-items: center; padding: 24px; color: var(--nm-text-muted); font-size: 15.2px; }
-.nm-msg { padding: 12px; border-radius: var(--nm-radius-default); font-size: 15.2px; }
+.nm-empty { display: grid; place-items: center; padding: 24px; color: var(--nm-text-muted); font-size: 0.95rem; }
+.nm-msg { padding: 12px; border-radius: var(--nm-radius-default); font-size: 0.95rem; }
 .nm-msg--danger { color: var(--nm-color-danger-active); background: var(--nm-color-danger-light); }
 
 /* Optional widgets (Nowly.Select / Tabs / DatePicker / TimePicker / ColorPicker). */
-.nm-field-label { display: block; margin: 0 0 6px; color: var(--nm-text-strong); font-size: 13.6px; font-weight: 600; }
+.nm-field-label { display: block; margin: 0 0 6px; color: var(--nm-text-strong); font-size: 0.85rem; font-weight: 600; }
 .nm-select, .nm-datepicker { position: relative; }
 .nm-select__trigger {
   height: 40px; width: 100%; padding: 8px 12px;
   display: inline-flex; align-items: center; justify-content: space-between; gap: 8px;
   border: 1px solid var(--nm-border-default); border-radius: var(--nm-radius-default);
-  font: inherit; font-size: 16px; color: var(--nm-text-primary); background: var(--nm-bg-surface); cursor: pointer;
+  font: inherit; font-size: 1rem; color: var(--nm-text-primary); background: var(--nm-bg-surface); cursor: pointer;
 }
 .nm-select__trigger:focus-visible, .nm-datepicker__trigger:focus-visible {
   outline: none; border-color: var(--nm-color-primary); box-shadow: var(--nm-shadow-focus);
@@ -98,14 +105,14 @@ body {
 .nm-select__listbox { max-height: 240px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
 .nm-select__option {
   padding: 8px 12px; border-radius: var(--nm-radius-sm);
-  color: var(--nm-text-primary); font-size: 15.2px; cursor: pointer;
+  color: var(--nm-text-primary); font-size: 0.95rem; cursor: pointer;
 }
 .nm-select__option[data-active="true"] { background: var(--nm-bg-subtle); }
 .nm-select__option[aria-selected="true"] { color: var(--nm-color-primary-active); font-weight: 600; }
 .nm-tabs__list { display: flex; gap: 4px; border-bottom: 1px solid var(--nm-border-default); }
 .nm-tabs__tab {
   padding: 8px 16px; border: none; border-bottom: 2px solid transparent;
-  background: transparent; font: inherit; font-size: 15.2px; color: var(--nm-text-secondary); cursor: pointer;
+  background: transparent; font: inherit; font-size: 0.95rem; color: var(--nm-text-secondary); cursor: pointer;
 }
 .nm-tabs__tab:focus-visible { outline: none; box-shadow: var(--nm-shadow-focus); border-radius: var(--nm-radius-sm); }
 .nm-tabs__tab[aria-selected="true"] { color: var(--nm-color-primary-active); border-bottom-color: var(--nm-color-primary); font-weight: 600; }
@@ -123,12 +130,12 @@ body {
   background: var(--nm-bg-surface); color: var(--nm-text-primary); cursor: pointer;
 }
 .nm-datepicker__nav:focus-visible { outline: none; box-shadow: var(--nm-shadow-focus); }
-.nm-datepicker__month { font-size: 15.2px; font-weight: 600; color: var(--nm-text-primary); }
+.nm-datepicker__month { font-size: 0.95rem; font-weight: 600; color: var(--nm-text-primary); }
 .nm-datepicker__weekdays, .nm-datepicker__week { display: grid; grid-template-columns: repeat(7, 1fr); }
-.nm-datepicker__weekday { text-align: center; font-size: 12px; color: var(--nm-text-muted); padding: 4px 0; }
+.nm-datepicker__weekday { text-align: center; font-size: 0.75rem; color: var(--nm-text-muted); padding: 4px 0; }
 .nm-datepicker__day {
   height: 32px; border: none; border-radius: var(--nm-radius-sm);
-  background: transparent; font: inherit; font-size: 14px; color: var(--nm-text-primary); cursor: pointer;
+  background: transparent; font: inherit; font-size: 0.875rem; color: var(--nm-text-primary); cursor: pointer;
 }
 .nm-datepicker__day:focus-visible { outline: none; box-shadow: var(--nm-shadow-focus); }
 .nm-datepicker__day[aria-selected="true"] { background: var(--nm-color-primary); color: #ffffff; font-weight: 600; }

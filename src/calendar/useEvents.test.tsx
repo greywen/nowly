@@ -14,7 +14,8 @@ const settings: AppSettings = {
   density: 'balanced',
   weekStart: 'monday',
   dateFormat: 'localized',
-  showWeekends: true
+  showWeekends: true,
+  hideTopbarInWallpaper: true
 };
 
 const draft: EventDraft = {

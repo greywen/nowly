@@ -16,6 +16,7 @@ const defaultSettings: AppSettings = {
   weekStart: 'monday',
   dateFormat: 'localized',
   showWeekends: true,
+  hideTopbarInWallpaper: true,
   recentColors: []
 };
 

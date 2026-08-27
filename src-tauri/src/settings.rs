@@ -40,6 +40,7 @@ pub fn read_app_settings(connection: &Connection) -> Result<AppSettings, rusqlit
         week_start: read_value_or(connection, "week_start", "monday".to_string())?,
         date_format: read_value_or(connection, "date_format", "localized".to_string())?,
         show_weekends: read_value_or(connection, "show_weekends", true)?,
+        hide_topbar_in_wallpaper: read_value_or(connection, "hide_topbar_in_wallpaper", true)?,
         recent_colors: read_value_or(connection, "recent_colors", Vec::new())?,
     })
 }
@@ -87,6 +88,10 @@ pub fn write_app_settings(
             serde_json::to_string(&settings.show_weekends),
         ),
         (
+            "hide_topbar_in_wallpaper",
+            serde_json::to_string(&settings.hide_topbar_in_wallpaper),
+        ),
+        (
             "recent_colors",
             serde_json::to_string(&settings.recent_colors),
         ),
@@ -128,6 +133,7 @@ mod tests {
         assert_eq!(settings.week_start, "monday");
         assert_eq!(settings.date_format, "localized");
         assert!(settings.show_weekends);
+        assert!(settings.hide_topbar_in_wallpaper);
     }
 
     #[test]
@@ -142,6 +148,7 @@ mod tests {
             week_start: "sunday".into(),
             date_format: "iso".into(),
             show_weekends: false,
+            hide_topbar_in_wallpaper: false,
             recent_colors: vec![],
         };
 

@@ -49,6 +49,7 @@ const defaultSettings: Dict = {
   weekStart: 'monday',
   dateFormat: 'localized',
   showWeekends: true,
+  hideTopbarInWallpaper: true,
   recentColors: []
 };
 

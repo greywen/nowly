@@ -12,7 +12,8 @@ const settings: AppSettings = {
   density: 'balanced',
   weekStart: 'monday',
   dateFormat: 'localized',
-  showWeekends: true
+  showWeekends: true,
+  hideTopbarInWallpaper: true
 };
 
 function repository(overrides: Partial<NowlyRepository> = {}): NowlyRepository {

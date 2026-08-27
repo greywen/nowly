@@ -340,6 +340,7 @@ function AppContent() {
         onSetWallpaper={() => void runWindowModeSwitch(switchToWallpaper)}
         onWallpaperDoubleClick={() => void runWindowModeSwitch(switchToForeground)}
         onOpenSettings={() => setModal({type:'settings',trigger:null})}
+        hideTopbarInWallpaper={settingsFeature.settings.data.hideTopbarInWallpaper}
         overlay={windowMode === 'wallpaper' ? <FocusWallpaperOverlay /> : null}
         update={update}
       />

@@ -1,7 +1,7 @@
 import { Plus } from 'lucide-react';
 import { colorStyle } from '../lib/color';
 import type { DragEvent } from 'react';
-import { cardsInLane, type KanbanLane as KanbanLaneModel, type KanbanSnapshot } from './kanban-model';
+import { cardsInLane, type KanbanCard as KanbanCardModel, type KanbanLane as KanbanLaneModel, type KanbanSnapshot } from './kanban-model';
 import { resolveCard } from './kanban-view';
 import { KanbanCard } from './KanbanCard';
 import { t } from '../i18n';
@@ -20,6 +20,9 @@ type KanbanLaneProps = {
   onLaneDrop: (event: DragEvent<HTMLElement>, index: number) => void;
   onCardDragStart: (event: DragEvent<HTMLElement>, cardId: string) => void;
   onCardDragEnd: () => void;
+  // Optional predicate deciding which cards are visible under the active board
+  // filters. Defaults to showing everything.
+  matchesFilter?: (card: KanbanCardModel) => boolean;
 };
 
 // One fluid lane that shares board width: a draggable header carrying colour, an editable name
@@ -38,9 +41,11 @@ export function KanbanLane({
   onLaneDragOver,
   onLaneDrop,
   onCardDragStart,
-  onCardDragEnd
+  onCardDragEnd,
+  matchesFilter
 }: KanbanLaneProps) {
   const laneCards = cardsInLane(snapshot.cards, lane.id);
+  const visibleCards = matchesFilter ? laneCards.filter(matchesFilter) : laneCards;
 
   return (
     <section
@@ -60,8 +65,8 @@ export function KanbanLane({
         <button type="button" className="kanban-lane__name" onClick={onEditLane}>
           {lane.name}
         </button>
-        <span className="kanban-lane__count" aria-label={t('kanbanLane.count', { name: lane.name, count: laneCards.length })}>
-          {laneCards.length}
+        <span className="kanban-lane__count" aria-label={t('kanbanLane.count', { name: lane.name, count: visibleCards.length })}>
+          {visibleCards.length}
         </span>
         <div className="kanban-lane__actions">
           <button
@@ -76,8 +81,11 @@ export function KanbanLane({
       </header>
 
       <div className="kanban-lane__cards" data-testid="kanban-lane-cards">
-        {laneCards.length === 0 ? <p className="kanban-lane__empty">{t('kanbanLane.empty')}</p> : null}
-        {laneCards.map((card, index) => {
+        {visibleCards.length === 0 ? <p className="kanban-lane__empty">{t('kanbanLane.empty')}</p> : null}
+        {visibleCards.map((card) => {
+          // Map the visible position back to the card's real index within the
+          // full lane so drops land correctly even while a filter is active.
+          const realIndex = laneCards.findIndex((item) => item.id === card.id);
           return (
             <div
               key={card.id}
@@ -85,7 +93,7 @@ export function KanbanLane({
               onDragOver={onLaneDragOver}
               onDrop={(event) => {
                 event.stopPropagation();
-                onLaneDrop(event, index);
+                onLaneDrop(event, realIndex);
               }}
             >
               <KanbanCard

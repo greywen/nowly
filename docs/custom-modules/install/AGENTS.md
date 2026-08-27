@@ -3,9 +3,10 @@
 你被要求为 **Nowly** 写一个自定义模块。开始前，按顺序读这几份规范，它们就在这个仓库里：
 
 1. `docs/custom-modules/SKILL.md` — 主规范：清单头、安全约束、结构、提交前检查清单。**先读这份。**
-2. `docs/custom-modules/style.md` — 可用的 `--nm-*` 令牌与 `nm-*` 语义类。颜色只能用令牌，禁止字面量。
-3. `docs/custom-modules/size.md` — 尺寸表与三档断点。
-4. `docs/custom-modules/preview.md` — 怎么实时预览你写的模块。
+2. `design.md`（仓库根）— **设计系统的唯一真相**。模块视觉必须和主应用完全一致，颜色/字体/字号/间距/圆角/边框/阴影/各组件的确切数值都在这里。写任何样式前必读，别靠感觉取近似值。
+3. `docs/custom-modules/style.md` — 沙箱注入的 `--nm-*` 令牌与现成 `nm-*` 语义类（`design.md` 常见组件的便利实现）。颜色只能用令牌，禁止字面量。
+4. `docs/custom-modules/size.md` — 尺寸表与三档断点。
+5. `docs/custom-modules/preview.md` — 怎么实时预览你写的模块。
 
 ## 工作流
 
@@ -25,6 +26,7 @@
 - 纯 JS，不能 `import` / npm / React / JSX / TS。
 - 联网只能 `host.fetch`，且要声明 `@permissions network` + `@network 域名`。第三方库只能内联，不能从 CDN 拉。
 - 颜色只能 `var(--nm-*)` 或套 `nm-*` 类，禁止 `#` / `rgb()` / `hsl()`。
+- 视觉严格照 `design.md` 落数值：字号只用它的语义档、间距落在 4px 刻度上、圆角/边框/阴影用规定令牌，不写 `14px`/`10px 14px` 这类近似值。`nm-*` 类不够用时照 `design.md` §8 用令牌手写，别自造近似样式。
 - 不加任何 `transition` / `animation` / 补间。
 - 循环必须有明确边界；`while (true)` / `for (;;)` 会被 lint 拒，且死循环会冻结整个应用。
 

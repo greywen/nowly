@@ -207,6 +207,13 @@ pub struct ExternalEvent {
     pub color: String,
 }
 
+// The topbar defaults to hidden in wallpaper mode so the wallpaper reads as a
+// clean dashboard. Kept as a function so serde can fill it in when an older
+// settings payload predates the field.
+fn default_hide_topbar_in_wallpaper() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
@@ -217,6 +224,8 @@ pub struct AppSettings {
     pub week_start: String,
     pub date_format: String,
     pub show_weekends: bool,
+    #[serde(default = "default_hide_topbar_in_wallpaper")]
+    pub hide_topbar_in_wallpaper: bool,
     #[serde(default)]
     pub recent_colors: Vec<String>,
 }

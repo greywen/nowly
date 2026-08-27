@@ -9,7 +9,7 @@ Nowly 的自定义模块是**一个自描述的 `.js` 文件**。用户可以在
 
 这份规范告诉你如何写出一个**合法、可发布、样式合规**的模块。请完整阅读后再动手。
 
-**配套文件：** [style.md](./style.md)（`nm-*` 令牌与语义类）· [size.md](./size.md)（尺寸与断点）· [preview.md](./preview.md)（实时预览工作台）· [install/AGENTS.md](./install/AGENTS.md)（给 AI 工具的入口与工作流）。
+**配套文件：** [`../../design.md`](../../design.md)（**设计系统的唯一真相**，颜色/字体/间距/圆角/阴影/组件的确切数值都在这里，写任何样式前必读）· [style.md](./style.md)（`nm-*` 令牌与语义类）· [size.md](./size.md)（尺寸与断点）· [preview.md](./preview.md)（实时预览工作台）· [install/AGENTS.md](./install/AGENTS.md)（给 AI 工具的入口与工作流）。
 
 ---
 
@@ -181,31 +181,37 @@ const res = await host.fetch('https://api.open-meteo.com/v1/forecast?...', {
 
 ---
 
-## 3. 视觉样式规范（严格对齐 `design.md`）
+## 3. 视觉样式规范（唯一真相是 `design.md`）
 
-沙箱注入了一份从应用 `styles.css` 生成的样式表，`--nm-*` 令牌与 `nm-*` 语义类可直接用。**不要写颜色字面量**，一律用令牌或语义类对齐 Nowly 的设计语言。
+**模块的视觉必须和 Nowly 主应用长得一模一样。判定标准只有一个：仓库根的 [`design.md`](../../design.md)。** 动手写样式前先读它——颜色、字体、字号、字重、行高、间距、圆角、边框、阴影、每类组件的确切尺寸与状态，全在那里，且都是**精确数值**，不是「差不多」。
 
-### 3.1 禁止动效（强制）
+沙箱注入了一份从 `styles.css` 生成的样式表：`--nm-*` 令牌（等于 `design.md` §2 的色板、§5 圆角、§6 阴影）+ 一组 `nm-*` 语义类（常见组件的现成实现）。它们是**便利，不是天花板**——不要因为「只有这几个类」就把组件做窄或做走样。`design.md` 里有、`nm-*` 里没有的组件（图标按钮、卡片头、chip、Checkbox/Radio、下划线 Tab、日期/时间选择器、状态徽标、下拉浮层……），一律**用 `--nm-*` 令牌照着 `design.md` 的数值手写**，禁止凭感觉取近似值。
 
-**不要用任何 `transition`、`animation`、旋转、缩放、位移、淡入淡出、加载动画。** 所有状态即时切换。这是 Nowly 的铁律。
+两条铁律先记住，其余照 `design.md`：
 
-### 3.2 颜色：只用令牌
+- **禁止一切动效。** 不用任何 `transition`、`animation`、旋转、缩放、位移、淡入淡出、加载动画（`design.md` §5/§10）。所有状态即时切换。沙箱已全局 `animation:none / transition:none`，但 JS 逐帧改属性同样在禁止之列（`@motion animated` 除外，见 §2）。
+- **禁止颜色字面量。** 不写 `#` / `rgb()` / `hsl()`，一律 `var(--nm-*)` 令牌，否则校验器拒绝安装且无法主题化。
 
-沙箱注入了一份从应用 `styles.css` 生成的样式表。**不要写颜色字面量**——一律用 `var(--nm-*)` 令牌，否则校验器拒绝安装，且未来主题化无法覆盖你的模块。
+### 3.1 落数值的速查（全部出自 `design.md`，细节以它为准）
 
-常用令牌：`--nm-color-primary`、`--nm-text-primary`、`--nm-text-secondary`、`--nm-text-muted`、`--nm-bg-surface`、`--nm-bg-subtle`、`--nm-border-default`。完整清单与 `nm-*` 语义类见 [style.md](./style.md)。
+拿不准某个组件时翻 `design.md` 对应小节；下面是最常踩偏的几组硬数字：
 
-最省力的做法是直接套 `nm-*` 语义类（`.nm-card` / `.nm-title` / `.nm-btn` / `.nm-btn--primary` / `.nm-input` 等），它们已对齐设计规范，无需手写样式。
+- **字号（§3.3，只能用这些语义档，禁止 14/18/22 等相近值）**：Display `28/700`、H1 `24/700`、H2 `21.6/700`、H3 卡片标题 `20/600–700`、H4 `18.4/600`、Body Large `17.2`、正文 `16/400`、Body Small `15.2`、Caption `13.6`。行高统一 `1.5`（标题略紧，见表）。标题用 `--nm-text-primary`，正文 `--nm-text-secondary`，说明 `--nm-text-muted`。
+- **间距（§4，4px 基准）**：只用 `4 / 8 / 12 / 16 / 20 / 24 / 32…` 这套刻度。图标与文字 `8px`，同级卡片间距 `≥16px`，表单字段纵向 `20px`，标题与说明 `4–8px`。禁止 `10px`、`14px`、`30px` 这种离刻度值。
+- **圆角（§5）**：按钮/输入框/卡片 `var(--nm-radius-default)`（15.2px）；小标签 `var(--nm-radius-sm)`（7.6px）；胶囊/圆点 `var(--nm-radius-pill)`。同族组件不混用圆角。
+- **边框（§7）**：默认 `1px solid var(--nm-border-default)`；选中 `1px solid var(--nm-color-primary)`；错误 `--nm-color-danger`。除 Tab 选中下划线（3px）外，禁止 2px 以上粗边框作装饰。
+- **阴影（§6）**：普通卡片**不加阴影**，靠 1px 边框建立层级；hover 也不得突然加阴影。下拉/浮层用 `var(--nm-shadow-dropdown)`，焦点环用 `var(--nm-shadow-focus)`（`0 0 0 4px` 半透明青绿）。
+- **交互状态（§8、§9）**：每个可交互元素都要有 default / hover / active / focus-visible / disabled，且**只即时改颜色·背景·边框·阴影**，不改尺寸和位置。disabled 透明度 `0.65`。focus-visible 必须是 4px 青绿焦点环，不能只靠弱边框。
 
-### 3.3 其它
+### 3.2 现成的 `nm-*` 语义类（够用就直接套）
 
-- **圆角**：按钮、输入框、卡片统一用 `var(--nm-radius-default)`；小标签 `var(--nm-radius-sm)`；胶囊 `var(--nm-radius-pill)`。
-- **字体**：`var(--nm-font-sans)`（body 已默认套用，通常无需再设）。
-- **字号**：正文 `16px`，次级 `15.2px`，说明 `13.6px`，卡片标题 `18.4–20px`。
-- **间距**：以 `4px` 为基准，常用 `8px / 12px / 16px / 24px`。
-- **按钮**：高度 `40px`，内边距 `8px 24px`，字重 `500`（`.nm-btn` 已内置）。
-- **焦点环**：`var(--nm-shadow-focus)`。
-- **阴影**：普通卡片不加阴影，靠 `1px solid var(--nm-border-default)` 边框建立层级。
+常见组件已按 `design.md` 实现，能套就套，省得手写还不会走样：`.nm-card` / `.nm-title` / `.nm-text` / `.nm-muted` / `.nm-btn`（+`.nm-btn--primary` / `.nm-btn--danger`）/ `.nm-btn-icon`（40×40 图标按钮）/ `.nm-input` / `.nm-tag` / `.nm-list` / `.nm-empty` / `.nm-msg`（+`.nm-msg--danger`）。完整清单见 [style.md](./style.md)。
+
+### 3.3 超出现成类时：照 `design.md` 手写
+
+没有对应 `nm-*` 类的组件（如卡片头、chip、Checkbox/Radio、下划线 Tab、状态徽标、下拉菜单），**翻 `design.md` §8 对应小节，用 `--nm-*` 令牌把它的确切数值写出来**。例：`design.md` §8.1 的图标按钮是 `40×40`、无水平内边距、图标 `18px`、默认 `--nm-text-secondary`、active `--nm-color-primary`；§8.12 的 Tab 是下划线态、选中 `3px` 主色下划线且文字保持深色（不是胶囊、不是实色底）。
+
+> 判断做得对不对：把模块截图和主应用同类组件并排看，颜色·字号·圆角·间距·状态是否完全一致。有任何一处「相近但数值不同」，就是没对齐——回 `design.md` 抠数字。
 
 ### 3.4 尺寸与断点
 
@@ -348,6 +354,8 @@ Nowly.defineModule(async ({ host, root }) => {
 - [ ] 纯图标按钮（只含 `<svg>`、无可读文字）都带了 `aria-label`（或 `aria-labelledby` / `title` / svg 内 `<title>`）。命令式构建（`createElement`）时校验器扫不到，靠自觉。
 - [ ] 模块源码未超过 256 KiB（第三方库内联也要克制体积）。
 - [ ] 若声明了 `@motion animated`，已用 `host.onVisibilityChange` 在不可见时暂停动画；默认 `static` 模块无任何持续动效。
-- [ ] 圆角、字体、间距对齐第 3 节的令牌。
+- [ ] 视觉严格对齐 `design.md`：圆角、字号、字重、行高、间距、边框、阴影都落在其规定的档位上，没有 `14px`/`18px`/`10px 14px` 这类拍脑袋的近似值。
+- [ ] 超出便捷类的组件（图标按钮、卡片头、chip、下划线 Tab、复选框/单选、状态徽标、下拉浮层等）按 `design.md` 对应小节的确切数值用 `--nm-*` 令牌手写，没有自造近似样式。
+- [ ] 每个可交互元素都实现了 `design.md` §9 要求的静态状态（default / hover / active / focus-visible / disabled，必要时 error），且只即时改颜色/背景/边框/阴影。
 - [ ] `host.fetch` 和 `host.loadState` 都做了错误处理（`try/catch`），失败时给用户可读提示。
 - [ ] 在 `root` 上手动渲染，没有假设父页面存在任何元素。

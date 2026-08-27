@@ -1,5 +1,5 @@
 import { Plus, Settings } from 'lucide-react';
-import { type DragEvent, useRef, useState } from 'react';
+import { type DragEvent, useMemo, useRef, useState } from 'react';
 import { laneCardCount, totalCardCount } from './kanban-view';
 import { KanbanLane } from './KanbanLane';
 import { KanbanLaneDialog } from './KanbanLaneDialog';
@@ -10,6 +10,7 @@ import { useOptionalTaskWorkspace, useTaskWorkspace } from '../tasks/TaskWorkspa
 import { UnifiedTaskDialog } from '../tasks/UnifiedTaskDialog';
 import { TaskSettingsDialog } from '../tasks/TaskSettingsDialog';
 import { useKanban } from './useKanban';
+import { FilterSelect, type FilterOption } from '../components/FilterSelect';
 import type { CalendarEvent } from '../calendar/calendar-model';
 import { t } from '../i18n';
 
@@ -71,7 +72,46 @@ function KanbanWidgetContent({
   const [dialog, setDialog] = useState<DialogState>(null);
   const [drag, setDrag] = useState<Drag>(null);
   const [dropLaneId, setDropLaneId] = useState<string | null>(null);
+  const [filterPriority, setFilterPriority] = useState('');
+  const [filterTag, setFilterTag] = useState('');
+  const [filterCollaborator, setFilterCollaborator] = useState('');
   const restoreFocusRef = useRef<HTMLElement | null>(null);
+
+  // Only offer filter values that exist on the current board, and reset a
+  // selection to "show all" once it no longer matches anything.
+  const showAll = t('filter.showAll');
+  const priorityOptions = useMemo<FilterOption[]>(
+    () => [
+      { value: '', label: showAll },
+      ...data.priorities.map((priority) => ({ value: priority.id, label: priority.name, color: priority.color }))
+    ],
+    [data.priorities, showAll]
+  );
+  const tagOptions = useMemo<FilterOption[]>(
+    () => [
+      { value: '', label: showAll },
+      ...data.tags.map((tag) => ({ value: tag.id, label: tag.name, color: tag.color }))
+    ],
+    [data.tags, showAll]
+  );
+  const collaboratorOptions = useMemo<FilterOption[]>(
+    () => [
+      { value: '', label: showAll },
+      ...data.collaborators.map((person) => ({ value: person.id, label: person.name }))
+    ],
+    [data.collaborators, showAll]
+  );
+
+  const effectivePriority = data.priorities.some((p) => p.id === filterPriority) ? filterPriority : '';
+  const effectiveTag = data.tags.some((tag) => tag.id === filterTag) ? filterTag : '';
+  const effectiveCollaborator = data.collaborators.some((p) => p.id === filterCollaborator) ? filterCollaborator : '';
+
+  function matchesFilter(card: { priorityId: string | null; tagIds: string[]; collaboratorIds: string[] }): boolean {
+    if (effectivePriority && card.priorityId !== effectivePriority) return false;
+    if (effectiveTag && !card.tagIds.includes(effectiveTag)) return false;
+    if (effectiveCollaborator && !card.collaboratorIds.includes(effectiveCollaborator)) return false;
+    return true;
+  }
 
   const status = snapshot.status;
   const errorMessage = status === 'error' ? snapshot.message : undefined;
@@ -149,6 +189,37 @@ function KanbanWidgetContent({
         <div className="heading-group">
           <p>{t('kanbanWidget.cardCount', { count: totalCardCount(data) })}</p>
         </div>
+        {data.priorities.length > 0 || data.tags.length > 0 || data.collaborators.length > 0 ? (
+          <nav className="filter-bar" aria-label={t('kanbanWidget.boardMenu')}>
+            {data.priorities.length > 0 ? (
+              <FilterSelect
+                label={t('kanbanWidget.filterPriority')}
+                ariaLabel={t('kanbanWidget.filterByPriority')}
+                options={priorityOptions}
+                value={effectivePriority}
+                onChange={setFilterPriority}
+              />
+            ) : null}
+            {data.tags.length > 0 ? (
+              <FilterSelect
+                label={t('kanbanWidget.filterTag')}
+                ariaLabel={t('kanbanWidget.filterByTag')}
+                options={tagOptions}
+                value={effectiveTag}
+                onChange={setFilterTag}
+              />
+            ) : null}
+            {data.collaborators.length > 0 ? (
+              <FilterSelect
+                label={t('kanbanWidget.filterCollaborator')}
+                ariaLabel={t('kanbanWidget.filterByCollaborator')}
+                options={collaboratorOptions}
+                value={effectiveCollaborator}
+                onChange={setFilterCollaborator}
+              />
+            ) : null}
+          </nav>
+        ) : null}
         <div className="toolbar-actions">
           <button
             type="button"
@@ -224,6 +295,7 @@ function KanbanWidgetContent({
                   }}
                   onCardDragStart={onCardDragStart}
                   onCardDragEnd={onDragEnd}
+                  matchesFilter={matchesFilter}
                 />
               ))}
             </div>

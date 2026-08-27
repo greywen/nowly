@@ -44,6 +44,10 @@ export type AppSettings = {
   weekStart: 'monday' | 'sunday';
   dateFormat: 'localized' | 'iso';
   showWeekends: boolean;
+  // Hide the topbar while running as the desktop wallpaper. Defaults on, so the
+  // wallpaper reads as a clean dashboard; the topbar returns the moment the app
+  // is brought back to the foreground.
+  hideTopbarInWallpaper: boolean;
   recentColors?: HexColor[];
 };
 
