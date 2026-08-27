@@ -516,7 +516,10 @@ mod tests {
     fn unfolds_continuation_lines() {
         let text = "SUMMARY:Hello\r\n World\r\nUID:1";
         let lines = unfold_lines(text);
-        assert_eq!(lines, vec!["SUMMARY:HelloWorld".to_string(), "UID:1".to_string()]);
+        assert_eq!(
+            lines,
+            vec!["SUMMARY:HelloWorld".to_string(), "UID:1".to_string()]
+        );
     }
 
     #[test]
@@ -525,13 +528,17 @@ mod tests {
                     BEGIN:VEVENT\nUID:2\nEND:VEVENT\nEND:VCALENDAR";
         let blocks = vevent_blocks(&unfold_lines(text));
         assert_eq!(blocks.len(), 2);
-        assert_eq!(blocks[0], vec!["UID:1".to_string(), "SUMMARY:A".to_string()]);
+        assert_eq!(
+            blocks[0],
+            vec!["UID:1".to_string(), "SUMMARY:A".to_string()]
+        );
         assert_eq!(blocks[1], vec!["UID:2".to_string()]);
     }
 
     #[test]
     fn parses_property_name_params_and_value() {
-        let prop = parse_property("DTSTART;TZID=America/New_York;VALUE=DATE-TIME:20260810T100000").unwrap();
+        let prop = parse_property("DTSTART;TZID=America/New_York;VALUE=DATE-TIME:20260810T100000")
+            .unwrap();
         assert_eq!(prop.name, "DTSTART");
         assert_eq!(prop.param("TZID"), Some("America/New_York"));
         assert_eq!(prop.param("VALUE"), Some("DATE-TIME"));
@@ -782,7 +789,9 @@ mod tests {
         let events = parse_calendar(text).unwrap();
         let (s, e) = win("2026-08-01T00:00", "2026-09-01T00:00");
         let instances = expand_vevents(&events, s, e);
-        assert!(!instances.iter().any(|i| i.start_wall.starts_with("2026-08-17")));
+        assert!(!instances
+            .iter()
+            .any(|i| i.start_wall.starts_with("2026-08-17")));
         assert!(instances.iter().any(|i| i.start_wall == "2026-08-10T10:00"));
         assert!(instances.iter().any(|i| i.start_wall == "2026-08-24T10:00"));
     }

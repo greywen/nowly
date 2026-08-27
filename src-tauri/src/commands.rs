@@ -26,7 +26,9 @@ pub fn update_app_settings(
     settings: AppSettings,
 ) -> Result<AppSettings, CommandError> {
     crate::settings::validate(&settings).map_err(|error| match error {
-        rusqlite::Error::InvalidParameterName(field) => CommandError::validation(&field, "设置值无效。"),
+        rusqlite::Error::InvalidParameterName(field) => {
+            CommandError::validation(&field, "设置值无效。")
+        }
         other => CommandError::database(other),
     })?;
     let mut connection = db.0.lock().map_err(CommandError::database)?;
@@ -51,4 +53,3 @@ pub fn update_app_settings(
         other => CommandError::database(other),
     })
 }
-

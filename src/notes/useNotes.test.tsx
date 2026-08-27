@@ -5,7 +5,7 @@ import { RepositoryProvider } from '../data/RepositoryContext';
 import type { NowlyRepository } from '../data/nowly-repository';
 import { useNotes } from './useNotes';
 
-const note = { id:'n1', title:'原则', content:'简单', color:'purple' as const, pinned:true, createdAt:'x', updatedAt:'x' };
+const note = { id:'n1', title:'原则', content:'简单', color:'#4F55DA' as const, pinned:true, styleVariant:3, icon:'star' as const, createdAt:'x', updatedAt:'x' };
 function repository(overrides: Partial<NowlyRepository> = {}): NowlyRepository {
   return {
     listEventsInRange:vi.fn().mockResolvedValue([]), createEvent:vi.fn(), updateEvent:vi.fn(), deleteEvent:vi.fn(),
@@ -29,8 +29,8 @@ describe('useNotes', () => {
     const value = repository();
     const { result } = renderHook(() => useNotes(), { wrapper:wrapper(value) });
     await waitFor(() => expect(result.current.notes.status).toBe('ready'));
-    await act(() => result.current.createNote({ title:'原则', content:'', color:'yellow', pinned:false }));
-    await act(() => result.current.updateNote(note, { title:'原则', content:'简单', color:'purple', pinned:true }));
+    await act(() => result.current.createNote({ title:'原则', content:'', color:'#E8C444', pinned:false, icon:'' }));
+    await act(() => result.current.updateNote(note, { title:'原则', content:'简单', color:'#4F55DA', pinned:true, icon:'star' }));
     await act(() => result.current.deleteNote(note));
     expect(value.listNotes).toHaveBeenCalledTimes(4);
   });

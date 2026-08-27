@@ -14,6 +14,7 @@ const open: MatrixTask = {
   completed: false,
   linkedEventId: 'e1',
   note: '',
+  tags: [],
   createdAt: '2026-07-20T09:00:00Z',
   updatedAt: '2026-07-20T09:00:00Z'
 };

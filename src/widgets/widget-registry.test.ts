@@ -8,6 +8,7 @@ import {
   builtinDefinitions,
   canPlace,
   clampToBounds,
+  devModuleDefinition,
   sandboxExtensionToDefinition,
   defaultLayout,
   extensionDefinitions,
@@ -90,12 +91,34 @@ describe('user modules (sandbox extensions)', () => {
   });
 
   it('merges built-ins, extensions, and user modules into the full set', () => {
-    const all = buildDefinitions([extension()]);
+    const all = buildDefinitions([extension()], false);
     expect(all.map((definition) => definition.id)).toContain(`${SANDBOX_ID_PREFIX}ext1`);
     // Built-in count is 4: calendar, matrix, notes, plus the picker-only kanban.
     expect(all.filter((definition) => definition.category === 'builtin')).toHaveLength(4);
     expect(all.filter((definition) => definition.category === 'extension')).toHaveLength(1);
     expect(all.filter((definition) => definition.category === 'sandbox')).toHaveLength(1);
+  });
+});
+
+describe('developer module (dev-only)', () => {
+  it('is a builtin definition with valid geometry', () => {
+    expect(devModuleDefinition.id).toBe('devModule');
+    expect(devModuleDefinition.category).toBe('builtin');
+    expect(devModuleDefinition.minW).toBeGreaterThan(0);
+    expect(devModuleDefinition.minH).toBeGreaterThan(0);
+    expect(devModuleDefinition.default.w).toBeGreaterThanOrEqual(devModuleDefinition.minW);
+    expect(devModuleDefinition.default.h).toBeGreaterThanOrEqual(devModuleDefinition.minH);
+  });
+
+  it('is included only when includeDevModule is true', () => {
+    const withDev = buildDefinitions([], true);
+    expect(withDev.map((definition) => definition.id)).toContain('devModule');
+    const withoutDev = buildDefinitions([], false);
+    expect(withoutDev.map((definition) => definition.id)).not.toContain('devModule');
+  });
+
+  it('is kept out of the default layout', () => {
+    expect(defaultLayout.map((item) => item.id)).not.toContain('devModule');
   });
 });
 

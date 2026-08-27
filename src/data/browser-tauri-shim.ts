@@ -98,6 +98,48 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+const browserTaskPriorities = [
+  'important_urgent',
+  'important_not_urgent',
+  'not_important_urgent',
+  'not_important_not_urgent'
+];
+
+function ensureTaskWorkspace(store: Store) {
+  if (store.kanban.lanes.length === 0) {
+    const stamp = nowIso();
+    store.kanban.lanes = [
+      { id: 'kanban-lane-todo', name: '待处理', color: '#4FC9DA', position: 0, createdAt: stamp, updatedAt: stamp },
+      { id: 'kanban-lane-doing', name: '进行中', color: '#E8C444', position: 1, createdAt: stamp, updatedAt: stamp },
+      { id: 'kanban-lane-done', name: '已完成', color: '#B8D935', position: 2, createdAt: stamp, updatedAt: stamp }
+    ];
+  }
+  store.tasks = store.tasks.map((task, index) => {
+    if ('laneId' in task && 'boardPosition' in task && 'views' in task) return task;
+    const priority = typeof task.quadrant === 'string' && browserTaskPriorities.includes(task.quadrant)
+      ? task.quadrant
+      : null;
+    const dueDate = typeof task.dueAt === 'string' ? task.dueAt : null;
+    const completed = task.completed === true;
+    return {
+      id: task.id ?? id('t'),
+      title: task.title ?? '',
+      description: task.note ?? '',
+      priority,
+      dueDate,
+      completed,
+      laneId: completed ? 'kanban-lane-done' : 'kanban-lane-todo',
+      boardPosition: index,
+      tagIds: [],
+      collaboratorIds: [],
+      linkedEventId: task.linkedEventId ?? null,
+      views: ['kanban', ...(priority ? ['matrix'] : []), ...(dueDate ? ['calendar'] : [])],
+      createdAt: task.createdAt ?? nowIso(),
+      updatedAt: task.updatedAt ?? nowIso()
+    };
+  });
+}
+
 // Whether an event/external record starts inside the half-open range the UI
 // asks for. Recurrence is not expanded in the browser fallback; recurring
 // events surface only on their original start, which is an accepted dev-only
@@ -108,6 +150,29 @@ function inRange(startAt: unknown, range: { startAt: string; endAtExclusive: str
 
 export function installBrowserTauriBackend() {
   const store = loadStore();
+  ensureTaskWorkspace(store);
+
+  const taskWorkspaceSnapshot = () => ({
+    tasks: store.tasks,
+    lanes: store.kanban.lanes,
+    tags: store.kanban.tags.map((tag) => ({ archivedAt: null, ...tag })),
+    collaborators: store.kanban.collaborators.map((person) => ({ archivedAt: null, ...person })),
+    linkingEnabled: store.settings.taskViewLinkingEnabled !== false,
+    defaultLaneId: (store.settings.defaultTaskLaneId as string) ?? 'kanban-lane-todo',
+    completionLaneId: (store.settings.completionTaskLaneId as string) ?? 'kanban-lane-done',
+    viewPreferences: (store.settings.taskViewPreferences as Dict) ?? {}
+  });
+
+  const coordinateViews = (task: Dict) => {
+    if (store.settings.taskViewLinkingEnabled === false) {
+      const current = Array.isArray(task.views) ? task.views as string[] : ['kanban'];
+      task.views = current.filter((view) =>
+        view === 'kanban' || (view === 'matrix' && task.priority) || (view === 'calendar' && task.dueDate)
+      );
+      return;
+    }
+    task.views = ['kanban', ...(task.priority ? ['matrix'] : []), ...(task.dueDate ? ['calendar'] : [])];
+  };
 
   const persist = () => {
     try {
@@ -175,33 +240,249 @@ export function installBrowserTauriBackend() {
     list_external_events_in_range: (a) =>
       store.externalEvents.filter((e) => inRange(e.startAt, a.range as never)),
 
-    // Tasks
+    // Unified tasks. Legacy command names remain accepted because both the old
+    // focused tests and the new desktop IPC use create/update/delete_task.
+    get_task_workspace_snapshot: taskWorkspaceSnapshot,
     list_tasks: () => store.tasks,
     create_task: (a) => {
-      const task = { id: id('t'), createdAt: nowIso(), updatedAt: nowIso(), ...(a.draft as Dict) };
+      const draft = a.draft as Dict;
+      const laneId = (draft.laneId as string) ?? 'kanban-lane-todo';
+      const task: Dict = {
+        id: id('t'),
+        description: '',
+        priority: null,
+        dueDate: null,
+        completed: false,
+        laneId,
+        boardPosition: store.tasks.filter((item) => item.laneId === laneId).length,
+        tagIds: [],
+        collaboratorIds: [],
+        linkedEventId: null,
+        views: ['kanban'],
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+        ...draft
+      };
+      coordinateViews(task);
       store.tasks.push(task);
       persist();
       return task;
     },
     update_task: (a) => {
       let updated: Dict | undefined;
-      store.tasks = store.tasks.map((t) =>
-        t.id === a.id ? (updated = { ...t, ...(a.draft as Dict), updatedAt: nowIso() }) : t
-      );
+      store.tasks = store.tasks.map((task) => {
+        if (task.id !== a.id) return task;
+        updated = { ...task, ...(a.draft as Dict), updatedAt: nowIso() };
+        coordinateViews(updated);
+        return updated;
+      });
       persist();
       return updated;
     },
     delete_task: (a) => {
-      store.tasks = store.tasks.filter((t) => t.id !== a.id);
+      store.tasks = store.tasks.filter((task) => task.id !== a.id);
       persist();
     },
     set_task_completed: (a) => {
       let updated: Dict | undefined;
-      store.tasks = store.tasks.map((t) =>
-        t.id === a.id ? (updated = { ...t, completed: a.completed, updatedAt: nowIso() }) : t
+      const targetLane = a.completed
+        ? ((store.settings.completionTaskLaneId as string) ?? 'kanban-lane-done')
+        : ((store.settings.defaultTaskLaneId as string) ?? 'kanban-lane-todo');
+      store.tasks = store.tasks.map((task) =>
+        task.id === a.id
+          ? (updated = { ...task, completed: a.completed, laneId: targetLane, updatedAt: nowIso() })
+          : task
       );
       persist();
       return updated;
+    },
+    move_task_to_lane: (a) => {
+      const moving = store.tasks.find((task) => task.id === a.id);
+      if (!moving) return undefined;
+      const laneId = a.laneId as string;
+      const completionLane = (store.settings.completionTaskLaneId as string) ?? 'kanban-lane-done';
+      const target = store.tasks.filter((task) => task.id !== a.id && task.laneId === laneId)
+        .sort((left, right) => Number(left.boardPosition) - Number(right.boardPosition));
+      target.splice(Number(a.targetIndex), 0, moving);
+      const positions = new Map(target.map((task, index) => [task.id, index]));
+      let updated: Dict | undefined;
+      store.tasks = store.tasks.map((task) => {
+        if (task.id === a.id) {
+          updated = { ...task, laneId, completed: laneId === completionLane, boardPosition: positions.get(task.id) ?? 0, updatedAt: nowIso() };
+          return updated;
+        }
+        return positions.has(task.id) ? { ...task, boardPosition: positions.get(task.id) } : task;
+      });
+      persist();
+      return updated;
+    },
+    move_task_to_priority: (a) => {
+      let updated: Dict | undefined;
+      store.tasks = store.tasks.map((task) => {
+        if (task.id !== a.id) return task;
+        updated = { ...task, priority: a.priority, updatedAt: nowIso() };
+        coordinateViews(updated);
+        return updated;
+      });
+      persist();
+      return updated;
+    },
+    move_task_to_date: (a) => {
+      let updated: Dict | undefined;
+      store.tasks = store.tasks.map((task) => {
+        if (task.id !== a.id) return task;
+        updated = { ...task, dueDate: a.dueDate, updatedAt: nowIso() };
+        coordinateViews(updated);
+        return updated;
+      });
+      persist();
+      return updated;
+    },
+    set_task_view_memberships: (a) => {
+      let updated: Dict | undefined;
+      store.tasks = store.tasks.map((task) =>
+        task.id === a.id ? (updated = { ...task, views: a.views, updatedAt: nowIso() }) : task
+      );
+      persist();
+      return updated;
+    },
+    set_task_view_linking: (a) => {
+      store.settings.taskViewLinkingEnabled = a.enabled;
+      if (a.enabled) store.tasks.forEach(coordinateViews);
+      persist();
+      return taskWorkspaceSnapshot();
+    },
+    create_task_lane: (a) => {
+      const lane = {
+        id: id('lane'),
+        position: store.kanban.lanes.length,
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+        ...(a.draft as Dict)
+      };
+      store.kanban.lanes.push(lane);
+      persist();
+      return lane;
+    },
+    update_task_lane: (a) => {
+      let updated: Dict | undefined;
+      store.kanban.lanes = store.kanban.lanes.map((lane) =>
+        lane.id === a.id ? (updated = { ...lane, ...(a.draft as Dict), updatedAt: nowIso() }) : lane
+      );
+      persist();
+      return updated;
+    },
+    delete_task_lane: (a) => {
+      const replacement = a.replacementLaneId as string | null;
+      const removedId = a.id as string;
+      if (replacement) {
+        const start = store.tasks.filter((task) => task.laneId === replacement).length;
+        let offset = 0;
+        store.tasks = store.tasks.map((task) => task.laneId === removedId
+          ? { ...task, laneId: replacement, boardPosition: start + offset++, updatedAt: nowIso() }
+          : task);
+      } else {
+        store.tasks = store.tasks.filter((task) => task.laneId !== removedId);
+      }
+      store.kanban.lanes = store.kanban.lanes.filter((lane) => lane.id !== removedId);
+      if (store.settings.defaultTaskLaneId === removedId) store.settings.defaultTaskLaneId = replacement;
+      if (store.settings.completionTaskLaneId === removedId) store.settings.completionTaskLaneId = replacement;
+      const completionLane = (store.settings.completionTaskLaneId as string) ?? 'kanban-lane-done';
+      store.tasks = store.tasks.map((task) => ({ ...task, completed: task.laneId === completionLane }));
+      persist();
+      return taskWorkspaceSnapshot();
+    },
+    reorder_task_lanes: (a) => {
+      const order = a.orderedIds as string[];
+      store.kanban.lanes = store.kanban.lanes.map((lane) => ({
+        ...lane,
+        position: order.indexOf(lane.id as string),
+        updatedAt: nowIso()
+      }));
+      persist();
+      return store.kanban.lanes;
+    },
+    set_default_task_lane: (a) => {
+      store.settings.defaultTaskLaneId = a.id;
+      persist();
+      return taskWorkspaceSnapshot();
+    },
+    set_completion_task_lane: (a) => {
+      store.settings.completionTaskLaneId = a.id;
+      store.tasks = store.tasks.map((task) => ({
+        ...task,
+        completed: task.laneId === a.id,
+        updatedAt: nowIso()
+      }));
+      persist();
+      return taskWorkspaceSnapshot();
+    },
+    create_task_tag: (a) => {
+      const tag = { id: id('tag'), archivedAt: null, createdAt: nowIso(), updatedAt: nowIso(), ...(a.draft as Dict) };
+      store.kanban.tags.push(tag);
+      persist();
+      return tag;
+    },
+    update_task_tag: (a) => {
+      let updated: Dict | undefined;
+      store.kanban.tags = store.kanban.tags.map((tag) =>
+        tag.id === a.id ? (updated = { ...tag, ...(a.draft as Dict), updatedAt: nowIso() }) : tag
+      );
+      persist();
+      return updated;
+    },
+    archive_task_tag: (a) => {
+      let updated: Dict | undefined;
+      store.kanban.tags = store.kanban.tags.map((tag) =>
+        tag.id === a.id ? (updated = { ...tag, archivedAt: a.archived ? nowIso() : null, updatedAt: nowIso() }) : tag
+      );
+      persist();
+      return updated;
+    },
+    delete_task_tag: (a) => {
+      store.kanban.tags = store.kanban.tags.filter((tag) => tag.id !== a.id);
+      store.tasks = store.tasks.map((task) => ({
+        ...task,
+        tagIds: Array.isArray(task.tagIds) ? (task.tagIds as string[]).filter((tagId) => tagId !== a.id) : []
+      }));
+      persist();
+    },
+    create_task_collaborator: (a) => {
+      const person = { id: id('person'), archivedAt: null, createdAt: nowIso(), updatedAt: nowIso(), ...(a.draft as Dict) };
+      store.kanban.collaborators.push(person);
+      persist();
+      return person;
+    },
+    update_task_collaborator: (a) => {
+      let updated: Dict | undefined;
+      store.kanban.collaborators = store.kanban.collaborators.map((person) =>
+        person.id === a.id ? (updated = { ...person, ...(a.draft as Dict), updatedAt: nowIso() }) : person
+      );
+      persist();
+      return updated;
+    },
+    archive_task_collaborator: (a) => {
+      let updated: Dict | undefined;
+      store.kanban.collaborators = store.kanban.collaborators.map((person) =>
+        person.id === a.id ? (updated = { ...person, archivedAt: a.archived ? nowIso() : null, updatedAt: nowIso() }) : person
+      );
+      persist();
+      return updated;
+    },
+    delete_task_collaborator: (a) => {
+      store.kanban.collaborators = store.kanban.collaborators.filter((person) => person.id !== a.id);
+      store.tasks = store.tasks.map((task) => ({
+        ...task,
+        collaboratorIds: Array.isArray(task.collaboratorIds)
+          ? (task.collaboratorIds as string[]).filter((personId) => personId !== a.id)
+          : []
+      }));
+      persist();
+    },
+    set_task_view_preferences: (a) => {
+      store.settings.taskViewPreferences = a.preferences;
+      persist();
+      return taskWorkspaceSnapshot();
     },
 
     // Notes
@@ -264,6 +545,11 @@ export function installBrowserTauriBackend() {
       persist();
       return store.moduleLayout;
     },
+    // Draft modules live on the real filesystem (%APPDATA%/com.nowly.app/dev-modules),
+    // which the browser shim cannot read. The standalone preview page (channel
+    // B) covers browser-based previewing, so here we just report no drafts.
+    list_dev_modules: () => [],
+    dev_modules_dir_path: () => '',
     get_module_state: (a) => store.moduleState[a.moduleId as string] ?? null,
     set_module_state: (a) => {
       store.moduleState[a.moduleId as string] = a.state as string;

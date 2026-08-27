@@ -1,0 +1,211 @@
+/* Styling for the standalone module preview workbench (preview.html). It reuses
+   the app's design tokens (imported via styles.css) but lays out its own two-pane
+   shell: draft list on the left, sized sandbox + lint on the right. */
+
+.preview-root {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  height: 100vh;
+  background: var(--bg-subtle);
+}
+
+.preview-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-right: 1px solid var(--border-default);
+  background: var(--bg-surface);
+  overflow-y: auto;
+}
+
+.preview-sidebar__title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 18.4px;
+  font-weight: 600;
+}
+
+.preview-sidebar__empty {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13.6px;
+  line-height: 1.5;
+}
+
+.preview-draft-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.preview-draft {
+  width: 100%;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-default);
+  background: transparent;
+  color: var(--text-strong);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.preview-draft--active {
+  border-color: var(--border-default);
+  background: var(--bg-subtle);
+}
+
+.preview-draft__name {
+  font-size: 15.2px;
+  font-weight: 600;
+}
+
+.preview-draft__file {
+  color: var(--text-muted);
+  font-size: 12.8px;
+}
+
+.preview-draft__badge {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 1px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.preview-draft__badge--error {
+  color: var(--color-danger-active);
+  background: var(--color-danger-light);
+}
+
+.preview-main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+  overflow: auto;
+}
+
+.preview-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.preview-size-switch {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-default);
+  background: var(--bg-surface);
+}
+
+.preview-size-btn {
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  background: transparent;
+  font-size: 13.6px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.preview-size-btn--active {
+  color: #ffffff;
+  background: var(--color-primary);
+}
+
+.preview-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.preview-stage__frame-wrap {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-default);
+  background: var(--bg-surface);
+  overflow: hidden;
+}
+
+.preview-sandbox__frame {
+  border: 0;
+  display: block;
+}
+
+.preview-stage__dims {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12.8px;
+  font-weight: 500;
+}
+
+.preview-empty,
+.preview-error {
+  padding: 24px;
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-default);
+  color: var(--text-muted);
+}
+
+.preview-error {
+  border-style: solid;
+  border-color: var(--color-danger);
+  color: var(--color-danger-active);
+  background: var(--color-danger-light);
+}
+
+.preview-error strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.preview-error p {
+  margin: 0;
+  font-size: 13.6px;
+}
+
+.preview-lint {
+  padding: 16px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-default);
+  background: var(--bg-surface);
+}
+
+.preview-lint__title {
+  margin: 0 0 8px;
+  color: var(--text-primary);
+  font-size: 15.2px;
+  font-weight: 600;
+}
+
+.preview-lint__ok {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13.6px;
+}
+
+.preview-lint__list {
+  margin: 0;
+  padding: 0 0 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.preview-lint__item {
+  color: var(--color-danger-active);
+  font-size: 13.6px;
+}

@@ -5,8 +5,8 @@ use crate::models::{EditScope, Event, EventDraft, EventRange, EventTarget};
 use crate::recurrence::{self, parse_by_day, Recurrence, Series};
 use chrono::{Duration, NaiveDateTime, SecondsFormat, Utc};
 use rusqlite::{params, Connection, OptionalExtension, Row, Transaction, TransactionBehavior};
-use uuid::Uuid;
 use tauri::State;
+use uuid::Uuid;
 
 const LOCAL_MINUTE_FORMAT: &str = "%Y-%m-%dT%H:%M";
 const CATEGORIES: &[&str] = &["work", "important", "personal", "learning"];
@@ -36,10 +36,7 @@ fn reminders_to_json(reminders: &[i64]) -> String {
 
 /// 清空一条日程已发出的提醒去重记录。开始时刻或提醒集合变化后调用，
 /// 使新的提醒时刻可以重新触发。
-fn reset_reminder_dispatches(
-    connection: &Connection,
-    event_id: &str,
-) -> Result<(), CommandError> {
+fn reset_reminder_dispatches(connection: &Connection, event_id: &str) -> Result<(), CommandError> {
     connection
         .execute(
             "DELETE FROM reminder_dispatches WHERE event_id=?1",
@@ -144,7 +141,10 @@ pub(crate) fn to_display_wall(wall: &str, tz: &Option<String>) -> String {
         return wall.to_owned();
     };
     let instant = crate::timezone::wall_to_utc(naive, zone);
-    crate::timezone::format_wall(crate::timezone::utc_to_wall(instant, crate::timezone::device_tz()))
+    crate::timezone::format_wall(crate::timezone::utc_to_wall(
+        instant,
+        crate::timezone::device_tz(),
+    ))
 }
 
 /// 由系列行装配一个 `Event`。`occurrence_wall` 为该实例在系列自身时区下的钟面起点
@@ -296,7 +296,14 @@ pub fn list_in_range(
     };
 
     for series_row in &series_rows {
-        expand_series_into(connection, series_row, win_start, win_end, device, &mut results)?;
+        expand_series_into(
+            connection,
+            series_row,
+            win_start,
+            win_end,
+            device,
+            &mut results,
+        )?;
     }
 
     results.sort_by(|left, right| {
@@ -329,14 +336,10 @@ fn expand_series_into(
     // 设备钟面窗口 → 系列时区钟面窗口。浮动系列：钟面窗口原样。
     let (ws, we) = match series_tz {
         Some(zone) => {
-            let s = crate::timezone::utc_to_wall(
-                crate::timezone::wall_to_utc(win_start, device),
-                zone,
-            );
-            let e = crate::timezone::utc_to_wall(
-                crate::timezone::wall_to_utc(win_end, device),
-                zone,
-            );
+            let s =
+                crate::timezone::utc_to_wall(crate::timezone::wall_to_utc(win_start, device), zone);
+            let e =
+                crate::timezone::utc_to_wall(crate::timezone::wall_to_utc(win_end, device), zone);
             (s, e)
         }
         None => (win_start, win_end),
@@ -359,16 +362,11 @@ fn expand_series_into(
             .filter_map(|s| crate::timezone::parse_wall(s).ok())
             .collect(),
     };
-    let occs = crate::rrule_engine::expand(
-        &spec,
-        ws,
-        we,
-        crate::rrule_engine::MAX_WINDOW_OCCURRENCES,
-    )?;
+    let occs =
+        crate::rrule_engine::expand(&spec, ws, we, crate::rrule_engine::MAX_WINDOW_OCCURRENCES)?;
 
     // 例外：同时取回影响窗内槽位的、以及被覆盖后移入窗口的。键为系列时区钟面。
-    let exceptions =
-        event_exceptions::load_for_window(connection, &row.id, &ws_wall, &we_wall)?;
+    let exceptions = event_exceptions::load_for_window(connection, &row.id, &ws_wall, &we_wall)?;
 
     // Pass 1：窗内展开槽位。
     for occ in &occs {
@@ -474,10 +472,7 @@ struct IcsColumns {
 }
 
 /// 由重复规则算出绝对上界钟面（供范围预筛）。无限系列返回 None。
-fn compute_final_at(
-    draft: &EventDraft,
-    rule: &Recurrence,
-) -> Result<Option<String>, CommandError> {
+fn compute_final_at(draft: &EventDraft, rule: &Recurrence) -> Result<Option<String>, CommandError> {
     let dtstart = parse_local(&draft.start_at, "startAt")?;
     let normalized = recurrence::normalize(rule, dtstart)?;
     Ok(normalized
@@ -561,8 +556,9 @@ fn slots_continue(
     draft: &EventDraft,
     slot: NaiveDateTime,
 ) -> Result<bool, CommandError> {
-    let shape =
-        |rule: Option<&Recurrence>| rule.map(|rule| (rule.freq, rule.interval, rule.by_day.clone()));
+    let shape = |rule: Option<&Recurrence>| {
+        rule.map(|rule| (rule.freq, rule.interval, rule.by_day.clone()))
+    };
     let new_start = parse_local(&draft.start_at, "startAt")?;
     Ok(new_start == slot
         && parse_local(&existing.start_at, "startAt")?.time() == new_start.time()
@@ -585,9 +581,10 @@ fn series_of(event: &Event, rule: &Recurrence) -> Result<Series, CommandError> {
 /// 校验 `EventTarget` 带来的槽位确实由该系列展开得出。放在任何写入之前，
 /// 使非法槽位在留下孤儿例外行之前就被挡住。
 fn require_slot(existing: &Event, slot_text: &str) -> Result<NaiveDateTime, CommandError> {
-    let rule = existing.recurrence.as_ref().ok_or_else(|| {
-        CommandError::validation("occurrenceStartAt", "该日程不是重复日程。")
-    })?;
+    let rule = existing
+        .recurrence
+        .as_ref()
+        .ok_or_else(|| CommandError::validation("occurrenceStartAt", "该日程不是重复日程。"))?;
     let slot = parse_local(slot_text, "occurrenceStartAt")?;
     if recurrence::slot_exists(&series_of(existing, rule)?, slot) {
         Ok(slot)
@@ -599,7 +596,8 @@ fn require_slot(existing: &Event, slot_text: &str) -> Result<NaiveDateTime, Comm
     }
 }
 
-fn sql_write_error(error: rusqlite::Error) -> CommandError {    match &error {
+fn sql_write_error(error: rusqlite::Error) -> CommandError {
+    match &error {
         rusqlite::Error::SqliteFailure(details, _)
             if details.code == rusqlite::ErrorCode::ConstraintViolation =>
         {
@@ -700,11 +698,26 @@ pub fn create(connection: &mut Connection, draft: EventDraft) -> Result<Event, C
                                 all_day,category,color,linked_task_id,note,reminders,
                                 created_at,updated_at,rrule,recurrence_final_at,rdate,exdate)
              VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,NULL,?12,?13,?14,?14,?15,?16,?17,?18)",
-            params![id, draft.title, draft.start_at, draft.end_at,
-                    cols.start_tz, cols.end_tz, cols.start_utc, cols.end_utc,
-                    i64::from(draft.all_day), draft.category, draft.color,
-                    draft.note, reminders_to_json(&draft.reminders), now,
-                    cols.rrule, cols.final_at, cols.rdate, cols.exdate],
+            params![
+                id,
+                draft.title,
+                draft.start_at,
+                draft.end_at,
+                cols.start_tz,
+                cols.end_tz,
+                cols.start_utc,
+                cols.end_utc,
+                i64::from(draft.all_day),
+                draft.category,
+                draft.color,
+                draft.note,
+                reminders_to_json(&draft.reminders),
+                now,
+                cols.rrule,
+                cols.final_at,
+                cols.rdate,
+                cols.exdate
+            ],
         )
         .map_err(sql_write_error)?;
     relink(
@@ -720,9 +733,8 @@ pub fn create(connection: &mut Connection, draft: EventDraft) -> Result<Event, C
             params![id, draft.linked_task_id],
         )
         .map_err(sql_write_error)?;
-    let event = event_by_id(&transaction, &id)?.ok_or_else(|| {
-        CommandError::conflict("日程保存状态已变化，请重试。")
-    })?;
+    let event = event_by_id(&transaction, &id)?
+        .ok_or_else(|| CommandError::conflict("日程保存状态已变化，请重试。"))?;
     transaction.commit().map_err(sql_write_error)?;
     Ok(event)
 }
@@ -777,12 +789,27 @@ pub fn update(
                      linked_task_id=?12,note=?13,updated_at=?14,rrule=?15,recurrence_final_at=?16,
                      rdate=?17,exdate=?18,reminders=?19
                      WHERE id=?1",
-                    params![target.id, draft.title, draft.start_at, draft.end_at,
-                            cols.start_tz, cols.end_tz, cols.start_utc, cols.end_utc,
-                            i64::from(draft.all_day), draft.category, draft.color,
-                            draft.linked_task_id, draft.note, now,
-                            cols.rrule, cols.final_at, cols.rdate, cols.exdate,
-                            reminders_to_json(&draft.reminders)],
+                    params![
+                        target.id,
+                        draft.title,
+                        draft.start_at,
+                        draft.end_at,
+                        cols.start_tz,
+                        cols.end_tz,
+                        cols.start_utc,
+                        cols.end_utc,
+                        i64::from(draft.all_day),
+                        draft.category,
+                        draft.color,
+                        draft.linked_task_id,
+                        draft.note,
+                        now,
+                        cols.rrule,
+                        cols.final_at,
+                        cols.rdate,
+                        cols.exdate,
+                        reminders_to_json(&draft.reminders)
+                    ],
                 )
                 .map_err(sql_write_error)?;
             // 系列开始时刻或提醒变化后，旧的派发去重记录已无意义：删除后重新按新时刻计算。
@@ -852,7 +879,10 @@ pub fn update(
                         .checked_sub(consumed)
                         .filter(|value| *value > 0)
                         .ok_or_else(|| {
-                            CommandError::validation("occurrenceStartAt", "该实例不属于此重复日程。")
+                            CommandError::validation(
+                                "occurrenceStartAt",
+                                "该实例不属于此重复日程。",
+                            )
                         })?;
                     rewrite_end(
                         &transaction,
@@ -911,9 +941,10 @@ pub fn update(
 /// 该系列在 `slot` 之前已经产生的实例数，用于 Count 系列的守恒拆分。
 /// `slot` 必须已通过 `require_slot`：游标因此必然走到它并终止，无限系列亦然。
 fn occurrences_before(existing: &Event, slot: NaiveDateTime) -> Result<u32, CommandError> {
-    let rule = existing.recurrence.as_ref().ok_or_else(|| {
-        CommandError::validation("occurrenceStartAt", "该日程不是重复日程。")
-    })?;
+    let rule = existing
+        .recurrence
+        .as_ref()
+        .ok_or_else(|| CommandError::validation("occurrenceStartAt", "该日程不是重复日程。"))?;
     let series = series_of(existing, rule)?;
     let consumed = recurrence::OccurrenceCursor::new(&series, None)
         .take_while(|value| *value < slot)
@@ -1104,7 +1135,9 @@ mod tests {
 
     fn database() -> Connection {
         let mut connection = Connection::open_in_memory().unwrap();
-        connection.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        connection
+            .execute_batch("PRAGMA foreign_keys = ON;")
+            .unwrap();
         migrate(&mut connection).unwrap();
         connection
     }
@@ -1141,19 +1174,46 @@ mod tests {
     }
 
     fn insert_task(connection: &Connection, id: &str) {
-        connection.execute(
-            "INSERT INTO tasks(id,title,quadrant,priority,completed,note,created_at,updated_at)
-             VALUES (?1,?1,'important-urgent',1,0,'','2026-07-23T08:00:00Z','2026-07-23T08:00:00Z')",
-            [id],
-        ).unwrap();
+        connection
+            .execute(
+                "INSERT INTO tasks(
+                    id,title,description,priority,due_date,completed,lane_id,board_position,
+                    linked_event_id,created_at,updated_at
+                 ) VALUES (
+                    ?1,?1,'','important_urgent',NULL,0,'kanban-lane-todo',
+                    (SELECT COALESCE(MAX(board_position)+1,0) FROM tasks WHERE lane_id='kanban-lane-todo'),
+                    NULL,'2026-07-23T08:00:00Z','2026-07-23T08:00:00Z'
+                 )",
+                [id],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO task_view_memberships(task_id,view,position,created_at)
+                 VALUES (?1,'kanban',NULL,'2026-07-23T08:00:00Z')",
+                [id],
+            )
+            .unwrap();
     }
 
     fn event_link(connection: &Connection, id: &str) -> Option<String> {
-        connection.query_row("SELECT linked_task_id FROM events WHERE id=?1", [id], |row| row.get(0)).unwrap()
+        connection
+            .query_row(
+                "SELECT linked_task_id FROM events WHERE id=?1",
+                [id],
+                |row| row.get(0),
+            )
+            .unwrap()
     }
 
     fn task_link(connection: &Connection, id: &str) -> Option<String> {
-        connection.query_row("SELECT linked_event_id FROM tasks WHERE id=?1", [id], |row| row.get(0)).unwrap()
+        connection
+            .query_row(
+                "SELECT linked_event_id FROM tasks WHERE id=?1",
+                [id],
+                |row| row.get(0),
+            )
+            .unwrap()
     }
 
     #[test]
@@ -1173,9 +1233,10 @@ mod tests {
         // 显示钟面 = 02:00Z 换算到设备时区。
         use chrono::TimeZone;
         let instant = chrono::Utc.with_ymd_and_hms(2026, 8, 3, 2, 0, 0).unwrap();
-        let expected = crate::timezone::format_wall(
-            crate::timezone::utc_to_wall(instant, crate::timezone::device_tz()),
-        );
+        let expected = crate::timezone::format_wall(crate::timezone::utc_to_wall(
+            instant,
+            crate::timezone::device_tz(),
+        ));
         assert_eq!(event.start_at, expected);
     }
 
@@ -1214,7 +1275,14 @@ mod tests {
     #[test]
     fn create_leaves_all_day_events_floating() {
         let mut connection = database();
-        let created = create(&mut connection, EventDraft { all_day: true, ..draft() }).unwrap();
+        let created = create(
+            &mut connection,
+            EventDraft {
+                all_day: true,
+                ..draft()
+            },
+        )
+        .unwrap();
         let (tz, utc): (Option<String>, Option<String>) = connection
             .query_row(
                 "SELECT start_tz, start_utc FROM events WHERE id=?1",
@@ -1238,15 +1306,22 @@ mod tests {
                      'FREQ=WEEKLY;BYDAY=MO',NULL)",
             [],
         ).unwrap();
-        let events = list_in_range(&connection, &EventRange {
-            start_at: "2026-08-01T00:00".into(),
-            end_at_exclusive: "2026-09-01T00:00".into(),
-        }).unwrap();
+        let events = list_in_range(
+            &connection,
+            &EventRange {
+                start_at: "2026-08-01T00:00".into(),
+                end_at_exclusive: "2026-09-01T00:00".into(),
+            },
+        )
+        .unwrap();
         // 八月的周一：3、10、17、24、31 共五次。
         assert_eq!(events.len(), 5);
         assert!(events.iter().all(|e| e.series_id.as_deref() == Some("s1")));
         // occurrence_start_at 是系列时区钟面。
-        assert_eq!(events[0].occurrence_start_at.as_deref(), Some("2026-08-03T10:00"));
+        assert_eq!(
+            events[0].occurrence_start_at.as_deref(),
+            Some("2026-08-03T10:00")
+        );
     }
 
     #[test]
@@ -1257,10 +1332,14 @@ mod tests {
              VALUES ('f1','浮动','2026-08-10T09:00','2026-08-10T10:00',0,'work','#4FC9DA','','[]','t','t')",
             [],
         ).unwrap();
-        let events = list_in_range(&connection, &EventRange {
-            start_at: "2026-08-01T00:00".into(),
-            end_at_exclusive: "2026-09-01T00:00".into(),
-        }).unwrap();
+        let events = list_in_range(
+            &connection,
+            &EventRange {
+                start_at: "2026-08-01T00:00".into(),
+                end_at_exclusive: "2026-09-01T00:00".into(),
+            },
+        )
+        .unwrap();
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].start_at, "2026-08-10T09:00");
         assert_eq!(events[0].start_tz, None);
@@ -1273,17 +1352,40 @@ mod tests {
         assert_eq!(created.title, "评审");
         assert!(uuid::Uuid::parse_str(&created.id).is_ok());
 
-        update(&mut connection, &whole(&created.id), EventDraft {
-            title: "复盘".into(), color: "#F06445".into(), ..draft()
-        }, EditScope::All).unwrap();
+        update(
+            &mut connection,
+            &whole(&created.id),
+            EventDraft {
+                title: "复盘".into(),
+                color: "#F06445".into(),
+                ..draft()
+            },
+            EditScope::All,
+        )
+        .unwrap();
         let updated = event_by_id(&connection, &created.id).unwrap().unwrap();
         assert_eq!(updated.title, "复盘");
         assert_eq!(updated.created_at, created.created_at);
         assert!(updated.updated_at >= created.updated_at);
 
         delete(&mut connection, &whole(&created.id), EditScope::All).unwrap();
-        assert_eq!(update(&mut connection, &whole(&created.id), draft(), EditScope::All).unwrap_err().code, "not_found");
-        assert_eq!(delete(&mut connection, &whole(&created.id), EditScope::All).unwrap_err().code, "not_found");
+        assert_eq!(
+            update(
+                &mut connection,
+                &whole(&created.id),
+                draft(),
+                EditScope::All
+            )
+            .unwrap_err()
+            .code,
+            "not_found"
+        );
+        assert_eq!(
+            delete(&mut connection, &whole(&created.id), EditScope::All)
+                .unwrap_err()
+                .code,
+            "not_found"
+        );
     }
 
     #[test]
@@ -1291,24 +1393,62 @@ mod tests {
         let mut connection = database();
         insert_task(&connection, "t1");
         insert_task(&connection, "t2");
-        let first = create(&mut connection, EventDraft { linked_task_id: Some("t1".into()), ..draft() }).unwrap();
-        let second = create(&mut connection, EventDraft { linked_task_id: Some("t2".into()), ..draft() }).unwrap();
+        let first = create(
+            &mut connection,
+            EventDraft {
+                linked_task_id: Some("t1".into()),
+                ..draft()
+            },
+        )
+        .unwrap();
+        let second = create(
+            &mut connection,
+            EventDraft {
+                linked_task_id: Some("t2".into()),
+                ..draft()
+            },
+        )
+        .unwrap();
 
-        update(&mut connection, &whole(&second.id), EventDraft { linked_task_id: Some("t1".into()), ..draft() }, EditScope::All).unwrap();
+        update(
+            &mut connection,
+            &whole(&second.id),
+            EventDraft {
+                linked_task_id: Some("t1".into()),
+                ..draft()
+            },
+            EditScope::All,
+        )
+        .unwrap();
         assert_eq!(event_link(&connection, &first.id), None);
         assert_eq!(event_link(&connection, &second.id).as_deref(), Some("t1"));
-        assert_eq!(task_link(&connection, "t1").as_deref(), Some(second.id.as_str()));
+        assert_eq!(
+            task_link(&connection, "t1").as_deref(),
+            Some(second.id.as_str())
+        );
         assert_eq!(task_link(&connection, "t2"), None);
 
         delete(&mut connection, &whole(&second.id), EditScope::All).unwrap();
         assert_eq!(task_link(&connection, "t1"), None);
-        assert_eq!(connection.query_row("SELECT COUNT(*) FROM tasks", [], |row| row.get::<_, i64>(0)).unwrap(), 2);
+        assert_eq!(
+            connection
+                .query_row("SELECT COUNT(*) FROM tasks", [], |row| row.get::<_, i64>(0))
+                .unwrap(),
+            2
+        );
     }
 
     #[test]
     fn create_rejects_a_missing_linked_task() {
         let mut connection = database();
-        let error = create(&mut connection, EventDraft { linked_task_id: Some("missing".into()), ..draft() }).unwrap_err();
+        let error = create(
+            &mut connection,
+            EventDraft {
+                linked_task_id: Some("missing".into()),
+                ..draft()
+            },
+        )
+        .unwrap_err();
         assert_eq!(error.code, "validation_error");
         assert_eq!(error.field.as_deref(), Some("linkedTaskId"));
     }
@@ -1329,27 +1469,59 @@ mod tests {
             ).unwrap();
         }
 
-        let events = list_in_range(&connection, &EventRange {
-            start_at: "2026-07-01T00:00".into(),
-            end_at_exclusive: "2026-08-01T00:00".into(),
-        }).unwrap();
+        let events = list_in_range(
+            &connection,
+            &EventRange {
+                start_at: "2026-07-01T00:00".into(),
+                end_at_exclusive: "2026-08-01T00:00".into(),
+            },
+        )
+        .unwrap();
 
-        assert_eq!(events.iter().map(|event| event.id.as_str()).collect::<Vec<_>>(), vec!["july-a", "july-b"]);
+        assert_eq!(
+            events
+                .iter()
+                .map(|event| event.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["july-a", "july-b"]
+        );
     }
 
     #[test]
     fn reminders_persist_sorted_and_deduplicated_through_create_and_update() {
         let mut connection = database();
         // 乱序且含重复的提醒：写库前应被归一化成升序去重。
-        let created = create(&mut connection, EventDraft { reminders: vec![60, 10, 60], ..draft() }).unwrap();
+        let created = create(
+            &mut connection,
+            EventDraft {
+                reminders: vec![60, 10, 60],
+                ..draft()
+            },
+        )
+        .unwrap();
         assert_eq!(created.reminders, vec![10, 60]);
 
-        update(&mut connection, &whole(&created.id), EventDraft { reminders: vec![0], ..draft() }, EditScope::All).unwrap();
+        update(
+            &mut connection,
+            &whole(&created.id),
+            EventDraft {
+                reminders: vec![0],
+                ..draft()
+            },
+            EditScope::All,
+        )
+        .unwrap();
         let updated = event_by_id(&connection, &created.id).unwrap().unwrap();
         assert_eq!(updated.reminders, vec![0]);
 
         // 清空提醒也应被如实写回。
-        update(&mut connection, &whole(&created.id), draft(), EditScope::All).unwrap();
+        update(
+            &mut connection,
+            &whole(&created.id),
+            draft(),
+            EditScope::All,
+        )
+        .unwrap();
         let cleared = event_by_id(&connection, &created.id).unwrap().unwrap();
         assert!(cleared.reminders.is_empty());
     }
@@ -1357,11 +1529,46 @@ mod tests {
     #[test]
     fn reminders_reject_negative_out_of_range_and_over_the_count_cap() {
         let base = draft();
-        assert_eq!(validate_and_normalize(EventDraft { reminders: vec![-1], ..base.clone() }).unwrap_err().field.as_deref(), Some("reminders"));
-        assert_eq!(validate_and_normalize(EventDraft { reminders: vec![super::MAX_REMINDER_MINUTES + 1], ..base.clone() }).unwrap_err().field.as_deref(), Some("reminders"));
-        assert_eq!(validate_and_normalize(EventDraft { reminders: vec![0, 5, 10, 15, 30, 60], ..base.clone() }).unwrap_err().field.as_deref(), Some("reminders"));
+        assert_eq!(
+            validate_and_normalize(EventDraft {
+                reminders: vec![-1],
+                ..base.clone()
+            })
+            .unwrap_err()
+            .field
+            .as_deref(),
+            Some("reminders")
+        );
+        assert_eq!(
+            validate_and_normalize(EventDraft {
+                reminders: vec![super::MAX_REMINDER_MINUTES + 1],
+                ..base.clone()
+            })
+            .unwrap_err()
+            .field
+            .as_deref(),
+            Some("reminders")
+        );
+        assert_eq!(
+            validate_and_normalize(EventDraft {
+                reminders: vec![0, 5, 10, 15, 30, 60],
+                ..base.clone()
+            })
+            .unwrap_err()
+            .field
+            .as_deref(),
+            Some("reminders")
+        );
         // 恰好命中上限的合法组合应通过。
-        assert_eq!(validate_and_normalize(EventDraft { reminders: vec![0, 5, 10, 15, 30], ..base }).unwrap().reminders, vec![0, 5, 10, 15, 30]);
+        assert_eq!(
+            validate_and_normalize(EventDraft {
+                reminders: vec![0, 5, 10, 15, 30],
+                ..base
+            })
+            .unwrap()
+            .reminders,
+            vec![0, 5, 10, 15, 30]
+        );
     }
 
     #[test]
@@ -1369,20 +1576,63 @@ mod tests {
         let base = draft();
         assert_eq!(validate_and_normalize(base.clone()).unwrap().title, "评审");
         for (invalid, field) in [
-            (EventDraft { title: "  ".into(), ..base.clone() }, "title"),
-            (EventDraft { start_at: "bad".into(), ..base.clone() }, "startAt"),
-            (EventDraft { end_at: "2026-07-22T15:00".into(), ..base.clone() }, "endAt"),
-            (EventDraft { end_at: "2026-07-23T13:55".into(), ..base.clone() }, "endAt"),
-            (EventDraft { category: "other".into(), ..base.clone() }, "category"),
-            (EventDraft { color: "#GGGGGG".into(), ..base.clone() }, "color"),
+            (
+                EventDraft {
+                    title: "  ".into(),
+                    ..base.clone()
+                },
+                "title",
+            ),
+            (
+                EventDraft {
+                    start_at: "bad".into(),
+                    ..base.clone()
+                },
+                "startAt",
+            ),
+            (
+                EventDraft {
+                    end_at: "2026-07-22T15:00".into(),
+                    ..base.clone()
+                },
+                "endAt",
+            ),
+            (
+                EventDraft {
+                    end_at: "2026-07-23T13:55".into(),
+                    ..base.clone()
+                },
+                "endAt",
+            ),
+            (
+                EventDraft {
+                    category: "other".into(),
+                    ..base.clone()
+                },
+                "category",
+            ),
+            (
+                EventDraft {
+                    color: "#GGGGGG".into(),
+                    ..base.clone()
+                },
+                "color",
+            ),
         ] {
-            assert_eq!(validate_and_normalize(invalid).unwrap_err().field.as_deref(), Some(field));
+            assert_eq!(
+                validate_and_normalize(invalid)
+                    .unwrap_err()
+                    .field
+                    .as_deref(),
+                Some(field)
+            );
         }
         let multi_day = validate_and_normalize(EventDraft {
             start_at: "2026-07-23T14:00".into(),
             end_at: "2026-07-25T10:00".into(),
             ..base.clone()
-        }).unwrap();
+        })
+        .unwrap();
         assert_eq!(multi_day.start_at, "2026-07-23T14:00");
         assert_eq!(multi_day.end_at, "2026-07-25T10:00");
         let all_day = validate_and_normalize(EventDraft {
@@ -1390,12 +1640,14 @@ mod tests {
             start_at: "2026-07-23T09:30".into(),
             end_at: "2026-07-23T10:30".into(),
             ..base
-        }).unwrap();
+        })
+        .unwrap();
         assert_eq!(all_day.start_at, "2026-07-23T00:00");
         assert_eq!(all_day.end_at, "2026-07-23T23:59");
     }
 
-    const SERIES_COLUMNS: &str = "id,title,start_at,end_at,all_day,category,color,note,created_at,updated_at,\
+    const SERIES_COLUMNS: &str =
+        "id,title,start_at,end_at,all_day,category,color,note,created_at,updated_at,\
                                   rrule,recurrence_final_at";
 
     /// 2026-08-03 是周一，因此 `s1` 在八月展开出 8/3、8/10、8/17、8/24、8/31 共五次。
@@ -1458,11 +1710,18 @@ mod tests {
         for event in &events {
             assert_eq!(event.id, "s1");
             assert_eq!(event.series_id.as_deref(), Some("s1"));
-            assert_eq!(event.occurrence_start_at.as_deref(), Some(event.start_at.as_str()));
+            assert_eq!(
+                event.occurrence_start_at.as_deref(),
+                Some(event.start_at.as_str())
+            );
             assert_eq!(event.title, "周会");
             assert!(!event.is_overridden);
             assert_eq!(
-                event.recurrence.as_ref().expect("rule travels with the instance").freq,
+                event
+                    .recurrence
+                    .as_ref()
+                    .expect("rule travels with the instance")
+                    .freq,
                 Freq::Weekly
             );
         }
@@ -1534,7 +1793,10 @@ mod tests {
                 event.occurrence_start_at.as_deref(),
                 event.series_start_at.as_deref()
             );
-            assert_eq!(event.occurrence_start_at.as_deref(), Some(event.start_at.as_str()));
+            assert_eq!(
+                event.occurrence_start_at.as_deref(),
+                Some(event.start_at.as_str())
+            );
         }
 
         // 系列行自身读出来也是它的首个实例。
@@ -1804,7 +2066,10 @@ mod tests {
 
         let events = august(&connection);
         assert_eq!(
-            events.iter().map(|event| event.title.as_str()).collect::<Vec<_>>(),
+            events
+                .iter()
+                .map(|event| event.title.as_str())
+                .collect::<Vec<_>>(),
             vec!["补开", "提前"]
         );
         assert!(events.iter().all(|event| event.is_overridden));
@@ -1868,7 +2133,10 @@ mod tests {
         assert_eq!(rule.by_day, vec!["MO".to_string()]);
         assert_eq!(rule.end, RecurrenceEnd::Never);
         assert_eq!(series.series_id.as_deref(), Some("s1"));
-        assert_eq!(series.occurrence_start_at.as_deref(), Some("2026-08-03T10:00"));
+        assert_eq!(
+            series.occurrence_start_at.as_deref(),
+            Some("2026-08-03T10:00")
+        );
         assert!(!series.is_overridden);
     }
 
@@ -1931,11 +2199,18 @@ mod tests {
             .expect("series present");
         assert_eq!(updated.title, "周会（改名）");
         assert_eq!(
-            updated.recurrence.as_ref().expect("rule survives update").freq,
+            updated
+                .recurrence
+                .as_ref()
+                .expect("rule survives update")
+                .freq,
             Freq::Weekly
         );
         assert_eq!(updated.series_id.as_deref(), Some("s1"));
-        assert_eq!(updated.occurrence_start_at.as_deref(), Some("2026-08-03T10:00"));
+        assert_eq!(
+            updated.occurrence_start_at.as_deref(),
+            Some("2026-08-03T10:00")
+        );
         assert_eq!(august(&connection).len(), 5);
     }
 
@@ -2072,7 +2347,10 @@ mod tests {
         // 顺延必须落在库里，而不只是返回值上
         assert_eq!(
             stored_bounds(&connection, &created.id),
-            ("2026-08-07T07:00".to_string(), "2026-08-07T08:00".to_string())
+            (
+                "2026-08-07T07:00".to_string(),
+                "2026-08-07T08:00".to_string()
+            )
         );
         let (freq, interval, by_day, until, count, final_at) =
             recurrence_columns_of(&connection, &created.id);
@@ -2157,7 +2435,12 @@ mod tests {
         assert_eq!(exception_count(&connection, "s1"), 0);
         assert_eq!(
             starts(&august(&connection)),
-            vec!["2026-08-10T10:00", "2026-08-17T10:00", "2026-08-24T10:00", "2026-08-31T10:00"]
+            vec![
+                "2026-08-10T10:00",
+                "2026-08-17T10:00",
+                "2026-08-24T10:00",
+                "2026-08-31T10:00"
+            ]
         );
     }
 
@@ -2355,7 +2638,10 @@ mod tests {
             recurrence_columns_of(&connection, &created.id),
             (None, 1, String::new(), None, None, None)
         );
-        assert_eq!(task_link(&connection, "t1").as_deref(), Some(created.id.as_str()));
+        assert_eq!(
+            task_link(&connection, "t1").as_deref(),
+            Some(created.id.as_str())
+        );
     }
 
     fn window(connection: &Connection, start: &str, end_exclusive: &str) -> Vec<Event> {
@@ -2774,11 +3060,9 @@ mod tests {
     /// 拆分产生的新系列 id。仅用于库中恰好只有原系列与新系列两行的场景。
     fn other_series_id(connection: &Connection, original: &str) -> String {
         connection
-            .query_row(
-                "SELECT id FROM events WHERE id<>?1",
-                [original],
-                |row| row.get(0),
-            )
+            .query_row("SELECT id FROM events WHERE id<>?1", [original], |row| {
+                row.get(0)
+            })
             .expect("new series id reads")
     }
 
@@ -2913,7 +3197,10 @@ mod tests {
         // Never 原样承接：新系列的三个结束条件列都必须是空的
         let new_id = other_series_id(&connection, "s1");
         assert_eq!(total_events(&connection), 2);
-        assert_eq!(recurrence_columns_of(&connection, &new_id), weekly_columns());
+        assert_eq!(
+            recurrence_columns_of(&connection, &new_id),
+            weekly_columns()
+        );
         assert_eq!(
             stored_bounds(&connection, &new_id),
             (
@@ -2961,7 +3248,8 @@ mod tests {
         assert_eq!(old_until, None);
         assert_eq!(old_count, Some(2));
         assert_eq!(old_final.as_deref(), Some("2026-08-10T19:00"));
-        let (_, _, _, new_until, new_count, new_final) = recurrence_columns_of(&connection, &new_id);
+        let (_, _, _, new_until, new_count, new_final) =
+            recurrence_columns_of(&connection, &new_id);
         assert_eq!(new_until, None);
         assert_eq!(new_count, Some(3));
         assert_eq!(new_final.as_deref(), Some("2026-08-31T20:00"));
@@ -2972,11 +3260,7 @@ mod tests {
         assert_eq!(old_instances, vec!["2026-08-03T19:00", "2026-08-10T19:00"]);
         assert_eq!(
             new_instances,
-            vec![
-                "2026-08-17T20:00",
-                "2026-08-24T20:00",
-                "2026-08-31T20:00"
-            ]
+            vec!["2026-08-17T20:00", "2026-08-24T20:00", "2026-08-31T20:00"]
         );
         assert_eq!(old_instances.len() + new_instances.len(), 5);
     }
@@ -3026,7 +3310,8 @@ mod tests {
         assert_eq!(old_count, None);
         assert_eq!(old_final.as_deref(), Some("2026-08-10T10:00"));
         // 原样承接：既不得改写日期，也不得被换算成 count
-        let (_, _, _, new_until, new_count, new_final) = recurrence_columns_of(&connection, &new_id);
+        let (_, _, _, new_until, new_count, new_final) =
+            recurrence_columns_of(&connection, &new_id);
         assert_eq!(new_until.as_deref(), Some("2026-09-28"));
         assert_eq!(new_count, None);
         assert_eq!(new_final.as_deref(), Some("2026-09-28T10:00"));
@@ -3039,7 +3324,8 @@ mod tests {
     /// 只有被挪出原窗口的覆盖行才能在「漏迁移 / 漏删除」时显形。
     fn seeded_for_split() -> Connection {
         let connection = seeded();
-        upsert_excluded(&connection, "s1", "2026-08-10T10:00", "t").expect("exclude before the cut");
+        upsert_excluded(&connection, "s1", "2026-08-10T10:00", "t")
+            .expect("exclude before the cut");
         upsert_excluded(&connection, "s1", "2026-08-24T10:00", "t").expect("exclude after the cut");
         upsert_overridden(
             &connection,
@@ -3098,10 +3384,7 @@ mod tests {
             .collect();
         assert_eq!(
             shape,
-            vec![
-                ("2026-08-03T10:00", "周会"),
-                ("2026-08-17T10:00", "新周会"),
-            ]
+            vec![("2026-08-03T10:00", "周会"), ("2026-08-17T10:00", "新周会"),]
         );
         // 迁移过去的覆盖行必须在新系列上继续命中，而不是变成孤儿
         let far = far_overrides(&connection);
@@ -3306,7 +3589,8 @@ mod tests {
     #[test]
     fn splitting_drops_exceptions_when_the_start_date_moves_off_the_slot() {
         let mut connection = seeded();
-        upsert_excluded(&connection, "s1", "2026-08-10T10:00", "t").expect("exclude before the cut");
+        upsert_excluded(&connection, "s1", "2026-08-10T10:00", "t")
+            .expect("exclude before the cut");
         // 切点自身的覆盖行被挪到十二月：槽位仍在八月的幽灵行会被 list_in_range 静默丢弃
         upsert_overridden(
             &connection,
@@ -3414,11 +3698,7 @@ mod tests {
         assert_eq!(final_at.as_deref(), Some("2026-08-31T10:00"));
         assert_eq!(
             instances_of(&connection, &new_id),
-            vec![
-                "2026-08-17T10:00",
-                "2026-08-24T10:00",
-                "2026-08-31T10:00"
-            ]
+            vec!["2026-08-17T10:00", "2026-08-24T10:00", "2026-08-31T10:00"]
         );
         // 原系列仍按原结束条件截断：原为 Never，故切成 Until(该次前一天)
         let (_, _, _, old_until, old_count, old_final) = recurrence_columns_of(&connection, "s1");
@@ -3465,7 +3745,8 @@ mod tests {
         .expect("update runs");
 
         let new_id = other_series_id(&connection, &created.id);
-        let (_, _, _, new_until, new_count, new_final) = recurrence_columns_of(&connection, &new_id);
+        let (_, _, _, new_until, new_count, new_final) =
+            recurrence_columns_of(&connection, &new_id);
         assert_eq!(new_until.as_deref(), Some("2026-08-24"));
         assert_eq!(new_count, None);
         assert_eq!(new_final.as_deref(), Some("2026-08-24T10:00"));
@@ -3625,7 +3906,9 @@ mod command_tests {
             let state = self.app.state::<AppDb>();
             let connection = state.0.lock().unwrap();
             let rrule: Option<String> = connection
-                .query_row("SELECT rrule FROM events WHERE id=?1", [id], |row| row.get(0))
+                .query_row("SELECT rrule FROM events WHERE id=?1", [id], |row| {
+                    row.get(0)
+                })
                 .expect("series row exists");
             rrule
                 .as_deref()

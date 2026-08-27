@@ -46,7 +46,7 @@ describe('tauriNowlyRepository', () => {
     await tauriNowlyRepository.updateTask('t1', taskDraft);
     await tauriNowlyRepository.deleteTask('t1');
     await tauriNowlyRepository.setTaskCompleted('t1', true);
-    const noteDraft = { title: '产品原则', content: '保持简单', color: 'purple' as const, pinned: true };
+    const noteDraft = { title: '产品原则', content: '保持简单', color: '#4F55DA' as const, pinned: true, icon: 'smile' as const };
     await tauriNowlyRepository.listNotes();
     await tauriNowlyRepository.createNote(noteDraft);
     await tauriNowlyRepository.updateNote('n1', noteDraft);

@@ -22,10 +22,7 @@ fn is_valid_host(host: &str) -> bool {
         return false;
     }
     host.split('.').all(|label| {
-        !label.is_empty()
-            && label
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '-')
+        !label.is_empty() && label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
     })
 }
 
@@ -43,9 +40,14 @@ fn read_extension(row: &Row<'_>) -> rusqlite::Result<SandboxExtension> {
         rusqlite::Error::FromSqlConversionFailure(4, rusqlite::types::Type::Text, Box::new(error))
     })?;
     let allowed_hosts_json: String = row.get(11)?;
-    let allowed_hosts: Vec<String> = serde_json::from_str(&allowed_hosts_json).map_err(|error| {
-        rusqlite::Error::FromSqlConversionFailure(11, rusqlite::types::Type::Text, Box::new(error))
-    })?;
+    let allowed_hosts: Vec<String> =
+        serde_json::from_str(&allowed_hosts_json).map_err(|error| {
+            rusqlite::Error::FromSqlConversionFailure(
+                11,
+                rusqlite::types::Type::Text,
+                Box::new(error),
+            )
+        })?;
     Ok(SandboxExtension {
         id: row.get(0)?,
         name: row.get(1)?,
@@ -93,7 +95,10 @@ pub fn validate_and_normalize(
             continue;
         }
         if !is_valid_host(&host) {
-            return Err(CommandError::validation("allowedHosts", "声明了无效的联网域名。"));
+            return Err(CommandError::validation(
+                "allowedHosts",
+                "声明了无效的联网域名。",
+            ));
         }
         if !hosts.contains(&host) {
             hosts.push(host);
@@ -180,10 +185,16 @@ pub fn uninstall(connection: &mut Connection, id: &str) -> Result<(), CommandErr
     // Drop any layout entry and persisted state that referenced this extension
     // so the grid and storage stay consistent.
     transaction
-        .execute("DELETE FROM module_layout WHERE id=?1", [format!("sandbox:{id}")])
+        .execute(
+            "DELETE FROM module_layout WHERE id=?1",
+            [format!("sandbox:{id}")],
+        )
         .map_err(CommandError::database)?;
     transaction
-        .execute("DELETE FROM module_state WHERE module_id=?1", [format!("sandbox:{id}")])
+        .execute(
+            "DELETE FROM module_state WHERE module_id=?1",
+            [format!("sandbox:{id}")],
+        )
         .map_err(CommandError::database)?;
     if affected != 1 {
         return Err(CommandError::not_found("未找到该扩展。"));
@@ -240,7 +251,11 @@ mod tests {
     #[test]
     fn migration_seeds_the_counter_demo() {
         let connection = database();
-        let ids: Vec<String> = list(&connection).unwrap().into_iter().map(|e| e.id).collect();
+        let ids: Vec<String> = list(&connection)
+            .unwrap()
+            .into_iter()
+            .map(|e| e.id)
+            .collect();
         assert_eq!(ids, vec!["counter-demo"]);
     }
 
@@ -255,17 +270,23 @@ mod tests {
     #[test]
     fn validation_rejects_empty_name_source_and_unknown_permissions() {
         assert_eq!(
-            validate_and_normalize(SandboxExtensionDraft { name: "  ".into(), ..draft() })
-                .unwrap_err()
-                .field
-                .as_deref(),
+            validate_and_normalize(SandboxExtensionDraft {
+                name: "  ".into(),
+                ..draft()
+            })
+            .unwrap_err()
+            .field
+            .as_deref(),
             Some("name")
         );
         assert_eq!(
-            validate_and_normalize(SandboxExtensionDraft { source: "  ".into(), ..draft() })
-                .unwrap_err()
-                .field
-                .as_deref(),
+            validate_and_normalize(SandboxExtensionDraft {
+                source: "  ".into(),
+                ..draft()
+            })
+            .unwrap_err()
+            .field
+            .as_deref(),
             Some("source")
         );
         assert_eq!(
@@ -338,7 +359,10 @@ mod tests {
 
         uninstall(&mut connection, &installed.id).unwrap();
         assert_eq!(list(&connection).unwrap().len(), 1);
-        assert_eq!(uninstall(&mut connection, "missing").unwrap_err().code, "not_found");
+        assert_eq!(
+            uninstall(&mut connection, "missing").unwrap_err().code,
+            "not_found"
+        );
     }
 
     #[test]
@@ -359,10 +383,18 @@ mod tests {
             .unwrap();
         uninstall(&mut connection, &installed.id).unwrap();
         let layout_count: i64 = connection
-            .query_row("SELECT COUNT(*) FROM module_layout WHERE id LIKE 'sandbox:%'", [], |row| row.get(0))
+            .query_row(
+                "SELECT COUNT(*) FROM module_layout WHERE id LIKE 'sandbox:%'",
+                [],
+                |row| row.get(0),
+            )
             .unwrap();
         let state_count: i64 = connection
-            .query_row("SELECT COUNT(*) FROM module_state WHERE module_id LIKE 'sandbox:%'", [], |row| row.get(0))
+            .query_row(
+                "SELECT COUNT(*) FROM module_state WHERE module_id LIKE 'sandbox:%'",
+                [],
+                |row| row.get(0),
+            )
             .unwrap();
         assert_eq!(layout_count, 0);
         assert_eq!(state_count, 0);

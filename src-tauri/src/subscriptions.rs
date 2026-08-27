@@ -88,15 +88,11 @@ pub fn list(connection: &Connection) -> Result<Vec<CalendarSubscription>, Comman
 }
 
 fn fetch_one(connection: &Connection, id: &str) -> Result<CalendarSubscription, CommandError> {
-    let sql = format!(
-        "SELECT {SUBSCRIPTION_COLUMNS} FROM calendar_subscriptions WHERE id = ?1"
-    );
+    let sql = format!("SELECT {SUBSCRIPTION_COLUMNS} FROM calendar_subscriptions WHERE id = ?1");
     connection
         .query_row(&sql, params![id], read_subscription)
         .map_err(|error| match error {
-            rusqlite::Error::QueryReturnedNoRows => {
-                CommandError::validation("id", "订阅不存在。")
-            }
+            rusqlite::Error::QueryReturnedNoRows => CommandError::validation("id", "订阅不存在。"),
             other => CommandError::database(other),
         })
 }
@@ -113,10 +109,7 @@ pub fn create(
         })
         .map_err(CommandError::database)?;
     if count >= MAX_SUBSCRIPTIONS {
-        return Err(CommandError::validation(
-            "url",
-            "最多只能添加 3 个订阅源。",
-        ));
+        return Err(CommandError::validation("url", "最多只能添加 3 个订阅源。"));
     }
     let id = Uuid::new_v4().to_string();
     let now = now_utc();
@@ -169,7 +162,10 @@ pub fn update(
 /// 删除订阅（其 external_events 经外键级联删除）。
 pub fn delete(connection: &mut Connection, id: &str) -> Result<(), CommandError> {
     let affected = connection
-        .execute("DELETE FROM calendar_subscriptions WHERE id=?1", params![id])
+        .execute(
+            "DELETE FROM calendar_subscriptions WHERE id=?1",
+            params![id],
+        )
         .map_err(CommandError::database)?;
     if affected == 0 {
         return Err(CommandError::validation("id", "订阅不存在。"));
@@ -262,10 +258,7 @@ pub fn update_calendar_subscription(
 }
 
 #[tauri::command]
-pub fn delete_calendar_subscription(
-    db: State<'_, AppDb>,
-    id: String,
-) -> Result<(), CommandError> {
+pub fn delete_calendar_subscription(db: State<'_, AppDb>, id: String) -> Result<(), CommandError> {
     let mut connection = db.0.lock().map_err(CommandError::database)?;
     delete(&mut connection, &id)
 }
@@ -285,7 +278,9 @@ mod tests {
 
     fn memory_db() -> Connection {
         let mut connection = Connection::open_in_memory().unwrap();
-        connection.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        connection
+            .execute_batch("PRAGMA foreign_keys = ON;")
+            .unwrap();
         crate::db::migrate(&mut connection).unwrap();
         connection
     }
@@ -308,7 +303,10 @@ mod tests {
     fn draft_validation_rejects_blank_name_and_out_of_range_interval() {
         let mut d = draft();
         d.name = "  ".into();
-        assert_eq!(validate_draft(&d).unwrap_err().field.as_deref(), Some("name"));
+        assert_eq!(
+            validate_draft(&d).unwrap_err().field.as_deref(),
+            Some("name")
+        );
 
         let mut d = draft();
         d.refresh_interval_minutes = 0;
@@ -405,8 +403,22 @@ mod tests {
     fn list_external_in_range_filters_and_attaches_color() {
         let mut connection = memory_db();
         let s1 = create(&mut connection, draft()).unwrap();
-        insert_external(&connection, &s1.id, "a", "2026-08-10T10:00", "2026-08-10T11:00", None);
-        insert_external(&connection, &s1.id, "b", "2026-09-20T10:00", "2026-09-20T11:00", None);
+        insert_external(
+            &connection,
+            &s1.id,
+            "a",
+            "2026-08-10T10:00",
+            "2026-08-10T11:00",
+            None,
+        );
+        insert_external(
+            &connection,
+            &s1.id,
+            "b",
+            "2026-09-20T10:00",
+            "2026-09-20T11:00",
+            None,
+        );
 
         let range = EventRange {
             start_at: "2026-08-01T00:00".into(),

@@ -1,7 +1,7 @@
-import { Plus, X } from 'lucide-react';
-import { type DragEvent, useState } from 'react';
+import { Plus, Settings, X } from 'lucide-react';
+import { type DragEvent, useMemo, useState } from 'react';
 import type { CalendarEvent } from '../calendar/calendar-model';
-import type { MatrixTask, Quadrant } from './matrix-model';
+import type { MatrixTask, MatrixTaskTag, Quadrant } from './matrix-model';
 import { quadrantLabel, quadrantOrder } from './matrix-model';
 import { TaskRow } from './TaskRow';
 import { t } from '../i18n';
@@ -25,6 +25,7 @@ type MatrixWidgetProps = {
   pendingTaskIds: Set<string>;
   onRetry: () => void;
   onCreateTask: () => void;
+  onOpenSettings?: () => void;
   onOpenTask: (task: MatrixTask, trigger: HTMLElement) => void;
   onToggleTask: (task: MatrixTask, completed: boolean) => void;
   onMoveTask?: (task: MatrixTask, quadrant: Quadrant) => void;
@@ -43,6 +44,7 @@ export function MatrixWidget({
   pendingTaskIds,
   onRetry,
   onCreateTask,
+  onOpenSettings,
   onOpenTask,
   onToggleTask,
   onMoveTask,
@@ -55,8 +57,25 @@ export function MatrixWidget({
   // structured payloads, mirroring the kanban board's approach.
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropQuadrant, setDropQuadrant] = useState<Quadrant | null>(null);
+  // The active tag filter. `null` means "show every task"; otherwise only tasks
+  // carrying the selected tag id are visible across all quadrants.
+  const [activeTagId, setActiveTagId] = useState<string | null>(null);
 
   const draggingTask = draggingId ? tasks.find((task) => task.id === draggingId) ?? null : null;
+
+  // Distinct tags present on the current tasks, sorted by name, so the filter
+  // bar only ever offers tags that would actually match something.
+  const availableTags = useMemo<MatrixTaskTag[]>(() => {
+    const byId = new Map<string, MatrixTaskTag>();
+    for (const task of tasks) {
+      for (const tag of task.tags) if (!byId.has(tag.id)) byId.set(tag.id, tag);
+    }
+    return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [tasks]);
+
+  // If the active tag disappears (e.g. after edits), fall back to showing all.
+  const effectiveTagId = activeTagId && availableTags.some((tag) => tag.id === activeTagId) ? activeTagId : null;
+  const visibleTasks = effectiveTagId ? tasks.filter((task) => task.tags.some((tag) => tag.id === effectiveTagId)) : tasks;
 
   function onTaskDragStart(event: DragEvent<HTMLElement>, task: MatrixTask) {
     if (event.dataTransfer) {
@@ -89,10 +108,43 @@ export function MatrixWidget({
   return (
     <div className="widget-content">
       <div className="card-header card-header--actions-only">
+        {onOpenSettings ? (
+          <button type="button" className="btn btn-icon" aria-label={t('taskSettings.title')} onClick={onOpenSettings}>
+            <Settings aria-hidden="true" />
+          </button>
+        ) : null}
         <button type="button" className="btn btn-icon" aria-label={t('matrix.newTask')} onClick={onCreateTask}>
           <Plus aria-hidden="true" />
         </button>
       </div>
+      {availableTags.length > 0 ? (
+        <nav className="matrix-filter" aria-label={t('matrix.filterLabel')}>
+          <button
+            type="button"
+            className={`matrix-filter__chip${effectiveTagId === null ? ' matrix-filter__chip--active' : ''}`}
+            aria-pressed={effectiveTagId === null}
+            onClick={() => setActiveTagId(null)}
+          >
+            {t('matrix.filterAll')}
+          </button>
+          {availableTags.map((tag) => {
+            const active = effectiveTagId === tag.id;
+            return (
+              <button
+                key={tag.id}
+                type="button"
+                className={`matrix-filter__chip${active ? ' matrix-filter__chip--active' : ''}`}
+                style={{ color: tag.color }}
+                aria-pressed={active}
+                onClick={() => setActiveTagId(active ? null : tag.id)}
+              >
+                <span className="matrix-filter__hash" aria-hidden="true">#</span>
+                {tag.name}
+              </button>
+            );
+          })}
+        </nav>
+      ) : null}
       <div className="panel-body matrix-body">
         {status === 'error' ? (
           <div className="module-message" role="alert">
@@ -122,7 +174,8 @@ export function MatrixWidget({
         {status === 'loading' ? <p className="empty-copy">{t('matrix.loading')}</p> : null}
         <div className="quadrant-grid">
           {quadrantOrder.map((quadrant) => {
-            const quadrantTasks = tasks.filter((task) => task.quadrant === quadrant);
+            const quadrantTasks = visibleTasks.filter((task) => task.quadrant === quadrant);
+            const remaining = quadrantTasks.filter((task) => !task.completed).length;
             const isDropTarget = draggingTask !== null && dropQuadrant === quadrant && draggingTask.quadrant !== quadrant;
             return (
               <section
@@ -134,8 +187,8 @@ export function MatrixWidget({
               >
                 <div className="quadrant-head">
                   <h3>{quadrantLabel(quadrant)}</h3>
-                  <span className="quadrant-count" aria-label={t('matrix.quadrantCount', { label: quadrantLabel(quadrant), count: quadrantTasks.length })}>
-                    {quadrantTasks.length}
+                  <span className="quadrant-count" aria-label={t('matrix.quadrantCount', { label: quadrantLabel(quadrant), remaining, total: quadrantTasks.length })}>
+                    {remaining}/{quadrantTasks.length}
                   </span>
                 </div>
                 <div data-testid="quadrant-scroll" className="quadrant-tasks">

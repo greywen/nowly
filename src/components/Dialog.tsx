@@ -5,6 +5,7 @@ import {
   useId,
   useRef
 } from 'react';
+import { createPortal } from 'react-dom';
 
 const focusableSelector =
   'button:not([disabled]),[href],input:not([disabled]),textarea:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])';
@@ -83,7 +84,7 @@ export function Dialog({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isTopLayer, onRequestClose]);
 
-  return (
+  return createPortal(
     <div className="overlay">
       <div
         ref={dialogRef}
@@ -100,6 +101,7 @@ export function Dialog({
         <div className="good-dialog__body">{children}</div>
         {footer ? <footer className="good-dialog__footer">{footer}</footer> : null}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

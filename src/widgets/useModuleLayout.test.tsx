@@ -3,7 +3,14 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ReactNode } from 'react';
 import { RepositoryProvider } from '../data/RepositoryContext';
 import type { ModuleLayoutEntry, NowlyRepository } from '../data/nowly-repository';
-import { buildDefinitions, defaultLayout, type LayoutState } from './widget-registry';
+import {
+  buildDefinitions,
+  defaultLayout,
+  sandboxExtensionToDefinition,
+  type LayoutState,
+  type WidgetDefinition
+} from './widget-registry';
+import type { SandboxExtension } from '../data/nowly-repository';
 import { useModuleLayout } from './useModuleLayout';
 
 const definitions = buildDefinitions();
@@ -140,5 +147,58 @@ describe('useModuleLayout', () => {
     ];
     const { result } = await mountLoaded(withUnknown);
     expect(rectOf(result.current.layout, 'custom:gone')).toBeUndefined();
+  });
+
+  it('recovers a stored sandbox module once its definition loads late, and does not clobber it on an interim save', async () => {
+    const sandboxId = 'sandbox:abc';
+    const stored: LayoutState = [
+      { id: 'calendar', x: 0, y: 0, w: 4, h: 4 },
+      { id: sandboxId, x: 4, y: 0, w: 4, h: 3 }
+    ];
+    const { repository, saved } = fakeRepository(stored);
+    const wrapper = wrapperFor(repository);
+
+    const sandboxExtension: SandboxExtension = {
+      id: 'abc',
+      name: '沙箱模块',
+      description: '',
+      source: '',
+      permissions: [],
+      allowedHosts: [],
+      minW: 2,
+      minH: 2,
+      defaultW: 4,
+      defaultH: 3,
+      createdAt: '',
+      updatedAt: ''
+    };
+    const withSandbox: WidgetDefinition[] = [
+      ...definitions,
+      sandboxExtensionToDefinition(sandboxExtension)
+    ];
+
+    const view = renderHook(({ defs }) => useModuleLayout(defs), {
+      wrapper,
+      initialProps: { defs: definitions }
+    });
+    await waitFor(() => expect(view.result.current.loaded).toBe(true));
+
+    // The extension has not loaded yet, so the sandbox module is not rendered.
+    expect(rectOf(view.result.current.layout, sandboxId)).toBeUndefined();
+
+    // A user edit persists BEFORE the extension finishes loading. The stored
+    // sandbox entry must survive this save instead of being clobbered.
+    act(() => view.result.current.move('calendar', { x: 0, y: 4 }));
+    expect(saved().some((entry) => entry.id === sandboxId)).toBe(true);
+
+    // The extension loads. Its definition now exists, so the module reappears
+    // at its stored position.
+    view.rerender({ defs: withSandbox });
+    expect(rectOf(view.result.current.layout, sandboxId)).toMatchObject({
+      x: 4,
+      y: 0,
+      w: 4,
+      h: 3
+    });
   });
 });

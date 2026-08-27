@@ -2,7 +2,7 @@
  * @nowly-module 1
  * @id           hello-clock
  * @name         今日时钟
- * @version      1.0.0
+ * @version      1.0.1
  * @author       nowly
  * @description  显示今天的日期与一个本地走动的时钟，演示无联网的纯展示模块
  * @permissions  today
@@ -10,20 +10,15 @@
  * @defaultSize  4x3
  */
 Nowly.defineModule(async ({ host, root }) => {
-  root.style.fontFamily =
-    'Inter, "Microsoft YaHei", "PingFang SC", Helvetica, Arial, sans-serif';
-  root.style.color = '#211F1C';
-
   const date = document.createElement('p');
+  date.className = 'nm-muted';
   date.style.margin = '0 0 8px';
-  date.style.color = '#968E7E';
-  date.style.fontSize = '13.6px';
   date.textContent = host.todayIso ? '今天：' + host.todayIso : '';
 
   const clock = document.createElement('p');
+  clock.className = 'nm-title';
   clock.style.margin = '0';
   clock.style.fontSize = '28px';
-  clock.style.fontWeight = '600';
 
   root.appendChild(date);
   root.appendChild(clock);

@@ -45,7 +45,10 @@ pub fn read_app_settings(connection: &Connection) -> Result<AppSettings, rusqlit
 }
 
 pub(crate) fn validate(settings: &AppSettings) -> Result<(), rusqlite::Error> {
-    if !matches!(settings.density.as_str(), "compact" | "balanced" | "comfortable") {
+    if !matches!(
+        settings.density.as_str(),
+        "compact" | "balanced" | "comfortable"
+    ) {
         return Err(rusqlite::Error::InvalidParameterName("density".into()));
     }
     if !matches!(settings.week_start.as_str(), "monday" | "sunday") {
@@ -64,17 +67,33 @@ pub fn write_app_settings(
     validate(settings)?;
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let values = [
-        ("wallpaper_enabled", serde_json::to_string(&settings.wallpaper_enabled)),
-        ("launch_at_login", serde_json::to_string(&settings.launch_at_login)),
-        ("target_monitor_id", serde_json::to_string(&settings.target_monitor_id)),
+        (
+            "wallpaper_enabled",
+            serde_json::to_string(&settings.wallpaper_enabled),
+        ),
+        (
+            "launch_at_login",
+            serde_json::to_string(&settings.launch_at_login),
+        ),
+        (
+            "target_monitor_id",
+            serde_json::to_string(&settings.target_monitor_id),
+        ),
         ("density", serde_json::to_string(&settings.density)),
         ("week_start", serde_json::to_string(&settings.week_start)),
         ("date_format", serde_json::to_string(&settings.date_format)),
-        ("show_weekends", serde_json::to_string(&settings.show_weekends)),
-        ("recent_colors", serde_json::to_string(&settings.recent_colors)),
+        (
+            "show_weekends",
+            serde_json::to_string(&settings.show_weekends),
+        ),
+        (
+            "recent_colors",
+            serde_json::to_string(&settings.recent_colors),
+        ),
     ];
     for (key, value) in values {
-        let value = value.map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
+        let value =
+            value.map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
         // Upsert so a key that was never seeded (older or partially-migrated
         // database) is created rather than silently skipped by a plain UPDATE,
         // which would otherwise make the trailing read fail and reject the save.
@@ -173,7 +192,10 @@ mod tests {
         // Simulate an older/partially-migrated database that never seeded the
         // calendar preference rows.
         connection
-            .execute("DELETE FROM settings WHERE key IN ('week_start','date_format','show_weekends')", [])
+            .execute(
+                "DELETE FROM settings WHERE key IN ('week_start','date_format','show_weekends')",
+                [],
+            )
             .unwrap();
 
         let settings = read_app_settings(&connection).unwrap();
@@ -188,7 +210,10 @@ mod tests {
         let mut connection = Connection::open_in_memory().unwrap();
         migrate(&mut connection).unwrap();
         connection
-            .execute("DELETE FROM settings WHERE key IN ('week_start','date_format','show_weekends')", [])
+            .execute(
+                "DELETE FROM settings WHERE key IN ('week_start','date_format','show_weekends')",
+                [],
+            )
             .unwrap();
         let mut settings = read_app_settings(&connection).unwrap();
         settings.week_start = "sunday".into();

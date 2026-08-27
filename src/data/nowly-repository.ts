@@ -21,6 +21,19 @@ import type {
 } from '../kanban/kanban-model';
 import type { MatrixTask, TaskDraft } from '../matrix/matrix-model';
 import type { Note, NoteDraft } from '../notes/notes-model';
+import type {
+  Task as WorkspaceTask,
+  TaskCollaborator,
+  TaskCollaboratorDraft,
+  TaskDraft as WorkspaceTaskDraft,
+  TaskLane,
+  TaskLaneDraft,
+  TaskTag,
+  TaskTagDraft,
+  TaskView,
+  TaskViewPreferences,
+  TaskWorkspaceSnapshot
+} from '../tasks/task-model';
 import type { HexColor } from '../lib/color';
 
 export type AppSettings = {
@@ -35,6 +48,13 @@ export type AppSettings = {
 };
 
 export type ModuleLayoutEntry = { id: string; x: number; y: number; w: number; h: number };
+
+// A work-in-progress module file discovered under the app's dev-modules/
+// directory. The desktop backend reads %APPDATA%/com.nowly.app/dev-modules/*.js
+// at runtime so the in-app workbench (preview channel A) can render drafts that an
+// AI tool wrote to a machine-stable path. `source` is the raw file text; the
+// full path stays on the backend.
+export type DevModuleFile = { name: string; source: string };
 
 export type FocusSession = {
   id: string;
@@ -147,6 +167,34 @@ export type NowlyRepository = {
   updateTask(id: string, draft: TaskDraft): Promise<MatrixTask>;
   deleteTask(id: string): Promise<void>;
   setTaskCompleted(id: string, completed: boolean): Promise<MatrixTask>;
+  // Unified task workspace. Optional during the frontend migration so focused
+  // feature-test repositories that still exercise the legacy adapters remain
+  // lightweight; the desktop repository implements the complete contract.
+  getTaskWorkspaceSnapshot?(): Promise<TaskWorkspaceSnapshot>;
+  createWorkspaceTask?(originView: TaskView, draft: WorkspaceTaskDraft): Promise<WorkspaceTask>;
+  updateWorkspaceTask?(id: string, draft: WorkspaceTaskDraft): Promise<WorkspaceTask>;
+  deleteWorkspaceTask?(id: string): Promise<void>;
+  setWorkspaceTaskCompleted?(id: string, completed: boolean): Promise<WorkspaceTask>;
+  moveTaskToLane?(id: string, laneId: string, targetIndex: number): Promise<WorkspaceTask>;
+  moveTaskToPriority?(id: string, priority: WorkspaceTask['priority']): Promise<WorkspaceTask>;
+  moveTaskToDate?(id: string, dueDate: string | null): Promise<WorkspaceTask>;
+  setTaskViewMemberships?(id: string, views: TaskView[]): Promise<WorkspaceTask>;
+  setTaskViewLinking?(enabled: boolean): Promise<TaskWorkspaceSnapshot>;
+  createTaskLane?(draft: TaskLaneDraft): Promise<TaskLane>;
+  updateTaskLane?(id: string, draft: TaskLaneDraft): Promise<TaskLane>;
+  deleteTaskLane?(id: string, replacementLaneId?: string | null): Promise<TaskWorkspaceSnapshot>;
+  reorderTaskLanes?(orderedIds: string[]): Promise<TaskLane[]>;
+  setDefaultTaskLane?(id: string): Promise<TaskWorkspaceSnapshot>;
+  setCompletionTaskLane?(id: string): Promise<TaskWorkspaceSnapshot>;
+  createTaskTag?(draft: TaskTagDraft): Promise<TaskTag>;
+  updateTaskTag?(id: string, draft: TaskTagDraft): Promise<TaskTag>;
+  archiveTaskTag?(id: string, archived: boolean): Promise<TaskTag>;
+  deleteTaskTag?(id: string): Promise<void>;
+  createTaskCollaborator?(draft: TaskCollaboratorDraft): Promise<TaskCollaborator>;
+  updateTaskCollaborator?(id: string, draft: TaskCollaboratorDraft): Promise<TaskCollaborator>;
+  archiveTaskCollaborator?(id: string, archived: boolean): Promise<TaskCollaborator>;
+  deleteTaskCollaborator?(id: string): Promise<void>;
+  setTaskViewPreferences?(preferences: TaskViewPreferences): Promise<TaskWorkspaceSnapshot>;
   listNotes(): Promise<Note[]>;
   createNote(draft: NoteDraft): Promise<Note>;
   updateNote(id: string, draft: NoteDraft): Promise<Note>;
@@ -159,6 +207,14 @@ export type NowlyRepository = {
   listMonitors(): Promise<MonitorInfo[]>;
   listModuleLayout(): Promise<ModuleLayoutEntry[]>;
   saveModuleLayout(layout: ModuleLayoutEntry[]): Promise<ModuleLayoutEntry[]>;
+  // List the draft module files under the app's dev-modules/ directory. Optional
+  // so lightweight test doubles need not implement it; the workbench treats a
+  // missing method as "no drafts".
+  listDevModules?(): Promise<DevModuleFile[]>;
+  // Absolute path of the app-data dev-modules/ directory, resolved on the
+  // backend (OS-specific) and shown in the workbench empty state. Optional for
+  // the same reason as listDevModules.
+  devModulesDir?(): Promise<string>;
   getModuleState(moduleId: string): Promise<string | null>;
   setModuleState(moduleId: string, state: string): Promise<void>;
   createFocusSession(session: FocusSession): Promise<FocusSession>;

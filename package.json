@@ -1,6 +1,6 @@
 {
   "name": "nowly",
-  "version": "0.1.1",
+  "version": "0.1.3",
   "private": true,
   "type": "module",
   "description": "Nowly (此刻) — a local-first focus dashboard that lives on your Windows desktop wallpaper and answers one question: what should I be doing right now?",
@@ -30,7 +30,12 @@
     "test": "cross-env NODE_ENV=test vitest run",
     "test:watch": "cross-env NODE_ENV=test vitest",
     "e2e": "playwright test",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "module:css": "node scripts/generate-module-css.mjs",
+    "module:preview": "vite --open /preview.html",
+    "test:tooling": "node --test scripts/generate-module-css.test.mjs registry/lint.test.mjs",
+    "registry:lint": "node --test registry/lint.test.mjs",
+    "registry:validate": "node registry/validate.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "latest",

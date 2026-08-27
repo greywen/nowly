@@ -79,7 +79,11 @@ mod tests {
     #[test]
     fn migration_seeds_the_default_layout() {
         let connection = database();
-        let ids: Vec<String> = list(&connection).unwrap().into_iter().map(|e| e.id).collect();
+        let ids: Vec<String> = list(&connection)
+            .unwrap()
+            .into_iter()
+            .map(|e| e.id)
+            .collect();
         assert_eq!(ids, vec!["calendar", "matrix", "notes"]);
     }
 
@@ -87,8 +91,20 @@ mod tests {
     fn replace_persists_and_orders_entries() {
         let mut connection = database();
         let entries = vec![
-            ModuleLayoutEntry { id: "notes".into(), x: 0, y: 0, w: 4, h: 3 },
-            ModuleLayoutEntry { id: "calendar".into(), x: 4, y: 0, w: 8, h: 8 },
+            ModuleLayoutEntry {
+                id: "notes".into(),
+                x: 0,
+                y: 0,
+                w: 4,
+                h: 3,
+            },
+            ModuleLayoutEntry {
+                id: "calendar".into(),
+                x: 4,
+                y: 0,
+                w: 8,
+                h: 8,
+            },
         ];
         let saved = replace(&mut connection, &entries).unwrap();
         assert_eq!(saved, entries);

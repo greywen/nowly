@@ -17,10 +17,24 @@ test.beforeEach(async ({ page }) => {
       id:'e1', title:'设计评审', startAt:'2026-07-23T14:00', endAt:'2026-07-23T15:00',
       allDay:false, category:'work', color:'blue', linkedTaskId:null, note:'', createdAt:now, updatedAt:now
     }];
+    const lanes = [
+      { id:'lane-todo', name:'待处理', color:'#4FC9DA', position:0, createdAt:now, updatedAt:now },
+      { id:'lane-doing', name:'进行中', color:'#E8C444', position:1, createdAt:now, updatedAt:now },
+      { id:'lane-done', name:'已完成', color:'#B8D935', position:2, createdAt:now, updatedAt:now }
+    ];
     let tasks: any[] = [{
-      id:'t1', title:'发布 Nowly', quadrant:'important_urgent', dueAt:'2026-07-23', priority:1,
-      completed:false, linkedEventId:null, note:'', createdAt:now, updatedAt:now
+      id:'t1', title:'发布 Nowly', description:'', priority:'important_urgent', dueDate:'2026-07-23',
+      completed:false, laneId:'lane-todo', boardPosition:0, tagIds:[], collaboratorIds:[],
+      linkedEventId:null, views:['kanban','matrix','calendar'], createdAt:now, updatedAt:now
     }];
+    const coordinateViews = (task: any) => ({
+      ...task,
+      views:['kanban', ...(task.priority ? ['matrix'] : []), ...(task.dueDate ? ['calendar'] : [])]
+    });
+    const snapshot = () => ({
+      tasks, lanes, tags:[], collaborators:[], linkingEnabled:true,
+      defaultLaneId:'lane-todo', completionLaneId:'lane-done', viewPreferences:{}
+    });
     const settings = {
       wallpaperEnabled:false, launchAtLogin:false, targetMonitorId:null, density:'balanced',
       weekStart:'monday', dateFormat:'localized', showWeekends:true,
@@ -32,11 +46,17 @@ test.beforeEach(async ({ page }) => {
         if (command === 'list_events_in_range') {
           return events.filter((event) => event.startAt >= args.range.startAt && event.startAt < args.range.endAtExclusive);
         }
-        if (command === 'list_tasks') return tasks;
+        if (command === 'get_task_workspace_snapshot') return snapshot();
         if (command === 'list_notes') return [];
         if (command === 'get_app_settings') return settings;
         if (command === 'create_task') {
-          const task = { id:`t${sequence++}`, ...args.draft, createdAt:now, updatedAt:now };
+          const laneId = args.draft.laneId ?? 'lane-todo';
+          let task = coordinateViews({
+            id:`t${sequence++}`, description:'', priority:null, dueDate:null, completed:false,
+            laneId, boardPosition:tasks.filter((item) => item.laneId === laneId).length,
+            tagIds:[], collaboratorIds:[], linkedEventId:null, ...args.draft,
+            createdAt:now, updatedAt:now
+          });
           if (task.linkedEventId) {
             tasks = tasks.map((item) => item.linkedEventId === task.linkedEventId ? { ...item, linkedEventId:null, updatedAt:now } : item);
             events = events.map((event) => event.id === task.linkedEventId ? { ...event, linkedTaskId:task.id, updatedAt:now } : event);
@@ -50,7 +70,7 @@ test.beforeEach(async ({ page }) => {
           events = events.map((event) => event.linkedTaskId === args.id ? { ...event, linkedTaskId:null, updatedAt:now } : event);
           tasks = tasks.map((task) => task.id !== args.id && task.linkedEventId === args.draft.linkedEventId
             ? { ...task, linkedEventId:null, updatedAt:now } : task);
-          const updated = { ...previous, ...args.draft, updatedAt:now };
+          const updated = coordinateViews({ ...previous, ...args.draft, updatedAt:now });
           tasks = tasks.map((task) => task.id === args.id ? updated : task);
           if (updated.linkedEventId) {
             events = events.map((event) => event.id === updated.linkedEventId ? { ...event, linkedTaskId:updated.id, updatedAt:now } : event);
@@ -69,8 +89,25 @@ test.beforeEach(async ({ page }) => {
           }
           const task = tasks.find((task) => task.id === args.id);
           if (!task) throw { code:'not_found', message:'未找到该任务。' };
-          const updated = { ...task, completed:args.completed, updatedAt:now };
+          const updated = {
+            ...task,
+            completed:args.completed,
+            laneId:args.completed ? 'lane-done' : 'lane-todo',
+            updatedAt:now
+          };
           tasks = tasks.map((task) => task.id === args.id ? updated : task);
+          return updated;
+        }
+        if (command === 'move_task_to_priority') {
+          const task = tasks.find((item) => item.id === args.id);
+          const updated = coordinateViews({ ...task, priority:args.priority, updatedAt:now });
+          tasks = tasks.map((item) => item.id === args.id ? updated : item);
+          return updated;
+        }
+        if (command === 'move_task_to_date') {
+          const task = tasks.find((item) => item.id === args.id);
+          const updated = coordinateViews({ ...task, dueDate:args.dueDate, updatedAt:now });
+          tasks = tasks.map((item) => item.id === args.id ? updated : item);
           return updated;
         }
         if (command === 'enter_wallpaper_mode' || command === 'enter_foreground_mode') return 'ok';
@@ -88,17 +125,22 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('creates from date detail, moves quadrant, links, and deletes without deleting the event', async ({ page }) => {
-  await page.getByRole('button', { name:'2026年7月23日' }).click();
+  // Task/event chips occupy the body of the day cell; click its uncovered
+  // top-left area rather than bypassing actionability with force.
+  await page.getByRole('button', { name:'2026年7月23日' }).click({ position: { x: 8, y: 8 } });
   await page.getByRole('button', { name:'新建任务' }).click();
   await expect(page.getByRole('button', { name:'截止日期' })).toContainText('23 日');
   await page.getByLabel('任务标题').fill('发布任务');
+  await page.getByRole('combobox', { name:'所属象限' }).click();
+  await page.getByRole('option', { name:'重要且紧急', exact:true }).click();
   await page.getByRole('combobox', { name:'关联日程' }).click();
   await page.getByRole('option', { name:'设计评审' }).click();
   await page.getByRole('button', { name:'保存任务' }).click();
   await page.getByRole('button', { name:'关闭日期详情' }).click();
 
   await page.getByRole('button', { name:'编辑任务：发布任务' }).click();
-  await page.getByRole('radio', { name:'重要不紧急', exact:true }).check();
+  await page.getByRole('combobox', { name:'所属象限' }).click();
+  await page.getByRole('option', { name:'重要不紧急', exact:true }).click();
   await page.getByRole('button', { name:'保存任务' }).click();
   const quadrant = page.getByRole('region', { name:'重要不紧急', exact:true });
   await expect(quadrant.getByRole('button', { name:'编辑任务：发布任务' })).toBeVisible();
@@ -116,7 +158,7 @@ test('rolls back failed completion and retries the original target', async ({ pa
   const checkbox = page.getByRole('checkbox', { name:'完成任务：发布 Nowly' });
   await checkbox.click();
   await expect(checkbox).not.toBeChecked();
-  await expect(page.getByRole('alert')).toContainText('完成状态保存失败');
+  await expect(page.locator('.completion-message')).toContainText('完成状态保存失败');
   await page.getByRole('button', { name:'重试完成状态' }).click();
   await expect(page.getByRole('checkbox', { name:'标记任务为未完成：发布 Nowly' })).toBeChecked();
   await expect(page.getByText(/已完成/)).toBeVisible();

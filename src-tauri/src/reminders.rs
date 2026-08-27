@@ -1,7 +1,7 @@
 use crate::error::CommandError;
 use crate::events::list_in_range;
-use crate::models::{Event, EventRange};
 use crate::events::MAX_REMINDER_MINUTES;
+use crate::models::{Event, EventRange};
 use crate::timezone;
 use chrono::{Duration, NaiveDateTime};
 use chrono_tz::Tz;
@@ -98,7 +98,11 @@ pub fn due_reminders_utc(
 }
 
 /// 取真实设备时区的到期判定入口，供 `poll_due` 使用。
-pub fn due_reminders(events: &[Event], now_wall: NaiveDateTime, grace: Duration) -> Vec<DueReminder> {
+pub fn due_reminders(
+    events: &[Event],
+    now_wall: NaiveDateTime,
+    grace: Duration,
+) -> Vec<DueReminder> {
     due_reminders_utc(events, now_wall, grace, timezone::device_tz())
 }
 
@@ -236,7 +240,11 @@ mod tests {
     fn catches_up_a_missed_reminder_while_the_event_is_still_upcoming() {
         let events = vec![event("2026-08-10T10:00", vec![60])];
         // fire_time 是 09:00，此刻 09:30 早已过点，但日程还没开始：仍应补发。
-        let due = due_reminders(&events, dt("2026-08-10T09:30"), Duration::minutes(GRACE_MINUTES));
+        let due = due_reminders(
+            &events,
+            dt("2026-08-10T09:30"),
+            Duration::minutes(GRACE_MINUTES),
+        );
         assert_eq!(due.len(), 1);
     }
 
@@ -244,18 +252,33 @@ mod tests {
     fn skips_a_reminder_once_the_event_has_started_past_the_grace() {
         let events = vec![event("2026-08-10T10:00", vec![10])];
         // 已开始 6 分钟，超过 5 分钟宽限：过期不再打扰。
-        assert!(due_reminders(&events, dt("2026-08-10T10:06"), Duration::minutes(GRACE_MINUTES)).is_empty());
+        assert!(due_reminders(
+            &events,
+            dt("2026-08-10T10:06"),
+            Duration::minutes(GRACE_MINUTES)
+        )
+        .is_empty());
     }
 
     #[test]
     fn an_at_start_reminder_fires_within_the_grace() {
         let events = vec![event("2026-08-10T10:00", vec![0])];
         assert_eq!(
-            due_reminders(&events, dt("2026-08-10T10:00"), Duration::minutes(GRACE_MINUTES)).len(),
+            due_reminders(
+                &events,
+                dt("2026-08-10T10:00"),
+                Duration::minutes(GRACE_MINUTES)
+            )
+            .len(),
             1
         );
         assert_eq!(
-            due_reminders(&events, dt("2026-08-10T10:04"), Duration::minutes(GRACE_MINUTES)).len(),
+            due_reminders(
+                &events,
+                dt("2026-08-10T10:04"),
+                Duration::minutes(GRACE_MINUTES)
+            )
+            .len(),
             1
         );
     }
@@ -280,12 +303,18 @@ mod tests {
             Duration::minutes(GRACE_MINUTES),
             chrono_tz::Tz::America__New_York,
         );
-        assert_eq!(due.len(), 1, "触发瞬时点必须按设备时区精确换算，跨 DST 断层不漂移");
+        assert_eq!(
+            due.len(),
+            1,
+            "触发瞬时点必须按设备时区精确换算，跨 DST 断层不漂移"
+        );
     }
 
     fn database() -> Connection {
         let mut connection = Connection::open_in_memory().unwrap();
-        connection.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        connection
+            .execute_batch("PRAGMA foreign_keys = ON;")
+            .unwrap();
         migrate(&mut connection).unwrap();
         connection
     }
@@ -327,7 +356,9 @@ mod tests {
         let week1 = poll_due(&connection, dt("2026-08-03T09:50")).unwrap();
         assert_eq!(week1.len(), 1);
         // 同一实例不重复。
-        assert!(poll_due(&connection, dt("2026-08-03T09:51")).unwrap().is_empty());
+        assert!(poll_due(&connection, dt("2026-08-03T09:51"))
+            .unwrap()
+            .is_empty());
         // 下一周的实例是独立的一次派发。
         let week2 = poll_due(&connection, dt("2026-08-10T09:50")).unwrap();
         assert_eq!(week2.len(), 1);
@@ -343,7 +374,10 @@ mod tests {
             start_at: "2026-08-10T00:00".into(),
             all_day: true,
         };
-        assert_eq!(notification_body(dt("2026-08-10T00:00"), &reminder), "今天（全天）");
+        assert_eq!(
+            notification_body(dt("2026-08-10T00:00"), &reminder),
+            "今天（全天）"
+        );
     }
 
     #[test]

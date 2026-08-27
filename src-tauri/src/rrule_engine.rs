@@ -48,7 +48,11 @@ fn stamp(wall: NaiveDateTime) -> String {
 fn compose_ics(spec: &SeriesSpec) -> String {
     let mut lines: Vec<String> = Vec::new();
     match spec.tz {
-        Some(tz) => lines.push(format!("DTSTART;TZID={}:{}", tz.name(), stamp(spec.dtstart_wall))),
+        Some(tz) => lines.push(format!(
+            "DTSTART;TZID={}:{}",
+            tz.name(),
+            stamp(spec.dtstart_wall)
+        )),
         None => lines.push(format!("DTSTART:{}", stamp(spec.dtstart_wall))),
     }
     if let Some(rule) = &spec.rrule {
@@ -187,11 +191,23 @@ mod tests {
         let (s, e) = window("2026-03-01T00:00", "2026-03-31T00:00");
         let occ = expand(&spec, s, e, MAX_WINDOW_OCCURRENCES).unwrap();
         // 钟面恒为 10:00。
-        assert!(occ.iter().all(|o| o.wall.format("%H:%M").to_string() == "10:00"));
+        assert!(occ
+            .iter()
+            .all(|o| o.wall.format("%H:%M").to_string() == "10:00"));
         // 3/2 在 DST 前：15:00Z；3/9 在 DST 后：14:00Z。
-        let by_date = |d: &str| occ.iter().find(|o| o.wall.format("%Y-%m-%d").to_string() == d).unwrap();
-        assert_eq!(timezone::format_utc(by_date("2026-03-02").utc.unwrap()), "2026-03-02T15:00Z");
-        assert_eq!(timezone::format_utc(by_date("2026-03-09").utc.unwrap()), "2026-03-09T14:00Z");
+        let by_date = |d: &str| {
+            occ.iter()
+                .find(|o| o.wall.format("%Y-%m-%d").to_string() == d)
+                .unwrap()
+        };
+        assert_eq!(
+            timezone::format_utc(by_date("2026-03-02").utc.unwrap()),
+            "2026-03-02T15:00Z"
+        );
+        assert_eq!(
+            timezone::format_utc(by_date("2026-03-09").utc.unwrap()),
+            "2026-03-09T14:00Z"
+        );
     }
 
     #[test]
@@ -206,7 +222,10 @@ mod tests {
         // 窗口 [8/1, 8/3)：应含 8/1、8/2，不含 8/3。
         let (s, e) = window("2026-08-01T00:00", "2026-08-03T00:00");
         let occ = expand(&spec, s, e, MAX_WINDOW_OCCURRENCES).unwrap();
-        let dates: Vec<String> = occ.iter().map(|o| o.wall.format("%Y-%m-%d").to_string()).collect();
+        let dates: Vec<String> = occ
+            .iter()
+            .map(|o| o.wall.format("%Y-%m-%d").to_string())
+            .collect();
         assert_eq!(dates, vec!["2026-08-01", "2026-08-02"]);
     }
 
@@ -222,7 +241,10 @@ mod tests {
         };
         let (s, e) = window("2026-01-01T00:00", "2026-04-01T00:00");
         let occ = expand(&spec, s, e, MAX_WINDOW_OCCURRENCES).unwrap();
-        let dates: Vec<String> = occ.iter().map(|o| o.wall.format("%Y-%m-%d").to_string()).collect();
+        let dates: Vec<String> = occ
+            .iter()
+            .map(|o| o.wall.format("%Y-%m-%d").to_string())
+            .collect();
         assert_eq!(dates, vec!["2026-01-20", "2026-02-17", "2026-03-17"]);
         // 浮动事件无 UTC 瞬时点。
         assert!(occ.iter().all(|o| o.utc.is_none()));
@@ -240,8 +262,14 @@ mod tests {
         let (s, e) = window("2026-08-01T00:00", "2026-09-01T00:00");
         let occ = expand(&spec, s, e, MAX_WINDOW_OCCURRENCES).unwrap();
         assert_eq!(occ.len(), 1);
-        assert_eq!(occ[0].wall.format("%Y-%m-%dT%H:%M").to_string(), "2026-08-03T10:00");
-        assert_eq!(timezone::format_utc(occ[0].utc.unwrap()), "2026-08-03T02:00Z");
+        assert_eq!(
+            occ[0].wall.format("%Y-%m-%dT%H:%M").to_string(),
+            "2026-08-03T10:00"
+        );
+        assert_eq!(
+            timezone::format_utc(occ[0].utc.unwrap()),
+            "2026-08-03T02:00Z"
+        );
     }
 
     #[test]
@@ -254,7 +282,9 @@ mod tests {
             exdate: Vec::new(),
         };
         let (s, e) = window("2026-09-01T00:00", "2026-10-01T00:00");
-        assert!(expand(&spec, s, e, MAX_WINDOW_OCCURRENCES).unwrap().is_empty());
+        assert!(expand(&spec, s, e, MAX_WINDOW_OCCURRENCES)
+            .unwrap()
+            .is_empty());
     }
 
     #[test]
@@ -282,7 +312,10 @@ mod tests {
         };
         let (s, e) = window("2026-08-01T00:00", "2026-09-01T00:00");
         let occ = expand(&spec, s, e, MAX_WINDOW_OCCURRENCES).unwrap();
-        let dates: Vec<String> = occ.iter().map(|o| o.wall.format("%Y-%m-%d").to_string()).collect();
+        let dates: Vec<String> = occ
+            .iter()
+            .map(|o| o.wall.format("%Y-%m-%d").to_string())
+            .collect();
         assert_eq!(dates, vec!["2026-08-01", "2026-08-02", "2026-08-03"]);
     }
 
@@ -313,7 +346,10 @@ mod tests {
         };
         let (s, e) = window("2026-08-01T00:00", "2026-09-01T00:00");
         let occ = expand(&spec, s, e, MAX_WINDOW_OCCURRENCES).unwrap();
-        let dates: Vec<String> = occ.iter().map(|o| o.wall.format("%Y-%m-%d").to_string()).collect();
+        let dates: Vec<String> = occ
+            .iter()
+            .map(|o| o.wall.format("%Y-%m-%d").to_string())
+            .collect();
         assert_eq!(dates, vec!["2026-08-10"]);
     }
 

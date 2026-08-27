@@ -41,6 +41,27 @@ describe('parseModuleManifest', () => {
     expect(manifest.minW).toBe(2);
     expect(manifest.defaultW).toBe(4);
     expect(manifest.author).toBe('');
+    // Motion defaults to static: no rAF/animation unless explicitly declared.
+    expect(manifest.motion).toBe('static');
+  });
+
+  it('parses @motion animated', () => {
+    const manifest = parseModuleManifest(
+      header(
+        [' * @nowly-module 1', ' * @id anim', ' * @name 动画', ' * @version 1.0.0', ' * @motion animated'].join('\n')
+      )
+    );
+    expect(manifest.motion).toBe('animated');
+  });
+
+  it('rejects an unknown @motion value', () => {
+    expect(() =>
+      parseModuleManifest(
+        header(
+          [' * @nowly-module 1', ' * @id a', ' * @name n', ' * @version 1', ' * @motion sparkly'].join('\n')
+        )
+      )
+    ).toThrow('bad-motion');
   });
 
   it('rejects a missing header', () => {

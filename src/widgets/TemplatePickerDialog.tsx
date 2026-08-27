@@ -1,9 +1,10 @@
 import { useRef, useState } from 'react';
-import { Check, Minus, Plus, Trash2, Upload, X } from 'lucide-react';
+import { Check, Minus, Plus, Trash2, X } from 'lucide-react';
 import { Dialog } from '../components/Dialog';
 import type { SandboxExtension, SandboxExtensionDraft } from '../data/nowly-repository';
 import {
   builtinDefinitions,
+  devModuleDefinition,
   extensionDefinitions,
   kanbanDefinition,
   sandboxExtensionToDefinition,
@@ -85,7 +86,16 @@ export function TemplatePickerDialog({
   onInstallExtension,
   onUninstallExtension
 }: Props) {
-  const builtinModules = [...builtinDefinitions, kanbanDefinition, ...extensionDefinitions];
+  // The developer module is a dev-only preview tool; gate it on the same
+  // `import.meta.env.DEV` flag App uses to render it, so the picker never
+  // offers end users a module they cannot use. Read in the render body (not at
+  // module load) so the flag is honored per render.
+  const builtinModules = [
+    ...builtinDefinitions,
+    kanbanDefinition,
+    ...extensionDefinitions,
+    ...(import.meta.env.DEV ? [devModuleDefinition] : [])
+  ];
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   // A pending network-module install waiting on the risk dialog confirmation.
@@ -165,9 +175,7 @@ export function TemplatePickerDialog({
         </section>
 
         <section className="template-picker__group">
-          <div className="template-picker__group-head">
-            <h3>{t('template.myModules')}</h3>
-          </div>
+          <h3>{t('template.myModules')}</h3>
           <p className="template-picker__empty">{t('template.uploadComingSoon')}</p>
           {sandboxExtensions.length === 0 ? null : (
             <div className="template-grid">

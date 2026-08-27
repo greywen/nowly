@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNowlyRepository } from '../data/RepositoryContext';
 import type { ModuleLayoutEntry } from '../data/nowly-repository';
 import {
@@ -25,8 +25,18 @@ export function useModuleLayout(definitions: WidgetDefinition[]) {
   const [layout, setLayout] = useState<LayoutState>(() => defaultLayout);
   const [loaded, setLoaded] = useState(false);
 
-  // Re-normalize whenever definitions change (e.g. a custom template was
-  // deleted) so stale entries drop out of the rendered layout.
+  // The authoritative set of placed entries, which is the source of truth for
+  // persistence. It may contain entries whose definition has NOT loaded yet —
+  // most importantly `sandbox:<id>` modules, whose definitions arrive only after
+  // the extensions list resolves. The rendered `layout` is derived from this by
+  // normalizing against the definitions known right now. Keeping the raw entries
+  // separate is what lets a not-yet-loaded sandbox module survive a save: if we
+  // persisted the rendered layout instead, an interim move/resize would write
+  // back a layout missing that entry and lose it permanently.
+  const entriesRef = useRef<ModuleLayoutEntry[]>(toEntries(defaultLayout));
+
+  // Re-derive the rendered layout whenever definitions change (a custom template
+  // was deleted, or a sandbox extension finished loading).
   const definitionKey = useMemo(() => definitions.map((entry) => entry.id).join('|'), [definitions]);
 
   useEffect(() => {
@@ -35,7 +45,8 @@ export function useModuleLayout(definitions: WidgetDefinition[]) {
       .listModuleLayout()
       .then((entries) => {
         if (!active) return;
-        setLayout(normalizeLayout(entries, definitions));
+        entriesRef.current = entries.map((entry) => ({ ...entry }));
+        setLayout(normalizeLayout(entriesRef.current, definitions));
         setLoaded(true);
       })
       .catch(() => {
@@ -49,26 +60,34 @@ export function useModuleLayout(definitions: WidgetDefinition[]) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [repository]);
 
-  // Drop entries whose definition no longer exists once definitions settle.
+  // Re-derive the rendered layout when definitions settle. A sandbox module
+  // whose definition was unknown at load time reappears here; a genuinely-removed
+  // definition drops out of the rendering (its raw entry lingers in entriesRef,
+  // harmlessly, and re-materializes if the definition ever comes back).
   useEffect(() => {
     if (!loaded) return;
-    setLayout((current) => {
-      const filtered = current.filter((item) => getWidgetDefinition(item.id, definitions));
-      return filtered.length === current.length ? current : filtered;
-    });
+    setLayout(normalizeLayout(entriesRef.current, definitions));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [definitionKey, loaded]);
 
-  const persist = useCallback(
-    (next: LayoutState) => {
-      void repository.saveModuleLayout(toEntries(next)).catch(() => undefined);
-    },
-    [repository]
-  );
+  // Persist the authoritative entries. Callers first mutate entriesRef, then the
+  // rendered layout, then call this — so the database always holds the full set
+  // including not-yet-loaded modules.
+  const persist = useCallback(() => {
+    void repository.saveModuleLayout(entriesRef.current.map((entry) => ({ ...entry }))).catch(() => undefined);
+  }, [repository]);
+
+  // Replace a single entry in the authoritative set (preserving order), or drop
+  // it when `rect` is null. Unknown-definition entries are left untouched.
+  const upsertEntry = useCallback((id: WidgetId, rect: { x: number; y: number; w: number; h: number } | null) => {
+    const rest = entriesRef.current.filter((entry) => entry.id !== id);
+    entriesRef.current = rect === null ? rest : [...rest, { id, ...rect }];
+  }, []);
 
   const commit = useCallback(
     (next: LayoutState) => {
-      persist(next);
+      entriesRef.current = toEntries(next);
+      persist();
       setLayout(next);
     },
     [persist]
@@ -82,11 +101,12 @@ export function useModuleLayout(definitions: WidgetDefinition[]) {
         const target = clampToBounds({ x: position.x, y: position.y, w: item.w, h: item.h });
         if (!canPlace(current, id, target, definitions)) return current;
         const next = current.map((entry) => (entry.id === id ? { ...entry, ...target } : entry));
-        persist(next);
+        upsertEntry(id, target);
+        persist();
         return next;
       });
     },
-    [definitions, persist]
+    [definitions, persist, upsertEntry]
   );
 
   const resize = useCallback(
@@ -97,11 +117,12 @@ export function useModuleLayout(definitions: WidgetDefinition[]) {
         const target = { x: item.x, y: item.y, w: size.w, h: size.h };
         if (!canPlace(current, id, target, definitions)) return current;
         const next = current.map((entry) => (entry.id === id ? { ...entry, ...target } : entry));
-        persist(next);
+        upsertEntry(id, target);
+        persist();
         return next;
       });
     },
-    [definitions, persist]
+    [definitions, persist, upsertEntry]
   );
 
   // Add a module to the layout at the first free slot that fits. Tries the
@@ -119,11 +140,12 @@ export function useModuleLayout(definitions: WidgetDefinition[]) {
           findFreeSlot(current, definition.minW, definition.minH);
         if (!slot) return current;
         const next = [...current, { id, ...slot }];
-        persist(next);
+        upsertEntry(id, slot);
+        persist();
         return next;
       });
     },
-    [definitions, persist]
+    [definitions, persist, upsertEntry]
   );
 
   const removeWidget = useCallback(
@@ -131,11 +153,12 @@ export function useModuleLayout(definitions: WidgetDefinition[]) {
       setLayout((current) => {
         if (!current.some((entry) => entry.id === id)) return current;
         const next = current.filter((entry) => entry.id !== id);
-        persist(next);
+        upsertEntry(id, null);
+        persist();
         return next;
       });
     },
-    [persist]
+    [persist, upsertEntry]
   );
 
   const reset = useCallback(() => {

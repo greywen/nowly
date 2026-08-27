@@ -42,6 +42,7 @@ const tasks: MatrixTask[] = [{
   completed: false,
   linkedEventId: 'linked',
   note: '',
+  tags: [],
   createdAt: '2026-07-23T09:00:00Z',
   updatedAt: '2026-07-23T09:00:00Z'
 }];

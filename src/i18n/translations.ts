@@ -155,6 +155,12 @@ export const translations: Record<Language, Record<string, string>> = {
     'dateDetail.empty': '当天暂无日程',
     'dateDetail.dayEvents': '当日日程',
     'dateDetail.linkedTask': '关联任务：{title}',
+    'dateDetail.eventsSection': '日程',
+    'dateDetail.tasksSection': '任务',
+    'dateDetail.tasksEmpty': '当天暂无任务',
+    'dateDetail.dayTasks': '当日任务',
+    'dateDetail.taskLabel': '任务：{title}',
+    'dateDetail.taskBadge': '任务',
 
     // Event categories
     'category.work': '工作',
@@ -217,9 +223,21 @@ export const translations: Record<Language, Record<string, string>> = {
     'kanbanCard.task': '任务：{title}',
     'kanbanCard.collaborators': '协作人：{names}',
 
+    // Unified task settings
+    'taskSettings.title': '任务设置',
+    'taskSettings.linkingTab': '视图联动',
+    'taskSettings.linkingTitle': '自动协调任务视图',
+    'taskSettings.linkingDescription': '开启后，有优先分类的任务自动显示在四象限，有截止日期的任务自动显示在日历，所有任务显示在看板。',
+    'taskSettings.linkingToggle': '开启视图联动',
+    'taskSettings.manualModeHint': '联动已关闭。修改日期或优先分类不会自动新增视图，可在任务弹窗的“显示在”中手动选择。',
+    'taskSettings.enableTitle': '重新开启视图联动？',
+    'taskSettings.enableDescription': '系统会按每个任务当前的优先分类和截止日期重新构建视图显示关系，手动选择的关系可能被替换。任务字段不会丢失。',
+    'taskSettings.enableConfirm': '开启并重新协调',
+
     // Kanban field manager
     'kanbanField.errorName': '请输入名称。',
     'kanbanField.priorities': '优先级',
+    'kanbanField.fixedPrioritiesNote': '四象限优先分类为固定值，不可新增、删除、重命名或排序。',
     'kanbanField.tags': '标签',
     'kanbanField.collaborators': '协作人',
     'kanbanField.title': '看板设置',
@@ -314,6 +332,7 @@ export const translations: Record<Language, Record<string, string>> = {
     // Note draft validation
     'noteDraft.errorTitle': '请输入便签标题。',
     'noteDraft.errorColor': '请选择有效颜色。',
+    'noteDraft.errorIcon': '请选择有效图标。',
 
     // Task draft validation / meta
     'taskDraft.errorTitle': '请输入任务标题。',
@@ -342,7 +361,9 @@ export const translations: Record<Language, Record<string, string>> = {
     'matrix.retryCompletion': '重试完成状态',
     'matrix.dismissError': '关闭错误提示',
     'matrix.loading': '正在读取本地任务',
-    'matrix.quadrantCount': '{label} {count} 个任务',
+    'matrix.quadrantCount': '{label}：剩余 {remaining} / 共 {total} 个任务',
+    'matrix.filterLabel': '按标签筛选任务',
+    'matrix.filterAll': '全部',
     'matrix.empty': '暂无任务',
     'matrix.readError': '无法读取本地任务，请重试。',
 
@@ -426,8 +447,20 @@ export const translations: Record<Language, Record<string, string>> = {
     'noteModal.title': '便签标题',
     'noteModal.content': '便签内容',
     'noteModal.color': '便签颜色',
+    'noteModal.icon': '便签图标',
     'noteModal.pinned': '置顶便签',
     'noteModal.deleteTitle': '永久删除“{title}”？',
+
+    'noteIcon.none': '无图标',
+    'noteIcon.smile': '微笑',
+    'noteIcon.grin': '大笑',
+    'noteIcon.love': '心动',
+    'noteIcon.cool': '酷',
+    'noteIcon.laugh': '欢乐',
+    'noteIcon.spark': '闪光',
+    'noteIcon.star': '星标',
+    'noteIcon.heart': '心形',
+    'noteIcon.sad': '难过',
 
     // TaskModal
     'taskModal.createTitle': '新建任务',
@@ -443,6 +476,13 @@ export const translations: Record<Language, Record<string, string>> = {
     'taskModal.staleLink': '已关联其他月份日程',
     'taskModal.completed': '已完成',
     'taskModal.note': '备注',
+    'taskModal.lane': '看板泳道',
+    'taskModal.views': '显示在',
+    'taskModal.viewKanban': '看板',
+    'taskModal.viewMatrix': '四象限',
+    'taskModal.viewCalendar': '日历',
+    'calendar.taskLabel': '任务：{title}',
+    'calendar.taskBadge': '任务',
     'taskModal.deleteTitle': '永久删除“{title}”？',
     'taskModal.deleteDesc2': '若存在关联，只解除关联，不删除关联日程。',
 
@@ -588,6 +628,18 @@ export const translations: Record<Language, Record<string, string>> = {
     'market.integrityError': '模块文件校验失败，可能已被篡改，已阻止安装。',
     'market.by': '作者：{author}',
     'market.network': '联网',
+
+    // Developer module (channel A preview, dev builds only)
+    'widget.devModule.name': '开发者模块',
+    'widget.devModule.desc': '选择并实时预览 dev-modules 里的草稿（仅开发版）',
+    'devModule.selectLabel': '选择草稿模块',
+    'devModule.none': 'dev-modules 目录下没有草稿。把 .js 文件写到下面这个目录：',
+    'devModule.loading': '正在读取草稿…',
+    'devModule.selectPrompt': '从上方选择一个草稿模块开始预览。',
+    'devModule.lintResults': '校验结果',
+    'devModule.lintPass': '校验：通过',
+    'devModule.lintCount': '校验：{count} 项问题',
+    'devModule.manifestError': '清单错误：{message}',
 
     // Install risk dialog
     'risk.title': '此模块会联网',
@@ -771,6 +823,12 @@ export const translations: Record<Language, Record<string, string>> = {
     'dateDetail.empty': 'No events on this day',
     'dateDetail.dayEvents': 'Events for the day',
     'dateDetail.linkedTask': 'Linked task: {title}',
+    'dateDetail.eventsSection': 'Events',
+    'dateDetail.tasksSection': 'Tasks',
+    'dateDetail.tasksEmpty': 'No tasks on this day',
+    'dateDetail.dayTasks': 'Tasks for the day',
+    'dateDetail.taskLabel': 'Task: {title}',
+    'dateDetail.taskBadge': 'Task',
 
     // Event categories
     'category.work': 'Work',
@@ -833,9 +891,21 @@ export const translations: Record<Language, Record<string, string>> = {
     'kanbanCard.task': 'Task: {title}',
     'kanbanCard.collaborators': 'Collaborators: {names}',
 
+    // Unified task settings
+    'taskSettings.title': 'Task settings',
+    'taskSettings.linkingTab': 'View linking',
+    'taskSettings.linkingTitle': 'Coordinate task views automatically',
+    'taskSettings.linkingDescription': 'When enabled, tasks with a priority appear in the matrix, tasks with a due date appear in the calendar, and every task appears on the board.',
+    'taskSettings.linkingToggle': 'Enable view linking',
+    'taskSettings.manualModeHint': 'Linking is off. Changing a due date or priority will not add views automatically; choose views manually in the task dialog.',
+    'taskSettings.enableTitle': 'Enable view linking again?',
+    'taskSettings.enableDescription': 'Nowly will rebuild view memberships from each task’s current priority and due date. Manual memberships may be replaced, but task fields will not be lost.',
+    'taskSettings.enableConfirm': 'Enable and coordinate',
+
     // Kanban field manager
     'kanbanField.errorName': 'Please enter a name.',
     'kanbanField.priorities': 'Priorities',
+    'kanbanField.fixedPrioritiesNote': 'The four quadrant priorities are fixed and cannot be added, deleted, renamed, or reordered.',
     'kanbanField.tags': 'Tags',
     'kanbanField.collaborators': 'Collaborators',
     'kanbanField.title': 'Board settings',
@@ -930,6 +1000,7 @@ export const translations: Record<Language, Record<string, string>> = {
     // Note draft validation
     'noteDraft.errorTitle': 'Please enter a note title.',
     'noteDraft.errorColor': 'Please choose a valid color.',
+    'noteDraft.errorIcon': 'Please choose a valid icon.',
 
     // Task draft validation / meta
     'taskDraft.errorTitle': 'Please enter a task title.',
@@ -958,7 +1029,9 @@ export const translations: Record<Language, Record<string, string>> = {
     'matrix.retryCompletion': 'Retry status update',
     'matrix.dismissError': 'Dismiss error',
     'matrix.loading': 'Loading tasks…',
-    'matrix.quadrantCount': '{label}: {count, plural, one {# task} other {# tasks}}',
+    'matrix.quadrantCount': '{label}: {remaining} of {total} tasks remaining',
+    'matrix.filterLabel': 'Filter tasks by tag',
+    'matrix.filterAll': 'All',
     'matrix.empty': 'No tasks',
     'matrix.readError': 'Unable to read local tasks. Please try again.',
 
@@ -1042,8 +1115,20 @@ export const translations: Record<Language, Record<string, string>> = {
     'noteModal.title': 'Note title',
     'noteModal.content': 'Note content',
     'noteModal.color': 'Note color',
+    'noteModal.icon': 'Note icon',
     'noteModal.pinned': 'Pin note',
     'noteModal.deleteTitle': 'Permanently delete "{title}"?',
+
+    'noteIcon.none': 'No icon',
+    'noteIcon.smile': 'Smile',
+    'noteIcon.grin': 'Grin',
+    'noteIcon.love': 'Love',
+    'noteIcon.cool': 'Cool',
+    'noteIcon.laugh': 'Laugh',
+    'noteIcon.spark': 'Spark',
+    'noteIcon.star': 'Star',
+    'noteIcon.heart': 'Heart',
+    'noteIcon.sad': 'Sad',
 
     // TaskModal
     'taskModal.createTitle': 'New task',
@@ -1059,6 +1144,13 @@ export const translations: Record<Language, Record<string, string>> = {
     'taskModal.staleLink': 'Linked to an event in another month',
     'taskModal.completed': 'Done',
     'taskModal.note': 'Note',
+    'taskModal.lane': 'Board lane',
+    'taskModal.views': 'Show in',
+    'taskModal.viewKanban': 'Board',
+    'taskModal.viewMatrix': 'Matrix',
+    'taskModal.viewCalendar': 'Calendar',
+    'calendar.taskLabel': 'Task: {title}',
+    'calendar.taskBadge': 'Task',
     'taskModal.deleteTitle': 'Permanently delete "{title}"?',
     'taskModal.deleteDesc2': 'If linked, only the link is removed; the linked event is kept.',
 
@@ -1202,6 +1294,18 @@ export const translations: Record<Language, Record<string, string>> = {
     'market.integrityError': 'Module integrity check failed; the file may have been tampered with. Installation blocked.',
     'market.by': 'By {author}',
     'market.network': 'Network',
+
+    // Module workbench (channel A preview)
+    'widget.devModule.name': 'Developer module',
+    'widget.devModule.desc': 'Pick and live-preview a draft from dev-modules (dev builds only)',
+    'devModule.selectLabel': 'Select draft module',
+    'devModule.none': 'No drafts under dev-modules. Write a .js file to the directory below:',
+    'devModule.loading': 'Reading drafts…',
+    'devModule.selectPrompt': 'Pick a draft module above to preview it.',
+    'devModule.lintPass': 'Lint: passed',
+    'devModule.lintCount': 'Lint: {count} issue(s)',
+    'devModule.manifestError': 'Manifest error: {message}',
+    'devModule.lintResults': 'Lint results',
 
     // Install risk dialog
     'risk.title': 'This module accesses the network',

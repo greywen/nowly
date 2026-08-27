@@ -39,17 +39,26 @@ pub struct Event {
     pub subscription_id: Option<String>,
 }
 
+// Unified task. A task is the single source of truth projected into the
+// kanban, matrix, and calendar views. `priority` is one of the four fixed
+// values or None (unclassified). `views` lists the view memberships the task
+// currently belongs to; the calendar/matrix ones are coordinated from
+// `priority`/`due_date` while linking is enabled, or frozen while it is off.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Task {
     pub id: String,
     pub title: String,
-    pub quadrant: String,
-    pub due_at: Option<String>,
-    pub priority: i64,
+    pub description: String,
+    pub priority: Option<String>,
+    pub due_date: Option<String>,
     pub completed: bool,
+    pub lane_id: String,
+    pub board_position: i64,
+    pub tag_ids: Vec<String>,
+    pub collaborator_ids: Vec<String>,
     pub linked_event_id: Option<String>,
-    pub note: String,
+    pub views: Vec<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -62,6 +71,8 @@ pub struct Note {
     pub content: String,
     pub color: String,
     pub pinned: bool,
+    pub style_variant: i64,
+    pub icon: String,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -102,16 +113,31 @@ pub enum EditScope {
     All,
 }
 
+// Draft for creating or updating a task. `views` is optional: when None the
+// backend keeps existing memberships (create defaults to the origin view plus
+// any auto memberships), when Some it sets an explicit membership list (used by
+// the "显示在" control while linking is disabled).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskDraft {
     pub title: String,
-    pub quadrant: String,
-    pub due_at: Option<String>,
-    pub priority: i64,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub priority: Option<String>,
+    #[serde(default)]
+    pub due_date: Option<String>,
+    #[serde(default)]
     pub completed: bool,
+    pub lane_id: String,
+    #[serde(default)]
+    pub tag_ids: Vec<String>,
+    #[serde(default)]
+    pub collaborator_ids: Vec<String>,
+    #[serde(default)]
     pub linked_event_id: Option<String>,
-    pub note: String,
+    #[serde(default)]
+    pub views: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -121,6 +147,8 @@ pub struct NoteDraft {
     pub content: String,
     pub color: String,
     pub pinned: bool,
+    #[serde(default)]
+    pub icon: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -203,9 +231,12 @@ pub struct ModuleLayoutEntry {
     pub h: i64,
 }
 
+// A kanban lane, evolved from the old kanban_lanes table. Lanes are execution
+// status. The default and completion lanes are pinned by stable id in settings,
+// never inferred from a (renameable) name.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct KanbanLane {
+pub struct TaskLane {
     pub id: String,
     pub name: String,
     pub color: String,
@@ -216,102 +247,62 @@ pub struct KanbanLane {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct KanbanLaneDraft {
+pub struct TaskLaneDraft {
     pub name: String,
     pub color: String,
 }
 
+// An application-global tag. `archived_at` hides it from new pickers without
+// touching historical task links; a permanent delete cascades links only.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct KanbanCard {
+pub struct TaskTag {
     pub id: String,
-    pub lane_id: String,
-    pub title: String,
-    pub description: Option<String>,
-    pub due_date: Option<String>,
-    pub priority_id: Option<String>,
-    pub position: i64,
-    pub tag_ids: Vec<String>,
-    pub collaborator_ids: Vec<String>,
+    pub name: String,
+    pub color: String,
+    pub archived_at: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct KanbanCardDraft {
-    pub lane_id: String,
-    pub title: String,
-    #[serde(default)]
-    pub description: Option<String>,
-    #[serde(default)]
-    pub due_date: Option<String>,
-    #[serde(default)]
-    pub priority_id: Option<String>,
-    #[serde(default)]
-    pub tag_ids: Vec<String>,
-    #[serde(default)]
-    pub collaborator_ids: Vec<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct KanbanPriority {
-    pub id: String,
+pub struct TaskTagDraft {
     pub name: String,
     pub color: String,
-    pub position: i64,
+}
+
+// An application-global collaborator (a local person name only; not an account
+// or a real share). Same archive/delete semantics as tags.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskCollaborator {
+    pub id: String,
+    pub name: String,
+    pub archived_at: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct KanbanPriorityDraft {
-    pub name: String,
-    pub color: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct KanbanTag {
-    pub id: String,
-    pub name: String,
-    pub color: String,
-    pub created_at: String,
-    pub updated_at: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct KanbanTagDraft {
-    pub name: String,
-    pub color: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct KanbanCollaborator {
-    pub id: String,
-    pub name: String,
-    pub created_at: String,
-    pub updated_at: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct KanbanCollaboratorDraft {
+pub struct TaskCollaboratorDraft {
     pub name: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+// The single snapshot every view reads from. `view_preferences` is an opaque
+// JSON blob of per-view display/filter settings, owned by the frontend.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct KanbanSnapshot {
-    pub lanes: Vec<KanbanLane>,
-    pub cards: Vec<KanbanCard>,
-    pub priorities: Vec<KanbanPriority>,
-    pub tags: Vec<KanbanTag>,
-    pub collaborators: Vec<KanbanCollaborator>,
+pub struct TaskWorkspaceSnapshot {
+    pub tasks: Vec<Task>,
+    pub lanes: Vec<TaskLane>,
+    pub tags: Vec<TaskTag>,
+    pub collaborators: Vec<TaskCollaborator>,
+    pub linking_enabled: bool,
+    pub default_lane_id: String,
+    pub completion_lane_id: String,
+    pub view_preferences: serde_json::Value,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -551,18 +542,24 @@ mod tests {
     fn task_draft_deserializes_camel_case() {
         let draft: TaskDraft = serde_json::from_value(serde_json::json!({
             "title": "发布 Nowly",
-            "quadrant": "important_urgent",
-            "dueAt": "2026-07-23",
-            "priority": 1,
+            "description": "发布前检查",
+            "priority": "important_urgent",
+            "dueDate": "2026-07-23",
             "completed": false,
-            "linkedEventId": "e1",
-            "note": "发布前检查"
+            "laneId": "kanban-lane-todo",
+            "tagIds": ["t1"],
+            "collaboratorIds": ["c1"],
+            "linkedEventId": "e1"
         }))
         .unwrap();
 
-        assert_eq!(draft.due_at.as_deref(), Some("2026-07-23"));
+        assert_eq!(draft.due_date.as_deref(), Some("2026-07-23"));
         assert_eq!(draft.linked_event_id.as_deref(), Some("e1"));
-        assert_eq!(draft.priority, 1);
+        assert_eq!(draft.priority.as_deref(), Some("important_urgent"));
+        assert_eq!(draft.lane_id, "kanban-lane-todo");
+        assert_eq!(draft.tag_ids, vec!["t1".to_string()]);
+        assert_eq!(draft.collaborator_ids, vec!["c1".to_string()]);
+        assert_eq!(draft.views, None);
     }
 
     #[test]
@@ -603,7 +600,12 @@ mod tests {
         assert_eq!(object.get("lastSyncedAt"), Some(&Value::Null));
         assert_eq!(object.get("lastAttemptedAt"), Some(&Value::Null));
         assert_eq!(object.get("lastStatus"), Some(&Value::Null));
-        for snake in ["refresh_interval_minutes", "last_synced_at", "last_status", "last_error"] {
+        for snake in [
+            "refresh_interval_minutes",
+            "last_synced_at",
+            "last_status",
+            "last_error",
+        ] {
             assert!(!object.contains_key(snake), "{snake} 不应出现在契约里");
         }
     }

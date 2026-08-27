@@ -1,4 +1,6 @@
 import { SANDBOX_CHANNEL } from './sandbox-protocol';
+import { NOWLY_MODULE_CSS } from './nowly-module-css';
+import { SANDBOX_WIDGETS } from './sandbox-widgets';
 
 // The script that runs *inside* the sandboxed iframe. It is injected as source
 // text into the iframe document, so it must be self-contained plain JS (no
@@ -21,6 +23,18 @@ export const SANDBOX_RUNTIME = `(() => {
   var nextId = 1;
   var userModule = null;
   var errorPrefix = 'Extension error: ';
+  // Visibility state and the module's registered listeners. The host pushes
+  // 'visibility' messages when the module scrolls out of view, the window is
+  // minimized/backgrounded, or focus mode starts. Animated modules must pause
+  // their rAF loops when not visible — the runtime just relays the flag.
+  var visible = true;
+  var visibilityListeners = [];
+  // Which surface this frame is ('main' or 'dialog'), and listeners for the
+  // host's 'stateChanged' broadcast. Both surfaces share one moduleId (one
+  // state row), so when one saves, the host tells the other to reload — see
+  // spec §11 Q3.
+  var surface = 'main';
+  var stateChangedListeners = [];
 
   function call(method, args) {
     return new Promise(function (resolve, reject) {
@@ -42,6 +56,41 @@ export const SANDBOX_RUNTIME = `(() => {
       todayIso: init.todayIso,
       loadState: function () { return call('loadState', []); },
       saveState: function (value) { return call('saveState', [value]); }
+    };
+    host.surface = surface;
+    // Ask the host to open/close the dialog surface. The host mounts a second
+    // iframe loading this same source (surface: 'dialog'); closing tears it
+    // down. Either surface may call these; redundant requests are ignored.
+    host.openDialog = function (title) {
+      parent.postMessage(
+        { channel: CHANNEL, kind: 'openDialog', title: typeof title === 'string' ? title : undefined },
+        '*'
+      );
+    };
+    host.closeDialog = function () {
+      parent.postMessage({ channel: CHANNEL, kind: 'closeDialog' }, '*');
+    };
+    // Register for the host's post-save broadcast so this surface can reload
+    // state after the other surface changed it.
+    host.onStateChanged = function (fn) {
+      if (typeof fn !== 'function') return function () {};
+      stateChangedListeners.push(fn);
+      return function () {
+        var i = stateChangedListeners.indexOf(fn);
+        if (i !== -1) stateChangedListeners.splice(i, 1);
+      };
+    };
+    host.isVisible = function () { return visible; };
+    host.onVisibilityChange = function (fn) {
+      if (typeof fn !== 'function') return function () {};
+      visibilityListeners.push(fn);
+      // Deliver the current state immediately so a module can set its initial
+      // running/paused state without waiting for the next transition.
+      try { fn(visible); } catch (e) {}
+      return function () {
+        var i = visibilityListeners.indexOf(fn);
+        if (i !== -1) visibilityListeners.splice(i, 1);
+      };
     };
     if (init.permissions && init.permissions.indexOf('network') !== -1) {
       host.fetch = function (url, options) {
@@ -73,9 +122,26 @@ export const SANDBOX_RUNTIME = `(() => {
       return;
     }
 
+    if (data.kind === 'visibility') {
+      visible = data.visible === true;
+      for (var i = 0; i < visibilityListeners.length; i++) {
+        try { visibilityListeners[i](visible); } catch (e) {}
+      }
+      return;
+    }
+
+    if (data.kind === 'stateChanged') {
+      for (var j = 0; j < stateChangedListeners.length; j++) {
+        try { stateChangedListeners[j](); } catch (e) {}
+      }
+      return;
+    }
+
     if (data.kind === 'init') {
       if (typeof userModule !== 'function') return;
       if (typeof data.errorPrefix === 'string') errorPrefix = data.errorPrefix;
+      if (typeof data.visible === 'boolean') visible = data.visible;
+      if (data.surface === 'dialog' || data.surface === 'main') surface = data.surface;
       var host = makeHost(data);
       var root = document.getElementById('root');
       try {
@@ -99,31 +165,6 @@ export const SANDBOX_RUNTIME = `(() => {
     announce();
   }
 })();`;
-
-// Base styles injected into the sandbox document so extensions inherit the app's
-// look without reaching into the parent. Kept minimal and animation-free.
-const SANDBOX_STYLES = `
-  :root { color-scheme: light; }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; }
-  body {
-    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    color: #1f2733;
-    background: transparent;
-    font-size: 14px;
-  }
-  #root { padding: 16px; height: 100%; }
-  button {
-    font: inherit;
-    border: 1px solid #d7dde5;
-    background: #fff;
-    color: #1f2733;
-    border-radius: 8px;
-    padding: 6px 12px;
-    cursor: pointer;
-  }
-  button:hover { background: #f2f5f8; }
-`;
 
 // A locked-down Content-Security-Policy for the sandbox document. It permits the
 // inline runtime/extension scripts and inline styles we inject, but blocks all
@@ -155,11 +196,12 @@ export function buildSandboxDocument(extensionSource: string): string {
 <head>
 <meta charset="utf-8" />
 <meta http-equiv="Content-Security-Policy" content="${SANDBOX_CSP}" />
-<style>${SANDBOX_STYLES}</style>
+<style>${NOWLY_MODULE_CSS}</style>
 </head>
 <body>
 <div id="root"></div>
 <script>${escapeScript(SANDBOX_RUNTIME)}</script>
+<script>${escapeScript(SANDBOX_WIDGETS)}</script>
 <script>${escapeScript(extensionSource)}</script>
 </body>
 </html>`;

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { MatrixTask } from '../matrix/matrix-model';
 import { compareTasks, createTaskForm, formatTaskMeta, isTaskFormDirty, taskToForm, toTaskDraft, validateTaskForm } from './task-draft';
 
-const base: MatrixTask = { id:'high', title:'发布', quadrant:'important_urgent', dueAt:'2026-07-23', priority:1, completed:false, linkedEventId:'e1', note:'', createdAt:'2026-07-20T00:00:00Z', updatedAt:'x' };
+const base: MatrixTask = { id:'high', title:'发布', quadrant:'important_urgent', dueAt:'2026-07-23', priority:1, completed:false, linkedEventId:'e1', note:'', tags:[], createdAt:'2026-07-20T00:00:00Z', updatedAt:'x' };
 const earlier={...base,id:'earlier',dueAt:'2026-07-01',priority:2 as const};
 const low={...base,id:'low',priority:3 as const};
 const noDue={...base,id:'no-due',dueAt:null};

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Repeat, Settings } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ListTodo, Plus, Repeat, Settings } from 'lucide-react';
 import type { CalendarSettings } from './CalendarSettingsDialog';
 import {
   buildMonthGrid,
@@ -22,6 +22,7 @@ import {
 import { colorStyle } from '../lib/color';
 import { occurrenceKey } from '../lib/recurrence';
 import { t } from '../i18n';
+import type { Task } from '../tasks/task-model';
 
 // Indexed by day-of-week (0 = Sunday … 6 = Saturday) so a column's label can be
 // looked up directly from its weekday regardless of the week-start setting.
@@ -83,6 +84,7 @@ type CalendarWidgetProps = {
   monthIndex: number;
   todayIso: string;
   events: CalendarEvent[];
+  tasks?: Task[];
   status: LoadStatus;
   errorMessage?: string;
   view?: CalendarView;
@@ -96,11 +98,14 @@ type CalendarWidgetProps = {
   onCreateEventForDate: (isoDate: string) => void;
   onOpenDate: (isoDate: string) => void;
   onOpenEvent: (event: CalendarEvent) => void;
+  onOpenTask?: (task: Task) => void;
+  onMoveTaskToDate?: (task: Task, dueDate: string) => Promise<unknown> | void;
   onMoveEvent?: (event: CalendarEvent, isoDate: string) => void;
   onMoveEventToHour?: (event: CalendarEvent, isoDate: string, startHour: number) => void;
   onResizeEvent?: (event: CalendarEvent, endIsoDate: string) => void;
   calendarSettings?: CalendarSettings;
   onOpenSettings?: () => void;
+  onOpenTaskSettings?: () => void;
 };
 
 function summaryFor(status: LoadStatus, count: number, view: CalendarView) {
@@ -131,6 +136,7 @@ export function CalendarWidget({
   monthIndex,
   todayIso,
   events,
+  tasks = [],
   status,
   errorMessage,
   view = 'month',
@@ -144,13 +150,26 @@ export function CalendarWidget({
   onCreateEventForDate,
   onOpenDate,
   onOpenEvent,
+  onOpenTask,
+  onMoveTaskToDate,
   onMoveEvent,
   onMoveEventToHour,
   onResizeEvent,
   calendarSettings,
-  onOpenSettings
+  onOpenSettings,
+  onOpenTaskSettings
 }: CalendarWidgetProps) {
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const taskGestureRef = useRef<{
+    task: Task;
+    startDate: string;
+    targetDate: string;
+    downX: number;
+    downY: number;
+    moved: boolean;
+  } | null>(null);
+  const taskSuppressClickRef = useRef(false);
+  const [taskPreview, setTaskPreview] = useState<{ taskId: string; dueDate: string } | null>(null);
   const anchor = anchorIso ? new Date(`${anchorIso}T00:00:00`) : new Date(year, monthIndex, 1);
   const today = new Date(`${todayIso}T00:00:00`);
   const weekStart = calendarSettings?.weekStart ?? 'monday';
@@ -199,6 +218,7 @@ export function CalendarWidget({
   }
 
   const dropEnabled = Boolean(onMoveEvent);
+  const taskDropEnabled = Boolean(onMoveTaskToDate);
   const hourDropEnabled = Boolean(onMoveEventToHour);
   const resizeEnabled = Boolean(onResizeEvent);
 
@@ -232,6 +252,56 @@ export function CalendarWidget({
     const cell = element?.closest('[data-iso-date]') as HTMLElement | null;
     return cell?.dataset.isoDate ?? null;
   }, []);
+
+  const handleTaskPointerMove = useCallback((event: PointerEvent) => {
+    const gesture = taskGestureRef.current;
+    if (!gesture) return;
+    if (!gesture.moved) {
+      const moved = Math.abs(event.clientX - gesture.downX) > 4 || Math.abs(event.clientY - gesture.downY) > 4;
+      if (!moved) return;
+      gesture.moved = true;
+      setPointerActive(true);
+    }
+    const dueDate = dayIsoFromPoint(event.clientX, event.clientY);
+    if (!dueDate || dueDate === gesture.targetDate) return;
+    gesture.targetDate = dueDate;
+    setTaskPreview({ taskId: gesture.task.id, dueDate });
+  }, [dayIsoFromPoint]);
+
+  const handleTaskPointerUp = useCallback(() => {
+    window.removeEventListener('pointermove', handleTaskPointerMove);
+    window.removeEventListener('pointerup', handleTaskPointerUp);
+    const gesture = taskGestureRef.current;
+    taskGestureRef.current = null;
+    setPointerActive(false);
+    if (!gesture?.moved) {
+      setTaskPreview(null);
+      return;
+    }
+    taskSuppressClickRef.current = true;
+    if (gesture.targetDate !== gesture.startDate) {
+      void Promise.resolve(onMoveTaskToDate?.(gesture.task, gesture.targetDate)).finally(() => {
+        setTaskPreview(null);
+      });
+    } else {
+      setTaskPreview(null);
+    }
+  }, [handleTaskPointerMove, onMoveTaskToDate]);
+
+  const beginTaskMove = useCallback((event: React.PointerEvent, task: Task) => {
+    if (!taskDropEnabled || event.button !== 0 || !task.dueDate) return;
+    cancelDateClick();
+    taskGestureRef.current = {
+      task,
+      startDate: task.dueDate,
+      targetDate: task.dueDate,
+      downX: event.clientX,
+      downY: event.clientY,
+      moved: false
+    };
+    window.addEventListener('pointermove', handleTaskPointerMove);
+    window.addEventListener('pointerup', handleTaskPointerUp);
+  }, [handleTaskPointerMove, handleTaskPointerUp, taskDropEnabled]);
 
   const hourFromPoint = useCallback((clientX: number, clientY: number) => {
     const element = document.elementFromPoint(clientX, clientY);
@@ -411,6 +481,12 @@ export function CalendarWidget({
         : event
     );
   }, [events, preview]);
+  const displayTasks = useMemo(
+    () => tasks
+      .filter((task) => task.dueDate && task.views.includes('calendar'))
+      .map((task) => taskPreview?.taskId === task.id ? { ...task, dueDate: taskPreview.dueDate } : task),
+    [taskPreview, tasks]
+  );
 
   useEffect(() => cancelDateClick, []);
 
@@ -436,10 +512,35 @@ export function CalendarWidget({
     () => () => {
       window.removeEventListener('pointermove', handleGesturePointerMove);
       window.removeEventListener('pointerup', handleGesturePointerUp);
+      window.removeEventListener('pointermove', handleTaskPointerMove);
+      window.removeEventListener('pointerup', handleTaskPointerUp);
       if (previewClearTimer.current) clearTimeout(previewClearTimer.current);
     },
-    [handleGesturePointerMove, handleGesturePointerUp]
+    [handleGesturePointerMove, handleGesturePointerUp, handleTaskPointerMove, handleTaskPointerUp]
   );
+
+  function renderTaskItem(task: Task, className = 'event event-cell') {
+    const movable = taskDropEnabled && Boolean(task.dueDate);
+    return (
+      <button
+        type="button"
+        key={`task-${task.id}`}
+        aria-label={t('calendar.taskLabel', { title: task.title })}
+        className={`${className} calendar-task${task.completed ? ' is-completed' : ''}${movable ? ' event--movable' : ''}`}
+        onPointerDown={movable ? (event) => beginTaskMove(event, task) : undefined}
+        onClick={() => {
+          if (taskSuppressClickRef.current) {
+            taskSuppressClickRef.current = false;
+            return;
+          }
+          onOpenTask?.(task);
+        }}
+      >
+        <ListTodo aria-hidden="true" />
+        <span className="event__title">{task.title}</span>
+      </button>
+    );
+  }
 
   // A multi-day bar in the top "spanning" zone. Absolutely positioned by lane
   // and column so it stays one connected bar across the days it covers.
@@ -588,6 +689,9 @@ export function CalendarWidget({
                 style={{ paddingTop: `${singlesPadTopByCol[col]}px` }}
               >
                 {singlesByCol[col].map((event) => renderCellEvent(event))}
+                {displayTasks
+                  .filter((task) => task.dueDate === day.isoDate)
+                  .map((task) => renderTaskItem(task))}
                 {overflowByCol[col].length > 0 ? (
                   <button
                     type="button"
@@ -690,6 +794,9 @@ export function CalendarWidget({
                   style={{ paddingTop: `${spanLanesByCol[col] * LANE_HEIGHT_PX}px` }}
                 >
                   {singlesByCol[col].map((event) => renderCellEvent(event))}
+                  {displayTasks
+                    .filter((task) => task.dueDate === day.isoDate)
+                    .map((task) => renderTaskItem(task))}
                 </div>
               </div>
             ))}
@@ -709,6 +816,7 @@ export function CalendarWidget({
     const dayEvents = displayEvents.filter((event) => event.startAt.startsWith(iso));
     const allDayEvents = sortEvents(dayEvents.filter((event) => event.allDay));
     const timedEvents = dayEvents.filter((event) => !event.allDay);
+    const dayTasks = displayTasks.filter((task) => task.dueDate === iso);
     const eventsByHour = new Map<number, CalendarEvent[]>();
     for (const event of timedEvents) {
       const hour = Number(event.startAt.slice(11, 13));
@@ -718,7 +826,7 @@ export function CalendarWidget({
     }
     return (
       <div className="calendar-day-view calendar-scroll-region">
-        {allDayEvents.length > 0 ? (
+        {allDayEvents.length > 0 || dayTasks.length > 0 ? (
           <div className="day-grid__allday">
             {allDayEvents.map((event) => (
               <button
@@ -731,6 +839,7 @@ export function CalendarWidget({
                 {repeatMark(event)}{event.title}
               </button>
             ))}
+            {dayTasks.map((task) => renderTaskItem(task, 'event'))}
           </div>
         ) : null}
         <div className={`day-grid day-grid--full-day${pointerActive ? ' is-dragging' : ''}`} aria-label={t('calendar.dayGrid')}>
@@ -770,37 +879,51 @@ export function CalendarWidget({
   }
 
   function renderList() {
-    const groups = groupEventsByDate(events);
+    const eventGroups = groupEventsByDate(events);
+    const dates = [...new Set([
+      ...eventGroups.map((group) => group.isoDate),
+      ...displayTasks.map((task) => task.dueDate).filter((date): date is string => Boolean(date))
+    ])].sort();
+    const eventsByDate = new Map(eventGroups.map((group) => [group.isoDate, group.events]));
     return (
       <div className="calendar-list-view calendar-scroll-region">
-        {groups.length === 0 ? (
+        {dates.length === 0 ? (
           <div className="calendar-empty">{t('calendar.monthEmpty')}</div>
         ) : (
-          groups.map((group) => (
-            <section key={group.isoDate} className="calendar-list-group">
-              <h3 className="calendar-list-group__date">{dateFormat === 'iso' ? listDateLabel(group.isoDate, dateFormat) : listDateLabel(group.isoDate).replace('月', ' 月 ').replace('日', ' 日')}</h3>
-              <ul className="calendar-list-group__items">
-                {group.events.map((event) => (
-                  <li key={occurrenceKey(event)}>
-                    <button
-                      type="button"
-                      aria-label={eventLabel(event)}
-                      onClick={() => onOpenEvent(event)}
-                      className="calendar-list-item"
-                    >
-                      <span className="calendar-list-item__time">
-                        {event.allDay ? t('calendar.allDay') : event.startAt.slice(11, 16)}
-                      </span>
-                      <span className="calendar-list-item__title">{repeatMark(event)}{event.title}</span>
-                      <span className={`calendar-list-item__category date-detail-dialog__category--${event.category}`}>
-                        {eventCategoryLabel(event.category)}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ))
+          dates.map((isoDate) => {
+            const dateEvents = eventsByDate.get(isoDate) ?? [];
+            const dateTasks = displayTasks.filter((task) => task.dueDate === isoDate);
+            return (
+              <section key={isoDate} className="calendar-list-group">
+                <h3 className="calendar-list-group__date">{dateFormat === 'iso' ? listDateLabel(isoDate, dateFormat) : listDateLabel(isoDate).replace('月', ' 月 ').replace('日', ' 日')}</h3>
+                <ul className="calendar-list-group__items">
+                  {dateEvents.map((event) => (
+                    <li key={occurrenceKey(event)}>
+                      <button
+                        type="button"
+                        aria-label={eventLabel(event)}
+                        onClick={() => onOpenEvent(event)}
+                        className="calendar-list-item"
+                      >
+                        <span className="calendar-list-item__time">
+                          {event.allDay ? t('calendar.allDay') : event.startAt.slice(11, 16)}
+                        </span>
+                        <span className="calendar-list-item__title">{repeatMark(event)}{event.title}</span>
+                        <span className={`calendar-list-item__category date-detail-dialog__category--${event.category}`}>
+                          {eventCategoryLabel(event.category)}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                  {dateTasks.map((task) => (
+                    <li key={`task-${task.id}`}>
+                      {renderTaskItem(task, 'calendar-list-item')}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            );
+          })
         )}
       </div>
     );
@@ -836,6 +959,11 @@ export function CalendarWidget({
           <button type="button" className="btn btn-icon" aria-label={navLabels.next} onClick={onNextMonth}>
             <ChevronRight aria-hidden="true" />
           </button>
+          {onOpenTaskSettings ? (
+            <button type="button" className="btn btn-icon" aria-label={t('taskSettings.title')} onClick={onOpenTaskSettings}>
+              <ListTodo aria-hidden="true" />
+            </button>
+          ) : null}
           {onOpenSettings ? (
             <button type="button" className="btn btn-icon" aria-label={t('calendarSettings.label')} onClick={onOpenSettings}>
               <Settings aria-hidden="true" />

@@ -6,10 +6,31 @@ use rusqlite::{params, Connection, OptionalExtension, Row, TransactionBehavior};
 use tauri::State;
 use uuid::Uuid;
 
+const NOTE_STYLE_VARIANT_COUNT: u8 = 9;
+const NOTE_ICONS: &[&str] = &[
+    "", "smile", "grin", "love", "cool", "laugh", "spark", "star", "heart", "sad",
+];
+
+fn normalize_icon(value: &str) -> Option<String> {
+    let normalized = value.trim().to_ascii_lowercase();
+    if NOTE_ICONS.contains(&normalized.as_str()) {
+        Some(normalized)
+    } else {
+        None
+    }
+}
+
 fn read_note(row: &Row<'_>) -> rusqlite::Result<Note> {
     Ok(Note {
-        id: row.get(0)?, title: row.get(1)?, content: row.get(2)?, color: row.get(3)?,
-        pinned: row.get::<_, i64>(4)? == 1, created_at: row.get(5)?, updated_at: row.get(6)?,
+        id: row.get(0)?,
+        title: row.get(1)?,
+        content: row.get(2)?,
+        color: row.get(3)?,
+        pinned: row.get::<_, i64>(4)? == 1,
+        style_variant: row.get(5)?,
+        icon: row.get(6)?,
+        created_at: row.get(7)?,
+        updated_at: row.get(8)?,
     })
 }
 
@@ -20,15 +41,20 @@ pub fn validate_and_normalize(mut draft: NoteDraft) -> Result<NoteDraft, Command
     }
     draft.color = crate::color::normalize_hex(&draft.color)
         .ok_or_else(|| CommandError::validation("color", "请选择有效颜色。"))?;
+    draft.icon = normalize_icon(&draft.icon)
+        .ok_or_else(|| CommandError::validation("icon", "请选择有效图标。"))?;
     Ok(draft)
 }
 
 pub fn list(connection: &Connection) -> Result<Vec<Note>, CommandError> {
     let mut statement = connection.prepare(
-        "SELECT id,title,content,color,pinned,created_at,updated_at FROM notes ORDER BY pinned DESC,updated_at DESC,id ASC"
+        "SELECT id,title,content,color,pinned,style_variant,icon,created_at,updated_at FROM notes ORDER BY pinned DESC,updated_at DESC,id ASC"
     ).map_err(CommandError::database)?;
-    let rows = statement.query_map([], read_note).map_err(CommandError::database)?;
-    rows.collect::<rusqlite::Result<Vec<_>>>().map_err(CommandError::database)
+    let rows = statement
+        .query_map([], read_note)
+        .map_err(CommandError::database)?;
+    rows.collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(CommandError::database)
 }
 
 fn timestamp() -> String {
@@ -37,43 +63,62 @@ fn timestamp() -> String {
 
 fn by_id(connection: &Connection, id: &str) -> Result<Option<Note>, CommandError> {
     connection.query_row(
-        "SELECT id,title,content,color,pinned,created_at,updated_at FROM notes WHERE id=?1",
+        "SELECT id,title,content,color,pinned,style_variant,icon,created_at,updated_at FROM notes WHERE id=?1",
         [id], read_note,
     ).optional().map_err(CommandError::database)
 }
 
 pub fn create(connection: &mut Connection, draft: NoteDraft) -> Result<Note, CommandError> {
     let draft = validate_and_normalize(draft)?;
-    let id = Uuid::new_v4().hyphenated().to_string();
+    let id_seed = Uuid::new_v4();
+    let id = id_seed.hyphenated().to_string();
+    let style_variant = i64::from(id_seed.as_bytes()[0] % NOTE_STYLE_VARIANT_COUNT);
     let now = timestamp();
-    let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate).map_err(CommandError::database)?;
+    let transaction = connection
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(CommandError::database)?;
     transaction.execute(
-        "INSERT INTO notes(id,title,content,color,pinned,created_at,updated_at) VALUES (?1,?2,?3,?4,?5,?6,?6)",
-        params![id, draft.title, draft.content, draft.color, i64::from(draft.pinned), now],
+        "INSERT INTO notes(id,title,content,color,pinned,style_variant,icon,created_at,updated_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?8)",
+        params![id, draft.title, draft.content, draft.color, i64::from(draft.pinned), style_variant, draft.icon, now],
     ).map_err(CommandError::database)?;
-    let note = by_id(&transaction, &id)?.ok_or_else(|| CommandError::conflict("便签保存状态已变化，请重试。"))?;
+    let note = by_id(&transaction, &id)?
+        .ok_or_else(|| CommandError::conflict("便签保存状态已变化，请重试。"))?;
     transaction.commit().map_err(CommandError::database)?;
     Ok(note)
 }
 
-pub fn update(connection: &mut Connection, id: &str, draft: NoteDraft) -> Result<Note, CommandError> {
+pub fn update(
+    connection: &mut Connection,
+    id: &str,
+    draft: NoteDraft,
+) -> Result<Note, CommandError> {
     let draft = validate_and_normalize(draft)?;
     let now = timestamp();
-    let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate).map_err(CommandError::database)?;
+    let transaction = connection
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(CommandError::database)?;
     let affected = transaction.execute(
-        "UPDATE notes SET title=?2,content=?3,color=?4,pinned=?5,updated_at=?6 WHERE id=?1",
-        params![id, draft.title, draft.content, draft.color, i64::from(draft.pinned), now],
+        "UPDATE notes SET title=?2,content=?3,color=?4,pinned=?5,icon=?6,updated_at=?7 WHERE id=?1",
+        params![id, draft.title, draft.content, draft.color, i64::from(draft.pinned), draft.icon, now],
     ).map_err(CommandError::database)?;
-    if affected != 1 { return Err(CommandError::not_found("未找到该便签。")); }
+    if affected != 1 {
+        return Err(CommandError::not_found("未找到该便签。"));
+    }
     let note = by_id(&transaction, id)?.ok_or_else(|| CommandError::not_found("未找到该便签。"))?;
     transaction.commit().map_err(CommandError::database)?;
     Ok(note)
 }
 
 pub fn delete(connection: &mut Connection, id: &str) -> Result<(), CommandError> {
-    let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate).map_err(CommandError::database)?;
-    let affected = transaction.execute("DELETE FROM notes WHERE id=?1", [id]).map_err(CommandError::database)?;
-    if affected != 1 { return Err(CommandError::not_found("未找到该便签。")); }
+    let transaction = connection
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(CommandError::database)?;
+    let affected = transaction
+        .execute("DELETE FROM notes WHERE id=?1", [id])
+        .map_err(CommandError::database)?;
+    if affected != 1 {
+        return Err(CommandError::not_found("未找到该便签。"));
+    }
     transaction.commit().map_err(CommandError::database)
 }
 
@@ -90,7 +135,11 @@ pub fn create_note(db: State<'_, AppDb>, draft: NoteDraft) -> Result<Note, Comma
 }
 
 #[tauri::command]
-pub fn update_note(db: State<'_, AppDb>, id: String, draft: NoteDraft) -> Result<Note, CommandError> {
+pub fn update_note(
+    db: State<'_, AppDb>,
+    id: String,
+    draft: NoteDraft,
+) -> Result<Note, CommandError> {
     let mut connection = db.0.lock().map_err(CommandError::database)?;
     update(&mut connection, &id, draft)
 }
@@ -103,7 +152,7 @@ pub fn delete_note(db: State<'_, AppDb>, id: String) -> Result<(), CommandError>
 
 #[cfg(test)]
 mod tests {
-    use super::{create, delete, list, update, validate_and_normalize};
+    use super::{create, delete, list, update, validate_and_normalize, NOTE_STYLE_VARIANT_COUNT};
     use crate::db::migrate;
     use crate::models::NoteDraft;
     use rusqlite::Connection;
@@ -120,6 +169,7 @@ mod tests {
             content: " 保持简单 ".into(),
             color: "#4F55DA".into(),
             pinned: true,
+            icon: "cool".into(),
         }
     }
 
@@ -128,8 +178,36 @@ mod tests {
         let valid = validate_and_normalize(draft()).unwrap();
         assert_eq!(valid.title, "产品原则");
         assert_eq!(valid.content, " 保持简单 ");
-        assert_eq!(validate_and_normalize(NoteDraft { title: "  ".into(), ..draft() }).unwrap_err().field.as_deref(), Some("title"));
-        assert_eq!(validate_and_normalize(NoteDraft { color: "#GGGGGG".into(), ..draft() }).unwrap_err().field.as_deref(), Some("color"));
+        assert_eq!(
+            validate_and_normalize(NoteDraft {
+                title: "  ".into(),
+                ..draft()
+            })
+            .unwrap_err()
+            .field
+            .as_deref(),
+            Some("title")
+        );
+        assert_eq!(
+            validate_and_normalize(NoteDraft {
+                color: "#GGGGGG".into(),
+                ..draft()
+            })
+            .unwrap_err()
+            .field
+            .as_deref(),
+            Some("color")
+        );
+        assert_eq!(
+            validate_and_normalize(NoteDraft {
+                icon: "???".into(),
+                ..draft()
+            })
+            .unwrap_err()
+            .field
+            .as_deref(),
+            Some("icon")
+        );
     }
 
     #[test]
@@ -137,29 +215,58 @@ mod tests {
         let mut connection = database();
         let created = create(&mut connection, draft()).unwrap();
         assert_eq!(created.title, "产品原则");
+        assert!((0..i64::from(NOTE_STYLE_VARIANT_COUNT)).contains(&created.style_variant));
+        assert_eq!(created.icon, "cool");
         assert!(uuid::Uuid::parse_str(&created.id).is_ok());
-        let updated = update(&mut connection, &created.id, NoteDraft {
-            title: "新原则".into(), pinned: false, ..draft()
-        }).unwrap();
+        let updated = update(
+            &mut connection,
+            &created.id,
+            NoteDraft {
+                title: "新原则".into(),
+                pinned: false,
+                icon: "heart".into(),
+                ..draft()
+            },
+        )
+        .unwrap();
         assert_eq!(updated.title, "新原则");
         assert_eq!(updated.created_at, created.created_at);
+        assert_eq!(updated.style_variant, created.style_variant);
+        assert_eq!(updated.icon, "heart");
         assert!(!updated.pinned);
         delete(&mut connection, &created.id).unwrap();
         assert!(list(&connection).unwrap().is_empty());
-        assert_eq!(update(&mut connection, "missing", draft()).unwrap_err().code, "not_found");
-        assert_eq!(delete(&mut connection, "missing").unwrap_err().code, "not_found");
+        assert_eq!(
+            update(&mut connection, "missing", draft())
+                .unwrap_err()
+                .code,
+            "not_found"
+        );
+        assert_eq!(
+            delete(&mut connection, "missing").unwrap_err().code,
+            "not_found"
+        );
     }
 
     #[test]
     fn list_orders_pinned_then_updated_descending_and_id() {
         let connection = database();
-        for (id, pinned, updated) in [("old", 0, "2026-07-20T00:00:00Z"), ("b", 1, "2026-07-21T00:00:00Z"), ("a", 1, "2026-07-21T00:00:00Z"), ("new", 0, "2026-07-22T00:00:00Z")] {
+        for (id, pinned, updated) in [
+            ("old", 0, "2026-07-20T00:00:00Z"),
+            ("b", 1, "2026-07-21T00:00:00Z"),
+            ("a", 1, "2026-07-21T00:00:00Z"),
+            ("new", 0, "2026-07-22T00:00:00Z"),
+        ] {
             connection.execute(
-                "INSERT INTO notes(id,title,content,color,pinned,created_at,updated_at) VALUES (?1,?1,'','yellow',?2,?3,?3)",
+                "INSERT INTO notes(id,title,content,color,pinned,style_variant,icon,created_at,updated_at) VALUES (?1,?1,'','#E8C444',?2,0,'',?3,?3)",
                 rusqlite::params![id, pinned, updated],
             ).unwrap();
         }
-        let ids: Vec<String> = list(&connection).unwrap().into_iter().map(|note| note.id).collect();
+        let ids: Vec<String> = list(&connection)
+            .unwrap()
+            .into_iter()
+            .map(|note| note.id)
+            .collect();
         assert_eq!(ids, vec!["a", "b", "new", "old"]);
     }
 }

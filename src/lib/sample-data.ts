@@ -84,6 +84,7 @@ export const sampleTasks: MatrixTask[] = [
     completed: false,
     linkedEventId: 'event-2',
     note: '',
+    tags: [{ id: 'tag-eng', name: 'eng', color: '#F06445' }],
     createdAt: '2026-07-23T09:00:00Z',
     updatedAt: '2026-07-23T09:00:00Z'
   },
@@ -96,6 +97,7 @@ export const sampleTasks: MatrixTask[] = [
     completed: false,
     linkedEventId: null,
     note: '',
+    tags: [{ id: 'tag-design', name: 'design', color: '#4F55DA' }],
     createdAt: '2026-07-23T09:00:00Z',
     updatedAt: '2026-07-23T09:00:00Z'
   },
@@ -108,6 +110,7 @@ export const sampleTasks: MatrixTask[] = [
     completed: false,
     linkedEventId: null,
     note: '',
+    tags: [{ id: 'tag-eng', name: 'eng', color: '#F06445' }],
     createdAt: '2026-07-23T09:00:00Z',
     updatedAt: '2026-07-23T09:00:00Z'
   },
@@ -120,6 +123,7 @@ export const sampleTasks: MatrixTask[] = [
     completed: false,
     linkedEventId: null,
     note: '',
+    tags: [],
     createdAt: '2026-07-23T09:00:00Z',
     updatedAt: '2026-07-23T09:00:00Z'
   }
@@ -130,8 +134,10 @@ export const sampleNotes: Note[] = [
     id: 'note-1',
     title: '产品原则',
     content: '只有一个主界面，所有操作通过弹窗完成。',
-    color: 'yellow',
+    color: '#E8C444',
     pinned: true,
+    styleVariant: 2,
+    icon: 'star',
     createdAt: '2026-07-23T09:00:00',
     updatedAt: '2026-07-23T09:00:00'
   },
@@ -139,8 +145,10 @@ export const sampleNotes: Note[] = [
     id: 'note-2',
     title: '待办记录',
     content: '买咖啡豆；晚上看 FullCalendar basic 示例。',
-    color: 'yellow',
+    color: '#E8C444',
     pinned: false,
+    styleVariant: 7,
+    icon: '',
     createdAt: '2026-07-23T09:10:00',
     updatedAt: '2026-07-23T09:10:00'
   }

@@ -33,7 +33,7 @@ describe('MatrixWidget', () => {
     expect(screen.getByText('重要不紧急')).toBeInTheDocument();
     expect(screen.getByText('不重要但紧急')).toBeInTheDocument();
     expect(screen.getByText('不重要不紧急')).toBeInTheDocument();
-    expect(screen.getAllByText('1')).toHaveLength(4);
+    expect(screen.getAllByText('1/1')).toHaveLength(4);
     expect(screen.getByRole('button', { name: '编辑任务：发布 v0.1' })).toBeInTheDocument();
     expect(screen.getAllByTestId('quadrant-scroll')).toHaveLength(4);
   });

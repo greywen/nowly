@@ -20,22 +20,25 @@ import type {
   KanbanTagDraft
 } from './kanban-model';
 
-type FieldTab = 'priorities' | 'tags' | 'collaborators';
+type FieldTab = 'linking' | 'priorities' | 'tags' | 'collaborators';
 
 type KanbanFieldManagerDialogProps = {
   snapshot: KanbanSnapshot;
+  linkingEnabled?: boolean;
+  onSetLinking?: (enabled: boolean) => Promise<unknown>;
+  fixedPrioritiesReadOnly?: boolean;
   restoreFocusRef?: RefObject<HTMLElement | null>;
   onClose(): void;
-  createPriority(draft: KanbanPriorityDraft): Promise<KanbanPriority>;
-  updatePriority(id: string, draft: KanbanPriorityDraft): Promise<KanbanPriority>;
-  deletePriority(id: string): Promise<void>;
-  reorderPriorities(orderedIds: string[]): Promise<KanbanPriority[]>;
-  createTag(draft: KanbanTagDraft): Promise<KanbanTag>;
-  updateTag(id: string, draft: KanbanTagDraft): Promise<KanbanTag>;
-  deleteTag(id: string): Promise<void>;
-  createCollaborator(draft: KanbanCollaboratorDraft): Promise<KanbanCollaborator>;
-  updateCollaborator(id: string, draft: KanbanCollaboratorDraft): Promise<KanbanCollaborator>;
-  deleteCollaborator(id: string): Promise<void>;
+  createPriority(draft: KanbanPriorityDraft): Promise<unknown>;
+  updatePriority(id: string, draft: KanbanPriorityDraft): Promise<unknown>;
+  deletePriority(id: string): Promise<unknown>;
+  reorderPriorities(orderedIds: string[]): Promise<unknown>;
+  createTag(draft: KanbanTagDraft): Promise<unknown>;
+  updateTag(id: string, draft: KanbanTagDraft): Promise<unknown>;
+  deleteTag(id: string): Promise<unknown>;
+  createCollaborator(draft: KanbanCollaboratorDraft): Promise<unknown>;
+  updateCollaborator(id: string, draft: KanbanCollaboratorDraft): Promise<unknown>;
+  deleteCollaborator(id: string): Promise<unknown>;
   recentColors?: HexColor[];
   onRememberCustomColor?: (color: HexColor) => Promise<void> | void;
 };
@@ -51,6 +54,9 @@ type PlainItem = { id: string; name: string };
 
 export function KanbanFieldManagerDialog({
   snapshot,
+  linkingEnabled,
+  onSetLinking,
+  fixedPrioritiesReadOnly = false,
   restoreFocusRef,
   onClose,
   createPriority,
@@ -67,15 +73,48 @@ export function KanbanFieldManagerDialog({
   onRememberCustomColor
 }: KanbanFieldManagerDialogProps) {
   const titleId = useId();
-  const [tab, setTab] = useState<FieldTab>('priorities');
+  const [tab, setTab] = useState<FieldTab>(onSetLinking ? 'linking' : 'priorities');
   const [name, setName] = useState('');
   const [color, setColor] = useState<KanbanColor>(DEFAULT_KANBAN_COLOR);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<{ id: string; name: string; usage: number } | null>(null);
+  const [confirmLinking, setConfirmLinking] = useState(false);
 
   const hasColor = tab !== 'collaborators';
+
+  async function changeLinking(enabled: boolean) {
+    if (!onSetLinking) return;
+    if (enabled && linkingEnabled === false) {
+      setConfirmLinking(true);
+      return;
+    }
+    setBusy(true);
+    setFormError('');
+    try {
+      await onSetLinking(enabled);
+    } catch (error) {
+      setFormError(errorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function enableLinking() {
+    if (!onSetLinking) return;
+    setBusy(true);
+    setFormError('');
+    try {
+      await onSetLinking(true);
+      setConfirmLinking(false);
+    } catch (error) {
+      setFormError(errorMessage(error));
+      setConfirmLinking(false);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   function resetForm() {
     setName('');
@@ -161,6 +200,7 @@ export function KanbanFieldManagerDialog({
   }
 
   const rows = useMemo(() => {
+    if (tab === 'linking') return [];
     if (tab === 'priorities') {
       return snapshot.priorities.map((item) => ({
         id: item.id,
@@ -186,12 +226,14 @@ export function KanbanFieldManagerDialog({
   }, [snapshot, tab]);
 
   const tabLabels: Record<FieldTab, string> = {
+    linking: t('taskSettings.linkingTab'),
     priorities: t('kanbanField.priorities'),
     tags: t('kanbanField.tags'),
     collaborators: t('kanbanField.collaborators')
   };
 
   const tabs: TabItem<FieldTab>[] = [
+    ...(onSetLinking ? [{ id: 'linking' as const, label: tabLabels.linking }] : []),
     { id: 'priorities', label: tabLabels.priorities, count: snapshot.priorities.length },
     { id: 'tags', label: tabLabels.tags, count: snapshot.tags.length },
     { id: 'collaborators', label: tabLabels.collaborators, count: snapshot.collaborators.length }
@@ -207,9 +249,9 @@ export function KanbanFieldManagerDialog({
   return (
     <>
       <Dialog
-        title={t('kanbanField.title')}
+        title={onSetLinking ? t('taskSettings.title') : t('kanbanField.title')}
         ariaLabelledBy={titleId}
-        isTopLayer={!confirmDelete}
+        isTopLayer={!confirmDelete && !confirmLinking}
         restoreFocusRef={restoreFocusRef}
         onRequestClose={busy ? () => undefined : onClose}
         className="kanban-field-dialog"
@@ -228,104 +270,101 @@ export function KanbanFieldManagerDialog({
             onChange={switchTab}
           />
           <TabPanel idPrefix="kanban-field" tabId={tab} active className="kanban-field__panel">
-            <form
-              className="kanban-field__form"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void submit();
-              }}
-            >
-              <div className="good-field">
-                <label htmlFor="kanban-field-name">{editingId ? t('kanbanField.edit', { label: tabLabels[tab] }) : t('kanbanField.add', { label: tabLabels[tab] })}</label>
-                <input
-                  id="kanban-field-name"
-                  className="good-input"
-                  autoComplete="off"
-                  value={name}
-                  disabled={busy}
-                  onChange={(event) => setName(event.target.value)}
-                />
-              </div>
-              {hasColor ? (
-                <ColorPicker legend={t('kanbanField.color')} name="kanban-field-color" value={color} presets={kanbanColorPresets()} recentColors={recentColors} disabled={busy} onChange={setColor} onRememberColor={onRememberCustomColor} />
-              ) : null}
-              {formError ? <div role="alert" className="dialog-error">{formError}</div> : null}
-              <div className="kanban-field__form-actions">
-                {editingId ? (
-                  <button type="button" className="good-button" disabled={busy} onClick={resetForm}>
-                    {t('kanbanField.cancelEdit')}
-                  </button>
+            {tab === 'linking' ? (
+              <div className="task-linking-settings">
+                <div>
+                  <strong>{t('taskSettings.linkingTitle')}</strong>
+                  <p>{t('taskSettings.linkingDescription')}</p>
+                </div>
+                <label className="form-check form-check-custom form-check-solid">
+                  <input
+                    className="form-check-input"
+                    type="checkbox"
+                    checked={linkingEnabled !== false}
+                    disabled={busy}
+                    onChange={(event) => void changeLinking(event.target.checked)}
+                  />
+                  <span className="form-check-label">{t('taskSettings.linkingToggle')}</span>
+                </label>
+                {linkingEnabled === false ? (
+                  <p className="task-linking-settings__status">{t('taskSettings.manualModeHint')}</p>
                 ) : null}
-                <button type="submit" className="good-button good-button--primary" disabled={busy}>
-                  {editingId ? t('kanbanField.saveEdit') : t('kanbanField.addAction', { label: tabLabels[tab] })}
-                </button>
+                {formError ? <div role="alert" className="dialog-error">{formError}</div> : null}
               </div>
-            </form>
+            ) : fixedPrioritiesReadOnly && tab === 'priorities' ? (
+              <p className="kanban-field__readonly-note">{t('kanbanField.fixedPrioritiesNote')}</p>
+            ) : (
+              <form
+                className="kanban-field__form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void submit();
+                }}
+              >
+                <div className="good-field">
+                  <label htmlFor="kanban-field-name">{editingId ? t('kanbanField.edit', { label: tabLabels[tab] }) : t('kanbanField.add', { label: tabLabels[tab] })}</label>
+                  <input
+                    id="kanban-field-name"
+                    className="good-input"
+                    autoComplete="off"
+                    value={name}
+                    disabled={busy}
+                    onChange={(event) => setName(event.target.value)}
+                  />
+                </div>
+                {hasColor ? (
+                  <ColorPicker legend={t('kanbanField.color')} name="kanban-field-color" value={color} presets={kanbanColorPresets()} recentColors={recentColors} disabled={busy} onChange={setColor} onRememberColor={onRememberCustomColor} />
+                ) : null}
+                {formError ? <div role="alert" className="dialog-error">{formError}</div> : null}
+                <div className="kanban-field__form-actions">
+                  {editingId ? (
+                    <button type="button" className="good-button" disabled={busy} onClick={resetForm}>
+                      {t('kanbanField.cancelEdit')}
+                    </button>
+                  ) : null}
+                  <button type="submit" className="good-button good-button--primary" disabled={busy}>
+                    {editingId ? t('kanbanField.saveEdit') : t('kanbanField.addAction', { label: tabLabels[tab] })}
+                  </button>
+                </div>
+              </form>
+            )}
 
-            <ul className="kanban-field__list" aria-label={t('kanbanField.list', { label: tabLabels[tab] })}>
-              {rows.length === 0 ? (
-                <li className="kanban-field__empty">{t('kanbanField.empty', { label: tabLabels[tab] })}</li>
-              ) : (
-                rows.map((row, index) => (
-                  <li key={row.id} className="kanban-field__row">
-                    {row.color ? (
-                      <span
-                        className="kanban-badge"
-                        style={colorStyle(row.color)}
-                        aria-hidden="true"
-                      >
-                        {row.name}
-                      </span>
-                    ) : (
-                      <span className="kanban-field__name">{row.name}</span>
-                    )}
-                    <span className="kanban-field__usage">{t('kanbanField.usage', { count: row.usage })}</span>
-                    <span className="kanban-field__tools">
-                      {tab === 'priorities' ? (
-                        <>
-                          <button
-                            type="button"
-                            className="good-icon-button"
-                            aria-label={t('kanbanField.moveUp', { name: row.name })}
-                            disabled={busy || index === 0}
-                            onClick={() => void move(row.id, -1)}
-                          >
-                            ↑
+            {tab !== 'linking' ? (
+              <ul className="kanban-field__list" aria-label={t('kanbanField.list', { label: tabLabels[tab] })}>
+                {rows.length === 0 ? (
+                  <li className="kanban-field__empty">{t('kanbanField.empty', { label: tabLabels[tab] })}</li>
+                ) : (
+                  rows.map((row, index) => (
+                    <li key={row.id} className="kanban-field__row">
+                      {row.color ? (
+                        <span className="kanban-badge" style={colorStyle(row.color)} aria-hidden="true">
+                          {row.name}
+                        </span>
+                      ) : (
+                        <span className="kanban-field__name">{row.name}</span>
+                      )}
+                      <span className="kanban-field__usage">{t('kanbanField.usage', { count: row.usage })}</span>
+                      {fixedPrioritiesReadOnly && tab === 'priorities' ? null : (
+                        <span className="kanban-field__tools">
+                          {tab === 'priorities' ? (
+                            <>
+                              <button type="button" className="good-icon-button" aria-label={t('kanbanField.moveUp', { name: row.name })} disabled={busy || index === 0} onClick={() => void move(row.id, -1)}>↑</button>
+                              <button type="button" className="good-icon-button" aria-label={t('kanbanField.moveDown', { name: row.name })} disabled={busy || index === rows.length - 1} onClick={() => void move(row.id, 1)}>↓</button>
+                            </>
+                          ) : null}
+                          <button type="button" className="good-icon-button" aria-label={t('kanbanField.editItem', { name: row.name })} disabled={busy} onClick={() => beginEdit(row.color ? { id: row.id, name: row.name, color: row.color } : { id: row.id, name: row.name })}>
+                            <Pencil aria-hidden="true" />
                           </button>
-                          <button
-                            type="button"
-                            className="good-icon-button"
-                            aria-label={t('kanbanField.moveDown', { name: row.name })}
-                            disabled={busy || index === rows.length - 1}
-                            onClick={() => void move(row.id, 1)}
-                          >
-                            ↓
+                          <button type="button" className="good-icon-button" aria-label={t('kanbanField.deleteItem', { name: row.name })} disabled={busy} onClick={() => setConfirmDelete({ id: row.id, name: row.name, usage: row.usage })}>
+                            <Trash2 aria-hidden="true" />
                           </button>
-                        </>
-                      ) : null}
-                      <button
-                        type="button"
-                        className="good-icon-button"
-                        aria-label={t('kanbanField.editItem', { name: row.name })}
-                        disabled={busy}
-                        onClick={() => beginEdit(row.color ? { id: row.id, name: row.name, color: row.color } : { id: row.id, name: row.name })}
-                      >
-                        <Pencil aria-hidden="true" />
-                      </button>
-                      <button
-                        type="button"
-                        className="good-icon-button"
-                        aria-label={t('kanbanField.deleteItem', { name: row.name })}
-                        disabled={busy}
-                        onClick={() => setConfirmDelete({ id: row.id, name: row.name, usage: row.usage })}
-                      >
-                        <Trash2 aria-hidden="true" />
-                      </button>
-                    </span>
-                  </li>
-                ))
-              )}
-            </ul>
+                        </span>
+                      )}
+                    </li>
+                  ))
+                )}
+              </ul>
+            ) : null}
           </TabPanel>
         </div>
       </Dialog>
@@ -340,6 +379,17 @@ export function KanbanFieldManagerDialog({
           busy={busy}
           onCancel={() => setConfirmDelete(null)}
           onConfirm={() => void confirmRemoval()}
+        />
+      ) : null}
+      {confirmLinking ? (
+        <ConfirmDialog
+          title={t('taskSettings.enableTitle')}
+          description={t('taskSettings.enableDescription')}
+          confirmLabel={t('taskSettings.enableConfirm')}
+          busyLabel={t('common.saving')}
+          busy={busy}
+          onCancel={() => setConfirmLinking(false)}
+          onConfirm={() => void enableLinking()}
         />
       ) : null}
     </>
