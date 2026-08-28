@@ -5,7 +5,7 @@ import type {
   EventRange,
   EventTarget
 } from '../calendar/calendar-model';
-import type { CalendarSubscription, ExternalEvent, SubscriptionDraft } from '../calendar/subscription-model';
+import type { CalendarSubscription, ExternalEvent, OAuthAccount, RemoteCalendar, SubscriptionDraft } from '../calendar/subscription-model';
 import type {
   KanbanCard,
   KanbanCardDraft,
@@ -165,6 +165,24 @@ export type NowlyRepository = {
   updateCalendarSubscription: (id: string, draft: SubscriptionDraft) => Promise<CalendarSubscription>;
   deleteCalendarSubscription: (id: string) => Promise<void>;
   refreshCalendarSubscription: (id: string) => Promise<void>;
+  // OAuth 日历（Google / Outlook·Teams）。
+  startOAuthLogin: (provider: 'google' | 'microsoft') => Promise<OAuthAccount>;
+  listOAuthAccounts: () => Promise<OAuthAccount[]>;
+  disconnectOAuthAccount: (id: string) => Promise<void>;
+  listRemoteCalendars: (accountId: string) => Promise<RemoteCalendar[]>;
+  subscribeRemoteCalendar: (
+    accountId: string,
+    remoteCalendarId: string,
+    name: string,
+    color: string,
+    refreshIntervalMinutes: number
+  ) => Promise<CalendarSubscription>;
+  updateSubscriptionDisplay: (
+    id: string,
+    name: string,
+    color: string,
+    refreshIntervalMinutes: number
+  ) => Promise<CalendarSubscription>;
   listExternalEventsInRange: (range: EventRange) => Promise<ExternalEvent[]>;
   listTasks(): Promise<MatrixTask[]>;
   createTask(draft: TaskDraft): Promise<MatrixTask>;

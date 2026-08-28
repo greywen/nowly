@@ -9,8 +9,9 @@ use rusqlite::{params, Connection, Row};
 use tauri::State;
 use uuid::Uuid;
 
-/// 订阅源数量上限。
-pub const MAX_SUBSCRIPTIONS: i64 = 3;
+/// 订阅源数量上限。放宽到一个宽松值，避免失控但不再限制到 3 个，
+/// 以支持多个 OAuth 账户下的多个日历同时订阅。
+pub const MAX_SUBSCRIPTIONS: i64 = 50;
 
 /// 把订阅 URL 规范化：`webcal://` 前缀换成 `https://`，其余原样。
 /// 返回规范化后的串；非 https（且非 webcal）一律拒绝。
@@ -49,7 +50,8 @@ fn validate_draft(draft: &SubscriptionDraft) -> Result<String, CommandError> {
 }
 
 const SUBSCRIPTION_COLUMNS: &str = "id,name,url,color,refresh_interval_minutes,\
-    last_synced_at,last_status,last_error,created_at,updated_at,last_attempted_at";
+    last_synced_at,last_status,last_error,created_at,updated_at,last_attempted_at,\
+    provider,account_id,remote_calendar_id";
 
 fn read_subscription(row: &Row<'_>) -> rusqlite::Result<CalendarSubscription> {
     Ok(CalendarSubscription {
@@ -64,6 +66,9 @@ fn read_subscription(row: &Row<'_>) -> rusqlite::Result<CalendarSubscription> {
         created_at: row.get(8)?,
         updated_at: row.get(9)?,
         last_attempted_at: row.get(10)?,
+        provider: row.get(11)?,
+        account_id: row.get(12)?,
+        remote_calendar_id: row.get(13)?,
     })
 }
 
@@ -87,7 +92,10 @@ pub fn list(connection: &Connection) -> Result<Vec<CalendarSubscription>, Comman
     Ok(out)
 }
 
-fn fetch_one(connection: &Connection, id: &str) -> Result<CalendarSubscription, CommandError> {
+pub fn fetch_one(
+    connection: &Connection,
+    id: &str,
+) -> Result<CalendarSubscription, CommandError> {
     let sql = format!("SELECT {SUBSCRIPTION_COLUMNS} FROM calendar_subscriptions WHERE id = ?1");
     connection
         .query_row(&sql, params![id], read_subscription)
@@ -109,7 +117,10 @@ pub fn create(
         })
         .map_err(CommandError::database)?;
     if count >= MAX_SUBSCRIPTIONS {
-        return Err(CommandError::validation("url", "最多只能添加 3 个订阅源。"));
+        return Err(CommandError::validation(
+            "url",
+            "订阅源数量已达上限。",
+        ));
     }
     let id = Uuid::new_v4().to_string();
     let now = now_utc();
@@ -124,6 +135,80 @@ pub fn create(
                 url,
                 draft.color,
                 draft.refresh_interval_minutes,
+                now
+            ],
+        )
+        .map_err(CommandError::database)?;
+    fetch_one(connection, &id)
+}
+
+/// 新建一个 OAuth 日历订阅（google/microsoft）。与 ICS 的 `create` 区别：
+/// 不校验 URL（存空串），落 provider/account_id/remote_calendar_id，供同步分流。
+/// 同一账户下同一远端日历不重复订阅。返回新建记录。
+pub fn create_oauth(
+    connection: &mut Connection,
+    provider: &str,
+    account_id: &str,
+    remote_calendar_id: &str,
+    name: &str,
+    color: &str,
+    refresh_interval_minutes: i64,
+) -> Result<CalendarSubscription, CommandError> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err(CommandError::validation("name", "日历名称不能为空。"));
+    }
+    if !(1..=30).contains(&refresh_interval_minutes) {
+        return Err(CommandError::validation(
+            "refreshIntervalMinutes",
+            "刷新间隔需在 1 到 30 分钟之间。",
+        ));
+    }
+    if provider != "google" && provider != "microsoft" {
+        return Err(CommandError::validation("provider", "不支持的日历来源。"));
+    }
+    // 同账户 + 同远端日历不重复订阅。
+    let existing: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM calendar_subscriptions
+                WHERE account_id=?1 AND remote_calendar_id=?2",
+            params![account_id, remote_calendar_id],
+            |row| row.get(0),
+        )
+        .map_err(CommandError::database)?;
+    if existing > 0 {
+        return Err(CommandError::validation(
+            "remoteCalendarId",
+            "该日历已订阅。",
+        ));
+    }
+    let count: i64 = connection
+        .query_row("SELECT COUNT(*) FROM calendar_subscriptions", [], |row| {
+            row.get(0)
+        })
+        .map_err(CommandError::database)?;
+    if count >= MAX_SUBSCRIPTIONS {
+        return Err(CommandError::validation(
+            "remoteCalendarId",
+            "订阅源数量已达上限。",
+        ));
+    }
+    let id = Uuid::new_v4().to_string();
+    let now = now_utc();
+    connection
+        .execute(
+            "INSERT INTO calendar_subscriptions
+                (id,name,url,color,refresh_interval_minutes,
+                 provider,account_id,remote_calendar_id,created_at,updated_at)
+             VALUES (?1,?2,'',?3,?4,?5,?6,?7,?8,?8)",
+            params![
+                id,
+                name,
+                color,
+                refresh_interval_minutes,
+                provider,
+                account_id,
+                remote_calendar_id,
                 now
             ],
         )
@@ -263,6 +348,110 @@ pub fn delete_calendar_subscription(db: State<'_, AppDb>, id: String) -> Result<
     delete(&mut connection, &id)
 }
 
+/// 列出某 OAuth 账户下可订阅的远端日历，供用户勾选。
+/// 先确保 access_token 有效（必要时刷新），再调 API 拉日历清单（锁外）。
+#[tauri::command]
+pub fn list_remote_calendars(
+    db: State<'_, AppDb>,
+    account_id: String,
+) -> Result<Vec<crate::models::RemoteCalendar>, CommandError> {
+    // 短锁读 provider。
+    let provider: String = {
+        let connection = db.0.lock().map_err(CommandError::database)?;
+        connection
+            .query_row(
+                "SELECT provider FROM oauth_accounts WHERE id=?1",
+                params![account_id],
+                |row| row.get(0),
+            )
+            .map_err(|error| match error {
+                rusqlite::Error::QueryReturnedNoRows => {
+                    CommandError::validation("accountId", "账户不存在。")
+                }
+                other => CommandError::database(other),
+            })?
+    };
+    // 锁外刷新 token + 拉清单。
+    let access_token = crate::oauth::ensure_valid_access_token(db.inner(), &account_id)?;
+    crate::calendar_api::list_calendars(&provider, &access_token)
+}
+
+/// 把某个远端日历添加为订阅，并立刻同步一次使事件即时可见。
+#[tauri::command]
+pub fn subscribe_remote_calendar(
+    db: State<'_, AppDb>,
+    account_id: String,
+    remote_calendar_id: String,
+    name: String,
+    color: String,
+    refresh_interval_minutes: i64,
+) -> Result<CalendarSubscription, CommandError> {
+    // 短锁读 provider 并创建订阅。
+    let created = {
+        let mut connection = db.0.lock().map_err(CommandError::database)?;
+        let provider: String = connection
+            .query_row(
+                "SELECT provider FROM oauth_accounts WHERE id=?1",
+                params![account_id],
+                |row| row.get(0),
+            )
+            .map_err(|error| match error {
+                rusqlite::Error::QueryReturnedNoRows => {
+                    CommandError::validation("accountId", "账户不存在。")
+                }
+                other => CommandError::database(other),
+            })?;
+        create_oauth(
+            &mut connection,
+            &provider,
+            &account_id,
+            &remote_calendar_id,
+            &name,
+            &color,
+            refresh_interval_minutes,
+        )?
+    };
+    // 锁外首次同步；失败不阻塞订阅创建（状态字段会记为 failed，可稍后重试）。
+    let _ = crate::subscription_sync::sync_one_db(db.inner(), &created);
+    // 回读最新状态。
+    let connection = db.0.lock().map_err(CommandError::database)?;
+    fetch_one(&connection, &created.id)
+}
+
+/// 编辑一个订阅的展示属性（名称/颜色/间隔）。ICS 与 OAuth 通用，不改 URL/来源。
+#[tauri::command]
+pub fn update_subscription_display(
+    db: State<'_, AppDb>,
+    id: String,
+    name: String,
+    color: String,
+    refresh_interval_minutes: i64,
+) -> Result<CalendarSubscription, CommandError> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err(CommandError::validation("name", "名称不能为空。"));
+    }
+    if !(1..=30).contains(&refresh_interval_minutes) {
+        return Err(CommandError::validation(
+            "refreshIntervalMinutes",
+            "刷新间隔需在 1 到 30 分钟之间。",
+        ));
+    }
+    let connection = db.0.lock().map_err(CommandError::database)?;
+    let affected = connection
+        .execute(
+            "UPDATE calendar_subscriptions
+                SET name=?2,color=?3,refresh_interval_minutes=?4,updated_at=?5
+             WHERE id=?1",
+            params![id, name, color, refresh_interval_minutes, now_utc()],
+        )
+        .map_err(CommandError::database)?;
+    if affected == 0 {
+        return Err(CommandError::validation("id", "订阅不存在。"));
+    }
+    fetch_one(&connection, &id)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -353,16 +542,16 @@ mod tests {
     }
 
     #[test]
-    fn create_enforces_three_source_cap() {
+    fn create_enforces_source_cap() {
         let mut connection = memory_db();
-        for i in 0..3 {
+        for i in 0..MAX_SUBSCRIPTIONS {
             let mut d = draft();
             d.name = format!("源{i}");
             create(&mut connection, d).unwrap();
         }
         let err = create(&mut connection, draft()).unwrap_err();
         assert_eq!(err.field.as_deref(), Some("url"));
-        assert_eq!(list(&connection).unwrap().len(), 3);
+        assert_eq!(list(&connection).unwrap().len() as i64, MAX_SUBSCRIPTIONS);
     }
 
     #[test]

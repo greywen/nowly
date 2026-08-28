@@ -2,13 +2,20 @@ import type { HexColor } from '../lib/color';
 
 export type SubscriptionStatus = 'ok' | 'failed';
 
+// 'ics'：直连密钥地址；'google'/'microsoft'：OAuth API 接入。
+export type SubscriptionProvider = 'ics' | 'google' | 'microsoft';
+
 export type CalendarSubscription = {
   id: string;
   name: string;
   url: string;
   color: HexColor;
   refreshIntervalMinutes: number;
+  provider: SubscriptionProvider;
+  accountId: string | null;
+  remoteCalendarId: string | null;
   lastSyncedAt: string | null;
+  lastAttemptedAt: string | null;
   lastStatus: SubscriptionStatus | null;
   lastError: string | null;
   createdAt: string;
@@ -20,6 +27,22 @@ export type SubscriptionDraft = {
   url: string;
   color: HexColor;
   refreshIntervalMinutes: number;
+};
+
+// 一个已连接的 OAuth 账户（一次登录 = 一个账户，可暴露多个日历）。
+export type OAuthAccount = {
+  id: string;
+  provider: 'google' | 'microsoft';
+  accountLabel: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+// OAuth 授权后可勾选的远端日历。
+export type RemoteCalendar = {
+  id: string;
+  name: string;
+  color: string | null;
 };
 
 import type { CalendarEvent, EventCategory } from './calendar-model';

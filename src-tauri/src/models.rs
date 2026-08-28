@@ -168,6 +168,16 @@ pub struct CalendarSubscription {
     pub url: String,
     pub color: String,
     pub refresh_interval_minutes: i64,
+    /// 订阅来源：'ics'（直连密钥地址）/ 'google' / 'microsoft'（OAuth API）。
+    /// 迁移前的旧订阅默认 'ics'。
+    #[serde(default = "default_provider")]
+    pub provider: String,
+    /// OAuth 源关联的账户 id；ICS 源为 None。
+    #[serde(default)]
+    pub account_id: Option<String>,
+    /// OAuth 源对应的远端日历 id；ICS 源为 None。
+    #[serde(default)]
+    pub remote_calendar_id: Option<String>,
     /// 上次成功同步的时间戳（RFC3339 UTC）；从未同步为 None。
     pub last_synced_at: Option<String>,
     /// 上次尝试同步的时间戳（RFC3339 UTC），无论成败都更新；从未尝试为 None。
@@ -188,6 +198,34 @@ pub struct SubscriptionDraft {
     pub url: String,
     pub color: String,
     pub refresh_interval_minutes: i64,
+}
+
+/// 迁移前的旧订阅、以及前端未显式给出 provider 时的默认来源。
+fn default_provider() -> String {
+    "ics".to_owned()
+}
+
+/// 一个 OAuth 日历账户（一次登录 = 一个账户，可暴露多个日历）。
+/// token 密文（DPAPI 加密）永不序列化给前端，仅后端持有。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OAuthAccount {
+    pub id: String,
+    pub provider: String,
+    /// 面向用户的账户标识（邮箱或显示名）。
+    pub account_label: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// OAuth 授权后暴露给用户勾选的一个远端日历。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteCalendar {
+    pub id: String,
+    pub name: String,
+    /// 远端给出的建议颜色（hex），可能为 None。
+    pub color: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -598,6 +636,9 @@ mod tests {
             url: "https://example.com/a.ics".into(),
             color: "#4FC9DA".into(),
             refresh_interval_minutes: 15,
+            provider: "ics".into(),
+            account_id: None,
+            remote_calendar_id: None,
             last_synced_at: None,
             last_attempted_at: None,
             last_status: None,
@@ -608,6 +649,9 @@ mod tests {
         let value = serde_json::to_value(&sub).expect("serializes");
         let object = value.as_object().unwrap();
         assert_eq!(object.get("refreshIntervalMinutes"), Some(&json!(15)));
+        assert_eq!(object.get("provider"), Some(&json!("ics")));
+        assert_eq!(object.get("accountId"), Some(&Value::Null));
+        assert_eq!(object.get("remoteCalendarId"), Some(&Value::Null));
         assert_eq!(object.get("lastSyncedAt"), Some(&Value::Null));
         assert_eq!(object.get("lastAttemptedAt"), Some(&Value::Null));
         assert_eq!(object.get("lastStatus"), Some(&Value::Null));

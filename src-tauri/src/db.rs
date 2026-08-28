@@ -25,6 +25,7 @@ const MIGRATIONS: &[(i64, Migration)] = &[
     (16, migration_16_calendar_subscriptions),
     (17, migration_17_notes_styles_and_icons),
     (18, migration_18_unified_tasks),
+    (19, migration_19_oauth_calendar_sources),
 ];
 
 pub fn open_database(path: PathBuf) -> Result<Connection> {
@@ -1179,6 +1180,38 @@ fn migration_18_unified_tasks(transaction: &Transaction<'_>) -> Result<()> {
     Ok(())
 }
 
+// Add OAuth calendar sources (Google / Microsoft) alongside the existing ICS
+// subscriptions. An `oauth_accounts` row is one signed-in account (holding the
+// DPAPI-encrypted tokens); a `calendar_subscriptions` row gains `provider`,
+// `account_id`, and `remote_calendar_id` so an OAuth subscription points at one
+// remote calendar under an account. ICS rows keep provider='ics' with a NULL
+// account. `url` becomes nullable because OAuth sources have no ICS URL.
+fn migration_19_oauth_calendar_sources(transaction: &Transaction<'_>) -> Result<()> {
+    transaction.execute_batch(
+        "CREATE TABLE oauth_accounts (
+            id TEXT PRIMARY KEY,
+            provider TEXT NOT NULL CHECK (provider IN ('google','microsoft')),
+            account_label TEXT NOT NULL,
+            access_token_enc BLOB,
+            refresh_token_enc BLOB,
+            token_expires_at TEXT,
+            scopes TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+         );
+
+         ALTER TABLE calendar_subscriptions
+            ADD COLUMN provider TEXT NOT NULL DEFAULT 'ics'
+            CHECK (provider IN ('ics','google','microsoft'));
+         ALTER TABLE calendar_subscriptions ADD COLUMN account_id TEXT
+            REFERENCES oauth_accounts(id) ON DELETE CASCADE;
+         ALTER TABLE calendar_subscriptions ADD COLUMN remote_calendar_id TEXT;
+
+         CREATE INDEX idx_calendar_subscriptions_account
+            ON calendar_subscriptions(account_id) WHERE account_id IS NOT NULL;",
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::{migrate, open_database, MIGRATIONS};
@@ -1243,7 +1276,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             versions,
-            vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
+            vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
         );
 
         let event_fks: Vec<(String, String, String)> = connection
@@ -1335,7 +1368,7 @@ mod tests {
 
         assert_eq!(
             versions,
-            vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
+            vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
         );
         for table in [
             "events",
@@ -1624,7 +1657,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             versions,
-            vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
+            vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
         );
 
         // 新列存在。

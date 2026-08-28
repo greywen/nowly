@@ -24,6 +24,7 @@ const STORAGE_KEY = 'nowly:browser-backend';
 type Store = {
   events: Dict[];
   subscriptions: Dict[];
+  oauthAccounts: Dict[];
   externalEvents: Dict[];
   tasks: Dict[];
   notes: Dict[];
@@ -57,6 +58,7 @@ function emptyStore(): Store {
   return {
     events: [],
     subscriptions: [],
+    oauthAccounts: [],
     externalEvents: [],
     tasks: [],
     notes: [],
@@ -212,7 +214,11 @@ export function installBrowserTauriBackend() {
     create_calendar_subscription: (a) => {
       const sub = {
         id: id('sub'),
+        provider: 'ics',
+        accountId: null,
+        remoteCalendarId: null,
         lastSyncedAt: null,
+        lastAttemptedAt: null,
         lastStatus: null,
         lastError: null,
         createdAt: nowIso(),
@@ -237,6 +243,69 @@ export function installBrowserTauriBackend() {
       persist();
     },
     refresh_calendar_subscription: () => undefined,
+    // OAuth 日历（浏览器 mock：无真实授权，仅维持 UI 可用）。
+    start_oauth_login: (a) => {
+      const provider = a.provider as string;
+      const account = {
+        id: id('acct'),
+        provider,
+        accountLabel: `${provider}@example.com`,
+        createdAt: nowIso(),
+        updatedAt: nowIso()
+      };
+      store.oauthAccounts.push(account);
+      persist();
+      return account;
+    },
+    list_oauth_accounts: () => store.oauthAccounts,
+    disconnect_oauth_account: (a) => {
+      store.oauthAccounts = store.oauthAccounts.filter((acct) => acct.id !== a.id);
+      const removed = store.subscriptions.filter((s) => s.accountId === a.id).map((s) => s.id);
+      store.subscriptions = store.subscriptions.filter((s) => s.accountId !== a.id);
+      store.externalEvents = store.externalEvents.filter((e) => !removed.includes(e.subscriptionId as string));
+      persist();
+    },
+    list_remote_calendars: () => [
+      { id: 'primary', name: '主日历', color: '#4FC9DA' },
+      { id: 'work', name: '工作', color: '#F2A65A' }
+    ],
+    subscribe_remote_calendar: (a) => {
+      const sub = {
+        id: id('sub'),
+        name: a.name as string,
+        url: '',
+        color: a.color as string,
+        refreshIntervalMinutes: a.refreshIntervalMinutes as number,
+        provider: (store.oauthAccounts.find((acct) => acct.id === a.accountId)?.provider as string) ?? 'google',
+        accountId: a.accountId as string,
+        remoteCalendarId: a.remoteCalendarId as string,
+        lastSyncedAt: null,
+        lastAttemptedAt: null,
+        lastStatus: null,
+        lastError: null,
+        createdAt: nowIso(),
+        updatedAt: nowIso()
+      };
+      store.subscriptions.push(sub);
+      persist();
+      return sub;
+    },
+    update_subscription_display: (a) => {
+      let updated: Dict | undefined;
+      store.subscriptions = store.subscriptions.map((s) =>
+        s.id === a.id
+          ? (updated = {
+              ...s,
+              name: a.name as string,
+              color: a.color as string,
+              refreshIntervalMinutes: a.refreshIntervalMinutes as number,
+              updatedAt: nowIso()
+            })
+          : s
+      );
+      persist();
+      return updated;
+    },
     list_external_events_in_range: (a) =>
       store.externalEvents.filter((e) => inRange(e.startAt, a.range as never)),
 

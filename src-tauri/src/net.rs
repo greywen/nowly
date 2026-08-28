@@ -289,6 +289,79 @@ pub fn fetch_public_text(url: &str) -> Result<String, CommandError> {
     fetch_text(url, MAX_RELEASE_BYTES)
 }
 
+// The fixed set of hosts the OAuth calendar integration may talk to. Unlike the
+// module proxy (which enforces a per-module user allow-list), these API calls
+// carry an `Authorization: Bearer` token, so the destination must be pinned to
+// exactly the identity/token/calendar endpoints of Google and Microsoft — never
+// an arbitrary host a caller might pass. Any host outside this list is refused.
+const OAUTH_API_HOSTS: &[&str] = &[
+    "accounts.google.com",
+    "oauth2.googleapis.com",
+    "www.googleapis.com",
+    "login.microsoftonline.com",
+    "graph.microsoft.com",
+];
+
+const MAX_API_BYTES: usize = 2 * 1024 * 1024; // 2 MiB of calendar JSON
+
+fn assert_oauth_host(url: &reqwest::Url) -> Result<(), CommandError> {
+    let host = url
+        .host_str()
+        .ok_or_else(|| CommandError::validation("url", "请求地址缺少域名。"))?
+        .to_ascii_lowercase();
+    if OAUTH_API_HOSTS.iter().any(|allowed| *allowed == host) {
+        Ok(())
+    } else {
+        Err(CommandError::validation("url", "请求域名不在授权白名单内。"))
+    }
+}
+
+/// 向固定白名单内的 OAuth token 端点发一个 `application/x-www-form-urlencoded`
+/// 的 POST（换 code 或刷新 token）。复用 https-only / 拦内网 IP / 禁重定向 /
+/// 限大小 / 超时基线，host 被钉死在 `OAUTH_API_HOSTS`。返回响应体文本（可能是
+/// 成功或错误 JSON，由调用方按 HTTP 状态区分）。
+pub fn post_oauth_form(url: &str, form: &[(&str, &str)]) -> Result<String, CommandError> {
+    let parsed =
+        reqwest::Url::parse(url).map_err(|_| CommandError::validation("url", "地址无效。"))?;
+    if parsed.scheme() != "https" {
+        return Err(CommandError::validation("url", "仅允许 https 地址。"));
+    }
+    assert_oauth_host(&parsed)?;
+    let client = pinned_client(&parsed)?;
+    let response = client
+        .post(parsed)
+        .form(form)
+        .send()
+        .map_err(|error| {
+            CommandError::validation("url", &format!("请求失败：{}", short_reqwest_error(&error)))
+        })?;
+    // token 端点用非 2xx 表达业务错误（如 invalid_grant），把响应体带回给调用方
+    // 解析，而不是在这里吞掉。
+    read_capped(response, MAX_RELEASE_BYTES)
+}
+
+/// 向固定白名单内的 API 端点发一个带 `Authorization: Bearer` 的 GET（拉日历/事件）。
+/// 复用同一套安全基线，host 钉死在 `OAUTH_API_HOSTS`。返回 (status, body)。
+pub fn get_with_bearer(url: &str, access_token: &str) -> Result<(u16, String), CommandError> {
+    let parsed =
+        reqwest::Url::parse(url).map_err(|_| CommandError::validation("url", "地址无效。"))?;
+    if parsed.scheme() != "https" {
+        return Err(CommandError::validation("url", "仅允许 https 地址。"));
+    }
+    assert_oauth_host(&parsed)?;
+    let client = pinned_client(&parsed)?;
+    let response = client
+        .get(parsed)
+        .bearer_auth(access_token)
+        .send()
+        .map_err(|error| {
+            CommandError::validation("url", &format!("请求失败：{}", short_reqwest_error(&error)))
+        })?;
+    let status = response.status().as_u16();
+    let body = read_capped(response, MAX_API_BYTES)?;
+    Ok((status, body))
+}
+
 #[tauri::command]
 pub fn proxy_fetch(request: ProxyFetchRequest) -> Result<ProxyFetchResponse, CommandError> {
     run_proxy_fetch(request)

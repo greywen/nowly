@@ -1,6 +1,7 @@
 // Prevents an extra console window on Windows in release builds. DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod calendar_api;
 mod color;
 mod commands;
 mod db;
@@ -19,6 +20,8 @@ mod module_state;
 mod monitors;
 mod net;
 mod notes;
+mod oauth;
+mod oauth_config;
 mod recurrence;
 mod reminders;
 mod rrule_bridge;
@@ -28,6 +31,7 @@ mod subscription_sync;
 mod subscriptions;
 mod task_workspace;
 mod timezone;
+mod token_store;
 mod update;
 mod wallpaper;
 mod window_lifecycle;
@@ -505,6 +509,12 @@ fn main() {
             subscriptions::create_calendar_subscription,
             subscriptions::update_calendar_subscription,
             subscriptions::delete_calendar_subscription,
+            subscriptions::subscribe_remote_calendar,
+            subscriptions::update_subscription_display,
+            subscriptions::list_remote_calendars,
+            oauth::start_oauth_login,
+            oauth::list_oauth_accounts,
+            oauth::disconnect_oauth_account,
             subscription_sync::refresh_calendar_subscription,
             subscriptions::list_external_events_in_range,
             wallpaper::enter_wallpaper_mode,

@@ -11,6 +11,20 @@ export const tauriNowlyRepository: NowlyRepository = {
   updateCalendarSubscription: (id, draft) => invoke('update_calendar_subscription', { id, draft }),
   deleteCalendarSubscription: (id) => invoke('delete_calendar_subscription', { id }),
   refreshCalendarSubscription: (id) => invoke('refresh_calendar_subscription', { id }),
+  startOAuthLogin: (provider) => invoke('start_oauth_login', { provider }),
+  listOAuthAccounts: () => invoke('list_oauth_accounts'),
+  disconnectOAuthAccount: (id) => invoke('disconnect_oauth_account', { id }),
+  listRemoteCalendars: (accountId) => invoke('list_remote_calendars', { accountId }),
+  subscribeRemoteCalendar: (accountId, remoteCalendarId, name, color, refreshIntervalMinutes) =>
+    invoke('subscribe_remote_calendar', {
+      accountId,
+      remoteCalendarId,
+      name,
+      color,
+      refreshIntervalMinutes
+    }),
+  updateSubscriptionDisplay: (id, name, color, refreshIntervalMinutes) =>
+    invoke('update_subscription_display', { id, name, color, refreshIntervalMinutes }),
   listExternalEventsInRange: (range) => invoke('list_external_events_in_range', { range }),
   listTasks: () => invoke('list_tasks'),
   createTask: (draft) => invoke('create_task', { draft }),

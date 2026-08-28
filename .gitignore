@@ -20,6 +20,9 @@ node_modules/
 !.env.example
 *.local
 
+# OAuth client credentials (never commit; embedded/bundled at build time)
+/src-tauri/oauth-credentials.json
+
 # Logs
 *.log
 npm-debug.log*

@@ -164,17 +164,45 @@ where
     commit_sync(connection, subscription_id, now, outcome)
 }
 
+/// 锁外拉取一个源的事件实例：按 provider 分流。
+/// - ICS：https 拉文本 → 解析 → 客户端展开（前后各 6 个月窗口）。
+/// - google/microsoft：确保 access_token 有效 → 调 API（服务端已展开）→ 归一化。
+/// 失败向上传播，调用方据此保留旧数据并记失败状态。
+fn fetch_source(
+    db: &AppDb,
+    source: &crate::models::CalendarSubscription,
+    today: NaiveDate,
+) -> Result<Vec<ExternalInstance>, CommandError> {
+    match source.provider.as_str() {
+        "google" | "microsoft" => {
+            let account_id = source.account_id.as_deref().ok_or_else(|| {
+                CommandError::validation("accountId", "该订阅缺少关联账户。")
+            })?;
+            let remote_id = source.remote_calendar_id.as_deref().ok_or_else(|| {
+                CommandError::validation("remoteCalendarId", "该订阅缺少远端日历。")
+            })?;
+            let access_token = crate::oauth::ensure_valid_access_token(db, account_id)?;
+            crate::calendar_api::fetch_events(&source.provider, &access_token, remote_id)
+        }
+        // 默认按 ICS 处理（含迁移前的旧订阅）。
+        _ => fetch_and_expand(&source.url, today, |u| crate::net::fetch_ics(u)),
+    }
+}
+
 /// 生产路径：同步一个源，网络请求在锁外执行。
-/// 阶段：① 短锁读 URL → ② 锁外拉取+解析+展开 → ③ 短锁整源替换写库+记状态。
-/// 这样 8 秒级网络耗时不会占着全局数据库锁拖垮其它操作。
-pub fn sync_one_db(db: &AppDb, subscription_id: &str, url: &str) -> Result<(), CommandError> {
+/// 阶段：① 锁外拉取（ICS 拉解展开 / OAuth 调 API）→ ② 短锁整源替换写库+记状态。
+/// 这样秒级网络耗时不会占着全局数据库锁拖垮其它操作。
+pub fn sync_one_db(
+    db: &AppDb,
+    source: &crate::models::CalendarSubscription,
+) -> Result<(), CommandError> {
     let today = chrono::Local::now().date_naive();
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-    // ② 锁外网络+解析。
-    let outcome = fetch_and_expand(url, today, |u| crate::net::fetch_ics(u));
-    // ③ 短锁写库。
+    // ① 锁外网络+解析（OAuth 刷新 token 也在锁外）。
+    let outcome = fetch_source(db, source, today);
+    // ② 短锁写库。
     let mut connection = db.0.lock().map_err(CommandError::database)?;
-    commit_sync(&mut connection, subscription_id, &now, outcome)
+    commit_sync(&mut connection, &source.id, &now, outcome)
 }
 
 /// 同步全部订阅（启动时调用）。逐源独立，单源失败不影响其它源。
@@ -185,7 +213,7 @@ pub fn sync_all_db(db: &AppDb) -> Result<(), CommandError> {
         crate::subscriptions::list(&connection)?
     };
     for source in sources {
-        let _ = sync_one_db(db, &source.id, &source.url);
+        let _ = sync_one_db(db, &source);
     }
     Ok(())
 }
@@ -224,7 +252,7 @@ pub fn sync_due_db(db: &AppDb) -> Result<bool, CommandError> {
             now_utc,
         ) {
             attempted = true;
-            let _ = sync_one_db(db, &source.id, &source.url);
+            let _ = sync_one_db(db, &source);
         }
     }
     Ok(attempted)
@@ -232,24 +260,13 @@ pub fn sync_due_db(db: &AppDb) -> Result<bool, CommandError> {
 
 #[tauri::command]
 pub fn refresh_calendar_subscription(db: State<'_, AppDb>, id: String) -> Result<(), CommandError> {
-    // ① 短锁读 URL 并确认存在。
-    let url: String = {
+    // ① 短锁读整条订阅并确认存在。
+    let source = {
         let connection = db.0.lock().map_err(CommandError::database)?;
-        connection
-            .query_row(
-                "SELECT url FROM calendar_subscriptions WHERE id=?1",
-                params![id],
-                |r| r.get(0),
-            )
-            .map_err(|error| match error {
-                rusqlite::Error::QueryReturnedNoRows => {
-                    CommandError::validation("id", "订阅不存在。")
-                }
-                other => CommandError::database(other),
-            })?
+        crate::subscriptions::fetch_one(&connection, &id)?
     };
     // ②③ 锁外拉取，短锁写库。
-    sync_one_db(db.inner(), &id, &url)
+    sync_one_db(db.inner(), &source)
 }
 
 #[cfg(test)]
