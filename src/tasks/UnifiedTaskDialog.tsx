@@ -1,6 +1,5 @@
 import { X } from 'lucide-react';
 import { type RefObject, useId, useMemo, useState } from 'react';
-import type { CalendarEvent } from '../calendar/calendar-model';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { DatePicker } from '../components/DatePicker';
 import { Dialog } from '../components/Dialog';
@@ -24,10 +23,8 @@ type Mode =
 
 type Props = {
   mode: Mode;
-  events: CalendarEvent[];
   restoreFocusRef?: RefObject<HTMLElement | null>;
   onClose(): void;
-  onEventsChanged?(): Promise<unknown> | void;
 };
 
 type Form = {
@@ -39,7 +36,6 @@ type Form = {
   laneId: string;
   tagIds: string[];
   collaboratorIds: string[];
-  linkedEventId: string;
   views: TaskView[];
 };
 
@@ -49,7 +45,7 @@ function message(error: unknown) {
     : t('common.opFailed');
 }
 
-export function UnifiedTaskDialog({ mode, events, restoreFocusRef, onClose, onEventsChanged }: Props) {
+export function UnifiedTaskDialog({ mode, restoreFocusRef, onClose }: Props) {
   const workspace = useTaskWorkspace();
   const snapshot = workspace.workspace.data;
   const initial = useMemo<Form>(() => {
@@ -63,7 +59,6 @@ export function UnifiedTaskDialog({ mode, events, restoreFocusRef, onClose, onEv
         laneId: mode.task.laneId,
         tagIds: mode.task.tagIds,
         collaboratorIds: mode.task.collaboratorIds,
-        linkedEventId: mode.task.linkedEventId ?? '',
         views: mode.task.views
       };
     }
@@ -78,7 +73,6 @@ export function UnifiedTaskDialog({ mode, events, restoreFocusRef, onClose, onEv
       laneId: mode.laneId ?? snapshot.defaultLaneId,
       tagIds: [],
       collaboratorIds: [],
-      linkedEventId: '',
       views
     };
   }, [mode, snapshot.defaultLaneId]);
@@ -100,13 +94,6 @@ export function UnifiedTaskDialog({ mode, events, restoreFocusRef, onClose, onEv
     ...taskPriorityOrder.map((priority) => ({ value: priority, label: quadrantLabel(priority) }))
   ];
   const laneOptions = snapshot.lanes.map((lane) => ({ value: lane.id, label: lane.name }));
-  const eventOptions = [
-    { value: '', label: t('taskModal.noLink') },
-    ...(form.linkedEventId && !events.some((event) => event.id === form.linkedEventId)
-      ? [{ value: form.linkedEventId, label: t('taskModal.staleLink') }]
-      : []),
-    ...events.map((event) => ({ value: event.id, label: event.title }))
-  ];
 
   const update = <K extends keyof Form>(key: K, value: Form[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -123,7 +110,7 @@ export function UnifiedTaskDialog({ mode, events, restoreFocusRef, onClose, onEv
 
   function draft(): TaskDraft {
     const views = form.views.filter((view) =>
-      view === 'kanban' || (view === 'matrix' && form.priority) || (view === 'calendar' && form.dueDate)
+      view === 'kanban' || (view === 'matrix' && form.priority)
     );
     return {
       title: form.title.trim(),
@@ -134,7 +121,6 @@ export function UnifiedTaskDialog({ mode, events, restoreFocusRef, onClose, onEv
       laneId: form.laneId,
       tagIds: form.tagIds,
       collaboratorIds: form.collaboratorIds,
-      linkedEventId: form.linkedEventId || null,
       ...(!snapshot.linkingEnabled ? { views: views.length ? views : ['kanban'] } : {})
     };
   }
@@ -147,12 +133,12 @@ export function UnifiedTaskDialog({ mode, events, restoreFocusRef, onClose, onEv
     setBusy(true);
     setDialogError('');
     setFieldError(null);
-    const previousLink = mode.type === 'edit' ? mode.task.linkedEventId : null;
     try {
-      const saved = mode.type === 'create'
-        ? await workspace.createTask(mode.originView, draft())
-        : await workspace.updateTask(mode.task.id, draft());
-      if (previousLink !== saved.linkedEventId) await onEventsChanged?.();
+      if (mode.type === 'create') {
+        await workspace.createTask(mode.originView, draft());
+      } else {
+        await workspace.updateTask(mode.task.id, draft());
+      }
       onClose();
     } catch (error) {
       const repositoryError = error as RepositoryError;
@@ -172,7 +158,6 @@ export function UnifiedTaskDialog({ mode, events, restoreFocusRef, onClose, onEv
     setDialogError('');
     try {
       await workspace.deleteTask(mode.task.id);
-      if (mode.task.linkedEventId) await onEventsChanged?.();
       onClose();
     } catch (error) {
       setDialogError(message(error));
@@ -183,8 +168,7 @@ export function UnifiedTaskDialog({ mode, events, restoreFocusRef, onClose, onEv
 
   const viewOptions: Array<{ id: TaskView; label: string; disabled: boolean }> = [
     { id: 'kanban', label: t('taskModal.viewKanban'), disabled: false },
-    { id: 'matrix', label: t('taskModal.viewMatrix'), disabled: !form.priority },
-    { id: 'calendar', label: t('taskModal.viewCalendar'), disabled: !form.dueDate }
+    { id: 'matrix', label: t('taskModal.viewMatrix'), disabled: !form.priority }
   ];
 
   return <>
@@ -244,8 +228,6 @@ export function UnifiedTaskDialog({ mode, events, restoreFocusRef, onClose, onEv
           options={activeCollaborators.map((person) => ({ id: person.id, label: person.name }))}
           selected={form.collaboratorIds} disabled={busy} emptyHint={t('kanbanTask.collaboratorsEmpty')}
           onToggle={(id, checked) => update('collaboratorIds', toggle(form.collaboratorIds, id, checked))} />
-        <Select id="unified-task-event" label={t('taskModal.linkedEvent')} options={eventOptions}
-          value={form.linkedEventId} searchable disabled={busy} onChange={(value) => update('linkedEventId', value)} />
         {!snapshot.linkingEnabled ? (
           <fieldset className="kanban-multiselect">
             <legend>{t('taskModal.views')}</legend>
@@ -272,7 +254,7 @@ export function UnifiedTaskDialog({ mode, events, restoreFocusRef, onClose, onEv
     ) : null}
     {confirm === 'delete' && mode.type === 'edit' ? (
       <ConfirmDialog title={t('taskModal.deleteTitle', { title: mode.task.title })}
-        description={<>{t('common.deleteUnrecoverable')}<br />{t('taskModal.deleteDesc2')}</>}
+        description={t('common.deleteUnrecoverable')}
         tone="danger" confirmLabel={t('common.permanentDelete')} busyLabel={t('common.deleting')}
         busy={busy} errorMessage={dialogError} onCancel={() => setConfirm(null)} onConfirm={() => void remove()} />
     ) : null}

@@ -25,7 +25,6 @@ describe('externalToCalendarEvent', () => {
     expect(event.color).toBe('#4FC9DA');
     // 只读事件不参与重复/关联/提醒逻辑。
     expect(event.recurrence).toBeNull();
-    expect(event.linkedTaskId).toBeNull();
     expect(event.reminders).toEqual([]);
     // 地点/描述作为独立字段承载，note 保持为空，避免字符串拼接混淆二者。
     expect(event.note).toBe('');

@@ -3,7 +3,7 @@ import type { MatrixTask, Quadrant, TaskDraft as MatrixTaskDraft } from '../matr
 import { matrixDraftToWorkspace, matrixTasksFromWorkspace, taskToMatrixTask } from './task-projections';
 import { useTaskWorkspace } from './TaskWorkspaceContext';
 
-export function useWorkspaceTasks({ onRefreshEvents }: { onRefreshEvents: () => Promise<unknown> }) {
+export function useWorkspaceTasks() {
   const workspace = useTaskWorkspace();
   const [failedCompletion, setFailedCompletion] = useState<{
     taskId: string;
@@ -23,11 +23,10 @@ export function useWorkspaceTasks({ onRefreshEvents }: { onRefreshEvents: () => 
       'matrix',
       matrixDraftToWorkspace(draft, undefined, workspace.workspace.data)
     );
-    if (saved.linkedEventId) await onRefreshEvents();
     const projected = taskToMatrixTask(saved, workspace.workspace.data.tags);
     if (!projected) throw new Error('创建的任务没有四象限成员关系。');
     return projected;
-  }, [onRefreshEvents, workspace]);
+  }, [workspace]);
 
   const updateTask = useCallback(async (task: MatrixTask, draft: MatrixTaskDraft) => {
     const current = workspace.workspace.data.tasks.find((item) => item.id === task.id);
@@ -35,16 +34,14 @@ export function useWorkspaceTasks({ onRefreshEvents }: { onRefreshEvents: () => 
       task.id,
       matrixDraftToWorkspace(draft, current, workspace.workspace.data)
     );
-    if (task.linkedEventId !== saved.linkedEventId) await onRefreshEvents();
     const projected = taskToMatrixTask(saved, workspace.workspace.data.tags);
     if (!projected) throw new Error('更新后的任务不再显示在四象限。');
     return projected;
-  }, [onRefreshEvents, workspace]);
+  }, [workspace]);
 
   const deleteTask = useCallback(async (task: MatrixTask) => {
     await workspace.deleteTask(task.id);
-    if (task.linkedEventId) await onRefreshEvents();
-  }, [onRefreshEvents, workspace]);
+  }, [workspace]);
 
   const setTaskCompleted = useCallback(async (task: MatrixTask, completed: boolean) => {
     if (workspace.pendingTaskIds.has(task.id)) return;

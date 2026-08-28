@@ -85,6 +85,20 @@ export type SandboxCloseDialog = {
   kind: 'closeDialog';
 };
 
+// Guest -> parent: the dialog surface's content height changed. The dialog
+// iframe is null-origin sandboxed, so the parent cannot read the guest's
+// layout; the guest measures its own content and reports the natural height so
+// the host can size the dialog to fit instead of using a fixed height. Only the
+// dialog surface sends this — the main surface is sized by the widget grid.
+// `height` is in CSS pixels; the host clamps it to a sane max and lets the
+// iframe scroll internally when the content exceeds that cap.
+export type SandboxResize = {
+  channel: typeof SANDBOX_CHANNEL;
+  kind: 'resize';
+  surface: SandboxSurface;
+  height: number;
+};
+
 // Parent -> guest: this module's persisted state changed on another surface.
 // Both surfaces share one `moduleId` and therefore one state row, so after the
 // dialog saves its settings the host broadcasts this to the main surface (and
@@ -169,6 +183,18 @@ export function isSandboxCloseDialog(data: unknown): data is SandboxCloseDialog 
   if (typeof data !== 'object' || data === null) return false;
   const message = data as Record<string, unknown>;
   return message.channel === SANDBOX_CHANNEL && message.kind === 'closeDialog';
+}
+
+export function isSandboxResize(data: unknown): data is SandboxResize {
+  if (typeof data !== 'object' || data === null) return false;
+  const message = data as Record<string, unknown>;
+  return (
+    message.channel === SANDBOX_CHANNEL &&
+    message.kind === 'resize' &&
+    (message.surface === 'main' || message.surface === 'dialog') &&
+    typeof message.height === 'number' &&
+    Number.isFinite(message.height as number)
+  );
 }
 
 // A simple sliding-window rate limiter. A misbehaving extension that floods the

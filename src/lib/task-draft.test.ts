@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { MatrixTask } from '../matrix/matrix-model';
 import { compareTasks, createTaskForm, formatTaskMeta, isTaskFormDirty, taskToForm, toTaskDraft, validateTaskForm } from './task-draft';
 
-const base: MatrixTask = { id:'high', title:'发布', quadrant:'important_urgent', dueAt:'2026-07-23', priority:1, completed:false, linkedEventId:'e1', note:'', tags:[], createdAt:'2026-07-20T00:00:00Z', updatedAt:'x' };
+const base: MatrixTask = { id:'high', title:'发布', quadrant:'important_urgent', dueAt:'2026-07-23', priority:1, completed:false, note:'', tags:[], createdAt:'2026-07-20T00:00:00Z', updatedAt:'x' };
 const earlier={...base,id:'earlier',dueAt:'2026-07-01',priority:2 as const};
 const low={...base,id:'low',priority:3 as const};
 const noDue={...base,id:'no-due',dueAt:null};
@@ -10,7 +10,7 @@ const done={...base,id:'done',dueAt:'2026-07-01',completed:true};
 
 describe('task draft helpers',()=>{
  it('creates approved defaults and date-detail defaults',()=>{
-  expect(createTaskForm(null)).toEqual({title:'',quadrant:'important_urgent',dueAt:'',priority:2,completed:false,linkedEventId:'',note:''});
+  expect(createTaskForm(null)).toEqual({title:'',quadrant:'important_urgent',dueAt:'',priority:2,completed:false,note:''});
   expect(createTaskForm('2026-07-23').dueAt).toBe('2026-07-23');
  });
  it('normalizes and validates forms',()=>{
@@ -27,7 +27,6 @@ describe('task draft helpers',()=>{
  });
  it('round trips and compares semantic dirtiness',()=>{
   const form=taskToForm(base);
-  expect(toTaskDraft(form).linkedEventId).toBe('e1');
   expect(isTaskFormDirty(form,{...form})).toBe(false);
   expect(isTaskFormDirty(form,{...form,note:'changed'})).toBe(true);
  });

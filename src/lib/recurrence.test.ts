@@ -18,7 +18,6 @@ const base: CalendarEvent = {
   allDay: false,
   category: 'work',
   color: '#0BB783',
-  linkedTaskId: null,
   note: '',
   reminders: [],
   createdAt: 't',

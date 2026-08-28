@@ -11,6 +11,7 @@ import {
   isSandboxOpenDialog,
   isSandboxReady,
   isSandboxRequest,
+  isSandboxResize,
   type SandboxGrant,
   type SandboxInit,
   type SandboxStateChanged,
@@ -51,6 +52,11 @@ export function SandboxModule({
   // title comes from the guest's openDialog request.
   const dialogFrameRef = useRef<HTMLIFrameElement | null>(null);
   const [dialog, setDialog] = useState<{ title: string } | null>(null);
+  // The dialog surface reports its natural content height (it is null-origin,
+  // so the parent cannot read its layout). We size the dialog iframe to that
+  // value, clamped by CSS max-height, instead of a fixed height. Reset to null
+  // whenever the dialog opens/closes so a fresh instance re-measures.
+  const [dialogHeight, setDialogHeight] = useState<number | null>(null);
   // Restore focus to the main frame's card when the dialog closes.
   const cardRef = useRef<HTMLDivElement | null>(null);
   // Latest visibility reading and whether the guest is ready to receive it. The
@@ -141,6 +147,11 @@ export function SandboxModule({
         return;
       }
 
+      if (isSandboxResize(data) && fromDialog && data.surface === 'dialog') {
+        setDialogHeight(data.height);
+        return;
+      }
+
       if (isSandboxRequest(data)) {
         const response = await handleSandboxRequest(host, data, grant);
         senderWindow?.postMessage(response, '*');
@@ -185,14 +196,20 @@ export function SandboxModule({
           title={dialog.title}
           ariaLabelledBy=""
           restoreFocusRef={cardRef}
-          onRequestClose={() => setDialog(null)}
+          onRequestClose={() => {
+            setDialog(null);
+            setDialogHeight(null);
+          }}
           className="sandbox-module-dialog"
           headerActions={
             <button
               type="button"
               className="good-icon-button"
               aria-label={t('common.close')}
-              onClick={() => setDialog(null)}
+              onClick={() => {
+                setDialog(null);
+                setDialogHeight(null);
+              }}
             >
               <X aria-hidden="true" />
             </button>
@@ -202,6 +219,7 @@ export function SandboxModule({
             ref={dialogFrameRef}
             className="sandbox-module__frame sandbox-module__frame--dialog"
             title={dialog.title}
+            style={dialogHeight != null ? { height: `${dialogHeight}px` } : undefined}
             // Same null-origin isolation as the main frame; same source, so the
             // guest runtime is identical and only the init `surface` differs.
             // A distinct Blob URL is required (see dialogUrl above).

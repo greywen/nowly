@@ -61,13 +61,8 @@ describe('ModalRoot', () => {
     const { rerender } = render(
       <ModalRoot {...base({ modal:{type:'date',isoDate:'2026-07-23',trigger:null}, onChangeModal })} />
     );
-    const taskButton = screen.getByRole('button', { name:'新建任务' });
-    await user.click(taskButton);
-    expect(onChangeModal).toHaveBeenCalledWith({
-      type:'task-create', dueDate:'2026-07-23', trigger:taskButton, parentDate:'2026-07-23'
-    });
 
-    rerender(<ModalRoot {...base({ modal:{type:'task-create',dueDate:'2026-07-23',trigger:taskButton,parentDate:'2026-07-23'}, onChangeModal })} />);
+    rerender(<ModalRoot {...base({ modal:{type:'task-create',dueDate:'2026-07-23',trigger:null,parentDate:'2026-07-23'}, onChangeModal })} />);
     expect(screen.getByRole('dialog', { name:/2026年7月23日/ })).toBeInTheDocument();
     expect(screen.getByRole('dialog', { name:'新建任务' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name:'截止日期' })).toHaveTextContent('2026 年 7 月 23 日');

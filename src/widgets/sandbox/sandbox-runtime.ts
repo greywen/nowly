@@ -36,6 +36,68 @@ export const SANDBOX_RUNTIME = `(() => {
   var surface = 'main';
   var stateChangedListeners = [];
 
+  // Dialog surface only: measure the natural content height and report it so
+  // the host can size the dialog to fit. The parent is a null-origin frame and
+  // cannot read our layout, so we compute it here. Because the injected CSS
+  // stretches html/body/#root to 100% height, scrollHeight would just echo the
+  // frame height; instead we take the lowest bottom edge across the rendered
+  // subtree (including any open popups like Select/DatePicker), relative to the
+  // top of the document, and add the root's bottom padding.
+  var lastReportedHeight = -1;
+  function measureContentHeight() {
+    var root = document.getElementById('root');
+    if (!root) return 0;
+    var nodes = root.querySelectorAll('*');
+    // Bound the scan so a pathological subtree can never freeze the frame.
+    var limit = Math.min(nodes.length, 5000);
+    var max = 0;
+    for (var i = 0; i < limit; i++) {
+      var rect = nodes[i].getBoundingClientRect();
+      if (rect.bottom > max) max = rect.bottom;
+    }
+    // Fall back to the root's own box when it has no measurable children.
+    if (max === 0) max = root.getBoundingClientRect().bottom;
+    // getBoundingClientRect is viewport-relative; #root starts at the top of
+    // the (unscrolled) document, and its 16px padding sits inside that origin.
+    // Add the matching bottom padding so content is not flush against the edge.
+    return Math.ceil(max + 16);
+  }
+  function reportHeight() {
+    if (surface !== 'dialog') return;
+    var height = measureContentHeight();
+    if (height <= 0 || height === lastReportedHeight) return;
+    lastReportedHeight = height;
+    parent.postMessage({ channel: CHANNEL, kind: 'resize', surface: surface, height: height }, '*');
+  }
+  function watchContentSize() {
+    if (surface !== 'dialog') return;
+    // Re-measure on any DOM or size change. A short burst of rAF-timed reads
+    // after init catches late layout from fonts and async content without a
+    // persistent loop (which would violate the no-animation rule).
+    if (typeof ResizeObserver === 'function') {
+      var ro = new ResizeObserver(function () { reportHeight(); });
+      ro.observe(document.documentElement);
+      var root = document.getElementById('root');
+      if (root) ro.observe(root);
+    }
+    if (typeof MutationObserver === 'function') {
+      var mo = new MutationObserver(function () { reportHeight(); });
+      mo.observe(document.getElementById('root') || document.body, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        characterData: true
+      });
+    }
+    var frames = 0;
+    function settle() {
+      reportHeight();
+      frames++;
+      if (frames < 6) requestAnimationFrame(settle);
+    }
+    requestAnimationFrame(settle);
+  }
+
   function call(method, args) {
     return new Promise(function (resolve, reject) {
       var id = nextId++;
@@ -151,6 +213,8 @@ export const SANDBOX_RUNTIME = `(() => {
       } catch (error) {
         root.textContent = errorPrefix + (error && error.message ? error.message : error);
       }
+      // Start reporting content height once the dialog surface has rendered.
+      watchContentSize();
     }
   });
 

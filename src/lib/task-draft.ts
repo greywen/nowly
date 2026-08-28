@@ -1,11 +1,11 @@
 import { priorityLabel, type MatrixTask, type Quadrant, type TaskDraft, type TaskPriority } from '../matrix/matrix-model';
 import { t } from '../i18n';
 
-export type TaskFormDraft={title:string;quadrant:Quadrant;dueAt:string;priority:TaskPriority;completed:boolean;linkedEventId:string;note:string};
-export type TaskFieldErrors=Partial<Record<'title'|'quadrant'|'dueAt'|'priority'|'linkedEventId',string>>;
-export function createTaskForm(sourceDate:string|null):TaskFormDraft{return{title:'',quadrant:'important_urgent',dueAt:sourceDate??'',priority:2,completed:false,linkedEventId:'',note:''};}
-export function taskToForm(task:MatrixTask):TaskFormDraft{return{title:task.title,quadrant:task.quadrant,dueAt:task.dueAt??'',priority:task.priority,completed:task.completed,linkedEventId:task.linkedEventId??'',note:task.note};}
-export function toTaskDraft(form:TaskFormDraft):TaskDraft{return{...form,title:form.title.trim(),dueAt:form.dueAt||null,linkedEventId:form.linkedEventId||null};}
+export type TaskFormDraft={title:string;quadrant:Quadrant;dueAt:string;priority:TaskPriority;completed:boolean;note:string};
+export type TaskFieldErrors=Partial<Record<'title'|'quadrant'|'dueAt'|'priority',string>>;
+export function createTaskForm(sourceDate:string|null):TaskFormDraft{return{title:'',quadrant:'important_urgent',dueAt:sourceDate??'',priority:2,completed:false,note:''};}
+export function taskToForm(task:MatrixTask):TaskFormDraft{return{title:task.title,quadrant:task.quadrant,dueAt:task.dueAt??'',priority:task.priority,completed:task.completed,note:task.note};}
+export function toTaskDraft(form:TaskFormDraft):TaskDraft{return{...form,title:form.title.trim(),dueAt:form.dueAt||null};}
 function validDate(value:string){const match=/^(\d{4})-(\d{2})-(\d{2})$/.exec(value);if(!match)return false;const [y,m,d]=match.slice(1).map(Number);const date=new Date(y,m-1,d);return date.getFullYear()===y&&date.getMonth()===m-1&&date.getDate()===d;}
 export function validateTaskForm(form:TaskFormDraft):TaskFieldErrors{if(!form.title.trim())return{title:t('taskDraft.errorTitle')};if(form.dueAt&&!validDate(form.dueAt))return{dueAt:t('taskDraft.errorDueDate')};return{};}
 export function isTaskFormDirty(initial:TaskFormDraft,current:TaskFormDraft){return JSON.stringify(initial)!==JSON.stringify(current);}

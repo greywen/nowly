@@ -28,7 +28,7 @@ function messageFrom(error: unknown) {
   return t('matrix.readError');
 }
 
-export function useTasks({ onRefreshEvents }: { onRefreshEvents: () => Promise<unknown> }) {
+export function useTasks() {
   const repository = useNowlyRepository();
   const [tasks, setTasks] = useState<TasksResource>({ status: 'loading', data: [] });
   const [pendingTaskIds, setPendingTaskIds] = useState<Set<string>>(new Set());
@@ -76,40 +76,32 @@ export function useTasks({ onRefreshEvents }: { onRefreshEvents: () => Promise<u
     void loadTasks();
   }, [loadTasks]);
 
-  const refreshAfterWrite = useCallback(
-    async (refreshEvents: boolean) => {
-      await loadTasks();
-      if (refreshEvents) await onRefreshEvents();
-    },
-    [loadTasks, onRefreshEvents]
-  );
-
   const createTask = useCallback(
     async (draft: TaskDraft) => {
       const created = await repository.createTask(draft);
-      await refreshAfterWrite(created.linkedEventId !== null);
+      await loadTasks();
       return created;
     },
-    [refreshAfterWrite, repository]
+    [loadTasks, repository]
   );
 
   const updateTask = useCallback(
     async (task: MatrixTask, draft: TaskDraft) => {
       const updated = await repository.updateTask(task.id, draft);
       nextRevision(task.id);
-      await refreshAfterWrite(task.linkedEventId !== updated.linkedEventId);
+      await loadTasks();
       return updated;
     },
-    [nextRevision, refreshAfterWrite, repository]
+    [loadTasks, nextRevision, repository]
   );
 
   const deleteTask = useCallback(
     async (task: MatrixTask) => {
       await repository.deleteTask(task.id);
       nextRevision(task.id);
-      await refreshAfterWrite(task.linkedEventId !== null);
+      await loadTasks();
     },
-    [nextRevision, refreshAfterWrite, repository]
+    [loadTasks, nextRevision, repository]
   );
 
   const setTaskCompleted = useCallback(
@@ -178,7 +170,6 @@ export function useTasks({ onRefreshEvents }: { onRefreshEvents: () => Promise<u
         dueAt: original.dueAt,
         priority: original.priority,
         completed: original.completed,
-        linkedEventId: original.linkedEventId,
         note: original.note
       };
       try {

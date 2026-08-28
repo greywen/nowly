@@ -17,7 +17,6 @@ export type MatrixTask = {
   dueAt: string | null;
   priority: TaskPriority;
   completed: boolean;
-  linkedEventId: string | null;
   note: string;
   tags: MatrixTaskTag[];
   createdAt: string;

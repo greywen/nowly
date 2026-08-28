@@ -31,7 +31,6 @@ export function taskToMatrixTask(task: Task, tags: TaskTag[] = []): MatrixTask |
     dueAt: task.dueDate,
     priority: legacyPriority(task.priority),
     completed: task.completed,
-    linkedEventId: task.linkedEventId,
     note: task.description,
     tags: resolvedTags,
     createdAt: task.createdAt,
@@ -58,8 +57,7 @@ export function matrixDraftToWorkspace(
     completed: draft.completed,
     laneId: current?.laneId ?? (draft.completed ? snapshot.completionLaneId : snapshot.defaultLaneId),
     tagIds: current?.tagIds ?? [],
-    collaboratorIds: current?.collaboratorIds ?? [],
-    linkedEventId: draft.linkedEventId
+    collaboratorIds: current?.collaboratorIds ?? []
   };
 }
 
@@ -68,7 +66,6 @@ export function workspaceTaskFromMatrix(
   snapshot: TaskWorkspaceSnapshot
 ): Task {
   const views: TaskView[] = ['kanban', 'matrix'];
-  if (task.dueAt) views.push('calendar');
   return {
     id: task.id,
     title: task.title,
@@ -80,7 +77,6 @@ export function workspaceTaskFromMatrix(
     boardPosition: snapshot.tasks.filter((item) => item.laneId === snapshot.defaultLaneId).length,
     tagIds: [],
     collaboratorIds: [],
-    linkedEventId: task.linkedEventId,
     views,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt
@@ -93,7 +89,6 @@ export function workspaceTaskFromKanbanCard(card: KanbanCard, snapshot: TaskWork
     : null;
   const views: TaskView[] = ['kanban'];
   if (priority) views.push('matrix');
-  if (card.dueDate) views.push('calendar');
   return {
     id: card.id,
     title: card.title,
@@ -105,7 +100,6 @@ export function workspaceTaskFromKanbanCard(card: KanbanCard, snapshot: TaskWork
     boardPosition: card.position,
     tagIds: card.tagIds,
     collaboratorIds: card.collaboratorIds,
-    linkedEventId: null,
     views,
     createdAt: card.createdAt,
     updatedAt: card.updatedAt

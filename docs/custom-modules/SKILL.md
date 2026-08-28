@@ -101,6 +101,8 @@ Nowly.defineModule(async ({ host, root }) => {
 
 两个面共享同一 `moduleId`，因此读写**同一行状态**。一个面 `saveState` 后，宿主会向另一个面广播状态变更——收到的那一面用 `host.onStateChanged` 重新 `loadState` 刷新，否则弹框改完设置主面仍显示旧值。
 
+**弹框高度随内容自适应，别写死高度。** 宿主会测量弹框面内容的自然高度并把 Dialog 撑到刚好包住内容（超过视口上限时封顶并让弹框内部滚动）。因此弹框面不要在 `root` / `body` / `html` 上写死 `height`，也不要为了「撑满」而套 `height:100%` 的外层——那会把内容拉伸、量出的高度失真。让内容按自身高度自然堆叠即可（纵向字段间距 20px，操作按钮靠右）。内容变化（展开下拉、增删字段）时宿主会重新测量并调整。
+
 ```js
 Nowly.defineModule(async ({ host, root }) => {
   async function render() {

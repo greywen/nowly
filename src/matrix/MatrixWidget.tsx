@@ -1,6 +1,5 @@
 import { Plus, Settings, X } from 'lucide-react';
 import { type DragEvent, useMemo, useState } from 'react';
-import type { CalendarEvent } from '../calendar/calendar-model';
 import type { MatrixTask, MatrixTaskTag, Quadrant, TaskPriority } from './matrix-model';
 import { priorityLabel, quadrantLabel, quadrantOrder } from './matrix-model';
 import { FilterSelect, type FilterOption } from '../components/FilterSelect';
@@ -18,7 +17,6 @@ type LoadStatus = 'loading' | 'ready' | 'error';
 
 type MatrixWidgetProps = {
   tasks: MatrixTask[];
-  events: CalendarEvent[];
   status: LoadStatus;
   errorMessage?: string;
   completionError: string | null;
@@ -37,7 +35,6 @@ type MatrixWidgetProps = {
 
 export function MatrixWidget({
   tasks,
-  events,
   status,
   errorMessage,
   completionError,
@@ -222,7 +219,6 @@ export function MatrixWidget({
                     <TaskRow
                       key={task.id}
                       task={task}
-                      events={events}
                       pending={pendingTaskIds.has(task.id)}
                       dragging={draggingId === task.id}
                       onToggle={onToggleTask}

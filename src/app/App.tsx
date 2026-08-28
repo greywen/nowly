@@ -12,7 +12,7 @@ import type { CalendarSubscription } from '../calendar/subscription-model';
 import { enterForegroundMode, enterWallpaperMode } from '../lib/window-mode';
 import { MatrixWidget } from '../matrix/MatrixWidget';
 import { KanbanWidget } from '../kanban/KanbanWidget';
-import { TaskWorkspaceProvider, useTaskWorkspace } from '../tasks/TaskWorkspaceContext';
+import { TaskWorkspaceProvider } from '../tasks/TaskWorkspaceContext';
 import { useWorkspaceTasks } from '../tasks/useWorkspaceTasks';
 import { ModalRoot } from '../modals/ModalRoot';
 import { NotesWidget } from '../notes/NotesWidget';
@@ -55,19 +55,12 @@ function AppContent() {
   useTranslation();
   const repository = useNowlyRepository();
   const settingsFeature = useSettings();
-  const refreshTasksRef = useRef<() => Promise<unknown>>(async () => undefined);
-  const refreshEventsRef = useRef<() => Promise<unknown>>(async () => undefined);
-  const refreshTasks = useCallback(() => refreshTasksRef.current(), []);
-  const refreshEvents = useCallback(() => refreshEventsRef.current(), []);
-  const eventsFeature = useEvents({ onRefreshTasks: refreshTasks, weekStart: settingsFeature.settings.data.weekStart });
-  const tasksFeature = useWorkspaceTasks({ onRefreshEvents: refreshEvents });
-  const taskWorkspace = useTaskWorkspace();
-  const workspaceTasks = taskWorkspace.workspace.data.tasks;
+  const eventsFeature = useEvents({ weekStart: settingsFeature.settings.data.weekStart });
+  const tasksFeature = useWorkspaceTasks();
   const notesFeature = useNotes();
   const notesView = useNotesView();
   const extensionsFeature = useExtensions();
-  refreshTasksRef.current = tasksFeature.retryTasks;
-  refreshEventsRef.current = eventsFeature.retryEvents;
+  const refreshEvents = useCallback(() => eventsFeature.retryEvents(), [eventsFeature]);
   const events = eventsFeature.events.data;
   const tasks = tasksFeature.tasks.data;
   const notes = notesFeature.notes.data;
@@ -167,7 +160,6 @@ function AppContent() {
         monthIndex={eventsFeature.monthIndex}
         todayIso={todayIso}
         events={events}
-        tasks={workspaceTasks}
         status={eventsFeature.events.status}
         errorMessage={eventsFeature.events.status === 'error' ? eventsFeature.events.message : undefined}
         view={eventsFeature.view}
@@ -185,8 +177,6 @@ function AppContent() {
             ? openModalInForeground({ type: 'external-detail', event, trigger: null })
             : openModalInForeground({ type: 'event-edit', event, trigger: null })
         }
-        onOpenTask={(task) => openModalInForeground({ type:'workspace-task-edit', task, trigger:null })}
-        onMoveTaskToDate={(task, dueDate) => void taskWorkspace.moveTaskToDate(task.id, dueDate)}
         onMoveEvent={(event, isoDate) => void eventsFeature.moveEvent(event, isoDate)}
         onMoveEventToHour={(event, isoDate, startHour) => void eventsFeature.moveEventToHour(event, isoDate, startHour)}
         onResizeEvent={(event, endIsoDate) => void eventsFeature.resizeEvent(event, endIsoDate)}
@@ -196,7 +186,6 @@ function AppContent() {
           showWeekends: settingsFeature.settings.data.showWeekends
         }}
         onOpenSettings={() => openModalInForeground({ type: 'calendar-settings', trigger: null })}
-        onOpenTaskSettings={() => openModalInForeground({ type: 'task-settings', trigger: null })}
       />
     );
   }
@@ -204,7 +193,6 @@ function AppContent() {
     modules.matrix = (
       <MatrixWidget
         tasks={tasks}
-        events={events}
         status={tasksFeature.tasks.status}
         errorMessage={tasksFeature.tasks.status === 'error' ? tasksFeature.tasks.message : undefined}
         completionError={tasksFeature.failedCompletion?.message ?? null}
@@ -240,8 +228,6 @@ function AppContent() {
   modules.kanban = (
     <KanbanWidget
       todayIso={todayIso}
-      events={events}
-      onEventsChanged={refreshEvents}
       recentColors={recentColors}
       onRememberCustomColor={rememberCustomColor}
     />
@@ -354,7 +340,6 @@ function AppContent() {
         modal={modal}
         events={events}
         tasks={tasks}
-        workspaceTasks={workspaceTasks}
         onClose={() => setModal(null)}
         onChangeModal={setModal}
         createEvent={eventsFeature.createEvent}
@@ -367,7 +352,6 @@ function AppContent() {
         deleteTask={tasksFeature.deleteTask}
         onTaskSaved={() => undefined}
         onTaskDeleted={() => undefined}
-        onTaskEventsChanged={async () => { await refreshEvents(); }}
         notes={notes}
         createNote={notesFeature.createNote}
         updateNote={notesFeature.updateNote}

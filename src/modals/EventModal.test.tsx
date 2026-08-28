@@ -2,12 +2,10 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { CalendarEvent, Recurrence } from '../calendar/calendar-model';
-import type { MatrixTask } from '../matrix/matrix-model';
 import { EventModal } from './EventModal';
 
 const now = () => new Date(2026, 6, 23, 9, 42);
-const task: MatrixTask = { id:'t1', title:'发布 Nowly', quadrant:'important_urgent', dueAt:null, priority:1, completed:false, linkedEventId:null, note:'', tags:[], createdAt:'x', updatedAt:'x' };
-const existing: CalendarEvent = { id:'e1', title:'设计评审', startAt:'2026-07-23T14:00', endAt:'2026-07-23T15:00', allDay:false, category:'important', color:'red', linkedTaskId:'t1', note:'确认范围', reminders:[], createdAt:'x', updatedAt:'x', recurrence:null, startTz:null, endTz:null, rrule:null, seriesId:null, seriesStartAt:null, occurrenceStartAt:null, subscriptionId:null, isOverridden:false };
+const existing: CalendarEvent = { id:'e1', title:'设计评审', startAt:'2026-07-23T14:00', endAt:'2026-07-23T15:00', allDay:false, category:'important', color:'red', note:'确认范围', reminders:[], createdAt:'x', updatedAt:'x', recurrence:null, startTz:null, endTz:null, rrule:null, seriesId:null, seriesStartAt:null, occurrenceStartAt:null, subscriptionId:null, isOverridden:false };
 // 既有 fixture 的 `color:'red'` 已通不过十六进制校验，编辑保存需要一个合法颜色。
 const editable: CalendarEvent = { ...existing, color:'#F06445' };
 const weeklyRule: Recurrence = { freq:'weekly', interval:1, byDay:['MO'], end:{ kind:'never' } };
@@ -23,8 +21,8 @@ async function pick(user: ReturnType<typeof userEvent.setup>, select: string, op
 
 function props(overrides: Record<string, unknown> = {}) {
   return {
-    mode: { type:'create' as const, dateIso:'2026-07-23' }, tasks:[task], onClose:vi.fn(), onSaved:vi.fn(), onDeleted:vi.fn(),
-    createEvent:vi.fn().mockResolvedValue({ ...existing, linkedTaskId:null }), updateEvent:vi.fn().mockResolvedValue(undefined), deleteEvent:vi.fn().mockResolvedValue(undefined), now,
+    mode: { type:'create' as const, dateIso:'2026-07-23' }, onClose:vi.fn(), onSaved:vi.fn(), onDeleted:vi.fn(),
+    createEvent:vi.fn().mockResolvedValue(existing), updateEvent:vi.fn().mockResolvedValue(undefined), deleteEvent:vi.fn().mockResolvedValue(undefined), now,
     ...overrides
   };
 }
@@ -39,7 +37,6 @@ describe('EventModal', () => {
     expect(screen.getByRole('button', { name:'开始时间' })).toHaveTextContent('09:45');
     expect(screen.getByRole('button', { name:'结束时间' })).toHaveTextContent('10:45');
     expect(screen.getByRole('combobox', { name:'分类' })).toHaveTextContent('工作');
-    expect(screen.getByRole('combobox', { name:'关联任务' })).toHaveTextContent('无关联');
     expect(screen.getAllByRole('radio')).toHaveLength(4);
     expect(screen.getByLabelText('备注')).toHaveValue('');
     expect(screen.queryByRole('button', { name:'删除日程' })).not.toBeInTheDocument();
@@ -69,14 +66,14 @@ describe('EventModal', () => {
   });
 
   it('validates fields and maps server field errors without closing', async () => {
-    const user = userEvent.setup(); const createEvent = vi.fn().mockRejectedValue({ code:'validation_error', field:'linkedTaskId', message:'关联任务不存在。' });
+    const user = userEvent.setup(); const createEvent = vi.fn().mockRejectedValue({ code:'validation_error', field:'title', message:'标题不合法。' });
     render(<EventModal {...props({ createEvent })} />);
     await user.click(screen.getByRole('button', { name:'保存' }));
     expect(screen.getByText('请输入日程标题。')).toBeInTheDocument();
     expect(createEvent).not.toHaveBeenCalled();
     await user.type(screen.getByLabelText('日程标题'), '评审');
     await user.click(screen.getByRole('button', { name:'保存' }));
-    expect(await screen.findByText('关联任务不存在。')).toBeInTheDocument();
+    expect(await screen.findByText('标题不合法。')).toBeInTheDocument();
     expect(screen.getByLabelText('日程标题')).toHaveValue('评审');
   });
 
@@ -87,7 +84,7 @@ describe('EventModal', () => {
     await user.type(screen.getByLabelText('日程标题'), '评审');
     await user.click(screen.getByRole('button', { name:'保存' }));
     expect(screen.getByRole('button', { name:'正在保存' })).toBeDisabled();
-    resolve({ ...existing, title:'评审', linkedTaskId:null });
+    resolve({ ...existing, title:'评审' });
     await waitFor(()=>expect(onSaved).toHaveBeenCalled()); expect(onClose).toHaveBeenCalled();
     unmount();
 
@@ -111,7 +108,7 @@ describe('EventModal', () => {
     const deleteEvent=vi.fn().mockRejectedValue({ message:'删除失败。' });
     rerender(<EventModal {...props({ mode:{type:'edit',event:existing}, deleteEvent })} />);
     await user.click(screen.getByRole('button', { name:'删除日程' }));
-    expect(screen.getByRole('dialog', { name:'永久删除“设计评审”？' })).toHaveTextContent('若存在关联，只解除关联，不删除关联任务。');
+    expect(screen.getByRole('dialog', { name:'永久删除“设计评审”？' })).toHaveTextContent('删除后无法恢复。');
     await user.click(screen.getByRole('button', { name:'永久删除' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('删除失败。');
   });
@@ -291,7 +288,7 @@ describe('EventModal', () => {
   });
 
   it('adds a reminder and submits it as minutes before start', async () => {
-    const user=userEvent.setup(); const createEvent=vi.fn().mockResolvedValue({ ...existing, linkedTaskId:null });
+    const user=userEvent.setup(); const createEvent=vi.fn().mockResolvedValue(existing);
     render(<EventModal {...props({ createEvent })} />);
     // 默认没有提醒。
     expect(screen.getByText('无提醒')).toBeInTheDocument();
@@ -305,7 +302,7 @@ describe('EventModal', () => {
   });
 
   it('converts the unit into stored minutes and loads them back', async () => {
-    const user=userEvent.setup(); const createEvent=vi.fn().mockResolvedValue({ ...existing, linkedTaskId:null });
+    const user=userEvent.setup(); const createEvent=vi.fn().mockResolvedValue(existing);
     render(<EventModal {...props({ createEvent })} />);
     await user.click(screen.getByRole('button', { name:'添加提醒' }));
     await user.click(screen.getByRole('combobox', { name:'提前单位' }));

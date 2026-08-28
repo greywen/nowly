@@ -133,8 +133,7 @@ function ensureTaskWorkspace(store: Store) {
       boardPosition: index,
       tagIds: [],
       collaboratorIds: [],
-      linkedEventId: task.linkedEventId ?? null,
-      views: ['kanban', ...(priority ? ['matrix'] : []), ...(dueDate ? ['calendar'] : [])],
+      views: ['kanban', ...(priority ? ['matrix'] : [])],
       createdAt: task.createdAt ?? nowIso(),
       updatedAt: task.updatedAt ?? nowIso()
     };
@@ -168,11 +167,11 @@ export function installBrowserTauriBackend() {
     if (store.settings.taskViewLinkingEnabled === false) {
       const current = Array.isArray(task.views) ? task.views as string[] : ['kanban'];
       task.views = current.filter((view) =>
-        view === 'kanban' || (view === 'matrix' && task.priority) || (view === 'calendar' && task.dueDate)
+        view === 'kanban' || (view === 'matrix' && task.priority)
       );
       return;
     }
-    task.views = ['kanban', ...(task.priority ? ['matrix'] : []), ...(task.dueDate ? ['calendar'] : [])];
+    task.views = ['kanban', ...(task.priority ? ['matrix'] : [])];
   };
 
   const persist = () => {
@@ -258,7 +257,6 @@ export function installBrowserTauriBackend() {
         boardPosition: store.tasks.filter((item) => item.laneId === laneId).length,
         tagIds: [],
         collaboratorIds: [],
-        linkedEventId: null,
         views: ['kanban'],
         createdAt: nowIso(),
         updatedAt: nowIso(),

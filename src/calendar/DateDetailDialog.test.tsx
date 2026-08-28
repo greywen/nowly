@@ -3,7 +3,6 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { CalendarEvent, Recurrence } from './calendar-model';
-import type { MatrixTask } from '../matrix/matrix-model';
 import { DateDetailDialog } from './DateDetailDialog';
 
 function event(overrides: Partial<CalendarEvent>): CalendarEvent {
@@ -15,7 +14,6 @@ function event(overrides: Partial<CalendarEvent>): CalendarEvent {
     allDay: false,
     category: 'work',
     color: 'blue',
-    linkedTaskId: null,
     note: '',
     createdAt: '2026-07-23T09:00:00Z',
     updatedAt: '2026-07-23T09:00:00Z',
@@ -33,27 +31,13 @@ function event(overrides: Partial<CalendarEvent>): CalendarEvent {
   };
 }
 
-const tasks: MatrixTask[] = [{
-  id: 't1',
-  title: '发布 Nowly v0.1',
-  quadrant: 'important_urgent',
-  dueAt: '2026-07-23',
-  priority: 1,
-  completed: false,
-  linkedEventId: 'linked',
-  note: '',
-  tags: [],
-  createdAt: '2026-07-23T09:00:00Z',
-  updatedAt: '2026-07-23T09:00:00Z'
-}];
-
 const events = [
   event({ id: 'other-day', title: '其他日期', startAt: '2026-07-24T09:00', endAt: '2026-07-24T10:00' }),
   event({ id: 'timed-b', title: '同刻后项', startAt: '2026-07-23T14:00', endAt: '2026-07-23T15:00' }),
   event({ id: 'early', title: '晨会', startAt: '2026-07-23T09:00', endAt: '2026-07-23T09:30', category: 'learning' }),
   event({ id: 'all-day', title: '产品发布日', startAt: '2026-07-23T00:00', endAt: '2026-07-23T23:59', allDay: true, category: 'important', color: 'red' }),
-  event({ id: 'linked', title: '关联评审', startAt: '2026-07-23T11:00', endAt: '2026-07-23T12:00', linkedTaskId: 't1', category: 'personal' }),
-  event({ id: 'missing-link', title: '旧关联', startAt: '2026-07-23T13:00', endAt: '2026-07-23T13:30', linkedTaskId: 'missing' }),
+  event({ id: 'personal-item', title: '关联评审', startAt: '2026-07-23T11:00', endAt: '2026-07-23T12:00', category: 'personal' }),
+  event({ id: 'work-item', title: '旧关联', startAt: '2026-07-23T13:00', endAt: '2026-07-23T13:30' }),
   event({ id: 'timed-a', title: '同刻前项', startAt: '2026-07-23T14:00', endAt: '2026-07-23T15:00' })
 ];
 
@@ -63,11 +47,9 @@ describe('DateDetailDialog', () => {
       <DateDetailDialog
         isoDate="2026-07-23"
         events={events}
-        tasks={tasks}
         isTopLayer
         onClose={vi.fn()}
         onCreateEvent={vi.fn()}
-        onCreateTask={vi.fn()}
         onEditEvent={vi.fn()}
       />
     );
@@ -75,7 +57,6 @@ describe('DateDetailDialog', () => {
     expect(screen.getByRole('dialog', { name: '2026年7月23日 星期四' })).toBeInTheDocument();
     expect(screen.getByText('共 6 个日程')).toBeInTheDocument();
     expect(screen.queryByText('其他日期')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '新建任务' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '新建日程' })).toBeInTheDocument();
   });
 
@@ -84,7 +65,6 @@ describe('DateDetailDialog', () => {
       <DateDetailDialog
         isoDate="2026-07-23"
         events={events}
-        tasks={tasks}
         isTopLayer
         onClose={vi.fn()}
         onCreateEvent={vi.fn()}
@@ -104,28 +84,11 @@ describe('DateDetailDialog', () => {
     ]);
   });
 
-  it('shows an existing linked task title and omits a missing task hint', () => {
-    render(
-      <DateDetailDialog
-        isoDate="2026-07-23"
-        events={events}
-        tasks={tasks}
-        isTopLayer
-        onClose={vi.fn()}
-        onCreateEvent={vi.fn()}
-        onEditEvent={vi.fn()}
-      />
-    );
-    expect(screen.getByRole('button', { name: /关联评审/ })).toHaveTextContent('关联任务：发布 Nowly v0.1');
-    expect(screen.getByRole('button', { name: /旧关联/ })).not.toHaveTextContent('关联任务');
-  });
-
   it('shows the source timezone for a tz-bound event', () => {
     render(
       <DateDetailDialog
         isoDate="2026-07-23"
         events={[event({ id: 'tz', title: '跨时区会议', startAt: '2026-07-23T10:00', endAt: '2026-07-23T11:00', startTz: 'Asia/Shanghai', endTz: 'Asia/Shanghai' })]}
-        tasks={[]}
         isTopLayer
         onClose={vi.fn()}
         onCreateEvent={vi.fn()}
@@ -140,7 +103,6 @@ describe('DateDetailDialog', () => {
       <DateDetailDialog
         isoDate="2026-07-23"
         events={[event({ id: 'floating', title: '浮动会议', startAt: '2026-07-23T10:00', endAt: '2026-07-23T11:00', startTz: null, endTz: null })]}
-        tasks={[]}
         isTopLayer
         onClose={vi.fn()}
         onCreateEvent={vi.fn()}
@@ -171,7 +133,6 @@ describe('DateDetailDialog', () => {
       <DateDetailDialog
         isoDate="2026-07-23"
         events={seriesEvents}
-        tasks={[]}
         isTopLayer
         onClose={vi.fn()}
         onCreateEvent={vi.fn()}
@@ -194,7 +155,6 @@ describe('DateDetailDialog', () => {
       <DateDetailDialog
         isoDate="2026-07-23"
         events={[]}
-        tasks={[]}
         isTopLayer
         onClose={vi.fn()}
         onCreateEvent={vi.fn()}
@@ -205,26 +165,20 @@ describe('DateDetailDialog', () => {
     expect(screen.getByText('共 0 个日程')).toBeInTheDocument();
   });
 
-  it('emits task, event, and edit intents with the date and trigger', async () => {
+  it('emits event and edit intents with the date and trigger', async () => {
     const user = userEvent.setup();
-    const onCreateTask = vi.fn();
     const onCreateEvent = vi.fn();
     const onEditEvent = vi.fn();
     render(
       <DateDetailDialog
         isoDate="2026-07-23"
         events={[events[2]]}
-        tasks={[]}
         isTopLayer
         onClose={vi.fn()}
         onCreateEvent={onCreateEvent}
-        onCreateTask={onCreateTask}
         onEditEvent={onEditEvent}
       />
     );
-    const taskButton = screen.getByRole('button', { name: '新建任务' });
-    await user.click(taskButton);
-    expect(onCreateTask).toHaveBeenCalledWith('2026-07-23', taskButton);
 
     await user.click(screen.getByRole('button', { name: '新建日程' }));
     expect(onCreateEvent).toHaveBeenCalledWith('2026-07-23');
@@ -238,12 +192,12 @@ describe('DateDetailDialog', () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
     const { rerender } = render(
-      <DateDetailDialog isoDate="2026-07-23" events={[]} tasks={[]} isTopLayer onClose={onClose} onCreateEvent={vi.fn()} onEditEvent={vi.fn()} />
+      <DateDetailDialog isoDate="2026-07-23" events={[]} isTopLayer onClose={onClose} onCreateEvent={vi.fn()} onEditEvent={vi.fn()} />
     );
     await user.keyboard('{Escape}');
     expect(onClose).toHaveBeenCalledOnce();
     rerender(
-      <DateDetailDialog isoDate="2026-07-23" events={[]} tasks={[]} isTopLayer={false} onClose={onClose} onCreateEvent={vi.fn()} onEditEvent={vi.fn()} />
+      <DateDetailDialog isoDate="2026-07-23" events={[]} isTopLayer={false} onClose={onClose} onCreateEvent={vi.fn()} onEditEvent={vi.fn()} />
     );
     await user.keyboard('{Escape}');
     expect(onClose).toHaveBeenCalledOnce();
@@ -262,7 +216,6 @@ describe('DateDetailDialog', () => {
         <DateDetailDialog
           isoDate="2026-07-23"
           events={[]}
-          tasks={[]}
           isTopLayer
           restoreFocusRef={restoreFocusRef}
           onClose={() => setOpen(false)}

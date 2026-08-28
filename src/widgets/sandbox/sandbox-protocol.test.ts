@@ -8,6 +8,7 @@ import {
   isSandboxOpenDialog,
   isSandboxReady,
   isSandboxRequest,
+  isSandboxResize,
   isSandboxVisibility,
   type SandboxGrant,
   type SandboxRequest
@@ -61,6 +62,20 @@ describe('isSandboxVisibility', () => {
     expect(isSandboxVisibility({ channel: SANDBOX_CHANNEL, kind: 'ready' })).toBe(false);
     expect(isSandboxVisibility({ channel: 'other', kind: 'visibility', visible: true })).toBe(false);
     expect(isSandboxVisibility(null)).toBe(false);
+  });
+});
+
+describe('isSandboxResize', () => {
+  it('recognizes only a well-formed resize report on the channel', () => {
+    expect(isSandboxResize({ channel: SANDBOX_CHANNEL, kind: 'resize', surface: 'dialog', height: 320 })).toBe(true);
+    expect(isSandboxResize({ channel: SANDBOX_CHANNEL, kind: 'resize', surface: 'main', height: 0 })).toBe(true);
+    // Missing/invalid height, bad surface, wrong kind, or wrong channel are rejected.
+    expect(isSandboxResize({ channel: SANDBOX_CHANNEL, kind: 'resize', surface: 'dialog' })).toBe(false);
+    expect(isSandboxResize({ channel: SANDBOX_CHANNEL, kind: 'resize', surface: 'other', height: 10 })).toBe(false);
+    expect(isSandboxResize({ channel: SANDBOX_CHANNEL, kind: 'resize', surface: 'dialog', height: Infinity })).toBe(false);
+    expect(isSandboxResize({ channel: SANDBOX_CHANNEL, kind: 'ready' })).toBe(false);
+    expect(isSandboxResize({ channel: 'other', kind: 'resize', surface: 'dialog', height: 10 })).toBe(false);
+    expect(isSandboxResize(null)).toBe(false);
   });
 });
 

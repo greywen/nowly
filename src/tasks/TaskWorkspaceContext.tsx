@@ -171,7 +171,6 @@ export function TaskWorkspaceProvider({ children }: { children: ReactNode }) {
         dueAt: draft.dueDate,
         priority: draft.priority ? legacyPriority(draft.priority) : 2 as const,
         completed: draft.completed,
-        linkedEventId: draft.linkedEventId,
         note: draft.description
       };
       const created = await repository.createTask(matrixDraft);
@@ -198,7 +197,6 @@ export function TaskWorkspaceProvider({ children }: { children: ReactNode }) {
         dueAt: draft.dueDate,
         priority: draft.priority ? legacyPriority(draft.priority) : 2 as const,
         completed: draft.completed,
-        linkedEventId: draft.linkedEventId,
         note: draft.description
       };
       const updated = await repository.updateTask(id, matrixDraft);

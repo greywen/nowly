@@ -1,13 +1,12 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import { sampleEvents, sampleTasks } from '../lib/sample-data';
+import { sampleTasks } from '../lib/sample-data';
 import { MatrixWidget } from './MatrixWidget';
 
 function props(overrides: Partial<Parameters<typeof MatrixWidget>[0]> = {}): Parameters<typeof MatrixWidget>[0] {
   return {
     tasks: sampleTasks,
-    events: sampleEvents,
     status: 'ready',
     onRetry: vi.fn(),
     onCreateTask: vi.fn(),
@@ -41,13 +40,13 @@ describe('MatrixWidget', () => {
   it('keeps four quadrants visible when empty and retries module errors', async () => {
     const user = userEvent.setup();
     const retry = vi.fn();
-    const { rerender } = render(<MatrixWidget {...props({ tasks: [], events: [], onRetry: retry })} />);
+    const { rerender } = render(<MatrixWidget {...props({ tasks: [], onRetry: retry })} />);
     expect(screen.getAllByText('暂无任务')).toHaveLength(4);
     expect(screen.getByRole('button', { name: '新增任务' })).toBeInTheDocument();
 
     rerender(
       <MatrixWidget
-        {...props({ tasks: [], events: [], status: 'error', errorMessage: '任务读取失败', onRetry: retry })}
+        {...props({ tasks: [], status: 'error', errorMessage: '任务读取失败', onRetry: retry })}
       />
     );
     await user.click(screen.getByRole('button', { name: '重试读取任务' }));
@@ -97,7 +96,7 @@ describe('MatrixWidget', () => {
   });
 
   it('shows a static loading message without spinners', () => {
-    render(<MatrixWidget {...props({ tasks: [], events: [], status: 'loading' })} />);
+    render(<MatrixWidget {...props({ tasks: [], status: 'loading' })} />);
     expect(screen.getByText('正在读取本地任务')).toBeInTheDocument();
   });
 

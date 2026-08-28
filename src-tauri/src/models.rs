@@ -90,6 +90,8 @@ pub struct EventDraft {
     pub all_day: bool,
     pub category: String,
     pub color: String,
+    // 日历与任务的联动已移除；前端不再发送该字段，保留列与默认值仅为兼容旧数据。
+    #[serde(default)]
     pub linked_task_id: Option<String>,
     pub note: String,
     #[serde(default)]

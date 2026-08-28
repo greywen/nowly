@@ -26,7 +26,6 @@ function event(id: string, startAt: string, endAt: string, allDay = false): Cale
     allDay,
     category: 'work',
     color: 'blue',
-    linkedTaskId: null,
     note: '',
     createdAt: '2026-07-01T00:00:00Z',
     updatedAt: '2026-07-01T00:00:00Z',

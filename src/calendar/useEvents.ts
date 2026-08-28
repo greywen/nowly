@@ -44,11 +44,9 @@ function dragScope(event: CalendarEvent): EditScope {
 
 export function useEvents({
   now = () => new Date(),
-  onRefreshTasks,
   weekStart = 'monday'
 }: {
   now?: () => Date;
-  onRefreshTasks: () => Promise<unknown>;
   weekStart?: WeekStart;
 }) {
   const repository = useNowlyRepository();
@@ -170,19 +168,18 @@ export function useEvents({
   }, []);
 
   const refreshAfterWrite = useCallback(
-    async (refreshTasks: boolean) => {
+    async () => {
       // Silent reload keeps the current events on screen so shared consumers
-      // (matrix, today summary, calendar) don't flash empty during a write.
+      // (today summary, calendar) don't flash empty during a write.
       await loadEvents(state, { silent: true });
-      if (refreshTasks) await onRefreshTasks();
     },
-    [loadEvents, onRefreshTasks, state]
+    [loadEvents, state]
   );
 
   const createEvent = useCallback(
     async (draft: EventDraft) => {
       const created = await repository.createEvent(draft);
-      await refreshAfterWrite(created.linkedTaskId !== null || draft.linkedTaskId !== null);
+      await refreshAfterWrite();
       return created;
     },
     [refreshAfterWrite, repository]
@@ -191,7 +188,7 @@ export function useEvents({
   const updateEvent = useCallback(
     async (event: CalendarEvent, draft: EventDraft, scope: EditScope) => {
       await repository.updateEvent(targetOf(event), draft, scope);
-      await refreshAfterWrite(event.linkedTaskId !== null || draft.linkedTaskId !== null);
+      await refreshAfterWrite();
     },
     [refreshAfterWrite, repository]
   );
@@ -199,7 +196,7 @@ export function useEvents({
   const deleteEvent = useCallback(
     async (event: CalendarEvent, scope: EditScope) => {
       await repository.deleteEvent(targetOf(event), scope);
-      await refreshAfterWrite(event.linkedTaskId !== null);
+      await refreshAfterWrite();
     },
     [refreshAfterWrite, repository]
   );
@@ -209,7 +206,6 @@ export function useEvents({
       if (event.startAt.slice(0, 10) === isoDate) return;
       const draft = shiftEventToDate(event, isoDate);
       await repository.updateEvent(targetOf(event), draft, dragScope(event));
-      const refreshTasks = event.linkedTaskId !== null || draft.linkedTaskId !== null;
       const [targetYear, targetMonth] = isoDate.split('-').map(Number);
       const outsideVisibleMonth =
         state.view === 'month' &&
@@ -221,12 +217,11 @@ export function useEvents({
         requestIdRef.current += 1;
         setEvents({ status: 'loading', data: [] });
         setState({ view: 'month', anchor: new Date(targetYear, targetMonth - 1, 1) });
-        if (refreshTasks) await onRefreshTasks();
       } else {
-        await refreshAfterWrite(refreshTasks);
+        await refreshAfterWrite();
       }
     },
-    [onRefreshTasks, refreshAfterWrite, repository, state]
+    [refreshAfterWrite, repository, state]
   );
 
   const moveEventToHour = useCallback(
@@ -237,7 +232,7 @@ export function useEvents({
         return;
       }
       await repository.updateEvent(targetOf(event), draft, dragScope(event));
-      await refreshAfterWrite(event.linkedTaskId !== null || draft.linkedTaskId !== null);
+      await refreshAfterWrite();
     },
     [refreshAfterWrite, repository]
   );
@@ -250,7 +245,7 @@ export function useEvents({
       if (endDate === event.endAt.slice(0, 10)) return;
       const draft = resizeEventEndToDate(event, endDate);
       await repository.updateEvent(targetOf(event), draft, dragScope(event));
-      await refreshAfterWrite(event.linkedTaskId !== null || draft.linkedTaskId !== null);
+      await refreshAfterWrite();
     },
     [refreshAfterWrite, repository]
   );

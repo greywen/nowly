@@ -21,7 +21,6 @@ const form: EventFormDraft = {
   allDay: false,
   category: 'work',
   color: '#4FC9DA',
-  linkedTaskId: null,
   note: '  保留备注空格  ',
   reminders: [],
   recurrence: null
@@ -35,7 +34,6 @@ const event: CalendarEvent = {
   allDay: false,
   category: 'important',
   color: '#F06445',
-  linkedTaskId: 't1',
   note: '确认范围',
   createdAt: '2026-07-23T09:00:00Z',
   updatedAt: '2026-07-23T09:00:00Z',
@@ -62,7 +60,6 @@ describe('event draft helpers', () => {
       allDay: false,
       category: 'work',
       color: '#4FC9DA',
-      linkedTaskId: null,
       note: '',
       reminders: [],
       recurrence: null
@@ -86,7 +83,6 @@ describe('event draft helpers', () => {
       allDay: false,
       category: 'important',
       color: '#F06445',
-      linkedTaskId: 't1',
       note: '确认范围',
       reminders: [],
       recurrence: null
@@ -102,7 +98,6 @@ describe('event draft helpers', () => {
       allDay: false,
       category: 'work',
       color: '#4FC9DA',
-      linkedTaskId: null,
       note: '  保留备注空格  ',
       reminders: [],
       recurrence: null

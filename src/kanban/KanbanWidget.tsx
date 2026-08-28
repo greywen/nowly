@@ -11,7 +11,6 @@ import { UnifiedTaskDialog } from '../tasks/UnifiedTaskDialog';
 import { TaskSettingsDialog } from '../tasks/TaskSettingsDialog';
 import { useKanban } from './useKanban';
 import { FilterSelect, type FilterOption } from '../components/FilterSelect';
-import type { CalendarEvent } from '../calendar/calendar-model';
 import { t } from '../i18n';
 
 // Drag payloads carried in component state (dataTransfer is unreliable in the
@@ -31,8 +30,6 @@ type DialogState =
 
 type KanbanWidgetProps = {
   todayIso: string;
-  events?: CalendarEvent[];
-  onEventsChanged?: () => Promise<unknown> | void;
   recentColors?: string[];
   onRememberCustomColor?: (color: string) => Promise<void> | void;
 };
@@ -57,8 +54,6 @@ function LegacyKanbanWidget(props: KanbanWidgetProps) {
 
 function KanbanWidgetContent({
   todayIso,
-  events = [],
-  onEventsChanged,
   recentColors = [],
   onRememberCustomColor,
   kanban,
@@ -328,10 +323,8 @@ function KanbanWidgetContent({
         workspace ? (
           <UnifiedTaskDialog
             mode={{ type: 'create', originView: 'kanban', dueDate: null, laneId: creatingCardLane.id }}
-            events={events}
             restoreFocusRef={restoreFocusRef}
             onClose={closeDialog}
-            onEventsChanged={onEventsChanged}
           />
         ) : (
           <KanbanTaskDialog
@@ -354,10 +347,8 @@ function KanbanWidgetContent({
               type: 'edit',
               task: workspace.workspace.data.tasks.find((task) => task.id === editingCard.id)!
             }}
-            events={events}
             restoreFocusRef={restoreFocusRef}
             onClose={closeDialog}
-            onEventsChanged={onEventsChanged}
           />
         ) : (
           <KanbanTaskDialog

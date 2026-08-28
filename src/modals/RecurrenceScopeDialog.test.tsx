@@ -8,7 +8,6 @@ function props(overrides: Record<string, unknown> = {}) {
     action: 'edit' as const,
     isFirstOccurrence: false,
     slotsChanged: false,
-    hasLinkedTask: false,
     onCancel: vi.fn(),
     onConfirm: vi.fn(),
     ...overrides
@@ -16,7 +15,6 @@ function props(overrides: Record<string, unknown> = {}) {
 }
 
 const exceptionsNotice = '该日程已有的单次调整将被清除。';
-const linkedTaskNotice = '关联的任务将保留在原重复日程。';
 
 describe('RecurrenceScopeDialog', () => {
   it('hides this-and-following when the target is the first occurrence', () => {
@@ -55,21 +53,6 @@ describe('RecurrenceScopeDialog', () => {
     rerender(<RecurrenceScopeDialog {...props({ slotsChanged: false })} />);
     await user.click(screen.getByRole('radio', { name: '全部' }));
     expect(screen.queryByText(exceptionsNotice)).toBeNull();
-  });
-
-  it('explains the linked task only for this-and-following on a linked series', async () => {
-    const user = userEvent.setup();
-    const { rerender } = render(<RecurrenceScopeDialog {...props({ hasLinkedTask: true })} />);
-
-    expect(screen.queryByText(linkedTaskNotice)).toBeNull();
-    await user.click(screen.getByRole('radio', { name: '全部' }));
-    expect(screen.queryByText(linkedTaskNotice)).toBeNull();
-    await user.click(screen.getByRole('radio', { name: '此后所有' }));
-    expect(screen.getByText(linkedTaskNotice)).toBeInTheDocument();
-
-    rerender(<RecurrenceScopeDialog {...props({ hasLinkedTask: false })} />);
-    await user.click(screen.getByRole('radio', { name: '此后所有' }));
-    expect(screen.queryByText(linkedTaskNotice)).toBeNull();
   });
 
   it('reports every selected scope literal on confirm', async () => {

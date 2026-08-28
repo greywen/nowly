@@ -427,7 +427,6 @@ export function shiftEventToDate(event: CalendarEvent, isoDate: string): EventDr
     allDay: event.allDay,
     category: event.category,
     color: event.color,
-    linkedTaskId: event.linkedTaskId,
     note: event.note,
     reminders: event.reminders,
     recurrence: event.recurrence
@@ -451,7 +450,6 @@ export function resizeEventEndToDate(event: CalendarEvent, isoDate: string): Eve
     allDay: event.allDay,
     category: event.category,
     color: event.color,
-    linkedTaskId: event.linkedTaskId,
     note: event.note,
     reminders: event.reminders,
     recurrence: event.recurrence
@@ -489,7 +487,6 @@ export function shiftEventToHour(event: CalendarEvent, isoDate: string, startHou
     allDay: false,
     category: event.category,
     color: event.color,
-    linkedTaskId: event.linkedTaskId,
     note: event.note,
     reminders: event.reminders,
     recurrence: event.recurrence

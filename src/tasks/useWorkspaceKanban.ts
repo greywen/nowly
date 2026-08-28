@@ -34,8 +34,7 @@ export function useWorkspaceKanban() {
       completed: card.laneId === workspace.workspace.data.completionLaneId,
       laneId: card.laneId,
       tagIds: card.tagIds,
-      collaboratorIds: card.collaboratorIds,
-      linkedEventId: null
+      collaboratorIds: card.collaboratorIds
     };
   }, [workspace.workspace.data.completionLaneId, workspace.workspace.data.tasks]);
 
@@ -48,7 +47,6 @@ export function useWorkspaceKanban() {
     const current = workspace.workspace.data.tasks.find((task) => task.id === id);
     const saved = await workspace.updateTask(id, {
       ...taskDraft(draft),
-      linkedEventId: current?.linkedEventId ?? null,
       views: current?.views
     });
     return taskToKanbanCard(saved);

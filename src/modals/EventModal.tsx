@@ -13,11 +13,9 @@ import type { RepositoryError } from '../data/nowly-repository';
 import { createEventDraft, eventToForm, isEventFormDirty, MAX_REMINDERS, toEventDraft, validateEventForm, type EventFieldErrors, type EventFormDraft } from '../lib/event-draft';
 import { presetToRecurrence, recurrenceToPreset, weekdayOf, WEEKDAYS, type RecurrencePreset } from '../lib/recurrence';
 import { RecurrenceScopeDialog } from './RecurrenceScopeDialog';
-import type { MatrixTask } from '../matrix/matrix-model';
 
 type EventModalProps = {
   mode: { type:'create'; dateIso:string } | { type:'edit'; event:CalendarEvent };
-  tasks: MatrixTask[];
   restoreFocusRef?: RefObject<HTMLElement | null>;
   onClose(): void;
   onSaved(): Promise<void> | void;
@@ -66,7 +64,7 @@ function sameRecurrence(left:Recurrence|null,right:Recurrence|null){
     &&left.byDay.every((day,index)=>day===right.byDay[index])&&sameEnd(left.end,right.end);
 }
 
-export function EventModal({ mode,tasks,restoreFocusRef,onClose,onSaved,onDeleted,createEvent,updateEvent,deleteEvent,now=()=>new Date(),recentColors=[],onRememberCustomColor }:EventModalProps) {
+export function EventModal({ mode,restoreFocusRef,onClose,onSaved,onDeleted,createEvent,updateEvent,deleteEvent,now=()=>new Date(),recentColors=[],onRememberCustomColor }:EventModalProps) {
   const initial = useMemo(()=>mode.type==='edit'?eventToForm(mode.event):createEventDraft(mode.dateIso,now()),[mode]);
   const [form,setForm]=useState<EventFormDraft>(initial);
   // 预设不是双射（「自定义」的种子就是一条普通周规则），只在打开表单时初始化一次。
@@ -153,12 +151,11 @@ export function EventModal({ mode,tasks,restoreFocusRef,onClose,onSaved,onDelete
         </div>
         <Select id="event-category" label={t('eventModal.category')} options={categoryOptions()} value={form.category} disabled={busy} onChange={v=>update('category',v as EventCategory)}/>{errors.category?<span className="field-error">{errors.category}</span>:null}
         <ColorPicker legend={t('eventModal.color')} name="event-color" value={form.color} presets={eventColorPresets()} recentColors={recentColors} disabled={busy} onChange={color=>update('color',color)} onRememberColor={onRememberCustomColor}/>{errors.color?<span className="field-error">{errors.color}</span>:null}
-        <Select id="event-linked-task" label={t('eventModal.linkedTask')} options={[{value:'',label:t('eventModal.noLink')},...tasks.map(task=>({value:task.id,label:task.title}))]} value={form.linkedTaskId??''} searchable disabled={busy} onChange={v=>update('linkedTaskId',v||null)}/>{errors.linkedTaskId?<span className="field-error">{errors.linkedTaskId}</span>:null}
         <div className="good-field"><label htmlFor="event-note">{t('eventModal.note')}</label><textarea id="event-note" className="good-input good-textarea" autoComplete="off" value={form.note} disabled={busy} onChange={e=>update('note',e.target.value)}/></div>
       </form>
     </Dialog>
     {confirm==='discard'?<ConfirmDialog title={t('common.discardTitle')} description={t('common.discardDesc')} confirmLabel={t('common.discard')} busyLabel={t('common.discarding')} onCancel={()=>setConfirm(null)} onConfirm={onClose}/>:null}
-    {confirm==='delete'&&mode.type==='edit'?<ConfirmDialog title={t('eventModal.deleteTitle',{title:mode.event.title})} description={<>{t('common.deleteUnrecoverable')}<br/>{t('eventModal.deleteDesc2')}</>} tone="danger" confirmLabel={t('common.permanentDelete')} busyLabel={t('common.deleting')} busy={busy} errorMessage={dialogError} onCancel={()=>{setConfirm(null);setDialogError('');}} onConfirm={()=>void remove('all')}/>:null}
-    {scopeAction&&mode.type==='edit'?<RecurrenceScopeDialog action={scopeAction} isFirstOccurrence={mode.event.occurrenceStartAt===mode.event.seriesStartAt} slotsChanged={scopeAction==='edit'&&slotsChanged} hasLinkedTask={mode.event.linkedTaskId!==null} busy={busy} errorMessage={dialogError} onCancel={()=>{setScopeAction(null);setDialogError('');}} onConfirm={scope=>{ if(scopeAction==='edit')void commit(scope); else void remove(scope); }}/>:null}
+    {confirm==='delete'&&mode.type==='edit'?<ConfirmDialog title={t('eventModal.deleteTitle',{title:mode.event.title})} description={t('common.deleteUnrecoverable')} tone="danger" confirmLabel={t('common.permanentDelete')} busyLabel={t('common.deleting')} busy={busy} errorMessage={dialogError} onCancel={()=>{setConfirm(null);setDialogError('');}} onConfirm={()=>void remove('all')}/>:null}
+    {scopeAction&&mode.type==='edit'?<RecurrenceScopeDialog action={scopeAction} isFirstOccurrence={mode.event.occurrenceStartAt===mode.event.seriesStartAt} slotsChanged={scopeAction==='edit'&&slotsChanged} busy={busy} errorMessage={dialogError} onCancel={()=>{setScopeAction(null);setDialogError('');}} onConfirm={scope=>{ if(scopeAction==='edit')void commit(scope); else void remove(scope); }}/>:null}
   </>;
 }

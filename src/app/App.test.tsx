@@ -110,7 +110,7 @@ describe('App startup and window behavior', () => {
 
   it('queries month ranges, navigates, and creates an event from the header', async () => {
     const user = userEvent.setup();
-    const created = { id:'e1', title:'评审', startAt:'2026-07-23T09:45', endAt:'2026-07-23T10:45', allDay:false, category:'work' as const, color:'blue' as const, linkedTaskId:null, note:'', createdAt:'x', updatedAt:'x' };
+    const created = { id:'e1', title:'评审', startAt:'2026-07-23T09:45', endAt:'2026-07-23T10:45', allDay:false, category:'work' as const, color:'blue' as const, note:'', createdAt:'x', updatedAt:'x' };
     const listEventsInRange = vi.fn().mockResolvedValue([]);
     const createEvent = vi.fn().mockResolvedValue(created);
     const repository = createRepository({ listEventsInRange, createEvent });
@@ -132,7 +132,7 @@ describe('App startup and window behavior', () => {
     const user = userEvent.setup();
     const existing = {
       id:'t1', title:'发布 Nowly', quadrant:'important_urgent' as const, dueAt:null, priority:1 as const,
-      completed:false, linkedEventId:null, note:'', createdAt:'x', updatedAt:'x'
+      completed:false, note:'', createdAt:'x', updatedAt:'x'
     };
     const created = { ...existing, id:'t2', title:'新任务' };
     const listTasks = vi.fn().mockResolvedValueOnce([existing]).mockResolvedValue([existing, created]);
@@ -155,23 +155,6 @@ describe('App startup and window behavior', () => {
 
     await user.click(screen.getByRole('button', { name:'编辑任务：发布 Nowly' }));
     expect(screen.getByRole('dialog', { name:'编辑任务' })).toBeInTheDocument();
-  });
-
-  it('refreshes the current event month after creating a linked task', async () => {
-    const user = userEvent.setup();
-    const event = { id:'e1', title:'设计评审', startAt:'2026-07-23T14:00', endAt:'2026-07-23T15:00', allDay:false, category:'work' as const, color:'blue' as const, linkedTaskId:null, note:'', createdAt:'x', updatedAt:'x' };
-    const linked = { id:'t1', title:'关联任务', quadrant:'important_urgent' as const, dueAt:null, priority:2 as const, completed:false, linkedEventId:'e1', note:'', createdAt:'x', updatedAt:'x' };
-    const listEventsInRange = vi.fn().mockResolvedValue([event]);
-    const createTask = vi.fn().mockResolvedValue(linked);
-    renderApp(createRepository({ listEventsInRange, createTask }));
-    await waitFor(() => expect(listEventsInRange).toHaveBeenCalledOnce());
-
-    await user.click(screen.getByRole('button', { name:'新增任务' }));
-    await user.type(screen.getByLabelText('任务标题'), '关联任务');
-    await user.click(screen.getByRole('combobox', { name:'关联日程' }));
-    await user.click(screen.getByRole('option', { name:'设计评审' }));
-    await user.click(screen.getByRole('button', { name:'保存任务' }));
-    await waitFor(() => expect(listEventsInRange).toHaveBeenCalledTimes(2));
   });
 
   it('creates notes and opens the all-notes manager', async () => {

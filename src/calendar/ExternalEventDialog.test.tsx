@@ -6,7 +6,7 @@ import type { CalendarEvent } from './calendar-model';
 function event(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
   return {
     id: 'x1', title: '团队周会', startAt: '2026-08-10T18:00', endAt: '2026-08-10T19:00',
-    allDay: false, category: 'personal', color: '#4FC9DA', linkedTaskId: null,
+    allDay: false, category: 'personal', color: '#4FC9DA',
     note: '', reminders: [], createdAt: '', updatedAt: '',
     recurrence: null, startTz: 'Asia/Shanghai', endTz: 'Asia/Shanghai', rrule: null,
     seriesId: null, seriesStartAt: null, occurrenceStartAt: null, isOverridden: false,

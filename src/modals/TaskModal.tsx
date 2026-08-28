@@ -1,6 +1,5 @@
 import { X } from 'lucide-react';
 import { type RefObject, useId, useMemo, useState } from 'react';
-import type { CalendarEvent } from '../calendar/calendar-model';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { DatePicker } from '../components/DatePicker';
 import { Dialog } from '../components/Dialog';
@@ -18,10 +17,9 @@ import { t } from '../i18n';
 
 type TaskModalProps = {
   mode: { type: 'create'; dueDate: string | null } | { type: 'edit'; task: MatrixTask };
-  events: CalendarEvent[];
   restoreFocusRef?: RefObject<HTMLElement | null>;
   onClose(): void;
-  onSaved(task: MatrixTask, previousLinkedEventId: string | null): Promise<void> | void;
+  onSaved(task: MatrixTask): Promise<void> | void;
   onDeleted(task: MatrixTask): Promise<void> | void;
   createTask(draft: TaskDraft): Promise<MatrixTask>;
   updateTask(task: MatrixTask, draft: TaskDraft): Promise<MatrixTask>;
@@ -34,7 +32,7 @@ function errorMessage(error: unknown) {
 }
 
 export function TaskModal({
-  mode, events, restoreFocusRef, onClose, onSaved, onDeleted, createTask, updateTask, deleteTask
+  mode, restoreFocusRef, onClose, onSaved, onDeleted, createTask, updateTask, deleteTask
 }: TaskModalProps) {
   const initial = useMemo(
     () => mode.type === 'edit' ? taskToForm(mode.task) : createTaskForm(mode.dueDate),
@@ -48,13 +46,6 @@ export function TaskModal({
   const [confirm, setConfirm] = useState<'discard' | 'delete' | null>(null);
   const titleId = useId();
 
-  const eventOptions = [
-    { value: '', label: t('taskModal.noLink') },
-    ...(form.linkedEventId && !events.some((event) => event.id === form.linkedEventId)
-      ? [{ value: form.linkedEventId, label: t('taskModal.staleLink') }]
-      : []),
-    ...events.map((event) => ({ value: event.id, label: event.title }))
-  ];
   const priorityOptions = ([1, 2, 3] as TaskPriority[]).map((value) => ({
     value: String(value), label: priorityLabel(value)
   }));
@@ -78,7 +69,7 @@ export function TaskModal({
       const saved = mode.type === 'create'
         ? await createTask(draft)
         : await updateTask(mode.task, draft);
-      await onSaved(saved, mode.type === 'edit' ? mode.task.linkedEventId : null);
+      await onSaved(saved);
       onClose();
     } catch (error) {
       const repositoryError = error as RepositoryError;
@@ -177,14 +168,6 @@ export function TaskModal({
         />
         {errors.priority ? <span className="field-error">{errors.priority}</span> : null}
 
-        <Select
-          id="task-linked-event" name="linkedEventId" label={t('taskModal.linkedEvent')} options={eventOptions}
-          value={form.linkedEventId} searchable disabled={busy}
-          errorId={errors.linkedEventId ? 'task-linked-event-error' : undefined}
-          onChange={(value) => update('linkedEventId', value)}
-        />
-        {errors.linkedEventId ? <span id="task-linked-event-error" className="field-error">{errors.linkedEventId}</span> : null}
-
         <label className="form-check form-check-custom form-check-solid">
           <input
             className="form-check-input" type="checkbox" checked={form.completed} disabled={busy}
@@ -210,7 +193,7 @@ export function TaskModal({
     {confirm === 'delete' && mode.type === 'edit' ? (
       <ConfirmDialog
         title={t('taskModal.deleteTitle', { title: mode.task.title })}
-        description={<>{t('common.deleteUnrecoverable')}<br />{t('taskModal.deleteDesc2')}</>}
+        description={t('common.deleteUnrecoverable')}
         tone="danger" confirmLabel={t('common.permanentDelete')} busyLabel={t('common.deleting')} busy={busy}
         errorMessage={dialogError}
         onCancel={() => { setConfirm(null); setDialogError(''); }}

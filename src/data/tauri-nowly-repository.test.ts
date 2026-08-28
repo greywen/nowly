@@ -21,7 +21,6 @@ describe('tauriNowlyRepository', () => {
       allDay: false,
       category: 'work' as const,
       color: 'blue' as const,
-      linkedTaskId: null,
       note: '',
       reminders: [],
       recurrence: null
@@ -33,7 +32,6 @@ describe('tauriNowlyRepository', () => {
       dueAt: '2026-07-23',
       priority: 1 as const,
       completed: false,
-      linkedEventId: 'e1',
       note: ''
     };
 
@@ -125,7 +123,6 @@ describe('tauriNowlyRepository', () => {
       allDay: false,
       category: 'work',
       color: '#1F9C8A',
-      linkedTaskId: null,
       note: '',
       reminders: [],
       recurrence: { freq: 'weekly', interval: 1, byDay: ['MO'], end: { kind: 'never' } }

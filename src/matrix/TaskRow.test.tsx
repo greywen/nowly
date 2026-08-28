@@ -1,7 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import type { CalendarEvent } from '../calendar/calendar-model';
 import type { MatrixTask } from './matrix-model';
 import { TaskRow } from './TaskRow';
 
@@ -12,35 +11,10 @@ const open: MatrixTask = {
   dueAt: '2026-07-23',
   priority: 1,
   completed: false,
-  linkedEventId: 'e1',
   note: '',
   tags: [],
   createdAt: '2026-07-20T09:00:00Z',
   updatedAt: '2026-07-20T09:00:00Z'
-};
-
-const linkedEvent: CalendarEvent = {
-  id: 'e1',
-  title: '设计评审',
-  startAt: '2026-07-23T14:00',
-  endAt: '2026-07-23T15:00',
-  allDay: false,
-  category: 'work',
-  color: 'blue',
-  linkedTaskId: 't1',
-  note: '',
-  reminders: [],
-  createdAt: '2026-07-20T09:00:00Z',
-  updatedAt: '2026-07-20T09:00:00Z',
-  recurrence: null,
-  startTz: null,
-  endTz: null,
-  rrule: null,
-  seriesId: null,
-  seriesStartAt: null,
-  occurrenceStartAt: null,
-  subscriptionId: null,
-  isOverridden: false
 };
 
 describe('TaskRow', () => {
@@ -51,7 +25,6 @@ describe('TaskRow', () => {
     render(
       <TaskRow
         task={open}
-        events={[linkedEvent]}
         today={new Date(2026, 6, 23)}
         pending={false}
         onToggle={onToggle}
@@ -73,7 +46,7 @@ describe('TaskRow', () => {
   it('does not show a tooltip on hover or keyboard focus', async () => {
     const user = userEvent.setup();
     render(
-      <TaskRow task={open} events={[linkedEvent]} pending={false} onToggle={vi.fn()} onOpen={vi.fn()} />
+      <TaskRow task={open} pending={false} onToggle={vi.fn()} onOpen={vi.fn()} />
     );
     const title = screen.getByRole('button', { name: '编辑任务：发布 Nowly' });
 
@@ -91,8 +64,7 @@ describe('TaskRow', () => {
     const user = userEvent.setup();
     render(
       <TaskRow
-        task={{ ...open, completed: true, linkedEventId: 'outside' }}
-        events={[]}
+        task={{ ...open, completed: true }}
         pending
         onToggle={vi.fn()}
         onOpen={vi.fn()}

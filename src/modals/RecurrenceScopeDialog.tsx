@@ -7,7 +7,6 @@ type RecurrenceScopeDialogProps = {
   action: 'edit' | 'delete';
   isFirstOccurrence: boolean;
   slotsChanged: boolean;
-  hasLinkedTask: boolean;
   busy?: boolean;
   errorMessage?: string;
   onCancel(): void;
@@ -18,7 +17,6 @@ export function RecurrenceScopeDialog({
   action,
   isFirstOccurrence,
   slotsChanged,
-  hasLinkedTask,
   busy = false,
   errorMessage,
   onCancel,
@@ -33,9 +31,7 @@ export function RecurrenceScopeDialog({
   const notice =
     scope === 'all' && slotsChanged
       ? t('recurrence.noticeExceptionsCleared')
-      : scope === 'thisAndFollowing' && hasLinkedTask
-        ? t('recurrence.noticeLinkedTaskKept')
-        : '';
+      : '';
 
   return (
     <Dialog

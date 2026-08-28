@@ -6,7 +6,7 @@ export type TaskPriority =
   | 'not_important_urgent'
   | 'not_important_not_urgent';
 
-export type TaskView = 'kanban' | 'matrix' | 'calendar';
+export type TaskView = 'kanban' | 'matrix';
 
 export type Task = {
   id: string;
@@ -19,7 +19,6 @@ export type Task = {
   boardPosition: number;
   tagIds: string[];
   collaboratorIds: string[];
-  linkedEventId: string | null;
   views: TaskView[];
   createdAt: string;
   updatedAt: string;
@@ -34,7 +33,6 @@ export type TaskDraft = {
   laneId: string;
   tagIds: string[];
   collaboratorIds: string[];
-  linkedEventId: string | null;
   views?: TaskView[];
 };
 

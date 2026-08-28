@@ -19,14 +19,13 @@ export type EventFormDraft = {
   allDay: boolean;
   category: EventCategory;
   color: EventColor;
-  linkedTaskId: string | null;
   note: string;
   reminders: number[];
   recurrence: Recurrence | null;
 };
 
 export type EventFieldErrors = Partial<
-  Record<'title' | 'startAt' | 'endAt' | 'category' | 'color' | 'linkedTaskId' | 'reminders' | 'recurrence', string>
+  Record<'title' | 'startAt' | 'endAt' | 'category' | 'color' | 'reminders' | 'recurrence', string>
 >;
 
 const categories: EventCategory[] = ['work', 'important', 'personal', 'learning'];
@@ -61,7 +60,6 @@ export function createEventDraft(dateIso: string, now: Date): EventFormDraft {
     allDay: false,
     category: 'work',
     color: DEFAULT_EVENT_COLOR,
-    linkedTaskId: null,
     note: '',
     reminders: [],
     recurrence: null
@@ -83,7 +81,6 @@ export function eventToForm(event: CalendarEvent): EventFormDraft {
     allDay: event.allDay,
     category: event.category,
     color: event.color,
-    linkedTaskId: event.linkedTaskId,
     note: event.note,
     reminders: [...event.reminders],
     recurrence: event.recurrence
@@ -98,7 +95,6 @@ export function toEventDraft(form: EventFormDraft): EventDraft {
     allDay: form.allDay,
     category: form.category,
     color: normalizeHexColor(form.color) as EventColor,
-    linkedTaskId: form.linkedTaskId,
     note: form.note,
     reminders: normalizeReminders(form.reminders),
     recurrence: form.recurrence

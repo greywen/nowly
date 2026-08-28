@@ -135,6 +135,52 @@ describe('SandboxModule', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
+  it('sizes the dialog frame to the height the dialog surface reports', async () => {
+    render(
+      <SandboxModule
+        host={host()}
+        source="Nowly.defineModule(() => {});"
+        title="沙箱计数器"
+        permissions={['state']}
+      />
+    );
+    const mainFrame = screen.getByTitle('沙箱计数器') as HTMLIFrameElement;
+    await act(async () => {
+      postFromGuest(mainFrame, { channel: SANDBOX_CHANNEL, kind: 'openDialog', title: '模块设置' });
+    });
+    const dialogFrame = (await screen.findByTitle('模块设置')) as HTMLIFrameElement;
+    // Before any report, no inline height is applied (CSS fallback governs).
+    expect(dialogFrame.style.height).toBe('');
+
+    // The dialog surface measures its content and reports a natural height;
+    // the host applies it inline so the dialog fits the content.
+    await act(async () => {
+      postFromGuest(dialogFrame, { channel: SANDBOX_CHANNEL, kind: 'resize', surface: 'dialog', height: 264 });
+    });
+    await waitFor(() => expect(dialogFrame.style.height).toBe('264px'));
+  });
+
+  it('ignores a resize reported by the main surface', async () => {
+    render(
+      <SandboxModule
+        host={host()}
+        source="Nowly.defineModule(() => {});"
+        title="沙箱计数器"
+        permissions={['state']}
+      />
+    );
+    const mainFrame = screen.getByTitle('沙箱计数器') as HTMLIFrameElement;
+    await act(async () => {
+      postFromGuest(mainFrame, { channel: SANDBOX_CHANNEL, kind: 'openDialog', title: '模块设置' });
+    });
+    const dialogFrame = (await screen.findByTitle('模块设置')) as HTMLIFrameElement;
+    // A main-surface resize must not size the dialog frame.
+    await act(async () => {
+      postFromGuest(mainFrame, { channel: SANDBOX_CHANNEL, kind: 'resize', surface: 'main', height: 999 });
+    });
+    expect(dialogFrame.style.height).toBe('');
+  });
+
   it('broadcasts stateChanged to the other surface after a save', async () => {
     render(
       <SandboxModule

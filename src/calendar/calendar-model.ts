@@ -48,7 +48,6 @@ export type EventDraft = {
   allDay: boolean;
   category: EventCategory;
   color: EventColor;
-  linkedTaskId: string | null;
   note: string;
   // Minute offsets before the start at which to remind, e.g. [10, 60].
   reminders: number[];
@@ -68,7 +67,6 @@ export type CalendarEvent = {
   allDay: boolean;
   category: EventCategory;
   color: EventColor;
-  linkedTaskId: string | null;
   note: string;
   // Minute offsets before the start at which to remind, e.g. [10, 60].
   reminders: number[];

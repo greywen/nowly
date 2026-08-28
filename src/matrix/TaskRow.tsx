@@ -1,12 +1,10 @@
 import type { DragEvent } from 'react';
-import type { CalendarEvent } from '../calendar/calendar-model';
 import { formatTaskMeta } from '../lib/task-draft';
 import type { MatrixTask } from './matrix-model';
 import { t } from '../i18n';
 
 type TaskRowProps = {
   task: MatrixTask;
-  events: CalendarEvent[];
   today?: Date;
   pending: boolean;
   dragging?: boolean;

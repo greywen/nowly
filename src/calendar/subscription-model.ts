@@ -53,7 +53,6 @@ export function externalToCalendarEvent(external: ExternalEvent): CalendarEvent 
     // neutral category so category-based styling never fights the source color.
     category: 'personal' as EventCategory,
     color: external.color,
-    linkedTaskId: null,
     note: '',
     reminders: [],
     createdAt: '',

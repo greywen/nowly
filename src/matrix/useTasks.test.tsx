@@ -23,7 +23,6 @@ const draft: TaskDraft = {
   dueAt: '2026-07-23',
   priority: 1,
   completed: false,
-  linkedEventId: null,
   note: ''
 };
 
@@ -96,7 +95,7 @@ describe('useTasks', () => {
     const repository = createRepository({
       listTasks: vi.fn().mockImplementationOnce(() => first.promise).mockImplementationOnce(() => retry.promise)
     });
-    const { result } = renderHook(() => useTasks({ onRefreshEvents: vi.fn() }), {
+    const { result } = renderHook(() => useTasks(), {
       wrapper: wrapper(repository)
     });
 
@@ -111,7 +110,7 @@ describe('useTasks', () => {
     const existing = task('existing');
     const listTasks = vi.fn().mockResolvedValueOnce([existing]).mockRejectedValueOnce(new Error('任务读取失败'));
     const repository = createRepository({ listTasks });
-    const { result } = renderHook(() => useTasks({ onRefreshEvents: vi.fn() }), {
+    const { result } = renderHook(() => useTasks(), {
       wrapper: wrapper(repository)
     });
     await waitFor(() => expect(result.current.tasks.status).toBe('ready'));
@@ -120,37 +119,14 @@ describe('useTasks', () => {
     expect(result.current.tasks).toEqual({ status: 'error', data: [existing], message: '任务读取失败' });
   });
 
-  it('refreshes events only when CRUD changes a relationship', async () => {
-    const linked = task('linked', { linkedEventId: 'e1' });
-    const unlinked = task('linked', { linkedEventId: null });
-    const onRefreshEvents = vi.fn().mockResolvedValue(undefined);
-    const repository = createRepository({
-      createTask: vi.fn().mockResolvedValue(linked),
-      updateTask: vi.fn().mockResolvedValue(unlinked),
-      deleteTask: vi.fn().mockResolvedValue(undefined)
-    });
-    const { result } = renderHook(() => useTasks({ onRefreshEvents }), {
-      wrapper: wrapper(repository)
-    });
-    await waitFor(() => expect(result.current.tasks.status).toBe('ready'));
-
-    await act(() => result.current.createTask({ ...draft, linkedEventId: 'e1' }));
-    await act(() => result.current.updateTask(linked, draft));
-    await act(() => result.current.deleteTask(unlinked));
-
-    expect(repository.listTasks).toHaveBeenCalledTimes(4);
-    expect(onRefreshEvents).toHaveBeenCalledTimes(2);
-  });
-
-  it('rethrows failed writes without refreshing or mutating ready data', async () => {
+  it('rethrows failed writes without mutating ready data', async () => {
     const existing = task('existing');
     const failure = new Error('保存失败');
-    const onRefreshEvents = vi.fn();
     const repository = createRepository({
       listTasks: vi.fn().mockResolvedValue([existing]),
       createTask: vi.fn().mockRejectedValue(failure)
     });
-    const { result } = renderHook(() => useTasks({ onRefreshEvents }), {
+    const { result } = renderHook(() => useTasks(), {
       wrapper: wrapper(repository)
     });
     await waitFor(() => expect(result.current.tasks.data).toEqual([existing]));
@@ -158,7 +134,6 @@ describe('useTasks', () => {
     await expect(act(() => result.current.createTask(draft))).rejects.toBe(failure);
     expect(result.current.tasks).toEqual({ status: 'ready', data: [existing] });
     expect(repository.listTasks).toHaveBeenCalledOnce();
-    expect(onRefreshEvents).not.toHaveBeenCalled();
   });
 
   it('optimistically completes, disables duplicate writes, and accepts the server entity', async () => {
@@ -169,7 +144,7 @@ describe('useTasks', () => {
       listTasks: vi.fn().mockResolvedValue([open, task('later', { dueAt: null })]),
       setTaskCompleted
     });
-    const { result } = renderHook(() => useTasks({ onRefreshEvents: vi.fn() }), {
+    const { result } = renderHook(() => useTasks(), {
       wrapper: wrapper(repository)
     });
     await waitFor(() => expect(result.current.tasks.status).toBe('ready'));
@@ -195,7 +170,7 @@ describe('useTasks', () => {
       listTasks: vi.fn().mockResolvedValue([open]),
       setTaskCompleted
     });
-    const { result } = renderHook(() => useTasks({ onRefreshEvents: vi.fn() }), {
+    const { result } = renderHook(() => useTasks(), {
       wrapper: wrapper(repository)
     });
     await waitFor(() => expect(result.current.tasks.status).toBe('ready'));
@@ -232,7 +207,7 @@ describe('useTasks', () => {
       updateTask: vi.fn().mockResolvedValue(changed),
       deleteTask: vi.fn().mockResolvedValue(undefined)
     });
-    const { result } = renderHook(() => useTasks({ onRefreshEvents: vi.fn() }), {
+    const { result } = renderHook(() => useTasks(), {
       wrapper: wrapper(repository)
     });
     await waitFor(() => expect(result.current.tasks.status).toBe('ready'));
@@ -259,7 +234,7 @@ describe('useTasks', () => {
       setTaskCompleted: vi.fn(() => older.promise),
       updateTask: vi.fn().mockResolvedValue(edited)
     });
-    const { result } = renderHook(() => useTasks({ onRefreshEvents: vi.fn() }), {
+    const { result } = renderHook(() => useTasks(), {
       wrapper: wrapper(repository)
     });
     await waitFor(() => expect(result.current.tasks.status).toBe('ready'));
