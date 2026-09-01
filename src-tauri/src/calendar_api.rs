@@ -63,6 +63,9 @@ struct GoogleCalendarEntry {
     summary: Option<String>,
     #[serde(rename = "backgroundColor")]
     background_color: Option<String>,
+    /// Calendar-level defaults live on CalendarListEntry, not events.list.
+    #[serde(rename = "defaultReminders")]
+    default_reminders: Option<Vec<GoogleReminderOverride>>,
 }
 
 fn list_google_calendars(access_token: &str) -> Result<Vec<RemoteCalendar>, CommandError> {
@@ -159,6 +162,47 @@ struct GoogleEvent {
     description: Option<String>,
     start: Option<GoogleDate>,
     end: Option<GoogleDate>,
+    reminders: Option<GoogleReminders>,
+}
+
+/// Google 事件的提醒块。`use_default=true` 表示沿用 CalendarListEntry 的默认提醒；
+/// `overrides` 是显式设置的每条提醒。
+#[derive(Debug, Deserialize)]
+struct GoogleReminders {
+    #[serde(rename = "useDefault")]
+    use_default: Option<bool>,
+    overrides: Option<Vec<GoogleReminderOverride>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GoogleReminderOverride {
+    /// 提前的分钟数（Google 只支持 popup/email，两者都取分钟）。
+    minutes: Option<i64>,
+}
+
+/// 把一组 override（含默认提醒项）里的分钟数收集出来。
+fn override_minutes(overrides: &[GoogleReminderOverride]) -> Vec<i64> {
+    overrides.iter().filter_map(|o| o.minutes).collect()
+}
+
+/// 从 Google 事件的 reminders 块抽出「提前 N 分钟」列表。有显式 overrides 优先取之；
+/// 否则在 useDefault=true 时套用该日历的默认提醒 `defaults`。
+fn google_reminder_minutes(reminders: &Option<GoogleReminders>, defaults: &[i64]) -> Vec<i64> {
+    let Some(reminders) = reminders else {
+        return Vec::new();
+    };
+    let explicit: Vec<i64> = reminders
+        .overrides
+        .as_ref()
+        .map(|list| override_minutes(list))
+        .unwrap_or_default();
+    if !explicit.is_empty() {
+        return crate::ics_parser::sanitize_reminders(&explicit);
+    }
+    if reminders.use_default == Some(true) {
+        return crate::ics_parser::sanitize_reminders(defaults);
+    }
+    Vec::new()
 }
 
 #[derive(Debug, Deserialize)]
@@ -176,6 +220,27 @@ fn fetch_google_events(
     min: DateTime<Utc>,
     max: DateTime<Utc>,
 ) -> Result<Vec<ExternalInstance>, CommandError> {
+    // events.list 不包含日历级 defaultReminders；它位于 CalendarListEntry。
+    // 先读取对应条目，供 useDefault=true 的事件补齐实际提醒偏移量。
+    let defaults_url = format!(
+        "https://www.googleapis.com/calendar/v3/users/me/calendarList/{}",
+        url_encode(calendar_id),
+    );
+    let (defaults_status, defaults_body) =
+        crate::net::get_with_bearer(&defaults_url, access_token)?;
+    if !(200..300).contains(&defaults_status) {
+        return Err(api_error(defaults_status));
+    }
+    let calendar_entry: GoogleCalendarEntry = serde_json::from_str(&defaults_body)
+        .map_err(|_| CommandError::validation("url", "无法解析日历默认提醒。"))?;
+    let defaults = crate::ics_parser::sanitize_reminders(
+        &calendar_entry
+            .default_reminders
+            .as_ref()
+            .map(|list| override_minutes(list))
+            .unwrap_or_default(),
+    );
+
     let url = format!(
         "https://www.googleapis.com/calendar/v3/calendars/{}/events\
          ?singleEvents=true&maxResults=2500&timeMin={}&timeMax={}",
@@ -194,17 +259,18 @@ fn fetch_google_events(
         if event.status.as_deref() == Some("cancelled") {
             continue;
         }
-        if let Some(instance) = google_event_to_instance(event) {
+        if let Some(instance) = google_event_to_instance(event, &defaults) {
             out.push(instance);
         }
     }
     Ok(out)
 }
 
-fn google_event_to_instance(event: GoogleEvent) -> Option<ExternalInstance> {
+fn google_event_to_instance(event: GoogleEvent, defaults: &[i64]) -> Option<ExternalInstance> {
     let start = event.start?;
     let end = event.end?;
     let title = event.summary.unwrap_or_else(|| "(无标题)".to_owned());
+    let reminders = google_reminder_minutes(&event.reminders, defaults);
 
     // 全天：start.date / end.date（排他）。
     if let (Some(start_date), Some(end_date)) = (&start.date, &end.date) {
@@ -213,6 +279,7 @@ fn google_event_to_instance(event: GoogleEvent) -> Option<ExternalInstance> {
             title,
             event.location,
             event.description,
+            reminders,
             start_date,
             end_date,
         ));
@@ -229,6 +296,7 @@ fn google_event_to_instance(event: GoogleEvent) -> Option<ExternalInstance> {
         title,
         event.location,
         event.description,
+        reminders,
         start_instant,
         end_instant,
     ))
@@ -257,9 +325,25 @@ struct GraphEvent {
     is_cancelled: Option<bool>,
     #[serde(rename = "bodyPreview")]
     body_preview: Option<String>,
+    #[serde(rename = "isReminderOn")]
+    is_reminder_on: Option<bool>,
+    #[serde(rename = "reminderMinutesBeforeStart")]
+    reminder_minutes_before_start: Option<i64>,
     location: Option<GraphLocation>,
     start: Option<GraphDate>,
     end: Option<GraphDate>,
+}
+
+/// 从 Graph 事件抽出「提前 N 分钟」列表。Graph 每事件只有单一提醒，
+/// 且仅当 isReminderOn 为 true 时生效。
+fn graph_reminder_minutes(event: &GraphEvent) -> Vec<i64> {
+    if event.is_reminder_on != Some(true) {
+        return Vec::new();
+    }
+    match event.reminder_minutes_before_start {
+        Some(minutes) => crate::ics_parser::sanitize_reminders(&[minutes]),
+        None => Vec::new(),
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -288,7 +372,8 @@ fn fetch_microsoft_events(
     let url = format!(
         "https://graph.microsoft.com/v1.0/me/calendars/{}/calendarView\
          ?startDateTime={}&endDateTime={}&$top=1000\
-         &$select=id,subject,isAllDay,isCancelled,bodyPreview,location,start,end",
+         &$select=id,subject,isAllDay,isCancelled,bodyPreview,isReminderOn,\
+         reminderMinutesBeforeStart,location,start,end",
         url_encode(calendar_id),
         url_encode(&rfc3339(min)),
         url_encode(&rfc3339(max)),
@@ -312,6 +397,7 @@ fn fetch_microsoft_events(
 }
 
 fn graph_event_to_instance(event: GraphEvent) -> Option<ExternalInstance> {
+    let reminders = graph_reminder_minutes(&event);
     let start = event.start?;
     let end = event.end?;
     let title = event.subject.unwrap_or_else(|| "(无标题)".to_owned());
@@ -331,6 +417,7 @@ fn graph_event_to_instance(event: GraphEvent) -> Option<ExternalInstance> {
             title,
             location,
             event.body_preview,
+            reminders,
             &start_date,
             &end_date,
         ));
@@ -343,6 +430,7 @@ fn graph_event_to_instance(event: GraphEvent) -> Option<ExternalInstance> {
         title,
         location,
         event.body_preview,
+        reminders,
         start_instant,
         end_instant,
     ))
@@ -385,6 +473,7 @@ fn timed_instance(
     title: String,
     location: Option<String>,
     description: Option<String>,
+    reminders: Vec<i64>,
     start: DateTime<Utc>,
     end: DateTime<Utc>,
 ) -> ExternalInstance {
@@ -393,6 +482,7 @@ fn timed_instance(
         title,
         location: non_empty(location),
         description: non_empty(description),
+        reminders,
         start_wall: crate::timezone::format_wall(start.naive_utc()),
         end_wall: crate::timezone::format_wall(end.naive_utc()),
         start_tz: Some("UTC".to_owned()),
@@ -408,6 +498,7 @@ fn all_day_instance(
     title: String,
     location: Option<String>,
     description: Option<String>,
+    reminders: Vec<i64>,
     start_date: &str,
     end_date: &str,
 ) -> ExternalInstance {
@@ -416,6 +507,7 @@ fn all_day_instance(
         title,
         location: non_empty(location),
         description: non_empty(description),
+        reminders,
         start_wall: format!("{start_date}T00:00"),
         end_wall: format!("{end_date}T00:00"),
         start_tz: None,
@@ -442,7 +534,7 @@ mod tests {
                 "end":{"dateTime":"2026-08-10T11:00:00+08:00"}}"#,
         )
         .unwrap();
-        let inst = google_event_to_instance(event).unwrap();
+        let inst = google_event_to_instance(event, &[]).unwrap();
         assert!(!inst.all_day);
         // +08:00 10:00 → 02:00 UTC。
         assert_eq!(inst.start_wall, "2026-08-10T02:00");
@@ -458,12 +550,121 @@ mod tests {
                 "start":{"date":"2026-08-10"},"end":{"date":"2026-08-11"}}"#,
         )
         .unwrap();
-        let inst = google_event_to_instance(event).unwrap();
+        let inst = google_event_to_instance(event, &[]).unwrap();
         assert!(inst.all_day);
         assert_eq!(inst.start_wall, "2026-08-10T00:00");
         assert_eq!(inst.end_wall, "2026-08-11T00:00");
         assert_eq!(inst.start_tz, None);
         assert_eq!(inst.start_utc, None);
+    }
+
+    #[test]
+    fn google_reminder_overrides_become_offsets() {
+        let event: GoogleEvent = serde_json::from_str(
+            r#"{"id":"g3","summary":"评审",
+                "start":{"dateTime":"2026-08-10T10:00:00Z"},
+                "end":{"dateTime":"2026-08-10T11:00:00Z"},
+                "reminders":{"useDefault":false,
+                    "overrides":[{"method":"popup","minutes":15},
+                                 {"method":"email","minutes":60}]}}"#,
+        )
+        .unwrap();
+        let inst = google_event_to_instance(event, &[]).unwrap();
+        assert_eq!(inst.reminders, vec![15, 60]);
+    }
+
+    #[test]
+    fn google_use_default_reminders_apply_calendar_defaults() {
+        // useDefault=true 且无 overrides：套用传入的日历级默认提醒（如提前 40 分钟）。
+        let event: GoogleEvent = serde_json::from_str(
+            r#"{"id":"g4","summary":"评审",
+                "start":{"dateTime":"2026-08-10T10:00:00Z"},
+                "end":{"dateTime":"2026-08-10T11:00:00Z"},
+                "reminders":{"useDefault":true}}"#,
+        )
+        .unwrap();
+        let inst = google_event_to_instance(event, &[40]).unwrap();
+        assert_eq!(inst.reminders, vec![40]);
+    }
+
+    #[test]
+    fn google_use_default_without_calendar_defaults_is_none() {
+        // useDefault=true 但日历无默认提醒：无提醒。
+        let event: GoogleEvent = serde_json::from_str(
+            r#"{"id":"g5","summary":"评审",
+                "start":{"dateTime":"2026-08-10T10:00:00Z"},
+                "end":{"dateTime":"2026-08-10T11:00:00Z"},
+                "reminders":{"useDefault":true}}"#,
+        )
+        .unwrap();
+        let inst = google_event_to_instance(event, &[]).unwrap();
+        assert!(inst.reminders.is_empty());
+    }
+
+    #[test]
+    fn google_explicit_overrides_win_over_calendar_defaults() {
+        // 有显式 overrides 时忽略日历默认值。
+        let event: GoogleEvent = serde_json::from_str(
+            r#"{"id":"g6","summary":"评审",
+                "start":{"dateTime":"2026-08-10T10:00:00Z"},
+                "end":{"dateTime":"2026-08-10T11:00:00Z"},
+                "reminders":{"useDefault":false,"overrides":[{"minutes":5}]}}"#,
+        )
+        .unwrap();
+        let inst = google_event_to_instance(event, &[40]).unwrap();
+        assert_eq!(inst.reminders, vec![5]);
+    }
+
+    #[test]
+    fn google_calendar_list_defaults_apply_to_use_default_events() {
+        // defaultReminders 来自 CalendarListEntry；events.list 本身不返回该字段。
+        let calendar: GoogleCalendarEntry = serde_json::from_str(
+            r#"{"id":"primary","summary":"工作",
+                "defaultReminders":[{"method":"popup","minutes":40}]}"#,
+        )
+        .unwrap();
+        let defaults = crate::ics_parser::sanitize_reminders(
+            &calendar
+                .default_reminders
+                .as_ref()
+                .map(|list| override_minutes(list))
+                .unwrap_or_default(),
+        );
+        let event: GoogleEvent = serde_json::from_str(
+            r#"{"id":"g7","summary":"评审",
+                "start":{"dateTime":"2026-08-10T10:00:00Z"},
+                "end":{"dateTime":"2026-08-10T11:00:00Z"},
+                "reminders":{"useDefault":true}}"#,
+        )
+        .unwrap();
+        let inst = google_event_to_instance(event, &defaults).unwrap();
+        assert_eq!(inst.reminders, vec![40]);
+    }
+
+    #[test]
+    fn graph_reminder_becomes_single_offset_when_on() {
+        let event: GraphEvent = serde_json::from_str(
+            r#"{"id":"m3","subject":"周会","isAllDay":false,"isCancelled":false,
+                "isReminderOn":true,"reminderMinutesBeforeStart":30,
+                "start":{"dateTime":"2026-08-10T02:00:00.0000000","timeZone":"UTC"},
+                "end":{"dateTime":"2026-08-10T03:00:00.0000000","timeZone":"UTC"}}"#,
+        )
+        .unwrap();
+        let inst = graph_event_to_instance(event).unwrap();
+        assert_eq!(inst.reminders, vec![30]);
+    }
+
+    #[test]
+    fn graph_reminder_off_yields_no_offset() {
+        let event: GraphEvent = serde_json::from_str(
+            r#"{"id":"m4","subject":"周会","isAllDay":false,"isCancelled":false,
+                "isReminderOn":false,"reminderMinutesBeforeStart":30,
+                "start":{"dateTime":"2026-08-10T02:00:00.0000000","timeZone":"UTC"},
+                "end":{"dateTime":"2026-08-10T03:00:00.0000000","timeZone":"UTC"}}"#,
+        )
+        .unwrap();
+        let inst = graph_event_to_instance(event).unwrap();
+        assert!(inst.reminders.is_empty());
     }
 
     #[test]

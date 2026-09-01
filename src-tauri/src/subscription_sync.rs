@@ -7,7 +7,7 @@ use crate::ics_parser::{self, ExternalInstance};
 use crate::subscriptions::normalize_ics_url;
 use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime};
 use rusqlite::{params, Connection};
-use tauri::State;
+use tauri::Manager;
 use uuid::Uuid;
 
 /// 以 `today` 为基准，返回展开窗口 `[start, end)` 的钟面边界：
@@ -54,8 +54,8 @@ pub fn replace_external_events(
         tx.execute(
             "INSERT INTO external_events
                 (id,subscription_id,uid,start_at,end_at,start_tz,end_tz,
-                 start_utc,end_utc,all_day,title,location,description,last_synced_at)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
+                 start_utc,end_utc,all_day,title,location,description,reminders,last_synced_at)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)",
             params![
                 Uuid::new_v4().to_string(),
                 subscription_id,
@@ -70,6 +70,7 @@ pub fn replace_external_events(
                 inst.title,
                 inst.location,
                 inst.description,
+                serde_json::to_string(&inst.reminders).unwrap_or_else(|_| "[]".to_owned()),
                 synced_at
             ],
         )
@@ -175,9 +176,10 @@ fn fetch_source(
 ) -> Result<Vec<ExternalInstance>, CommandError> {
     match source.provider.as_str() {
         "google" | "microsoft" => {
-            let account_id = source.account_id.as_deref().ok_or_else(|| {
-                CommandError::validation("accountId", "该订阅缺少关联账户。")
-            })?;
+            let account_id = source
+                .account_id
+                .as_deref()
+                .ok_or_else(|| CommandError::validation("accountId", "该订阅缺少关联账户。"))?;
             let remote_id = source.remote_calendar_id.as_deref().ok_or_else(|| {
                 CommandError::validation("remoteCalendarId", "该订阅缺少远端日历。")
             })?;
@@ -258,15 +260,25 @@ pub fn sync_due_db(db: &AppDb) -> Result<bool, CommandError> {
     Ok(attempted)
 }
 
+/// 手动刷新会做网络拉取；同步执行会卡住 UI 主线程。改成 async + spawn_blocking，
+/// 阻塞的拉取丢进阻塞线程池，主线程立即释放。
 #[tauri::command]
-pub fn refresh_calendar_subscription(db: State<'_, AppDb>, id: String) -> Result<(), CommandError> {
-    // ① 短锁读整条订阅并确认存在。
-    let source = {
-        let connection = db.0.lock().map_err(CommandError::database)?;
-        crate::subscriptions::fetch_one(&connection, &id)?
-    };
-    // ②③ 锁外拉取，短锁写库。
-    sync_one_db(db.inner(), &source)
+pub async fn refresh_calendar_subscription<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    id: String,
+) -> Result<(), CommandError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let db = app.state::<AppDb>();
+        // ① 短锁读整条订阅并确认存在。
+        let source = {
+            let connection = db.0.lock().map_err(CommandError::database)?;
+            crate::subscriptions::fetch_one(&connection, &id)?
+        };
+        // ②③ 锁外拉取，短锁写库。
+        sync_one_db(db.inner(), &source)
+    })
+    .await
+    .map_err(|_| CommandError::system("刷新任务执行失败。"))?
 }
 
 #[cfg(test)]
@@ -304,6 +316,7 @@ mod tests {
             title: title.into(),
             location: None,
             description: None,
+            reminders: Vec::new(),
             start_wall: start.into(),
             end_wall: start.into(),
             start_tz: None,

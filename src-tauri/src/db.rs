@@ -26,6 +26,9 @@ const MIGRATIONS: &[(i64, Migration)] = &[
     (17, migration_17_notes_styles_and_icons),
     (18, migration_18_unified_tasks),
     (19, migration_19_oauth_calendar_sources),
+    (20, migration_20_backfill_last_attempted_at),
+    (21, migration_21_external_event_reminders),
+    (22, migration_22_remove_reminder_dispatch_foreign_key),
 ];
 
 pub fn open_database(path: PathBuf) -> Result<Connection> {
@@ -1212,6 +1215,76 @@ fn migration_19_oauth_calendar_sources(transaction: &Transaction<'_>) -> Result<
     )
 }
 
+// 补齐历史遗漏：`last_attempted_at` 曾被直接补进 migration 16 的建表语句，
+// 但在此之前建库的数据库已把 16 记为“已应用”，不会重跑，于是永远缺这一列，
+// 导致 `SELECT ...last_attempted_at...` 报 no such column。这里幂等补列：
+// 新库在 16 已建好该列，旧库靠本迁移补上。
+fn migration_20_backfill_last_attempted_at(transaction: &Transaction<'_>) -> Result<()> {
+    if !column_exists(transaction, "calendar_subscriptions", "last_attempted_at")? {
+        transaction.execute_batch(
+            "ALTER TABLE calendar_subscriptions ADD COLUMN last_attempted_at TEXT;",
+        )?;
+    }
+    Ok(())
+}
+
+// 订阅事件也带提醒：给 external_events 加 reminders（JSON 分钟偏移量列表），
+// 使 Google/Microsoft/ICS 拉来的提醒能触发本地通知并在只读详情里展示。
+// 旧库缺列会让 `SELECT ...reminders...` 报错，这里幂等补列。
+//
+// 同时重建 reminder_dispatches 去掉对 events(id) 的外键：订阅事件的提醒去重键
+// 用合成 id（`ext:{订阅}:{uid}`），不是真实 events 行，带外键会让派发记录写入
+// 违反约束。本地事件删除后靠 delete_series 显式清理去重行（原先靠级联），
+// 且本地 id 为 UUID 不会复用，遗留行无害。
+fn migration_21_external_event_reminders(transaction: &Transaction<'_>) -> Result<()> {
+    if !column_exists(transaction, "external_events", "reminders")? {
+        transaction.execute_batch(
+            "ALTER TABLE external_events ADD COLUMN reminders TEXT NOT NULL DEFAULT '[]';",
+        )?;
+    }
+    transaction.execute_batch(
+        "CREATE TABLE reminder_dispatches_v21 (
+            event_id TEXT NOT NULL,
+            occurrence_start_at TEXT NOT NULL,
+            offset_minutes INTEGER NOT NULL,
+            dispatched_at TEXT NOT NULL,
+            PRIMARY KEY (event_id, occurrence_start_at, offset_minutes)
+         );
+         INSERT INTO reminder_dispatches_v21
+            (event_id, occurrence_start_at, offset_minutes, dispatched_at)
+         SELECT event_id, occurrence_start_at, offset_minutes, dispatched_at
+         FROM reminder_dispatches;
+         DROP TABLE reminder_dispatches;
+         ALTER TABLE reminder_dispatches_v21 RENAME TO reminder_dispatches;",
+    )?;
+    Ok(())
+}
+
+// migration 21 was already applied by some development builds before its
+// reminder_dispatches rebuild was added. Those databases report version 21
+// while the table still has the old events(id) foreign key, so an external
+// reminder's synthetic `ext:...` id fails to insert. Rebuild once more under a
+// new version so every existing database actually loses the obsolete FK.
+fn migration_22_remove_reminder_dispatch_foreign_key(transaction: &Transaction<'_>) -> Result<()> {
+    transaction.execute_batch(
+        "DROP TABLE IF EXISTS reminder_dispatches_v22;
+         CREATE TABLE reminder_dispatches_v22 (
+            event_id TEXT NOT NULL,
+            occurrence_start_at TEXT NOT NULL,
+            offset_minutes INTEGER NOT NULL,
+            dispatched_at TEXT NOT NULL,
+            PRIMARY KEY (event_id, occurrence_start_at, offset_minutes)
+         );
+         INSERT OR IGNORE INTO reminder_dispatches_v22
+            (event_id, occurrence_start_at, offset_minutes, dispatched_at)
+         SELECT event_id, occurrence_start_at, offset_minutes, dispatched_at
+         FROM reminder_dispatches;
+         DROP TABLE reminder_dispatches;
+         ALTER TABLE reminder_dispatches_v22 RENAME TO reminder_dispatches;",
+    )?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{migrate, open_database, MIGRATIONS};
@@ -1276,7 +1349,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             versions,
-            vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+            vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,]
         );
 
         let event_fks: Vec<(String, String, String)> = connection
@@ -1302,6 +1375,141 @@ mod tests {
             })
             .unwrap();
         assert_eq!(violations, 0);
+    }
+
+    #[test]
+    fn migration_20_backfills_last_attempted_at_on_legacy_databases() {
+        // 模拟历史遗漏：跑到 16 但把该列去掉，再故意标记 16 为已应用，
+        // 使 migrate 不重跑 16。随后 migrate 应经由 20 补回该列。
+        let mut connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch("PRAGMA foreign_keys = ON;")
+            .unwrap();
+        migrate_through(&mut connection, 15).unwrap();
+        // 建一个缺 last_attempted_at 的旧版 calendar_subscriptions。
+        connection
+            .execute_batch(
+                "CREATE TABLE calendar_subscriptions (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    url TEXT NOT NULL,
+                    color TEXT NOT NULL,
+                    refresh_interval_minutes INTEGER NOT NULL DEFAULT 15,
+                    last_synced_at TEXT,
+                    last_status TEXT,
+                    last_error TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                 );
+                 CREATE TABLE external_events (
+                    id TEXT PRIMARY KEY,
+                    subscription_id TEXT NOT NULL
+                        REFERENCES calendar_subscriptions(id) ON DELETE CASCADE,
+                    uid TEXT, start_at TEXT NOT NULL, end_at TEXT NOT NULL,
+                    start_tz TEXT, end_tz TEXT, start_utc TEXT, end_utc TEXT,
+                    all_day INTEGER NOT NULL CHECK (all_day IN (0,1)),
+                    title TEXT NOT NULL, location TEXT, description TEXT,
+                    last_synced_at TEXT NOT NULL
+                 );
+                 INSERT INTO schema_migrations(version, applied_at)
+                    VALUES (16, 't');",
+            )
+            .unwrap();
+        assert!(!column_exists_conn(
+            &connection,
+            "calendar_subscriptions",
+            "last_attempted_at"
+        ));
+
+        // 完整 migrate：17/18/19/20 都会跑，20 应补上缺失列。
+        migrate(&mut connection).unwrap();
+        assert!(column_exists_conn(
+            &connection,
+            "calendar_subscriptions",
+            "last_attempted_at"
+        ));
+
+        // 补列后 SELECT 该列不再报错（即修复了“无法读取本地数据”）。
+        let count: i64 = connection
+            .query_row(
+                "SELECT COUNT(last_attempted_at) FROM calendar_subscriptions",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn migration_22_repairs_databases_with_the_legacy_version_21_schema() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch("PRAGMA foreign_keys = ON;")
+            .unwrap();
+        migrate_through(&mut connection, 20).unwrap();
+
+        // Early development builds recorded version 21 after only adding the
+        // reminders column. Simulate that state: the dispatch table still has
+        // its old events(id) FK, and migration 21 will not run again.
+        connection
+            .execute_batch(
+                "ALTER TABLE external_events
+                    ADD COLUMN reminders TEXT NOT NULL DEFAULT '[]';
+                 INSERT INTO schema_migrations(version, applied_at) VALUES (21, 't');
+                 INSERT INTO events
+                    (id,title,start_at,end_at,all_day,category,color,note,created_at,updated_at)
+                 VALUES ('local','Local','2026-08-31T21:45','2026-08-31T22:00',0,
+                         'work','#4FC9DA','','t','t');
+                 INSERT INTO reminder_dispatches
+                    (event_id,occurrence_start_at,offset_minutes,dispatched_at)
+                 VALUES ('local','2026-08-31T21:45',10,'t');",
+            )
+            .unwrap();
+        let old_fk_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_foreign_key_list('reminder_dispatches')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(old_fk_count > 0);
+
+        migrate(&mut connection).unwrap();
+
+        let new_fk_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_foreign_key_list('reminder_dispatches')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(new_fk_count, 0);
+        let preserved: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM reminder_dispatches WHERE event_id='local'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(preserved, 1);
+        connection
+            .execute(
+                "INSERT INTO reminder_dispatches
+                    (event_id,occurrence_start_at,offset_minutes,dispatched_at)
+                 VALUES ('ext:subscription:uid','2026-08-31T13:45',13,'t')",
+                [],
+            )
+            .expect("external reminder identity is no longer blocked by a local-event FK");
+    }
+
+    fn column_exists_conn(connection: &Connection, table: &str, column: &str) -> bool {
+        connection
+            .prepare(&format!("PRAGMA table_info({table})"))
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(1))
+            .unwrap()
+            .filter_map(Result::ok)
+            .any(|name| name == column)
     }
 
     #[test]
@@ -1368,7 +1576,7 @@ mod tests {
 
         assert_eq!(
             versions,
-            vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+            vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,]
         );
         for table in [
             "events",
@@ -1605,7 +1813,7 @@ mod tests {
             .expect("reminders defaults");
         assert_eq!(reminders, "[]");
 
-        // 派发记录随日程删除级联清理。
+        // 派发记录靠主键去重。
         connection
             .execute(
                 "INSERT INTO reminder_dispatches(event_id,occurrence_start_at,offset_minutes,dispatched_at)
@@ -1620,23 +1828,15 @@ mod tests {
             [],
         );
         assert!(dup.is_err(), "重复派发键必须被主键拒绝");
-        // 孤儿派发记录被外键拒绝。
-        let orphan = connection.execute(
+        // migration 21 起 reminder_dispatches 去掉了对 events 的外键：订阅事件用
+        // 合成 id 记录去重，本地事件删除时靠 delete_series 显式清理（见 events.rs）。
+        // 因此合成 id 的派发记录可以写入，不再被外键拒绝。
+        let synthetic = connection.execute(
             "INSERT INTO reminder_dispatches(event_id,occurrence_start_at,offset_minutes,dispatched_at)
-             VALUES ('missing','2026-08-03T10:00',10,'t')",
+             VALUES ('ext:sub1:evt-1','2026-08-03T10:00',10,'t')",
             [],
         );
-        assert!(orphan.is_err(), "派发记录必须挂在真实日程上");
-
-        connection
-            .execute("DELETE FROM events WHERE id='e1'", [])
-            .expect("event deletes");
-        let remaining: i64 = connection
-            .query_row("SELECT COUNT(*) FROM reminder_dispatches", [], |row| {
-                row.get(0)
-            })
-            .expect("count runs");
-        assert_eq!(remaining, 0, "派发记录随日程级联删除");
+        assert!(synthetic.is_ok(), "合成 id 的派发记录应允许写入（无外键）");
     }
 
     #[test]
@@ -1657,7 +1857,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             versions,
-            vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+            vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,]
         );
 
         // 新列存在。

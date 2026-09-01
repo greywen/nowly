@@ -30,6 +30,25 @@ function addDaysIso(isoDate: string, days: number): string {
   return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
 }
 
+// Format one reminder offset (minutes before start) into a coarse, readable
+// label like "提前 15 分钟" / "提前 1 天", picking the largest unit that divides
+// the offset evenly. Mirrors the editor's unit choice so both read the same.
+function formatReminderOffset(minutes: number): string {
+  const units: { size: number; unit: string }[] = [
+    { size: 10080, unit: t('reminder.unit.week') },
+    { size: 1440, unit: t('reminder.unit.day') },
+    { size: 60, unit: t('reminder.unit.hour') },
+    { size: 1, unit: t('reminder.unit.minute') }
+  ];
+  if (minutes === 0) return t('calendar.external.reminderAtStart');
+  for (const { size, unit } of units) {
+    if (minutes >= size && minutes % size === 0) {
+      return t('calendar.external.reminderBefore').replace('{value}', String(minutes / size)).replace('{unit}', unit);
+    }
+  }
+  return t('calendar.external.reminderBefore').replace('{value}', String(minutes)).replace('{unit}', t('reminder.unit.minute'));
+}
+
 // Build the human-readable time line. Handles same-day vs cross-day timed
 // events and single vs multi-day all-day events so nothing looks like a
 // negative duration or a lone "all day" with no date.
@@ -54,6 +73,7 @@ export function ExternalEventDialog({ event, sourceName, onClose, isTopLayer = t
   const time = formatTimeRange(event);
   const location = event.externalLocation?.trim() || '';
   const description = event.externalDescription?.trim() || '';
+  const reminders = event.reminders ?? [];
   return (
     <Dialog
       title={t('calendar.external.title')}
@@ -81,6 +101,12 @@ export function ExternalEventDialog({ event, sourceName, onClose, isTopLayer = t
           </p>
         ) : null}
         {description ? <p className="external-event__note">{description}</p> : null}
+        {reminders.length ? (
+          <p className="external-event__row">
+            <span className="external-event__label">{t('calendar.external.reminders')}</span>
+            {reminders.map(formatReminderOffset).join('、')}
+          </p>
+        ) : null}
         <p className="external-event__row">
           <span className="external-event__label">{t('calendar.external.source')}</span>
           {sourceName}

@@ -6,7 +6,7 @@ use crate::db::AppDb;
 use crate::error::CommandError;
 use crate::models::{CalendarSubscription, EventRange, ExternalEvent, SubscriptionDraft};
 use rusqlite::{params, Connection, Row};
-use tauri::State;
+use tauri::{Manager, State};
 use uuid::Uuid;
 
 /// 订阅源数量上限。放宽到一个宽松值，避免失控但不再限制到 3 个，
@@ -92,10 +92,7 @@ pub fn list(connection: &Connection) -> Result<Vec<CalendarSubscription>, Comman
     Ok(out)
 }
 
-pub fn fetch_one(
-    connection: &Connection,
-    id: &str,
-) -> Result<CalendarSubscription, CommandError> {
+pub fn fetch_one(connection: &Connection, id: &str) -> Result<CalendarSubscription, CommandError> {
     let sql = format!("SELECT {SUBSCRIPTION_COLUMNS} FROM calendar_subscriptions WHERE id = ?1");
     connection
         .query_row(&sql, params![id], read_subscription)
@@ -117,10 +114,7 @@ pub fn create(
         })
         .map_err(CommandError::database)?;
     if count >= MAX_SUBSCRIPTIONS {
-        return Err(CommandError::validation(
-            "url",
-            "订阅源数量已达上限。",
-        ));
+        return Err(CommandError::validation("url", "订阅源数量已达上限。"));
     }
     let id = Uuid::new_v4().to_string();
     let now = now_utc();
@@ -265,7 +259,8 @@ pub fn list_external_in_range(
     range: &EventRange,
 ) -> Result<Vec<ExternalEvent>, CommandError> {
     let sql = "SELECT e.id, e.subscription_id, e.title, e.start_at, e.end_at,
-                      e.start_tz, e.end_tz, e.all_day, e.location, e.description, s.color
+                      e.start_tz, e.end_tz, e.all_day, e.location, e.description,
+                      s.color, e.reminders
                FROM external_events e
                JOIN calendar_subscriptions s ON s.id = e.subscription_id";
     let mut statement = connection.prepare(sql).map_err(CommandError::database)?;
@@ -287,6 +282,10 @@ pub fn list_external_in_range(
                 location: row.get(8)?,
                 description: row.get(9)?,
                 color: row.get(10)?,
+                reminders: {
+                    let raw: String = row.get(11)?;
+                    serde_json::from_str::<Vec<i64>>(&raw).unwrap_or_default()
+                },
             })
         })
         .map_err(CommandError::database)?;
@@ -350,10 +349,24 @@ pub fn delete_calendar_subscription(db: State<'_, AppDb>, id: String) -> Result<
 
 /// 列出某 OAuth 账户下可订阅的远端日历，供用户勾选。
 /// 先确保 access_token 有效（必要时刷新），再调 API 拉日历清单（锁外）。
+/// 涉及网络（刷新 token + 拉清单），故走 async + spawn_blocking，避免冻主线程。
 #[tauri::command]
-pub fn list_remote_calendars(
-    db: State<'_, AppDb>,
+pub async fn list_remote_calendars<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     account_id: String,
+) -> Result<Vec<crate::models::RemoteCalendar>, CommandError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let db = app.state::<AppDb>();
+        list_remote_calendars_blocking(db.inner(), &account_id)
+    })
+    .await
+    .map_err(|_| CommandError::system("拉取日历任务执行失败。"))?
+}
+
+/// 阻塞实现：读 provider → 刷新 token → 拉日历清单。
+fn list_remote_calendars_blocking(
+    db: &AppDb,
+    account_id: &str,
 ) -> Result<Vec<crate::models::RemoteCalendar>, CommandError> {
     // 短锁读 provider。
     let provider: String = {
@@ -372,18 +385,43 @@ pub fn list_remote_calendars(
             })?
     };
     // 锁外刷新 token + 拉清单。
-    let access_token = crate::oauth::ensure_valid_access_token(db.inner(), &account_id)?;
+    let access_token = crate::oauth::ensure_valid_access_token(db, account_id)?;
     crate::calendar_api::list_calendars(&provider, &access_token)
 }
 
 /// 把某个远端日历添加为订阅，并立刻同步一次使事件即时可见。
+/// 首次同步会走网络，故走 async + spawn_blocking，避免冻主线程。
 #[tauri::command]
-pub fn subscribe_remote_calendar(
-    db: State<'_, AppDb>,
+pub async fn subscribe_remote_calendar<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     account_id: String,
     remote_calendar_id: String,
     name: String,
     color: String,
+    refresh_interval_minutes: i64,
+) -> Result<CalendarSubscription, CommandError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let db = app.state::<AppDb>();
+        subscribe_remote_calendar_blocking(
+            db.inner(),
+            &account_id,
+            &remote_calendar_id,
+            &name,
+            &color,
+            refresh_interval_minutes,
+        )
+    })
+    .await
+    .map_err(|_| CommandError::system("订阅任务执行失败。"))?
+}
+
+/// 阻塞实现：短锁创建订阅 → 锁外首次同步 → 回读最新状态。
+fn subscribe_remote_calendar_blocking(
+    db: &AppDb,
+    account_id: &str,
+    remote_calendar_id: &str,
+    name: &str,
+    color: &str,
     refresh_interval_minutes: i64,
 ) -> Result<CalendarSubscription, CommandError> {
     // 短锁读 provider 并创建订阅。
@@ -404,15 +442,15 @@ pub fn subscribe_remote_calendar(
         create_oauth(
             &mut connection,
             &provider,
-            &account_id,
-            &remote_calendar_id,
-            &name,
-            &color,
+            account_id,
+            remote_calendar_id,
+            name,
+            color,
             refresh_interval_minutes,
         )?
     };
     // 锁外首次同步；失败不阻塞订阅创建（状态字段会记为 failed，可稍后重试）。
-    let _ = crate::subscription_sync::sync_one_db(db.inner(), &created);
+    let _ = crate::subscription_sync::sync_one_db(db, &created);
     // 回读最新状态。
     let connection = db.0.lock().map_err(CommandError::database)?;
     fetch_one(&connection, &created.id)

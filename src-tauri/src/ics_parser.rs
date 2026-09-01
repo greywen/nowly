@@ -216,6 +216,8 @@ pub struct VEvent {
     pub summary: String,
     pub location: Option<String>,
     pub description: Option<String>,
+    /// 从 VALARM 的 TRIGGER 归一化出的「提前 N 分钟」偏移量列表（去重升序）。
+    pub reminders: Vec<i64>,
     dtstart: IcsDateTime,
     dtend: Option<IcsDateTime>,
     rrule: Option<String>,
@@ -226,6 +228,88 @@ pub struct VEvent {
     recurrence_id: Option<NaiveDateTime>,
     /// STATUS:CANCELLED 标记该事件（或该次 occurrence）已取消。
     cancelled: bool,
+}
+
+/// 把外部来源（ICS VALARM / OAuth API）给出的提醒偏移量做宽松归一：丢掉负值与
+/// 越界值、去重、升序、按上限截断。外部数据不受我们控制，永不报错——个别损坏
+/// 的提醒不该拖垮整源同步。
+pub fn sanitize_reminders(reminders: &[i64]) -> Vec<i64> {
+    let mut seen = std::collections::BTreeSet::new();
+    for &offset in reminders {
+        if !(0..=crate::events::MAX_REMINDER_MINUTES).contains(&offset) {
+            continue;
+        }
+        seen.insert(offset);
+    }
+    seen.into_iter()
+        .take(crate::events::MAX_REMINDERS)
+        .collect()
+}
+
+/// 解析 ISO 8601 duration（如 `-PT15M`、`-P1DT2H`）为带符号分钟数。
+/// 前导 `-` 记为负；无法识别的形态返回 None（如绝对时间戳触发器）。
+fn parse_iso_duration_minutes(value: &str) -> Option<i64> {
+    let value = value.trim();
+    let (sign, rest) = if let Some(r) = value.strip_prefix('-') {
+        (-1i64, r)
+    } else if let Some(r) = value.strip_prefix('+') {
+        (1i64, r)
+    } else {
+        (1i64, value)
+    };
+    let rest = rest.strip_prefix('P').or_else(|| rest.strip_prefix('p'))?;
+    let (date_part, time_part) = match rest.split_once(['T', 't']) {
+        Some((d, t)) => (d, t),
+        None => (rest, ""),
+    };
+    let mut total_minutes: i64 = 0;
+    let mut num = String::new();
+    for ch in date_part.chars() {
+        if ch.is_ascii_digit() {
+            num.push(ch);
+            continue;
+        }
+        let n: i64 = num.parse().ok()?;
+        num.clear();
+        match ch.to_ascii_uppercase() {
+            'W' => total_minutes += n * 7 * 24 * 60,
+            'D' => total_minutes += n * 24 * 60,
+            _ => return None,
+        }
+    }
+    if !num.is_empty() {
+        return None;
+    }
+    for ch in time_part.chars() {
+        if ch.is_ascii_digit() {
+            num.push(ch);
+            continue;
+        }
+        let n: i64 = num.parse().ok()?;
+        num.clear();
+        match ch.to_ascii_uppercase() {
+            'H' => total_minutes += n * 60,
+            'M' => total_minutes += n,
+            // 秒向下取整到分钟；纯秒触发器（如 PT30S）落到 0 分钟。
+            'S' => total_minutes += n / 60,
+            _ => return None,
+        }
+    }
+    if !num.is_empty() {
+        return None;
+    }
+    Some(sign * total_minutes)
+}
+
+/// 把一条 VALARM 的 TRIGGER 属性解析成「提前 N 分钟」偏移量。
+/// 仅处理相对开始时刻的触发器：`RELATED=END` 与绝对时间戳返回 None。
+/// 负 duration（开始前）→ 正偏移；正 duration（开始后）→ 负偏移，随后被 sanitize 丢弃。
+fn parse_trigger_offset(prop: &Property) -> Option<i64> {
+    if prop.param("RELATED").map(|v| v.eq_ignore_ascii_case("END")) == Some(true) {
+        return None;
+    }
+    let signed = parse_iso_duration_minutes(prop.value.trim())?;
+    Some(-signed)
 }
 
 /// 解析一个逗号分隔的日期时间列表（RDATE/EXDATE），取每项的钟面。解析失败项跳过。
@@ -256,10 +340,34 @@ fn parse_vevent_block(block: &[String]) -> Option<VEvent> {
     let mut exdate = Vec::new();
     let mut recurrence_id = None;
     let mut cancelled = false;
+    let mut reminders: Vec<i64> = Vec::new();
+    // VALARM 是 VEVENT 内的子块，也有自己的 DESCRIPTION 等属性。跟踪进出 VALARM，
+    // 避免闹钟的 DESCRIPTION 覆盖事件的 DESCRIPTION；块内只取 TRIGGER。
+    let mut in_valarm = false;
     for line in block {
         let Some(prop) = parse_property(line) else {
             continue;
         };
+        if prop.name == "BEGIN" {
+            if prop.value.trim().eq_ignore_ascii_case("VALARM") {
+                in_valarm = true;
+            }
+            continue;
+        }
+        if prop.name == "END" {
+            if prop.value.trim().eq_ignore_ascii_case("VALARM") {
+                in_valarm = false;
+            }
+            continue;
+        }
+        if in_valarm {
+            if prop.name == "TRIGGER" {
+                if let Some(offset) = parse_trigger_offset(&prop) {
+                    reminders.push(offset);
+                }
+            }
+            continue;
+        }
         match prop.name.as_str() {
             "UID" => uid = Some(prop.value.clone()),
             "SUMMARY" => summary = Some(unescape_text(&prop.value)),
@@ -281,6 +389,7 @@ fn parse_vevent_block(block: &[String]) -> Option<VEvent> {
         summary: summary.unwrap_or_else(|| "(无标题)".to_owned()),
         location,
         description,
+        reminders: sanitize_reminders(&reminders),
         dtstart,
         dtend,
         rrule,
@@ -349,6 +458,8 @@ pub struct ExternalInstance {
     pub title: String,
     pub location: Option<String>,
     pub description: Option<String>,
+    /// 「提前 N 分钟」提醒偏移量列表（已归一）。
+    pub reminders: Vec<i64>,
     /// 系列时区（或浮动）下的钟面起点，"%Y-%m-%dT%H:%M"。
     pub start_wall: String,
     pub end_wall: String,
@@ -401,6 +512,7 @@ fn make_instance(event: &VEvent, start_wall: NaiveDateTime) -> ExternalInstance 
         title: event.summary.clone(),
         location: event.location.clone(),
         description: event.description.clone(),
+        reminders: event.reminders.clone(),
         start_wall: timezone::format_wall(start_wall),
         end_wall: timezone::format_wall(end_wall),
         start_tz,
@@ -599,6 +711,57 @@ mod tests {
         assert_eq!(dt.wall, ndt("2026-08-10T10:00"));
         assert_eq!(dt.tz, None);
         assert!(!dt.all_day);
+    }
+
+    #[test]
+    fn parses_relative_valarm_trigger_into_minutes_before() {
+        // 一条带 VALARM 的定时事件：TRIGGER=-PT15M → 提前 15 分钟。
+        let text = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:a1\r\nSUMMARY:评审\r\n\
+                    DTSTART:20260810T100000Z\r\nDTEND:20260810T110000Z\r\n\
+                    BEGIN:VALARM\r\nACTION:DISPLAY\r\nDESCRIPTION:提醒\r\n\
+                    TRIGGER:-PT15M\r\nEND:VALARM\r\nEND:VEVENT\r\nEND:VCALENDAR";
+        let events = parse_calendar(text).unwrap();
+        assert_eq!(events[0].reminders, vec![15]);
+        // VALARM 的 DESCRIPTION 不得覆盖事件级 DESCRIPTION（此事件本无 DESCRIPTION）。
+        assert_eq!(events[0].description, None);
+    }
+
+    #[test]
+    fn multiple_valarms_dedupe_and_sort_and_drop_after_start() {
+        // 三条闹钟：-P1D（1440 分钟）、-PT30M（30 分钟）、PT10M（开始后 10 分钟，丢弃）。
+        let text = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:a2\r\nSUMMARY:x\r\n\
+                    DTSTART:20260810T100000Z\r\nDTEND:20260810T110000Z\r\n\
+                    BEGIN:VALARM\r\nTRIGGER:-P1D\r\nEND:VALARM\r\n\
+                    BEGIN:VALARM\r\nTRIGGER:-PT30M\r\nEND:VALARM\r\n\
+                    BEGIN:VALARM\r\nTRIGGER:PT10M\r\nEND:VALARM\r\n\
+                    END:VEVENT\r\nEND:VCALENDAR";
+        let events = parse_calendar(text).unwrap();
+        assert_eq!(events[0].reminders, vec![30, 1440]);
+    }
+
+    #[test]
+    fn valarm_related_end_and_absolute_trigger_are_ignored() {
+        // RELATED=END 与绝对时间戳触发器都不产生「提前 N 分钟」。
+        let text = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:a3\r\nSUMMARY:x\r\n\
+                    DTSTART:20260810T100000Z\r\nDTEND:20260810T110000Z\r\n\
+                    BEGIN:VALARM\r\nTRIGGER;RELATED=END:-PT15M\r\nEND:VALARM\r\n\
+                    BEGIN:VALARM\r\nTRIGGER;VALUE=DATE-TIME:20260810T090000Z\r\nEND:VALARM\r\n\
+                    END:VEVENT\r\nEND:VCALENDAR";
+        let events = parse_calendar(text).unwrap();
+        assert!(events[0].reminders.is_empty());
+    }
+
+    #[test]
+    fn parse_iso_duration_handles_common_forms() {
+        assert_eq!(parse_iso_duration_minutes("-PT15M"), Some(-15));
+        assert_eq!(parse_iso_duration_minutes("-PT1H30M"), Some(-90));
+        assert_eq!(parse_iso_duration_minutes("-P1D"), Some(-1440));
+        assert_eq!(parse_iso_duration_minutes("-P1W"), Some(-10080));
+        assert_eq!(parse_iso_duration_minutes("PT10M"), Some(10));
+        assert_eq!(parse_iso_duration_minutes("P1DT2H"), Some(1560));
+        // 纯秒向下取整到分钟。
+        assert_eq!(parse_iso_duration_minutes("-PT30S"), Some(0));
+        assert_eq!(parse_iso_duration_minutes("garbage"), None);
     }
 
     #[test]

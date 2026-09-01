@@ -18,7 +18,7 @@ use sha2::{Digest, Sha256};
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::time::{Duration as StdDuration, Instant};
-use tauri::State;
+use tauri::{Manager, State};
 
 /// 授权流的整体超时：用户需要在浏览器里完成登录与授权。
 const AUTH_TIMEOUT: StdDuration = StdDuration::from_secs(180);
@@ -57,8 +57,7 @@ fn endpoints_for(provider: &str) -> Result<ProviderEndpoints, CommandError> {
 
 /// base64url（无填充）编码。PKCE / state 都用这种字符集，URL 安全。
 fn base64url(bytes: &[u8]) -> String {
-    const CHARSET: &[u8; 64] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    const CHARSET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
     let mut out = String::with_capacity((bytes.len() + 2) / 3 * 4);
     for chunk in bytes.chunks(3) {
         let b0 = chunk[0] as u32;
@@ -339,7 +338,10 @@ fn parse_token_response(body: &str) -> Result<TokenSet, CommandError> {
         .map_err(|_| CommandError::validation("oauth", "无法解析授权响应。"))?;
     if let Some(error) = parsed.error {
         let detail = parsed.error_description.unwrap_or(error);
-        return Err(CommandError::validation("oauth", format!("授权失败：{detail}")));
+        return Err(CommandError::validation(
+            "oauth",
+            format!("授权失败：{detail}"),
+        ));
     }
     let access_token = parsed
         .access_token
@@ -354,10 +356,7 @@ fn parse_token_response(body: &str) -> Result<TokenSet, CommandError> {
 
 /// 用 refresh_token 刷新 access_token。返回新的 access_token 与过期时间。
 /// refresh_token 通常不变，返回的 TokenSet.refresh_token 可能为 None。
-pub fn refresh_access_token(
-    provider: &str,
-    refresh_token: &str,
-) -> Result<TokenSet, CommandError> {
+pub fn refresh_access_token(provider: &str, refresh_token: &str) -> Result<TokenSet, CommandError> {
     let endpoints = endpoints_for(provider)?;
     let creds = oauth_config::credentials(provider)?;
     let mut form: Vec<(&str, &str)> = vec![
@@ -457,10 +456,16 @@ pub fn start_login(db: &AppDb, provider: &str) -> Result<OAuthAccount, CommandEr
     // state 校验：防 CSRF / 混淆。
     let returned_state = query.iter().find(|(k, _)| k == "state").map(|(_, v)| v);
     if returned_state.map(String::as_str) != Some(state.as_str()) {
-        return Err(CommandError::validation("oauth", "授权状态校验失败，请重试。"));
+        return Err(CommandError::validation(
+            "oauth",
+            "授权状态校验失败，请重试。",
+        ));
     }
     if let Some((_, err)) = query.iter().find(|(k, _)| k == "error") {
-        return Err(CommandError::validation("oauth", format!("授权被拒绝：{err}")));
+        return Err(CommandError::validation(
+            "oauth",
+            format!("授权被拒绝：{err}"),
+        ));
     }
     let code = query
         .iter()
@@ -487,10 +492,7 @@ pub fn start_login(db: &AppDb, provider: &str) -> Result<OAuthAccount, CommandEr
 
 /// 确保账户的 access_token 有效：过期则用 refresh_token 刷新并落库。
 /// 返回可用的 access_token。无 refresh_token 且已过期则报错（需重新授权）。
-pub fn ensure_valid_access_token(
-    db: &AppDb,
-    account_id: &str,
-) -> Result<String, CommandError> {
+pub fn ensure_valid_access_token(db: &AppDb, account_id: &str) -> Result<String, CommandError> {
     // ① 短锁读账户 token。
     let account = {
         let connection = db.0.lock().map_err(CommandError::database)?;
@@ -528,12 +530,20 @@ pub fn ensure_valid_access_token(
 
 // ---- Tauri 命令 -----------------------------------------------------------
 
+/// 授权流程会阻塞等待浏览器回调（最多 `AUTH_TIMEOUT`）。若在主线程同步执行，
+/// 窗口会“未响应”。因此改为 async 命令 + `spawn_blocking`：把阻塞等待丢进
+/// 阻塞线程池，主线程立刻返回、UI 保持可交互。
 #[tauri::command]
-pub fn start_oauth_login(
-    db: State<'_, AppDb>,
+pub async fn start_oauth_login<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     provider: String,
 ) -> Result<OAuthAccount, CommandError> {
-    start_login(db.inner(), &provider)
+    tauri::async_runtime::spawn_blocking(move || {
+        let db = app.state::<AppDb>();
+        start_login(db.inner(), &provider)
+    })
+    .await
+    .map_err(|_| CommandError::system("授权任务执行失败。"))?
 }
 
 #[tauri::command]

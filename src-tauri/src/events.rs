@@ -1037,6 +1037,9 @@ fn delete_series(transaction: &Transaction<'_>, id: &str, now: &str) -> Result<(
     if affected != 1 {
         return Err(CommandError::not_found("未找到该日程。"));
     }
+    // reminder_dispatches 不再带外键级联（为容纳订阅事件的合成 id），
+    // 这里显式清理本地日程的去重记录。
+    reset_reminder_dispatches(transaction, id)?;
     Ok(())
 }
 

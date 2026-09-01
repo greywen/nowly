@@ -26,6 +26,31 @@ describe('ExternalEventDialog', () => {
     expect(screen.queryByRole('button', { name: /编辑|删除/ })).toBeNull();
   });
 
+  it('shows reminder offsets from the source calendar', () => {
+    render(
+      <ExternalEventDialog
+        event={event({ reminders: [10, 1440] })}
+        sourceName="家庭日历"
+        onClose={vi.fn()}
+      />
+    );
+    // 10 分钟取分钟单位，1440 分钟归成 1 天。
+    expect(screen.getByText(/提前 10 分钟/)).toBeInTheDocument();
+    expect(screen.getByText(/提前 1 天/)).toBeInTheDocument();
+  });
+
+  it('omits the reminder row when the source has no reminders', () => {
+    render(
+      <ExternalEventDialog
+        event={event({ reminders: [], externalDescription: '项目讨论' })}
+        sourceName="家庭日历"
+        onClose={vi.fn()}
+      />
+    );
+    // 无提醒时不渲染提醒行（用「提前 N」这一提醒专属文案判断，避免与描述里的字样冲突）。
+    expect(screen.queryByText(/提前 \d/)).toBeNull();
+  });
+
   it('shows a description even when there is no location', () => {
     render(
       <ExternalEventDialog

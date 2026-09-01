@@ -243,6 +243,9 @@ pub struct ExternalEvent {
     pub all_day: bool,
     pub location: Option<String>,
     pub description: Option<String>,
+    /// 「提前 N 分钟」提醒偏移量列表（已归一）。本地提醒轮询据此触发通知。
+    #[serde(default)]
+    pub reminders: Vec<i64>,
     /// 来源订阅的固定色（hex）。
     pub color: String,
 }
@@ -693,6 +696,7 @@ mod tests {
             location: Some("会议室".into()),
             description: None,
             color: "#4FC9DA".into(),
+            reminders: vec![10],
         };
         let value = serde_json::to_value(&ev).expect("serializes");
         let object = value.as_object().unwrap();

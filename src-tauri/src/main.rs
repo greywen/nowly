@@ -167,25 +167,62 @@ fn set_app_user_model_id() {
 /// is registered in `set_app_user_model_id`, the toast is delivered and
 /// attributed to Nowly across dev, release, and installed builds.
 #[cfg(target_os = "windows")]
-fn send_native_notification<R: Runtime>(_app: &AppHandle<R>, title: &str, body: &str) {
-    use tauri_winrt_notification::Toast;
+fn send_native_notification<R: Runtime>(
+    _app: &AppHandle<R>,
+    title: &str,
+    body: &str,
+    reminder: bool,
+) -> Result<(), String> {
+    send_windows_notification(title, body, reminder)
+}
 
-    if let Err(error) = Toast::new(APP_USER_MODEL_ID)
-        .title(title)
-        .text1(body)
-        .show()
-    {
-        eprintln!("failed to send notification: {error}");
+#[cfg(target_os = "windows")]
+fn send_windows_notification(title: &str, body: &str, reminder: bool) -> Result<(), String> {
+    use tauri_winrt_notification::{Duration, Scenario, Sound, Toast};
+    use windows::core::HSTRING;
+    use windows::UI::Notifications::{NotificationSetting, ToastNotificationManager};
+
+    let notifier =
+        ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from(APP_USER_MODEL_ID))
+            .map_err(|error| format!("cannot create Windows toast notifier: {error}"))?;
+    let setting = notifier
+        .Setting()
+        .map_err(|error| format!("cannot read Windows notification setting: {error}"))?;
+    if setting != NotificationSetting::Enabled {
+        return Err(format!(
+            "Windows notifications are disabled for Nowly (setting={})",
+            setting.0
+        ));
     }
+
+    let mut toast = Toast::new(APP_USER_MODEL_ID).title(title).text1(body);
+    if reminder {
+        toast = toast
+            .scenario(Scenario::Reminder)
+            .duration(Duration::Long)
+            .sound(Some(Sound::Reminder))
+            .add_button("关闭", "dismiss");
+    }
+    toast
+        .show()
+        .map_err(|error| format!("Windows rejected the notification: {error}"))
 }
 
 #[cfg(not(target_os = "windows"))]
-fn send_native_notification<R: Runtime>(app: &AppHandle<R>, title: &str, body: &str) {
+fn send_native_notification<R: Runtime>(
+    app: &AppHandle<R>,
+    title: &str,
+    body: &str,
+    _reminder: bool,
+) -> Result<(), String> {
     use tauri_plugin_notification::NotificationExt;
 
-    if let Err(error) = app.notification().builder().title(title).body(body).show() {
-        eprintln!("failed to send notification: {error}");
-    }
+    app.notification()
+        .builder()
+        .title(title)
+        .body(body)
+        .show()
+        .map_err(|error| format!("failed to send notification: {error}"))
 }
 
 fn main() {
@@ -226,11 +263,14 @@ fn main() {
                     .ok()
                     .and_then(|mut timer| timer.poll(std::time::Instant::now()));
                 if let Some(snapshot) = completed {
-                    send_native_notification(
+                    if let Err(error) = send_native_notification(
                         &timer_handle,
                         &snapshot.notification_title,
                         &snapshot.notification_body,
-                    );
+                        false,
+                    ) {
+                        eprintln!("failed to send focus notification: {error}");
+                    }
                     if let Err(error) = timer_handle.emit("focus-session-completed", snapshot) {
                         eprintln!("failed to emit focus completion: {error}");
                     }
@@ -243,15 +283,41 @@ fn main() {
                 std::thread::sleep(std::time::Duration::from_secs(20));
                 let now = chrono::Local::now().naive_local();
                 let notifications = match reminder_handle.state::<AppDb>().0.lock() {
-                    Ok(connection) => reminders::poll_due(&connection, now).unwrap_or_default(),
-                    Err(_) => Vec::new(),
+                    Ok(connection) => match reminders::poll_due(&connection, now) {
+                        Ok(notifications) => notifications,
+                        Err(error) => {
+                            eprintln!("failed to poll calendar reminders: {error:?}");
+                            Vec::new()
+                        }
+                    },
+                    Err(error) => {
+                        eprintln!("failed to lock calendar database for reminders: {error}");
+                        Vec::new()
+                    }
                 };
                 for notification in notifications {
-                    send_native_notification(
+                    if let Err(error) = send_native_notification(
                         &reminder_handle,
                         &notification.title,
                         &notification.body,
-                    );
+                        true,
+                    ) {
+                        eprintln!("failed to send calendar reminder: {error}");
+                        match reminder_handle.state::<AppDb>().0.lock() {
+                            Ok(connection) => {
+                                if let Err(release_error) =
+                                    reminders::release_dispatch(&connection, &notification)
+                                {
+                                    eprintln!(
+                                        "failed to release calendar reminder for retry: {release_error:?}"
+                                    );
+                                }
+                            }
+                            Err(lock_error) => eprintln!(
+                                "failed to lock calendar database to release reminder: {lock_error}"
+                            ),
+                        }
+                    }
                 }
             });
 

@@ -144,7 +144,7 @@ describe('useEvents', () => {
       id: 'x1', subscriptionId: 's1', title: '订阅会议',
       startAt: '2026-07-10T18:00', endAt: '2026-07-10T19:00',
       startTz: null, endTz: null, allDay: false,
-      location: null, description: null, color: '#4FC9DA' as const
+      location: null, description: null, color: '#4FC9DA' as const, reminders: []
     }];
     const repository = createRepository({
       listEventsInRange: vi.fn().mockResolvedValue([]),

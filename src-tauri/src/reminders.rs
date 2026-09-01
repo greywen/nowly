@@ -33,8 +33,32 @@ pub struct DueReminder {
 /// 要发送给系统的一条通知。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReminderNotification {
+    pub event_id: String,
+    pub occurrence_start_at: String,
+    pub offset_minutes: i64,
     pub title: String,
     pub body: String,
+}
+
+/// A notification is reserved in `poll_due` before the OS call so concurrent
+/// polls cannot duplicate it. If submitting the toast fails, remove that
+/// reservation so the next poll can retry while the reminder is still valid.
+pub fn release_dispatch(
+    connection: &Connection,
+    notification: &ReminderNotification,
+) -> Result<(), CommandError> {
+    connection
+        .execute(
+            "DELETE FROM reminder_dispatches
+             WHERE event_id=?1 AND occurrence_start_at=?2 AND offset_minutes=?3",
+            params![
+                notification.event_id,
+                notification.occurrence_start_at,
+                notification.offset_minutes
+            ],
+        )
+        .map_err(CommandError::database)?;
+    Ok(())
 }
 
 /// 该实例在去重表里的身份键：`event_id` 与 `occurrence_start_at`。
@@ -58,9 +82,15 @@ fn instant_of(start_at: &str, device: Tz) -> Option<chrono::DateTime<chrono::Utc
 /// 在指定设备时区下挑出此刻应触发的提醒。触发判定在 UTC 瞬时点上进行，
 /// 使「提前 N 分钟」在 DST 边界两侧精确（跨断层的裸钟面相减会偏移一小时）。
 ///
-/// 对每条提醒偏移量 `offset`，触发时刻 `fire_time = start - offset`。当
-/// `fire_time <= now` 且 `now < start + grace` 时该提醒到期：既覆盖常驻期间的准点触发，
-/// 也覆盖关闭后重开的补发，同时排除早已开始的过期日程。
+/// 对每条提醒偏移量 `offset`，触发时刻 `fire_time = start - offset`。到期条件：
+/// `fire_time <= now` 且 `now < 关联窗口上界`。一条提醒从触发时刻起、到事件结束为止都可弹框，
+/// 错过准点也能在此期间补弹一次；上界按事件时长自然区分：
+/// - 定时事件是一个时间点，上界取 `start + grace`（开始过宽限即视为过期）；
+/// - 全天事件铺满一整天，上界取「当天午夜结束」= `start + 1 天`。全天事件锚定 00:00，
+///   若上界也取 `start + grace`（≈ 00:05），弹框窗口只有午夜前后十几分钟，App 没恰好在那一刻
+///   常驻就永远漏弹；放宽到当天结束，使白天打开 App 仍能补弹当天该提醒一次。
+///
+/// 两者同遵「触发时刻起、到事件结束止可弹框」这一条原则，只是时长不同导致窗口长短不同。
 pub fn due_reminders_utc(
     events: &[Event],
     now_wall: NaiveDateTime,
@@ -76,12 +106,18 @@ pub fn due_reminders_utc(
         let Some(start) = instant_of(&event.start_at, device) else {
             continue;
         };
+        // 全天事件弹框窗口放宽到当天结束；定时事件维持紧凑宽限。
+        let relevance_end = if event.all_day {
+            start + Duration::days(1)
+        } else {
+            start + grace
+        };
         for &offset in &event.reminders {
             if offset < 0 {
                 continue;
             }
             let fire_time = start - Duration::minutes(offset);
-            if fire_time <= now && now < start + grace {
+            if fire_time <= now && now < relevance_end {
                 let (event_id, occurrence_start_at) = dispatch_identity(event);
                 due.push(DueReminder {
                     event_id,
@@ -137,8 +173,70 @@ fn day_phrase(today: chrono::NaiveDate, target: chrono::NaiveDate) -> String {
     }
 }
 
+/// 把带提醒的订阅事件读成 `Event` 形态，复用本地提醒的到期判定与去重。
+/// - `start_at` 取设备显示钟面，供触发时刻按设备时区换算；
+/// - `occurrence_start_at` 取来源钟面（跨同步、跨换时区都稳定），作为去重键第二段；
+/// - `id` 取 `ext:{订阅}:{uid}`，配合来源钟面构成跨同步稳定的去重身份，
+///   使订阅每次整源替换后不会把同一提醒重复弹出。
+fn external_reminder_events(connection: &Connection) -> Result<Vec<Event>, CommandError> {
+    let sql = "SELECT subscription_id, uid, title, start_at, start_tz, all_day, reminders
+               FROM external_events";
+    let mut statement = connection.prepare(sql).map_err(CommandError::database)?;
+    let rows = statement
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, Option<String>>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, Option<String>>(4)?,
+                row.get::<_, i64>(5)? == 1,
+                row.get::<_, String>(6)?,
+            ))
+        })
+        .map_err(CommandError::database)?;
+    let mut out = Vec::new();
+    for row in rows {
+        let (subscription_id, uid, title, source_wall, start_tz, all_day, reminders_raw) =
+            row.map_err(CommandError::database)?;
+        let reminders: Vec<i64> = serde_json::from_str(&reminders_raw).unwrap_or_default();
+        if reminders.is_empty() {
+            continue;
+        }
+        let display_wall = crate::events::to_display_wall(&source_wall, &start_tz);
+        let uid_key = uid.unwrap_or_else(|| source_wall.clone());
+        out.push(Event {
+            id: format!("ext:{subscription_id}:{uid_key}"),
+            title,
+            start_at: display_wall.clone(),
+            end_at: display_wall,
+            start_tz: None,
+            end_tz: None,
+            all_day,
+            category: "personal".to_owned(),
+            color: String::new(),
+            linked_task_id: None,
+            note: String::new(),
+            reminders,
+            created_at: String::new(),
+            updated_at: String::new(),
+            recurrence: None,
+            rrule: None,
+            series_id: None,
+            // 去重键第二段用来源钟面：跨同步、跨换设备时区都稳定，
+            // 而 start_at（设备显示钟面）会随时区变化。
+            series_start_at: None,
+            occurrence_start_at: Some(source_wall),
+            is_overridden: false,
+            subscription_id: Some(subscription_id),
+        });
+    }
+    Ok(out)
+}
+
 /// 轮询到期提醒：展开当前时间窗口内的日程实例，挑出到期项，写入去重表，
 /// 只为首次派发的提醒返回通知。已派发过的提醒不会再次返回。
+/// 本地日程与订阅事件（含 VALARM / Google / Microsoft 提醒）一并参与。
 pub fn poll_due(
     connection: &Connection,
     now: NaiveDateTime,
@@ -151,13 +249,16 @@ pub fn poll_due(
     let window_end = (now + Duration::minutes(MAX_REMINDER_MINUTES) + Duration::days(1))
         .format(LOCAL_MINUTE_FORMAT)
         .to_string();
-    let events = list_in_range(
+    let mut events = list_in_range(
         connection,
         &EventRange {
             start_at: window_start,
             end_at_exclusive: window_end,
         },
     )?;
+    // 订阅事件已被同步限制在前后各 6 个月窗口内；到期判定 (due_reminders)
+    // 会按 fire_time 过滤，窗口外的自然落选，无需再套时间过滤。
+    events.extend(external_reminder_events(connection)?);
 
     let now_text = now.format("%Y-%m-%dT%H:%M:%S").to_string();
     let mut notifications = Vec::new();
@@ -180,6 +281,9 @@ pub fn poll_due(
             continue;
         }
         notifications.push(ReminderNotification {
+            event_id: reminder.event_id.clone(),
+            occurrence_start_at: reminder.occurrence_start_at.clone(),
+            offset_minutes: reminder.offset_minutes,
             title: reminder.title.clone(),
             body: notification_body(now, &reminder),
         });
@@ -261,6 +365,34 @@ mod tests {
     }
 
     #[test]
+    fn all_day_reminder_can_fire_through_the_whole_event_day() {
+        // 全天事件锚定 00:00，提前 8 分钟 → 触发时刻是前一晚 23:52。
+        // App 没在那一刻常驻，当天白天打开仍应补弹（若上界取 00:05 就永远漏弹）。
+        let ev = Event {
+            all_day: true,
+            ..event("2026-08-10T00:00", vec![8])
+        };
+        let grace = Duration::minutes(GRACE_MINUTES);
+        // 前一晚 23:52 准点：到点弹框。
+        assert_eq!(
+            due_reminders(&[ev.clone()], dt("2026-08-09T23:52"), grace).len(),
+            1
+        );
+        // 当天下午才打开 App：仍在当天，补弹。
+        assert_eq!(
+            due_reminders(&[ev.clone()], dt("2026-08-10T14:00"), grace).len(),
+            1
+        );
+        // 当天快结束：仍在弹框窗口内。
+        assert_eq!(
+            due_reminders(&[ev.clone()], dt("2026-08-10T23:59"), grace).len(),
+            1
+        );
+        // 次日：当天已过，不再打扰。
+        assert!(due_reminders(&[ev], dt("2026-08-11T00:01"), grace).is_empty());
+    }
+
+    #[test]
     fn an_at_start_reminder_fires_within_the_grace() {
         let events = vec![event("2026-08-10T10:00", vec![0])];
         assert_eq!(
@@ -339,6 +471,26 @@ mod tests {
     }
 
     #[test]
+    fn failed_os_submission_can_release_and_retry_a_dispatch() {
+        let connection = database();
+        connection
+            .execute(
+                "INSERT INTO events(id,title,start_at,end_at,all_day,category,color,note,created_at,updated_at,reminders)
+                 VALUES ('e1','评审','2026-08-10T10:00','2026-08-10T11:00',0,'work','#4FC9DA','','t','t','[10]')",
+                [],
+            )
+            .unwrap();
+
+        let first = poll_due(&connection, dt("2026-08-10T09:50")).unwrap();
+        assert_eq!(first.len(), 1);
+        release_dispatch(&connection, &first[0]).unwrap();
+
+        let retry = poll_due(&connection, dt("2026-08-10T09:51")).unwrap();
+        assert_eq!(retry.len(), 1);
+        assert_eq!(retry[0].event_id, "e1");
+    }
+
+    #[test]
     fn poll_expands_a_recurring_series_and_fires_per_occurrence() {
         let connection = database();
         // 2026-08-03 是周一，每周一 10:00，提前 10 分钟提醒。
@@ -362,6 +514,85 @@ mod tests {
         // 下一周的实例是独立的一次派发。
         let week2 = poll_due(&connection, dt("2026-08-10T09:50")).unwrap();
         assert_eq!(week2.len(), 1);
+    }
+
+    #[test]
+    fn poll_fires_subscription_reminders_once_using_source_wall_dedup() {
+        let connection = database();
+        connection
+            .execute(
+                "INSERT INTO calendar_subscriptions
+                    (id,name,url,color,refresh_interval_minutes,created_at,updated_at)
+                 VALUES ('sub1','工作','https://e.com/a.ics','#4FC9DA',15,'t','t')",
+                [],
+            )
+            .unwrap();
+        // UTC 事件：来源钟面 02:00Z，提前 15 分钟。to_display_wall 会换算成设备钟面，
+        // due 判定按设备时区精确对齐到同一 UTC 瞬时点。
+        connection
+            .execute(
+                "INSERT INTO external_events
+                    (id,subscription_id,uid,start_at,end_at,start_tz,end_tz,
+                     start_utc,end_utc,all_day,title,reminders,last_synced_at)
+                 VALUES ('row1','sub1','evt-1','2026-08-10T02:00','2026-08-10T03:00',
+                         'UTC','UTC','2026-08-10T02:00Z','2026-08-10T03:00Z',0,'评审','[15]','t')",
+                [],
+            )
+            .unwrap();
+
+        // 设备钟面下 start 的提前 15 分钟到点：用 UTC 瞬时点判定，取设备时区。
+        let start_wall =
+            crate::events::to_display_wall("2026-08-10T02:00", &Some("UTC".to_owned()));
+        let start = NaiveDateTime::parse_from_str(&start_wall, LOCAL_MINUTE_FORMAT).unwrap();
+        let fire = start - Duration::minutes(15);
+        let first = poll_due(&connection, fire).unwrap();
+        assert_eq!(first.len(), 1);
+        assert_eq!(first[0].title, "评审");
+        // 同一时刻再轮询：已派发，不重复。
+        assert!(poll_due(&connection, fire).unwrap().is_empty());
+
+        // 模拟整源替换：行 id 变了，但 uid 与来源钟面不变——去重身份稳定，不重复弹。
+        connection
+            .execute("DELETE FROM external_events WHERE id='row1'", [])
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO external_events
+                    (id,subscription_id,uid,start_at,end_at,start_tz,end_tz,
+                     start_utc,end_utc,all_day,title,reminders,last_synced_at)
+                 VALUES ('row2','sub1','evt-1','2026-08-10T02:00','2026-08-10T03:00',
+                         'UTC','UTC','2026-08-10T02:00Z','2026-08-10T03:00Z',0,'评审','[15]','t')",
+                [],
+            )
+            .unwrap();
+        assert!(poll_due(&connection, fire).unwrap().is_empty());
+    }
+
+    #[test]
+    fn poll_ignores_subscription_events_without_reminders() {
+        let connection = database();
+        connection
+            .execute(
+                "INSERT INTO calendar_subscriptions
+                    (id,name,url,color,refresh_interval_minutes,created_at,updated_at)
+                 VALUES ('sub1','工作','https://e.com/a.ics','#4FC9DA',15,'t','t')",
+                [],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO external_events
+                    (id,subscription_id,uid,start_at,end_at,start_tz,end_tz,
+                     start_utc,end_utc,all_day,title,reminders,last_synced_at)
+                 VALUES ('row1','sub1','evt-1','2026-08-10T02:00','2026-08-10T03:00',
+                         'UTC','UTC','2026-08-10T02:00Z','2026-08-10T03:00Z',0,'评审','[]','t')",
+                [],
+            )
+            .unwrap();
+        let start_wall =
+            crate::events::to_display_wall("2026-08-10T02:00", &Some("UTC".to_owned()));
+        let start = NaiveDateTime::parse_from_str(&start_wall, LOCAL_MINUTE_FORMAT).unwrap();
+        assert!(poll_due(&connection, start).unwrap().is_empty());
     }
 
     #[test]

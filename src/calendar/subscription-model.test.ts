@@ -13,7 +13,8 @@ describe('externalToCalendarEvent', () => {
     allDay: false,
     location: '会议室',
     description: '议程',
-    color: '#4FC9DA'
+    color: '#4FC9DA',
+    reminders: [10, 60]
   };
 
   it('maps an external event into a read-only CalendarEvent', () => {
@@ -23,9 +24,9 @@ describe('externalToCalendarEvent', () => {
     expect(event.title).toBe('团队周会');
     expect(event.startAt).toBe('2026-08-10T18:00');
     expect(event.color).toBe('#4FC9DA');
-    // 只读事件不参与重复/关联/提醒逻辑。
+    // 只读事件不参与重复/关联逻辑；提醒直接沿用来源日历。
     expect(event.recurrence).toBeNull();
-    expect(event.reminders).toEqual([]);
+    expect(event.reminders).toEqual([10, 60]);
     // 地点/描述作为独立字段承载，note 保持为空，避免字符串拼接混淆二者。
     expect(event.note).toBe('');
     expect(event.externalLocation).toBe('会议室');

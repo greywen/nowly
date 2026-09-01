@@ -59,12 +59,15 @@ export type ExternalEvent = {
   location: string | null;
   description: string | null;
   color: HexColor;
+  // Minute offsets before the start at which the source calendar reminds.
+  reminders: number[];
 };
 
 // External subscription events reuse the calendar rendering pipeline, so map
-// each into a read-only CalendarEvent. They carry no recurrence/link/reminder
-// semantics; location and description are kept as dedicated fields for the
-// read-only detail popup. `note` stays empty so nothing conflates the two.
+// each into a read-only CalendarEvent. Reminders come straight from the source
+// (Google/Microsoft/ICS VALARM); location and description are kept as dedicated
+// fields for the read-only detail popup. `note` stays empty so nothing
+// conflates the two.
 export function externalToCalendarEvent(external: ExternalEvent): CalendarEvent {
   return {
     id: external.id,
@@ -77,7 +80,7 @@ export function externalToCalendarEvent(external: ExternalEvent): CalendarEvent 
     category: 'personal' as EventCategory,
     color: external.color,
     note: '',
-    reminders: [],
+    reminders: external.reminders ?? [],
     createdAt: '',
     updatedAt: '',
     recurrence: null,
