@@ -115,6 +115,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'calendar.external.reminderBefore': '提前 {value} {unit}',
     'calendar.external.reminderAtStart': '开始时',
     'calendar.external.readonly': '订阅日历为只读，无法编辑。',
+    'calendar.external.reconnectWritable': '该账户仅有只读权限，请断开并重新连接以允许编辑。',
     'calendar.external.allDay': '全天',
     'subscription.title': '日历订阅',
     'subscription.close': '关闭',
@@ -174,6 +175,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'calendar.errorLoad': '无法读取日程。',
     'calendar.retryLoad': '重试读取日程',
     'calendar.readError': '无法读取本地日程，请重试。',
+    'calendar.remoteWriteUnsupported': '当前环境不支持写入远端日历。',
 
     // DateDetailDialog
     'dateDetail.close': '关闭日期详情',
@@ -420,6 +422,9 @@ export const translations: Record<Language, Record<string, string>> = {
     'eventModal.reminders': '提醒',
     'eventModal.save': '保存',
     'eventModal.deleteTitle': '永久删除“{title}”？',
+    'eventModal.targetCalendar': '保存到日历',
+    'eventModal.targetLocal': 'Nowly 本地日历',
+    'eventModal.remoteCurrentOnly': '远端重复日程仅修改或删除当前实例。',
 
     // 提醒
     'reminder.none': '无提醒',
@@ -804,6 +809,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'calendar.external.reminderBefore': '{value} {unit} before',
     'calendar.external.reminderAtStart': 'At start',
     'calendar.external.readonly': 'Subscribed calendars are read-only.',
+    'calendar.external.reconnectWritable': 'This account has read-only access. Disconnect and reconnect it to allow editing.',
     'calendar.external.allDay': 'All day',
     'subscription.title': 'Calendar subscriptions',
     'subscription.close': 'Close',
@@ -863,6 +869,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'calendar.errorLoad': 'Unable to load events.',
     'calendar.retryLoad': 'Retry loading events',
     'calendar.readError': 'Unable to read local events. Please try again.',
+    'calendar.remoteWriteUnsupported': 'Remote calendar writing is not supported in this environment.',
 
     // DateDetailDialog
     'dateDetail.close': 'Close date details',
@@ -1109,6 +1116,9 @@ export const translations: Record<Language, Record<string, string>> = {
     'eventModal.reminders': 'Reminders',
     'eventModal.save': 'Save',
     'eventModal.deleteTitle': 'Permanently delete "{title}"?',
+    'eventModal.targetCalendar': 'Save to calendar',
+    'eventModal.targetLocal': 'Nowly local calendar',
+    'eventModal.remoteCurrentOnly': 'For recurring remote events, only this occurrence is changed or deleted.',
 
     // Reminders
     'reminder.none': 'No reminders',

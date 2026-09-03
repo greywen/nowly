@@ -26,6 +26,17 @@ describe('ExternalEventDialog', () => {
     expect(screen.queryByRole('button', { name: /编辑|删除/ })).toBeNull();
   });
 
+  it('asks legacy OAuth accounts to reconnect for write access', () => {
+    render(
+      <ExternalEventDialog
+        event={event({ externalProvider: 'google', externalWritable: false })}
+        sourceName="工作日历"
+        onClose={vi.fn()}
+      />
+    );
+    expect(screen.getByText(/断开并重新连接/)).toBeInTheDocument();
+  });
+
   it('shows reminder offsets from the source calendar', () => {
     render(
       <ExternalEventDialog

@@ -138,6 +138,20 @@ describe('shiftEventToDate', () => {
     expect(draft.allDay).toBe(true);
   });
 
+  it('converts an external all-day exclusive end into an inclusive remote draft', () => {
+    const external = {
+      ...event('remote', '2026-07-23T00:00:00', '2026-07-23T23:59:00', true),
+      subscriptionId: 'google-sub',
+      remoteEventId: 'remote-id',
+      externalProvider: 'google' as const,
+      externalWritable: true,
+      externalExclusiveEndAt: '2026-07-24T00:00'
+    };
+    const draft = shiftEventToDate(external, '2026-07-25');
+    expect(draft.startAt).toBe('2026-07-25T00:00');
+    expect(draft.endAt).toBe('2026-07-25T23:59');
+  });
+
   it('preserves the multi-day span when moving a multi-day event', () => {
     const draft = shiftEventToDate(event('e', '2026-07-23T09:30:00', '2026-07-25T10:00:00'), '2026-07-28');
     expect(draft.startAt).toBe('2026-07-28T09:30');

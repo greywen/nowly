@@ -9,6 +9,7 @@ import { CalendarWidget } from '../calendar/CalendarWidget';
 import { useEvents } from '../calendar/useEvents';
 import type { ModalState } from '../lib/modal-store';
 import type { CalendarSubscription } from '../calendar/subscription-model';
+import { isEventWritable } from '../calendar/calendar-model';
 import { enterForegroundMode, enterWallpaperMode } from '../lib/window-mode';
 import { MatrixWidget } from '../matrix/MatrixWidget';
 import { KanbanWidget } from '../kanban/KanbanWidget';
@@ -173,7 +174,7 @@ function AppContent() {
         onCreateEventForDate={(dateIso) => openModalInForeground({ type: 'event-create', dateIso, trigger: null })}
         onOpenDate={(isoDate) => openModalInForeground({ type: 'date', isoDate, trigger: null })}
         onOpenEvent={(event) =>
-          event.subscriptionId
+          event.subscriptionId && !isEventWritable(event)
             ? openModalInForeground({ type: 'external-detail', event, trigger: null })
             : openModalInForeground({ type: 'event-edit', event, trigger: null })
         }

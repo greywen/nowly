@@ -165,6 +165,148 @@ fn pinned_client(url: &reqwest::Url) -> Result<reqwest::blocking::Client, Comman
     builder.build().map_err(CommandError::system)
 }
 
+// Windows stores the current user's manual WinINet proxy in this shape:
+// either one endpoint for every protocol (`127.0.0.1:7897`) or a semicolon-
+// separated map (`http=host:port;https=host:port`). Browsers and WebView2 use
+// this setting automatically, while reqwest does not, so OAuth could finish in
+// the browser and then time out when Nowly exchanged the authorization code.
+fn https_proxy_from_server(value: &str) -> Option<String> {
+    let value = value.trim();
+    if value.is_empty() {
+        return None;
+    }
+
+    let endpoint = if value.contains('=') {
+        value.split(';').find_map(|part| {
+            let (scheme, endpoint) = part.split_once('=')?;
+            scheme
+                .trim()
+                .eq_ignore_ascii_case("https")
+                .then(|| endpoint.trim())
+        })?
+    } else {
+        value
+    };
+    if endpoint.is_empty() || endpoint.chars().any(char::is_whitespace) {
+        return None;
+    }
+
+    let candidate = if endpoint.contains("://") {
+        endpoint.to_owned()
+    } else {
+        format!("http://{endpoint}")
+    };
+    let parsed = reqwest::Url::parse(&candidate).ok()?;
+    if !matches!(parsed.scheme(), "http" | "https")
+        || parsed.host_str().is_none()
+        || parsed.port_or_known_default().is_none()
+        || parsed.username() != ""
+        || parsed.password().is_some()
+        || parsed.path() != "/"
+        || parsed.query().is_some()
+        || parsed.fragment().is_some()
+    {
+        return None;
+    }
+    Some(candidate)
+}
+
+#[cfg(target_os = "windows")]
+fn windows_manual_https_proxy() -> Option<String> {
+    use std::ffi::c_void;
+    use windows::core::w;
+    use windows::Win32::Foundation::ERROR_SUCCESS;
+    use windows::Win32::System::Registry::{
+        RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_DWORD, RRF_RT_REG_SZ,
+    };
+
+    let subkey = w!("Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings");
+    let mut enabled = 0u32;
+    let mut enabled_size = std::mem::size_of::<u32>() as u32;
+    let enabled_status = unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            subkey,
+            w!("ProxyEnable"),
+            RRF_RT_REG_DWORD,
+            None,
+            Some((&mut enabled as *mut u32).cast::<c_void>()),
+            Some(&mut enabled_size),
+        )
+    };
+    if enabled_status != ERROR_SUCCESS || enabled == 0 {
+        return None;
+    }
+
+    let mut byte_len = 0u32;
+    let size_status = unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            subkey,
+            w!("ProxyServer"),
+            RRF_RT_REG_SZ,
+            None,
+            None,
+            Some(&mut byte_len),
+        )
+    };
+    if size_status != ERROR_SUCCESS || byte_len < 2 || byte_len > 16 * 1024 {
+        return None;
+    }
+
+    let mut buffer = vec![0u16; (byte_len as usize + 1) / 2];
+    let read_status = unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            subkey,
+            w!("ProxyServer"),
+            RRF_RT_REG_SZ,
+            None,
+            Some(buffer.as_mut_ptr().cast::<c_void>()),
+            Some(&mut byte_len),
+        )
+    };
+    if read_status != ERROR_SUCCESS {
+        return None;
+    }
+    let end = buffer
+        .iter()
+        .position(|unit| *unit == 0)
+        .unwrap_or(buffer.len());
+    https_proxy_from_server(&String::from_utf16_lossy(&buffer[..end]))
+}
+
+#[cfg(not(target_os = "windows"))]
+fn windows_manual_https_proxy() -> Option<String> {
+    None
+}
+
+// OAuth and calendar calls use the browser's manual Windows proxy when one is
+// enabled. The destination URL is still restricted by `assert_oauth_host`, TLS
+// still authenticates the Google/Microsoft endpoint, and redirects remain
+// disabled. We resolve the destination up front as an additional guard; direct
+// connections are pinned to that result, while proxied requests use HTTPS
+// CONNECT through the explicitly configured proxy.
+fn oauth_client(url: &reqwest::Url) -> Result<reqwest::blocking::Client, CommandError> {
+    let host = url
+        .host_str()
+        .ok_or_else(|| CommandError::validation("url", "请求地址缺少域名。"))?;
+    let port = url.port_or_known_default().unwrap_or(443);
+    let addrs = resolve_public_addrs(host, port)?;
+    let mut builder = reqwest::blocking::Client::builder()
+        .timeout(REQUEST_TIMEOUT)
+        .connect_timeout(REQUEST_TIMEOUT)
+        .redirect(reqwest::redirect::Policy::none())
+        .user_agent(USER_AGENT)
+        .resolve_to_addrs(host, &addrs);
+    if let Some(proxy_url) = windows_manual_https_proxy() {
+        let proxy = reqwest::Proxy::https(&proxy_url)
+            .map_err(|_| CommandError::validation("proxy", "系统代理配置无效。"))?;
+        builder = builder.proxy(proxy);
+    }
+    builder.build().map_err(CommandError::system)
+}
+
 // Read at most `limit` bytes from the response body; anything larger is an
 // error rather than an unbounded allocation.
 fn read_capped(
@@ -312,7 +454,10 @@ fn assert_oauth_host(url: &reqwest::Url) -> Result<(), CommandError> {
     if OAUTH_API_HOSTS.iter().any(|allowed| *allowed == host) {
         Ok(())
     } else {
-        Err(CommandError::validation("url", "请求域名不在授权白名单内。"))
+        Err(CommandError::validation(
+            "url",
+            "请求域名不在授权白名单内。",
+        ))
     }
 }
 
@@ -327,14 +472,10 @@ pub fn post_oauth_form(url: &str, form: &[(&str, &str)]) -> Result<String, Comma
         return Err(CommandError::validation("url", "仅允许 https 地址。"));
     }
     assert_oauth_host(&parsed)?;
-    let client = pinned_client(&parsed)?;
-    let response = client
-        .post(parsed)
-        .form(form)
-        .send()
-        .map_err(|error| {
-            CommandError::validation("url", &format!("请求失败：{}", short_reqwest_error(&error)))
-        })?;
+    let client = oauth_client(&parsed)?;
+    let response = client.post(parsed).form(form).send().map_err(|error| {
+        CommandError::validation("url", &format!("请求失败：{}", short_reqwest_error(&error)))
+    })?;
     // token 端点用非 2xx 表达业务错误（如 invalid_grant），把响应体带回给调用方
     // 解析，而不是在这里吞掉。
     read_capped(response, MAX_RELEASE_BYTES)
@@ -349,7 +490,7 @@ pub fn get_with_bearer(url: &str, access_token: &str) -> Result<(u16, String), C
         return Err(CommandError::validation("url", "仅允许 https 地址。"));
     }
     assert_oauth_host(&parsed)?;
-    let client = pinned_client(&parsed)?;
+    let client = oauth_client(&parsed)?;
     let response = client
         .get(parsed)
         .bearer_auth(access_token)
@@ -357,6 +498,41 @@ pub fn get_with_bearer(url: &str, access_token: &str) -> Result<(u16, String), C
         .map_err(|error| {
             CommandError::validation("url", &format!("请求失败：{}", short_reqwest_error(&error)))
         })?;
+    let status = response.status().as_u16();
+    let body = read_capped(response, MAX_API_BYTES)?;
+    Ok((status, body))
+}
+
+/// 向固定 OAuth API 白名单发送带 Bearer 的 JSON 写请求。
+/// 与读取接口共用 DNS pinning、禁重定向、超时和响应大小限制。
+pub fn json_with_bearer(
+    method: &str,
+    url: &str,
+    access_token: &str,
+    body: Option<&serde_json::Value>,
+) -> Result<(u16, String), CommandError> {
+    let parsed =
+        reqwest::Url::parse(url).map_err(|_| CommandError::validation("url", "地址无效。"))?;
+    if parsed.scheme() != "https" {
+        return Err(CommandError::validation("url", "仅允许 https 地址。"));
+    }
+    assert_oauth_host(&parsed)?;
+    let method = match method {
+        "POST" => reqwest::Method::POST,
+        "PATCH" => reqwest::Method::PATCH,
+        "DELETE" => reqwest::Method::DELETE,
+        _ => return Err(CommandError::validation("method", "不支持的日历写入方法。")),
+    };
+    let client = oauth_client(&parsed)?;
+    let mut request = client.request(method, parsed).bearer_auth(access_token);
+    if let Some(value) = body {
+        request = request
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(value.to_string());
+    }
+    let response = request.send().map_err(|error| {
+        CommandError::validation("url", &format!("请求失败：{}", short_reqwest_error(&error)))
+    })?;
     let status = response.status().as_u16();
     let body = read_capped(response, MAX_API_BYTES)?;
     Ok((status, body))
@@ -473,5 +649,44 @@ mod tests {
     fn fetch_ics_rejects_private_ip() {
         let err = fetch_ics("https://192.168.0.10/a.ics").unwrap_err();
         assert_eq!(err.field.as_deref(), Some("url"));
+    }
+
+    #[test]
+    fn parses_windows_https_proxy_formats() {
+        assert_eq!(
+            https_proxy_from_server("127.0.0.1:7897"),
+            Some("http://127.0.0.1:7897".to_owned())
+        );
+        assert_eq!(
+            https_proxy_from_server("http=proxy.test:8080;https=secure.test:8443"),
+            Some("http://secure.test:8443".to_owned())
+        );
+        assert_eq!(
+            https_proxy_from_server("HTTPS=https://secure.test:8443; socks=127.0.0.1:9"),
+            Some("https://secure.test:8443".to_owned())
+        );
+    }
+
+    #[test]
+    fn rejects_unusable_windows_proxy_values() {
+        assert_eq!(https_proxy_from_server(""), None);
+        assert_eq!(https_proxy_from_server("http=proxy.test:8080"), None);
+        assert_eq!(https_proxy_from_server("socks=127.0.0.1:7897"), None);
+        assert_eq!(
+            https_proxy_from_server("http://user:pass@proxy.test:8080"),
+            None
+        );
+        assert_eq!(https_proxy_from_server("http://proxy.test:8080/path"), None);
+    }
+
+    #[test]
+    #[ignore = "requires live Google connectivity"]
+    fn oauth_client_reaches_google_through_the_windows_proxy() {
+        let (status, _) = get_with_bearer(
+            "https://www.googleapis.com/oauth2/v3/userinfo",
+            "invalid-test-token",
+        )
+        .expect("Google should answer instead of timing out");
+        assert_eq!(status, 401);
     }
 }

@@ -260,9 +260,15 @@ pub fn list_external_in_range(
 ) -> Result<Vec<ExternalEvent>, CommandError> {
     let sql = "SELECT e.id, e.subscription_id, e.title, e.start_at, e.end_at,
                       e.start_tz, e.end_tz, e.all_day, e.location, e.description,
-                      s.color, e.reminders
+                      s.color, e.reminders, e.uid, s.provider,
+                      CASE
+                        WHEN s.provider='google' AND instr(' ' || a.scopes || ' ', ' https://www.googleapis.com/auth/calendar ') > 0 THEN 1
+                        WHEN s.provider='microsoft' AND instr(' ' || lower(a.scopes) || ' ', ' https://graph.microsoft.com/calendars.readwrite ') > 0 THEN 1
+                        ELSE 0
+                      END AS writable
                FROM external_events e
-               JOIN calendar_subscriptions s ON s.id = e.subscription_id";
+               JOIN calendar_subscriptions s ON s.id = e.subscription_id
+               LEFT JOIN oauth_accounts a ON a.id = s.account_id";
     let mut statement = connection.prepare(sql).map_err(CommandError::database)?;
     let rows = statement
         .query_map([], |row| {
@@ -273,6 +279,9 @@ pub fn list_external_in_range(
             Ok(ExternalEvent {
                 id: row.get(0)?,
                 subscription_id: row.get(1)?,
+                remote_event_id: row.get(12)?,
+                provider: row.get(13)?,
+                writable: row.get::<_, i64>(14)? == 1,
                 title: row.get(2)?,
                 start_at: crate::events::to_display_wall(&start_raw, &start_tz),
                 end_at: crate::events::to_display_wall(&end_raw, &end_tz),
@@ -656,6 +665,9 @@ mod tests {
         assert_eq!(events[0].id, "a");
         assert_eq!(events[0].color, s1.color);
         assert_eq!(events[0].subscription_id, s1.id);
+        assert_eq!(events[0].provider, "ics");
+        assert!(!events[0].writable);
+        assert_eq!(events[0].remote_event_id, None);
     }
 
     #[test]

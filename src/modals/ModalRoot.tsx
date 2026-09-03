@@ -15,6 +15,7 @@ import type { CalendarSubscription, SubscriptionDraft } from '../calendar/subscr
 import { useOptionalTaskWorkspace } from '../tasks/TaskWorkspaceContext';
 import { UnifiedTaskDialog } from '../tasks/UnifiedTaskDialog';
 import { TaskSettingsDialog } from '../tasks/TaskSettingsDialog';
+import { isEventWritable } from '../calendar/calendar-model';
 
 type Props = {
   modal: ModalState;
@@ -22,7 +23,7 @@ type Props = {
   tasks: MatrixTask[];
   onClose(): void;
   onChangeModal(modal: ModalState): void;
-  createEvent(draft: EventDraft): Promise<CalendarEvent>;
+  createEvent(draft: EventDraft, subscriptionId?: string | null): Promise<CalendarEvent | void>;
   updateEvent(event: CalendarEvent, draft: EventDraft, scope: EditScope): Promise<void>;
   deleteEvent(event: CalendarEvent, scope: EditScope): Promise<void>;
   onSaved(): void | Promise<void>;
@@ -77,7 +78,9 @@ export function ModalRoot({
         restoreFocusRef={modal.type === 'date' ? { current:modal.trigger } : undefined}
         onClose={onClose}
         onCreateEvent={(isoDate) => onChangeModal({ type:'event-create', dateIso:isoDate, trigger:null, parentDate:isoDate })}
-        onEditEvent={(event, trigger) => onChangeModal({ type:'event-edit', event, trigger, parentDate:date })}
+        onEditEvent={(event, trigger) => onChangeModal(event.subscriptionId && !isEventWritable(event)
+          ? { type:'external-detail', event, trigger }
+          : { type:'event-edit', event, trigger, parentDate:date })}
       />
     ) : null}
     {isEventChild ? (
@@ -92,6 +95,7 @@ export function ModalRoot({
         onDeleted={onDeleted}
         recentColors={recentColors}
         onRememberCustomColor={onRememberCustomColor}
+        subscriptions={subscriptions}
       />
     ) : null}
     {isTaskChild ? workspace ? (

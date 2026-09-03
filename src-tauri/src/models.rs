@@ -233,6 +233,10 @@ pub struct RemoteCalendar {
 pub struct ExternalEvent {
     pub id: String,
     pub subscription_id: String,
+    /// Google/Graph 的真实事件（或重复实例）id；ICS 可能为空。
+    pub remote_event_id: Option<String>,
+    pub provider: String,
+    pub writable: bool,
     pub title: String,
     /// 设备显示时区下的钟面起止（后端已换算），"%Y-%m-%dT%H:%M"。
     pub start_at: String,
@@ -687,6 +691,9 @@ mod tests {
         let ev = ExternalEvent {
             id: "x1".into(),
             subscription_id: "s1".into(),
+            remote_event_id: Some("remote-1".into()),
+            provider: "google".into(),
+            writable: true,
             title: "会议".into(),
             start_at: "2026-08-10T18:00".into(),
             end_at: "2026-08-10T19:00".into(),

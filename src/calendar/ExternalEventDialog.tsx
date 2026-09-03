@@ -54,7 +54,7 @@ function formatReminderOffset(minutes: number): string {
 // negative duration or a lone "all day" with no date.
 function formatTimeRange(event: CalendarEvent): string {
   const start = splitWall(event.startAt);
-  const end = splitWall(event.endAt);
+  const end = splitWall(event.allDay && event.externalExclusiveEndAt ? event.externalExclusiveEndAt : event.endAt);
   if (event.allDay) {
     // DTEND is exclusive; the inclusive last day is end date - 1.
     const lastDay = addDaysIso(end.date, -1);
@@ -111,7 +111,11 @@ export function ExternalEventDialog({ event, sourceName, onClose, isTopLayer = t
           <span className="external-event__label">{t('calendar.external.source')}</span>
           {sourceName}
         </p>
-        <p className="external-event__readonly">{t('calendar.external.readonly')}</p>
+        <p className="external-event__readonly">
+          {event.externalProvider !== 'ics' && !event.externalWritable
+            ? t('calendar.external.reconnectWritable')
+            : t('calendar.external.readonly')}
+        </p>
       </div>
     </Dialog>
   );

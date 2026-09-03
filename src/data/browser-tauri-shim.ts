@@ -308,6 +308,45 @@ export function installBrowserTauriBackend() {
     },
     list_external_events_in_range: (a) =>
       store.externalEvents.filter((e) => inRange(e.startAt, a.range as never)),
+    create_remote_event: (a) => {
+      const subscription = store.subscriptions.find((source) => source.id === a.subscriptionId);
+      const draft = a.draft as Dict;
+      const event = {
+        id: id('external'),
+        subscriptionId: a.subscriptionId,
+        remoteEventId: id('remote'),
+        provider: subscription?.provider ?? 'google',
+        writable: true,
+        startTz: null,
+        endTz: null,
+        location: null,
+        description: draft.note ?? null,
+        reminders: [],
+        color: subscription?.color ?? '#4FC9DA',
+        ...draft
+      };
+      store.externalEvents.push(event);
+      persist();
+    },
+    update_remote_event: (a) => {
+      const draft = a.draft as Dict;
+      store.externalEvents = store.externalEvents.map((event) =>
+        event.subscriptionId === a.subscriptionId && event.remoteEventId === a.remoteEventId
+          ? {
+              ...event,
+              ...draft,
+              description: a.descriptionChanged ? draft.note ?? null : event.description
+            }
+          : event
+      );
+      persist();
+    },
+    delete_remote_event: (a) => {
+      store.externalEvents = store.externalEvents.filter((event) =>
+        event.subscriptionId !== a.subscriptionId || event.remoteEventId !== a.remoteEventId
+      );
+      persist();
+    },
 
     // Unified tasks. Legacy command names remain accepted because both the old
     // focused tests and the new desktop IPC use create/update/delete_task.

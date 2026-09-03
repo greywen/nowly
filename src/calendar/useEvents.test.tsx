@@ -142,6 +142,7 @@ describe('useEvents', () => {
   it('merges external subscription events into the calendar data', async () => {
     const external = [{
       id: 'x1', subscriptionId: 's1', title: '订阅会议',
+      remoteEventId: null, provider: 'ics' as const, writable: false,
       startAt: '2026-07-10T18:00', endAt: '2026-07-10T19:00',
       startTz: null, endTz: null, allDay: false,
       location: null, description: null, color: '#4FC9DA' as const, reminders: []
@@ -208,6 +209,51 @@ describe('useEvents', () => {
     await act(() => result.current.updateEvent(existing, draft, 'all'));
     await act(() => result.current.deleteEvent(existing, 'all'));
     expect(repository.listEventsInRange).toHaveBeenCalledTimes(4);
+  });
+
+  it('routes writable OAuth creates, edits, deletes, and drags to remote commands', async () => {
+    const createRemoteEvent = vi.fn().mockResolvedValue(undefined);
+    const updateRemoteEvent = vi.fn().mockResolvedValue(undefined);
+    const deleteRemoteEvent = vi.fn().mockResolvedValue(undefined);
+    const updateEvent = vi.fn().mockRejectedValue(new Error('must not write locally'));
+    const deleteEvent = vi.fn().mockRejectedValue(new Error('must not delete locally'));
+    const repository = createRepository({
+      createRemoteEvent,
+      updateRemoteEvent,
+      deleteRemoteEvent,
+      updateEvent,
+      deleteEvent
+    });
+    const { result } = renderHook(() => useEvents({ now }), { wrapper: wrapper(repository) });
+    await waitFor(() => expect(result.current.events.status).toBe('ready'));
+    const remote = {
+      ...event('cached-row'),
+      subscriptionId: 'google-sub',
+      remoteEventId: 'google-event',
+      externalProvider: 'google' as const,
+      externalWritable: true
+    };
+
+    await act(() => result.current.createEvent({ ...draft, recurrence: weekly }, 'google-sub'));
+    expect(createRemoteEvent).toHaveBeenCalledWith('google-sub', { ...draft, recurrence: null });
+    await act(() => result.current.updateEvent(remote, { ...draft, recurrence: weekly }, 'all'));
+    expect(updateRemoteEvent).toHaveBeenLastCalledWith(
+      'google-sub',
+      'google-event',
+      { ...draft, recurrence: null },
+      false
+    );
+    await act(() => result.current.moveEvent(remote, '2026-07-24'));
+    expect(updateRemoteEvent).toHaveBeenLastCalledWith(
+      'google-sub',
+      'google-event',
+      { ...shiftEventToDate(remote, '2026-07-24'), recurrence: null },
+      false
+    );
+    await act(() => result.current.deleteEvent(remote, 'all'));
+    expect(deleteRemoteEvent).toHaveBeenCalledWith('google-sub', 'google-event');
+    expect(updateEvent).not.toHaveBeenCalled();
+    expect(deleteEvent).not.toHaveBeenCalled();
   });
 
   it('rethrows write failures without changing current event data', async () => {

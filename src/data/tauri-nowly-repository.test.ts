@@ -77,9 +77,21 @@ describe('tauriNowlyRepository', () => {
     await tauriNowlyRepository.updateCalendarSubscription('s1', subscriptionDraft);
     await tauriNowlyRepository.deleteCalendarSubscription('s1');
     await tauriNowlyRepository.listExternalEventsInRange(range);
+    await tauriNowlyRepository.createRemoteEvent?.('s1', draft);
+    await tauriNowlyRepository.updateRemoteEvent?.('s1', 'remote-1', draft, true);
+    await tauriNowlyRepository.deleteRemoteEvent?.('s1', 'remote-1');
 
     expect(invokeMock.mock.calls).toContainEqual(['list_events_in_range', { range }]);
     expect(invokeMock.mock.calls).toContainEqual(['list_external_events_in_range', { range }]);
+    expect(invokeMock.mock.calls).toContainEqual(['create_remote_event', { subscriptionId: 's1', draft }]);
+    expect(invokeMock.mock.calls).toContainEqual([
+      'update_remote_event',
+      { subscriptionId: 's1', remoteEventId: 'remote-1', draft, descriptionChanged: true }
+    ]);
+    expect(invokeMock.mock.calls).toContainEqual([
+      'delete_remote_event',
+      { subscriptionId: 's1', remoteEventId: 'remote-1' }
+    ]);
     expect(invokeMock.mock.calls).toContainEqual(['create_event', { draft }]);
     expect(invokeMock.mock.calls).toContainEqual([
       'update_event',

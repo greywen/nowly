@@ -93,6 +93,14 @@ export type CalendarEvent = {
   // Non-null when this event comes from a read-only calendar subscription; the
   // value is the source subscription id. Local events are always null.
   subscriptionId: string | null;
+  // External source identity. OAuth events can be writable when the connected
+  // account granted a write scope; ICS subscriptions remain read-only.
+  externalProvider?: 'ics' | 'google' | 'microsoft';
+  remoteEventId?: string | null;
+  externalWritable?: boolean;
+  // Provider/ICS all-day DTEND before conversion to the calendar grid's
+  // inclusive end. The read-only detail view uses it for RFC 5545 semantics.
+  externalExclusiveEndAt?: string | null;
   // Read-only structured fields from a subscription source, shown in the
   // external detail popup. Absent for local events (the backend never sends
   // them). Kept separate from `note` so location and description are never
@@ -100,6 +108,10 @@ export type CalendarEvent = {
   externalLocation?: string | null;
   externalDescription?: string | null;
 };
+
+export function isEventWritable(event: CalendarEvent): boolean {
+  return event.subscriptionId === null || event.externalWritable === true;
+}
 
 export type CalendarDay = {
   isoDate: string;

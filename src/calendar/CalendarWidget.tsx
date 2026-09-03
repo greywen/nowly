@@ -15,6 +15,7 @@ import {
 } from './calendar-view';
 import {
   eventCategoryLabel,
+  isEventWritable,
   type CalendarDay,
   type CalendarEvent,
   type CalendarView,
@@ -462,8 +463,8 @@ export function CalendarWidget({
     const width = ((lastVisible - firstVisible + 1) / visibleCount) * 100;
     // A bar that runs off the right edge of the week keeps that side square and
     // hides the resize handle there (you resize from the true end segment).
-    const resizableHere = resizeEnabled && !continuesAfter && !event.subscriptionId;
-    const barMovable = dropEnabled && !event.subscriptionId;
+    const resizableHere = resizeEnabled && !continuesAfter && isEventWritable(event);
+    const barMovable = dropEnabled && isEventWritable(event);
     return (
       <button
         type="button"
@@ -505,7 +506,7 @@ export function CalendarWidget({
   // A single-day event that flows inside a per-column stack so each cell can
   // vertically center its own events (with an even gap) independently.
   function renderCellEvent(event: CalendarEvent) {
-    const cellMovable = dropEnabled && !event.subscriptionId;
+    const cellMovable = dropEnabled && isEventWritable(event);
     return (
       <button
         type="button"
@@ -524,7 +525,7 @@ export function CalendarWidget({
         {event.subscriptionId ? (
           <span className="event__source-badge" aria-label={t('calendar.externalBadge')} />
         ) : null}
-        {resizeEnabled && !event.subscriptionId ? (
+        {resizeEnabled && isEventWritable(event) ? (
           <span
             className="event-bar__resize-handle"
             aria-hidden="true"

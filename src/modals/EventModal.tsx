@@ -13,6 +13,7 @@ import type { RepositoryError } from '../data/nowly-repository';
 import { createEventDraft, eventToForm, isEventFormDirty, MAX_REMINDERS, toEventDraft, validateEventForm, type EventFieldErrors, type EventFormDraft } from '../lib/event-draft';
 import { presetToRecurrence, recurrenceToPreset, weekdayOf, WEEKDAYS, type RecurrencePreset } from '../lib/recurrence';
 import { RecurrenceScopeDialog } from './RecurrenceScopeDialog';
+import type { CalendarSubscription } from '../calendar/subscription-model';
 
 type EventModalProps = {
   mode: { type:'create'; dateIso:string } | { type:'edit'; event:CalendarEvent };
@@ -20,12 +21,13 @@ type EventModalProps = {
   onClose(): void;
   onSaved(): Promise<void> | void;
   onDeleted(event:CalendarEvent): Promise<void> | void;
-  createEvent(draft:EventDraft): Promise<CalendarEvent>;
+  createEvent(draft:EventDraft,subscriptionId?:string|null): Promise<CalendarEvent|void>;
   updateEvent(event:CalendarEvent,draft:EventDraft,scope:EditScope): Promise<void>;
   deleteEvent(event:CalendarEvent,scope:EditScope): Promise<void>;
   now?: () => Date;
   recentColors?: HexColor[];
   onRememberCustomColor?: (color: HexColor) => Promise<void> | void;
+  subscriptions?: CalendarSubscription[];
 };
 
 const categoryOptions = () => [{value:'work',label:t('category.work')},{value:'important',label:t('category.important')},{value:'personal',label:t('category.personal')},{value:'learning',label:t('category.learning')}];
@@ -64,7 +66,7 @@ function sameRecurrence(left:Recurrence|null,right:Recurrence|null){
     &&left.byDay.every((day,index)=>day===right.byDay[index])&&sameEnd(left.end,right.end);
 }
 
-export function EventModal({ mode,restoreFocusRef,onClose,onSaved,onDeleted,createEvent,updateEvent,deleteEvent,now=()=>new Date(),recentColors=[],onRememberCustomColor }:EventModalProps) {
+export function EventModal({ mode,restoreFocusRef,onClose,onSaved,onDeleted,createEvent,updateEvent,deleteEvent,now=()=>new Date(),recentColors=[],onRememberCustomColor,subscriptions=[] }:EventModalProps) {
   const initial = useMemo(()=>mode.type==='edit'?eventToForm(mode.event):createEventDraft(mode.dateIso,now()),[mode]);
   const [form,setForm]=useState<EventFormDraft>(initial);
   // 预设不是双射（「自定义」的种子就是一条普通周规则），只在打开表单时初始化一次。
@@ -75,6 +77,7 @@ export function EventModal({ mode,restoreFocusRef,onClose,onSaved,onDeleted,crea
   const [busy,setBusy]=useState(false);
   const [confirm,setConfirm]=useState<'discard'|'delete'|null>(null);
   const [scopeAction,setScopeAction]=useState<'edit'|'delete'|null>(null);
+  const [targetSubscriptionId,setTargetSubscriptionId]=useState<string|null>(null);
   const titleId=useId();
   const update=<K extends keyof EventFormDraft>(key:K,value:EventFormDraft[K])=>setForm(current=>({...current,[key]:value}));
   const requestClose=()=>{ if(busy)return; if(isEventFormDirty(initial,form))setConfirm('discard'); else onClose(); };
@@ -82,6 +85,13 @@ export function EventModal({ mode,restoreFocusRef,onClose,onSaved,onDeleted,crea
 
   const startAt=`${form.startDate}T${form.startTime}`;
   const rule=form.recurrence;
+  const remoteEdit=mode.type==='edit'&&Boolean(mode.event.subscriptionId);
+  const remoteTarget=remoteEdit||Boolean(targetSubscriptionId);
+  const writableTargets=useMemo(()=>subscriptions.filter(source=>source.provider!=='ics'),[subscriptions]);
+  const targetOptions=useMemo(()=>[
+    {value:'local',label:t('eventModal.targetLocal')},
+    ...writableTargets.map(source=>({value:source.id,label:source.name}))
+  ],[writableTargets]);
   // 后端只有在 RRULE 成功解析后才会提供可编辑的重复规则；孤立的 seriesId
   //（例如历史数据或损坏 RRULE）不能把单次日程带入重复范围流程。
   const recurringInstance=mode.type==='edit'&&Boolean(mode.event.seriesId&&mode.event.recurrence);
@@ -103,7 +113,7 @@ export function EventModal({ mode,restoreFocusRef,onClose,onSaved,onDeleted,crea
   }
   async function commit(scope:EditScope){
     setBusy(true);
-    try { const draft=toEventDraft(form); if(mode.type==='create')await createEvent(draft); else await updateEvent(mode.event,draft,scope); if(onRememberCustomColor&&!eventColorPresets().some(p=>p.value===draft.color))await onRememberCustomColor(draft.color); await onSaved(); setScopeAction(null); onClose(); }
+    try { const draft=toEventDraft(form); if(mode.type==='create')await createEvent({...draft,recurrence:remoteTarget?null:draft.recurrence},targetSubscriptionId); else await updateEvent(mode.event,{...draft,recurrence:remoteEdit?null:draft.recurrence},scope); if(!remoteTarget&&onRememberCustomColor&&!eventColorPresets().some(p=>p.value===draft.color))await onRememberCustomColor(draft.color); await onSaved(); setScopeAction(null); onClose(); }
     catch(error){ const repositoryError=error as RepositoryError; if(repositoryError.code==='validation_error'&&repositoryError.field){setErrors({[repositoryError.field]:repositoryError.message});setScopeAction(null);} else setDialogError(message(error)); }
     finally{setBusy(false);}
   }
@@ -115,12 +125,14 @@ export function EventModal({ mode,restoreFocusRef,onClose,onSaved,onDeleted,crea
       headerActions={<button type="button" aria-label={t('common.close')} className="good-icon-button" disabled={busy} onClick={requestClose}><X aria-hidden="true"/></button>}
       footer={<div className="event-dialog__actions">{dialogError&&!confirm&&!scopeAction?<div role="alert" className="dialog-error">{dialogError}</div>:null}{mode.type==='edit'?<button type="button" className="good-button good-button--danger-ghost" disabled={busy} onClick={requestDelete}>{t('eventModal.deleteEvent')}</button>:null}<button type="button" className="good-button" disabled={busy} onClick={requestClose}>{t('common.cancel')}</button><button type="button" className="good-button good-button--primary" disabled={busy} onClick={save}>{busy?t('common.saving'):t('eventModal.save')}</button></div>}>
       <form className="event-form" onSubmit={e=>{e.preventDefault();void save();}}>
+        {mode.type==='create'&&writableTargets.length?<Select id="event-target-calendar" label={t('eventModal.targetCalendar')} options={targetOptions} value={targetSubscriptionId??'local'} disabled={busy} onChange={value=>setTargetSubscriptionId(value==='local'?null:value)}/>:null}
+        {remoteEdit?<p className="reminder-field__empty">{t('eventModal.remoteCurrentOnly')}</p>:null}
         <div className="good-field"><label htmlFor="event-title">{t('eventModal.title')}</label><input id="event-title" className="good-input" autoComplete="off" value={form.title} disabled={busy} aria-describedby={errors.title?'event-title-error':undefined} onChange={e=>update('title',e.target.value)}/>{errors.title?<span id="event-title-error" className="field-error">{errors.title}</span>:null}</div>
         <label className="form-check form-check-custom form-check-solid"><input className="form-check-input" type="checkbox" checked={form.allDay} disabled={busy} onChange={e=>update('allDay',e.target.checked)}/><span className="form-check-label">{t('eventModal.allDay')}</span></label>
         <div className="form-row"><DatePicker id="event-start-date" label={t('eventModal.startDate')} value={form.startDate} errorId={errors.startAt?'event-start-error':undefined} disabled={busy} open={openPicker==='startDate'} onOpenChange={open=>setOpenPicker(open?'startDate':null)} onChange={v=>update('startDate',v)}/><DatePicker id="event-end-date" label={t('eventModal.endDate')} value={form.endDate} errorId={errors.endAt?'event-end-error':undefined} disabled={busy} open={openPicker==='endDate'} onOpenChange={open=>setOpenPicker(open?'endDate':null)} onChange={v=>update('endDate',v)}/></div>
         {!form.allDay?<div className="form-row"><TimePicker id="event-start-time" label={t('eventModal.startTime')} value={form.startTime} disabled={busy} open={openPicker==='startTime'} onOpenChange={open=>setOpenPicker(open?'startTime':null)} onChange={v=>update('startTime',v)}/><TimePicker id="event-end-time" label={t('eventModal.endTime')} value={form.endTime} disabled={busy} open={openPicker==='endTime'} onOpenChange={open=>setOpenPicker(open?'endTime':null)} onChange={v=>update('endTime',v)}/></div>:null}
         {errors.startAt?<span id="event-start-error" className="field-error">{errors.startAt}</span>:null}{errors.endAt?<span id="event-end-error" className="field-error">{errors.endAt}</span>:null}
-        <div className="recurrence-field">
+        {!remoteTarget?<div className="recurrence-field">
           <Select id="event-recurrence" label={t('eventModal.recurrence')} options={presetOptions()} value={preset} disabled={busy} onChange={v=>changePreset(v as RecurrencePreset)}/>
           {preset==='custom'&&rule?<div className="recurrence-custom">
             <div className="form-row">
@@ -133,7 +145,7 @@ export function EventModal({ mode,restoreFocusRef,onClose,onSaved,onDeleted,crea
             {rule.end.kind==='count'?<div className="good-field"><label htmlFor="event-recurrence-count">{t('recurrence.count')}</label><input id="event-recurrence-count" className="good-input" type="number" min={1} value={rule.end.count} disabled={busy} onChange={e=>patchRecurrence({end:{kind:'count',count:Number(e.target.value)}})}/></div>:null}
           </div>:null}
           {errors.recurrence?<span id="event-recurrence-error" className="field-error">{errors.recurrence}</span>:null}
-        </div>
+        </div>:null}
         <div className="reminder-field">
           <span className="reminder-field__label">{t('eventModal.reminders')}</span>
           {form.reminders.length===0?<p className="reminder-field__empty">{t('reminder.none')}</p>:null}
@@ -149,8 +161,8 @@ export function EventModal({ mode,restoreFocusRef,onClose,onSaved,onDeleted,crea
           {form.reminders.length<MAX_REMINDERS?<button type="button" className="good-button reminder-field__add" disabled={busy} onClick={addReminder}>{t('reminder.add')}</button>:null}
           {errors.reminders?<span className="field-error">{errors.reminders}</span>:null}
         </div>
-        <Select id="event-category" label={t('eventModal.category')} options={categoryOptions()} value={form.category} disabled={busy} onChange={v=>update('category',v as EventCategory)}/>{errors.category?<span className="field-error">{errors.category}</span>:null}
-        <ColorPicker legend={t('eventModal.color')} name="event-color" value={form.color} presets={eventColorPresets()} recentColors={recentColors} disabled={busy} onChange={color=>update('color',color)} onRememberColor={onRememberCustomColor}/>{errors.color?<span className="field-error">{errors.color}</span>:null}
+        {!remoteTarget?<><Select id="event-category" label={t('eventModal.category')} options={categoryOptions()} value={form.category} disabled={busy} onChange={v=>update('category',v as EventCategory)}/>{errors.category?<span className="field-error">{errors.category}</span>:null}
+        <ColorPicker legend={t('eventModal.color')} name="event-color" value={form.color} presets={eventColorPresets()} recentColors={recentColors} disabled={busy} onChange={color=>update('color',color)} onRememberColor={onRememberCustomColor}/>{errors.color?<span className="field-error">{errors.color}</span>:null}</>:null}
         <div className="good-field"><label htmlFor="event-note">{t('eventModal.note')}</label><textarea id="event-note" className="good-input good-textarea" autoComplete="off" value={form.note} disabled={busy} onChange={e=>update('note',e.target.value)}/></div>
       </form>
     </Dialog>

@@ -26,6 +26,11 @@ export const tauriNowlyRepository: NowlyRepository = {
   updateSubscriptionDisplay: (id, name, color, refreshIntervalMinutes) =>
     invoke('update_subscription_display', { id, name, color, refreshIntervalMinutes }),
   listExternalEventsInRange: (range) => invoke('list_external_events_in_range', { range }),
+  createRemoteEvent: (subscriptionId, draft) => invoke('create_remote_event', { subscriptionId, draft }),
+  updateRemoteEvent: (subscriptionId, remoteEventId, draft, descriptionChanged) =>
+    invoke('update_remote_event', { subscriptionId, remoteEventId, draft, descriptionChanged }),
+  deleteRemoteEvent: (subscriptionId, remoteEventId) =>
+    invoke('delete_remote_event', { subscriptionId, remoteEventId }),
   listTasks: () => invoke('list_tasks'),
   createTask: (draft) => invoke('create_task', { draft }),
   updateTask: (id, draft) => invoke('update_task', { id, draft }),

@@ -90,6 +90,22 @@ describe('event draft helpers', () => {
     expect(eventToForm({ ...event, recurrence: rule }).recurrence).toEqual(rule);
   });
 
+  it('shows an external all-day exclusive end as an inclusive form date', () => {
+    const form = eventToForm({
+      ...event,
+      allDay: true,
+      startAt: '2026-08-10T00:00',
+      endAt: '2026-08-10T23:59',
+      subscriptionId: 'google-sub',
+      remoteEventId: 'remote-id',
+      externalProvider: 'google',
+      externalWritable: true,
+      externalExclusiveEndAt: '2026-08-11T00:00'
+    });
+    expect(form.startDate).toBe('2026-08-10');
+    expect(form.endDate).toBe('2026-08-10');
+  });
+
   it('normalizes timed and all-day forms while trimming only the title', () => {
     expect(toEventDraft(form)).toEqual({
       title: '设计评审',

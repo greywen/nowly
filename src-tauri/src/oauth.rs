@@ -4,7 +4,7 @@
 //! （Google Desktop 客户端仍要求同时带上随包分发的 client_secret，一并携带）。
 //! 回调走本机 loopback（`http://127.0.0.1:<临时端口>`），用完即关，`state` 防 CSRF。
 //!
-//! 只申请只读日历权限：Google `calendar.readonly`，Microsoft `Calendars.Read`
+//! 申请日历读写权限：Google `calendar`，Microsoft `Calendars.ReadWrite`。
 //! （加 `offline_access` 换 refresh_token）。token 交给 `token_store` 用 DPAPI 加密落库。
 
 use crate::db::AppDb;
@@ -38,15 +38,14 @@ fn endpoints_for(provider: &str) -> Result<ProviderEndpoints, CommandError> {
         "google" => Ok(ProviderEndpoints {
             auth_uri: "https://accounts.google.com/o/oauth2/auth",
             token_uri: "https://oauth2.googleapis.com/token",
-            // openid+email 用于拿账户邮箱；calendar.readonly 只读日历。
-            scope: "openid email https://www.googleapis.com/auth/calendar.readonly",
+            scope: "openid email https://www.googleapis.com/auth/calendar",
             userinfo_uri: "https://www.googleapis.com/oauth2/v3/userinfo",
         }),
         "microsoft" => Ok(ProviderEndpoints {
             // common：个人账户 + 组织账户都可登录。
             auth_uri: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
             token_uri: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
-            scope: "openid email offline_access https://graph.microsoft.com/Calendars.Read",
+            scope: "openid email offline_access https://graph.microsoft.com/Calendars.ReadWrite",
             userinfo_uri: "https://graph.microsoft.com/v1.0/me",
         }),
         _ => Err(CommandError::validation("provider", "不支持的日历来源。")),

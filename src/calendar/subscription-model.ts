@@ -50,6 +50,9 @@ import type { CalendarEvent, EventCategory } from './calendar-model';
 export type ExternalEvent = {
   id: string;
   subscriptionId: string;
+  remoteEventId: string | null;
+  provider: SubscriptionProvider;
+  writable: boolean;
   title: string;
   startAt: string;
   endAt: string;
@@ -63,23 +66,33 @@ export type ExternalEvent = {
   reminders: number[];
 };
 
+function addDaysIso(isoDate: string, days: number) {
+  const [year, month, day] = isoDate.split('-').map(Number);
+  const date = new Date(year, month - 1, day + days);
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
 // External subscription events reuse the calendar rendering pipeline, so map
-// each into a read-only CalendarEvent. Reminders come straight from the source
+// each into a CalendarEvent. OAuth sources may be writable; ICS stays read-only.
 // (Google/Microsoft/ICS VALARM); location and description are kept as dedicated
 // fields for the read-only detail popup. `note` stays empty so nothing
 // conflates the two.
 export function externalToCalendarEvent(external: ExternalEvent): CalendarEvent {
+  const inclusiveEndAt = external.allDay
+    ? `${addDaysIso(external.endAt.slice(0, 10), -1)}T23:59`
+    : external.endAt;
   return {
     id: external.id,
     title: external.title,
     startAt: external.startAt,
-    endAt: external.endAt,
+    endAt: inclusiveEndAt,
     allDay: external.allDay,
     // Subscription events have a fixed source color, not a category color; use a
     // neutral category so category-based styling never fights the source color.
     category: 'personal' as EventCategory,
     color: external.color,
-    note: '',
+    note: external.description ?? '',
     reminders: external.reminders ?? [],
     createdAt: '',
     updatedAt: '',
@@ -92,6 +105,10 @@ export function externalToCalendarEvent(external: ExternalEvent): CalendarEvent 
     occurrenceStartAt: null,
     isOverridden: false,
     subscriptionId: external.subscriptionId,
+    externalProvider: external.provider,
+    remoteEventId: external.remoteEventId,
+    externalWritable: external.writable,
+    externalExclusiveEndAt: external.allDay ? external.endAt : null,
     externalLocation: external.location,
     externalDescription: external.description
   };

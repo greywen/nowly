@@ -24,6 +24,7 @@ mod oauth;
 mod oauth_config;
 mod recurrence;
 mod reminders;
+mod remote_events;
 mod rrule_bridge;
 mod rrule_engine;
 mod settings;
@@ -583,6 +584,9 @@ fn main() {
             oauth::disconnect_oauth_account,
             subscription_sync::refresh_calendar_subscription,
             subscriptions::list_external_events_in_range,
+            remote_events::create_remote_event,
+            remote_events::update_remote_event,
+            remote_events::delete_remote_event,
             wallpaper::enter_wallpaper_mode,
             wallpaper::enter_foreground_mode,
             window_lifecycle::get_window_mode

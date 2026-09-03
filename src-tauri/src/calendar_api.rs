@@ -25,7 +25,7 @@ fn rfc3339(instant: DateTime<Utc>) -> String {
 }
 
 /// application/x-www-form-urlencoded 编码单个 path/query 组件。
-fn url_encode(input: &str) -> String {
+pub(crate) fn url_encode(input: &str) -> String {
     let mut out = String::with_capacity(input.len());
     for &b in input.as_bytes() {
         match b {

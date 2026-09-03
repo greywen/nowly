@@ -42,6 +42,15 @@ function dragScope(event: CalendarEvent): EditScope {
   return event.occurrenceStartAt === null ? 'all' : 'occurrence';
 }
 
+function remoteIdentity(event: CalendarEvent): { subscriptionId: string; remoteEventId: string } | null {
+  if (!event.subscriptionId || !event.externalWritable || !event.remoteEventId) return null;
+  return { subscriptionId: event.subscriptionId, remoteEventId: event.remoteEventId };
+}
+
+function unsupportedRemoteWrite(): never {
+  throw new Error(t('calendar.remoteWriteUnsupported'));
+}
+
 export function useEvents({
   now = () => new Date(),
   weekStart = 'monday'
@@ -177,7 +186,13 @@ export function useEvents({
   );
 
   const createEvent = useCallback(
-    async (draft: EventDraft) => {
+    async (draft: EventDraft, subscriptionId: string | null = null) => {
+      if (subscriptionId) {
+        if (!repository.createRemoteEvent) unsupportedRemoteWrite();
+        await repository.createRemoteEvent(subscriptionId, { ...draft, recurrence: null });
+        await refreshAfterWrite();
+        return undefined;
+      }
       const created = await repository.createEvent(draft);
       await refreshAfterWrite();
       return created;
@@ -187,7 +202,17 @@ export function useEvents({
 
   const updateEvent = useCallback(
     async (event: CalendarEvent, draft: EventDraft, scope: EditScope) => {
-      await repository.updateEvent(targetOf(event), draft, scope);
+      const remote = remoteIdentity(event);
+      if (remote) {
+        if (!repository.updateRemoteEvent) unsupportedRemoteWrite();
+        await repository.updateRemoteEvent(
+          remote.subscriptionId,
+          remote.remoteEventId,
+          { ...draft, recurrence: null },
+          draft.note !== (event.externalDescription ?? '')
+        );
+      }
+      else await repository.updateEvent(targetOf(event), draft, scope);
       await refreshAfterWrite();
     },
     [refreshAfterWrite, repository]
@@ -195,7 +220,12 @@ export function useEvents({
 
   const deleteEvent = useCallback(
     async (event: CalendarEvent, scope: EditScope) => {
-      await repository.deleteEvent(targetOf(event), scope);
+      const remote = remoteIdentity(event);
+      if (remote) {
+        if (!repository.deleteRemoteEvent) unsupportedRemoteWrite();
+        await repository.deleteRemoteEvent(remote.subscriptionId, remote.remoteEventId);
+      }
+      else await repository.deleteEvent(targetOf(event), scope);
       await refreshAfterWrite();
     },
     [refreshAfterWrite, repository]
@@ -205,7 +235,12 @@ export function useEvents({
     async (event: CalendarEvent, isoDate: string) => {
       if (event.startAt.slice(0, 10) === isoDate) return;
       const draft = shiftEventToDate(event, isoDate);
-      await repository.updateEvent(targetOf(event), draft, dragScope(event));
+      const remote = remoteIdentity(event);
+      if (remote) {
+        if (!repository.updateRemoteEvent) unsupportedRemoteWrite();
+        await repository.updateRemoteEvent(remote.subscriptionId, remote.remoteEventId, { ...draft, recurrence: null }, false);
+      }
+      else await repository.updateEvent(targetOf(event), draft, dragScope(event));
       const [targetYear, targetMonth] = isoDate.split('-').map(Number);
       const outsideVisibleMonth =
         state.view === 'month' &&
@@ -231,7 +266,12 @@ export function useEvents({
       if (draft.startAt === event.startAt.slice(0, 16) && draft.endAt === event.endAt.slice(0, 16)) {
         return;
       }
-      await repository.updateEvent(targetOf(event), draft, dragScope(event));
+      const remote = remoteIdentity(event);
+      if (remote) {
+        if (!repository.updateRemoteEvent) unsupportedRemoteWrite();
+        await repository.updateRemoteEvent(remote.subscriptionId, remote.remoteEventId, { ...draft, recurrence: null }, false);
+      }
+      else await repository.updateEvent(targetOf(event), draft, dragScope(event));
       await refreshAfterWrite();
     },
     [refreshAfterWrite, repository]
@@ -244,7 +284,12 @@ export function useEvents({
       const endDate = endIsoDate < event.startAt.slice(0, 10) ? event.startAt.slice(0, 10) : endIsoDate;
       if (endDate === event.endAt.slice(0, 10)) return;
       const draft = resizeEventEndToDate(event, endDate);
-      await repository.updateEvent(targetOf(event), draft, dragScope(event));
+      const remote = remoteIdentity(event);
+      if (remote) {
+        if (!repository.updateRemoteEvent) unsupportedRemoteWrite();
+        await repository.updateRemoteEvent(remote.subscriptionId, remote.remoteEventId, { ...draft, recurrence: null }, false);
+      }
+      else await repository.updateEvent(targetOf(event), draft, dragScope(event));
       await refreshAfterWrite();
     },
     [refreshAfterWrite, repository]

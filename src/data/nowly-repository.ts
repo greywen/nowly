@@ -184,6 +184,14 @@ export type NowlyRepository = {
     refreshIntervalMinutes: number
   ) => Promise<CalendarSubscription>;
   listExternalEventsInRange: (range: EventRange) => Promise<ExternalEvent[]>;
+  createRemoteEvent?(subscriptionId: string, draft: EventDraft): Promise<void>;
+  updateRemoteEvent?(
+    subscriptionId: string,
+    remoteEventId: string,
+    draft: EventDraft,
+    descriptionChanged: boolean
+  ): Promise<void>;
+  deleteRemoteEvent?(subscriptionId: string, remoteEventId: string): Promise<void>;
   listTasks(): Promise<MatrixTask[]>;
   createTask(draft: TaskDraft): Promise<MatrixTask>;
   updateTask(id: string, draft: TaskDraft): Promise<MatrixTask>;
