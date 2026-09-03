@@ -141,6 +141,8 @@ test('moves a multi-day event to a later day by dragging its body', async ({ pag
 });
 
 test('moves a timed event to another day in week view by dragging', async ({ page }) => {
+  // The view switcher is an icon segmented control; each button carries the
+  // view's label as its accessible name.
   await page.getByRole('button', { name: '周', exact: true }).click();
   // The timed event sits on the 15th; drag its chip to the 17th column.
   const chip = page.getByRole('button', { name: /晨会/ }).first();

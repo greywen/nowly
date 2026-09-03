@@ -1,5 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Repeat, Settings } from 'lucide-react';
+import {
+  CalendarDays,
+  CalendarRange,
+  ChevronLeft,
+  ChevronRight,
+  List,
+  Plus,
+  Repeat,
+  RefreshCw,
+  Settings,
+  Square,
+  type LucideIcon
+} from 'lucide-react';
 import type { CalendarSettings } from './CalendarSettingsDialog';
 import {
   buildMonthGrid,
@@ -56,13 +68,17 @@ const DAY_CLICK_DELAY_MS = 250;
 const LANE_HEIGHT_PX = 24;
 // How many single-day events a month cell shows before collapsing to "+N".
 const MONTH_MAX_SINGLES = 3;
+// Debounce window for the subscription sync button: clicks landing within this
+// window after the previous sync are ignored so repeat taps can't fire
+// back-to-back network refreshes.
+const SYNC_COOLDOWN_MS = 2000;
 
-function viewOptionsList(): Array<{ view: CalendarView; label: string }> {
+function viewOptionsList(): Array<{ view: CalendarView; label: string; Icon: LucideIcon }> {
   return [
-    { view: 'month', label: t('calendar.viewMonth') },
-    { view: 'week', label: t('calendar.viewWeek') },
-    { view: 'day', label: t('calendar.viewDay') },
-    { view: 'list', label: t('calendar.viewList') }
+    { view: 'month', label: t('calendar.viewMonth'), Icon: CalendarDays },
+    { view: 'week', label: t('calendar.viewWeek'), Icon: CalendarRange },
+    { view: 'day', label: t('calendar.viewDay'), Icon: Square },
+    { view: 'list', label: t('calendar.viewList'), Icon: List }
   ];
 }
 
@@ -102,6 +118,11 @@ type CalendarWidgetProps = {
   onResizeEvent?: (event: CalendarEvent, endIsoDate: string) => void;
   calendarSettings?: CalendarSettings;
   onOpenSettings?: () => void;
+  // When there is at least one calendar subscription, the toolbar shows a sync
+  // button that refreshes every subscription at once. Omit either prop to hide
+  // the button (e.g. no subscriptions configured).
+  hasSubscriptions?: boolean;
+  onSyncSubscriptions?: () => void | Promise<void>;
 };
 
 function summaryFor(status: LoadStatus, count: number, view: CalendarView) {
@@ -149,9 +170,14 @@ export function CalendarWidget({
   onMoveEventToHour,
   onResizeEvent,
   calendarSettings,
-  onOpenSettings
+  onOpenSettings,
+  hasSubscriptions = false,
+  onSyncSubscriptions
 }: CalendarWidgetProps) {
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  // Timestamp (ms) of the last sync trigger, used to debounce repeat clicks.
+  const lastSyncAtRef = useRef(0);
   const anchor = anchorIso ? new Date(`${anchorIso}T00:00:00`) : new Date(year, monthIndex, 1);
   const today = new Date(`${todayIso}T00:00:00`);
   const weekStart = calendarSettings?.weekStart ?? 'monday';
@@ -401,6 +427,24 @@ export function CalendarWidget({
     },
     [onOpenEvent]
   );
+
+  const handleSync = useCallback(async () => {
+    if (!onSyncSubscriptions || syncing) return;
+    // Debounce: ignore a fresh click within the cooldown window after the last
+    // sync so quick repeat taps can't fire back-to-back network refreshes. The
+    // `syncing` guard already blocks clicks while one is in flight; this covers
+    // the moment right after it settles.
+    const nowMs = Date.now();
+    if (nowMs - lastSyncAtRef.current < SYNC_COOLDOWN_MS) return;
+    lastSyncAtRef.current = nowMs;
+    setSyncing(true);
+    try {
+      await onSyncSubscriptions();
+    } finally {
+      lastSyncAtRef.current = Date.now();
+      setSyncing(false);
+    }
+  }, [onSyncSubscriptions, syncing]);
 
   // While a gesture is active, preview the dragged event's new span so the bar
   // moves/stretches before the write lands.
@@ -822,18 +866,31 @@ export function CalendarWidget({
         <div className="toolbar-actions">
           {onSetView ? (
             <div className="view-switch" role="group" aria-label={t('calendar.switchView')}>
-              {viewOptions.map((option) => (
+              {viewOptions.map(({ view: optionView, label, Icon }) => (
                 <button
-                  key={option.view}
+                  key={optionView}
                   type="button"
-                  className={`view-switch__btn${view === option.view ? ' is-active' : ''}`}
-                  aria-pressed={view === option.view}
-                  onClick={() => onSetView(option.view)}
+                  className={`view-switch__btn view-switch__btn--icon${view === optionView ? ' is-active' : ''}`}
+                  aria-label={label}
+                  aria-pressed={view === optionView}
+                  title={label}
+                  onClick={() => onSetView(optionView)}
                 >
-                  {option.label}
+                  <Icon aria-hidden="true" />
                 </button>
               ))}
             </div>
+          ) : null}
+          {hasSubscriptions && onSyncSubscriptions ? (
+            <button
+              type="button"
+              className="btn btn-icon"
+              aria-label={t('calendar.syncSubscriptions')}
+              disabled={syncing}
+              onClick={() => void handleSync()}
+            >
+              <RefreshCw aria-hidden="true" />
+            </button>
           ) : null}
           <button type="button" className="btn btn-icon" aria-label={navLabels.previous} onClick={onPreviousMonth}>
             <ChevronLeft aria-hidden="true" />

@@ -276,16 +276,38 @@ describe('CalendarWidget', () => {
     const onSetView = vi.fn();
     render(<CalendarWidget {...baseProps} onSetView={onSetView} />);
 
+    // The view switcher is an icon segmented control; each icon button carries
+    // the view's label as its accessible name.
     const group = screen.getByRole('group', { name: '切换视图' });
     expect(group).toBeInTheDocument();
-    for (const label of ['月', '周', '天', '列表']) {
-      await user.click(screen.getByRole('button', { name: label, pressed: undefined }));
+    const expected: Array<[string, string]> = [
+      ['月', 'month'],
+      ['周', 'week'],
+      ['天', 'day'],
+      ['列表', 'list']
+    ];
+    for (const [label, view] of expected) {
+      await user.click(screen.getByRole('button', { name: label }));
+      expect(onSetView).toHaveBeenLastCalledWith(view);
     }
     expect(onSetView).toHaveBeenCalledTimes(4);
-    expect(onSetView).toHaveBeenNthCalledWith(1, 'month');
-    expect(onSetView).toHaveBeenNthCalledWith(2, 'week');
-    expect(onSetView).toHaveBeenNthCalledWith(3, 'day');
-    expect(onSetView).toHaveBeenNthCalledWith(4, 'list');
+  });
+
+  it('shows a sync button only when subscriptions exist and syncs on click', async () => {
+    const user = userEvent.setup();
+    const onSyncSubscriptions = vi.fn().mockResolvedValue(undefined);
+
+    const { rerender } = render(
+      <CalendarWidget {...baseProps} hasSubscriptions={false} onSyncSubscriptions={onSyncSubscriptions} />
+    );
+    expect(screen.queryByRole('button', { name: '同步所有日历订阅' })).toBeNull();
+
+    rerender(
+      <CalendarWidget {...baseProps} hasSubscriptions onSyncSubscriptions={onSyncSubscriptions} />
+    );
+    const syncButton = screen.getByRole('button', { name: '同步所有日历订阅' });
+    await user.click(syncButton);
+    expect(onSyncSubscriptions).toHaveBeenCalledTimes(1);
   });
 
   it('provides a persistent vertical scroll region in every calendar view', () => {
@@ -307,6 +329,8 @@ describe('CalendarWidget', () => {
 
   it('marks the active view and adapts navigation labels per view', () => {
     const { rerender } = render(<CalendarWidget {...baseProps} view="month" />);
+    // The view switcher is an icon segmented control; the active icon button is
+    // marked with aria-pressed.
     expect(screen.getByRole('button', { name: '月' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: '上一个月' })).toBeInTheDocument();
 

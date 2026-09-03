@@ -78,6 +78,17 @@ function AppContent() {
     loadSubscriptions();
     void refreshEvents();
   }, [loadSubscriptions, refreshEvents]);
+  // Refresh every configured subscription in turn, then reload the source list
+  // and calendar events so freshly synced items appear at once. Individual
+  // failures are ignored so one broken source can't block the rest.
+  const syncAllSubscriptions = useCallback(async () => {
+    await Promise.all(
+      subscriptions.map((subscription) =>
+        repository.refreshCalendarSubscription(subscription.id).catch(() => undefined)
+      )
+    );
+    onSubscriptionsChanged();
+  }, [subscriptions, repository, onSubscriptionsChanged]);
   const [focusStatisticsOpen, setFocusStatisticsOpen] = useState(false);
   const [windowMode, setWindowMode] = useState<WindowMode>('foreground');
   const [isSwitchingWindowMode, setIsSwitchingWindowMode] = useState(false);
@@ -187,6 +198,8 @@ function AppContent() {
           showWeekends: settingsFeature.settings.data.showWeekends
         }}
         onOpenSettings={() => openModalInForeground({ type: 'calendar-settings', trigger: null })}
+        hasSubscriptions={subscriptions.length > 0}
+        onSyncSubscriptions={syncAllSubscriptions}
       />
     );
   }

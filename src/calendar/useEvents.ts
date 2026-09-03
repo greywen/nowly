@@ -15,6 +15,25 @@ type ViewState = { view: CalendarView; anchor: Date };
 
 export { monthRange };
 
+// The chosen calendar layout is a local look preference, so it is stored next
+// to the other UI preferences (notes view, blur, onboarding) instead of the
+// database. Restored on open; defaults to month when absent or invalid.
+export const CALENDAR_VIEW_STORAGE_KEY = 'nowly:calendar-view';
+const DEFAULT_CALENDAR_VIEW: CalendarView = 'month';
+
+function isCalendarView(value: unknown): value is CalendarView {
+  return value === 'month' || value === 'week' || value === 'day' || value === 'list';
+}
+
+function readStoredView(): CalendarView {
+  try {
+    const raw = localStorage.getItem(CALENDAR_VIEW_STORAGE_KEY);
+    return isCalendarView(raw) ? raw : DEFAULT_CALENDAR_VIEW;
+  } catch {
+    return DEFAULT_CALENDAR_VIEW;
+  }
+}
+
 function messageFrom(error: unknown) {
   if (typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string') {
     return error.message;
@@ -61,7 +80,7 @@ export function useEvents({
   const repository = useNowlyRepository();
   const initialDateRef = useRef(now());
   const [state, setState] = useState<ViewState>({
-    view: 'month',
+    view: readStoredView(),
     anchor: new Date(
       initialDateRef.current.getFullYear(),
       initialDateRef.current.getMonth(),
@@ -168,6 +187,11 @@ export function useEvents({
   }, []);
 
   const setView = useCallback((view: CalendarView) => {
+    try {
+      localStorage.setItem(CALENDAR_VIEW_STORAGE_KEY, view);
+    } catch {
+      /* persistence is best-effort; the live view still applies */
+    }
     setState((current) => {
       if (current.view === view) return current;
       requestIdRef.current += 1;
