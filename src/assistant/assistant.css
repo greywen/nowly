@@ -86,8 +86,15 @@
 .assistant-timeline-group + .assistant-timeline-group { margin-top: 20px; }
 .assistant-timeline-date { margin: 0 0 12px; color: var(--text-primary); font-size: 1rem; font-weight: 600; line-height: 1.5; }
 .assistant-timeline { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
-.assistant-timeline-item { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 12px; }
-.assistant-timeline-marker { width: 36px; height: 36px; display: grid; place-items: center; border-radius: var(--radius-md); color: var(--color-primary-active); background: var(--color-primary-light); }
+/* Each entry is a marker column plus a body. The dashed rule is drawn on the
+   item itself and runs the full row height, so consecutive rows join into one
+   continuous line through the markers; :last-child stops it at the final entry
+   instead of trailing into empty space. */
+.assistant-timeline-item { position: relative; display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 12px; }
+.assistant-timeline-item::before { content: ""; position: absolute; top: 18px; bottom: -12px; left: 17px; width: 0; border-left: 1px dashed var(--border-default); }
+.assistant-timeline-item:last-child::before { display: none; }
+/* Opaque background keeps the dashed rule from showing through the glyph. */
+.assistant-timeline-marker { position: relative; z-index: 1; width: 36px; height: 36px; display: grid; place-items: center; border-radius: var(--radius-md); color: var(--color-primary-active); background: var(--color-primary-light); }
 .assistant-timeline-item[data-status="undone"] .assistant-timeline-marker,
 .assistant-timeline-item[data-status="cancelled"] .assistant-timeline-marker,
 .assistant-timeline-item[data-status="expired"] .assistant-timeline-marker { color: var(--text-tertiary); background: var(--bg-subtle); }
@@ -96,6 +103,9 @@
 .assistant-timeline-heading { min-width: 0; }
 .assistant-timeline-title { color: var(--text-primary); font-size: 1.075rem; font-weight: 600; }
 .assistant-timeline-meta { margin: 4px 0 0; color: var(--text-muted); font-size: .85rem; }
+.assistant-history-actions { flex: none; display: flex; align-items: center; gap: 8px; }
+.assistant-history-actions .btn-icon { width: 32px; min-width: 32px; height: 32px; min-height: 32px; }
+.assistant-history-actions .btn-icon svg { width: 16px; height: 16px; }
 .assistant-timeline-changes { margin: 12px 0 0; padding: 12px 0 0; border-top: 1px solid var(--border-subtle); list-style: none; }
 .assistant-timeline-changes > li + li { margin-top: 8px; }
 .assistant-timeline-detail { margin-top: 8px; padding: 12px; border-radius: var(--radius-default); background: var(--bg-subtle); }

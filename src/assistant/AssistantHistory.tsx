@@ -1,4 +1,4 @@
-import { CalendarDays, Layers, SquareKanban } from '../components/icons';
+import { CalendarDays, ChevronDown, ChevronUp, Layers, RotateCcw, SquareKanban } from '../components/icons';
 import { TabPanel, Tabs, type TabItem } from '../components/Tabs';
 import { ChangeDetails, kinds } from './PlanCard';
 import type { Plan } from './types';
@@ -75,7 +75,7 @@ export function AssistantHistory({ plans, range, openChange, busy, uncertain, on
             const Marker = planIcon(plan);
             const changeId = `${plan.id}:details`; const open = openChange === changeId;
             const title = plan.changes.map(change => change.title).join('、');
-            return <li className="assistant-history-row" key={plan.id} data-status={plan.status}>
+            return <li className="assistant-timeline-item" key={plan.id} data-status={plan.status}>
               <span className="assistant-timeline-marker" aria-hidden="true"><Marker size={16} /></span>
               <div className="assistant-timeline-body">
                 <div className="assistant-timeline-head">
@@ -85,9 +85,9 @@ export function AssistantHistory({ plans, range, openChange, busy, uncertain, on
                   </div>
                   <div className="assistant-history-actions">
                     <span className="assistant-status-badge" data-status={plan.status}>{statuses[plan.status]}</span>
-                    <button className="btn" aria-label={`查看${title}详情`} aria-expanded={open} aria-controls={`assistant-history-${changeId}`}
-                      onClick={() => onOpenChange(open ? null : changeId)}>查看</button>
-                    {plan.status === 'committed' && <button className="btn" aria-label={`撤销${title}`} disabled={busy || uncertain} onClick={() => onUndo(plan)}>撤销</button>}
+                    <button className="btn btn-icon" aria-label={`查看${title}详情`} title="查看详情" aria-expanded={open} aria-controls={`assistant-history-${changeId}`}
+                      onClick={() => onOpenChange(open ? null : changeId)}>{open ? <ChevronUp /> : <ChevronDown />}</button>
+                    {plan.status === 'committed' && <button className="btn btn-icon" aria-label={`撤销${title}`} title="撤销" disabled={busy || uncertain} onClick={() => onUndo(plan)}><RotateCcw /></button>}
                   </div>
                 </div>
                 {open && <div className="assistant-timeline-detail" id={`assistant-history-${changeId}`}>

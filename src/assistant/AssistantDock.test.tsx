@@ -97,7 +97,7 @@ describe('AssistantDock execution boundary', () => {
     render(<AssistantDock client={client} onRefresh={() => {}} />);
     await send();
     await click(await screen.findByRole('button', { name: '确认执行 1 项' }));
-    const details = screen.getByRole('button', { name: '查看详情' });
+    const details = screen.getByRole('button', { name: '查看早会详情' });
     expect(details).toHaveAttribute('aria-controls');
     await click(details);
     expect(document.getElementById(details.getAttribute('aria-controls')!)).toBeInTheDocument();
@@ -184,9 +184,9 @@ describe('AssistantDock execution boundary', () => {
     const refresh = vi.fn();
     render(<AssistantDock client={client} onRefresh={refresh} />);
     await openHistory();
-    await click(await screen.findByRole('button', { name: '查看' }));
+    await click(await screen.findByRole('button', { name: '查看早会详情' }));
     expect(screen.getByText('2026-09-09 08:00')).toBeInTheDocument();
-    await click(await screen.findByRole('button', { name: '撤销' }));
+    await click(await screen.findByRole('button', { name: '撤销早会' }));
     await screen.findByText('已撤销');
     expect(client.undo).toHaveBeenCalledWith('plan-1');
     expect(refresh).toHaveBeenCalledTimes(1);
@@ -343,7 +343,7 @@ describe('AssistantDock execution boundary', () => {
     ]);
     render(<AssistantDock client={client} onRefresh={() => {}} />);
     await openHistory();
-    await click(screen.getAllByRole('button', { name: '查看' })[0]);
+    await click(screen.getAllByRole('button', { name: '查看早会详情' })[0]);
     expect(document.querySelectorAll('.assistant-timeline-detail')).toHaveLength(1);
   });
   it('opens current chat when configuration finishes loading under a focused composer', async () => {
@@ -389,7 +389,7 @@ describe('AssistantDock execution boundary', () => {
     fireEvent.change(await screen.findByRole('textbox', { name: '标题 1' }), { target: { value: '团队早会' } });
     await screen.findByText('无法核实旧预览已取消。请重新发送请求。');
     await click(screen.getByRole('button', { name: '操作记录' }));
-    await click(await screen.findByRole('button', { name: '撤销' }));
+    await click(await screen.findByRole('button', { name: '撤销早会' }));
     await screen.findByText('已撤销');
     await click(screen.getByRole('button', { name: '操作记录' }));
     expect(screen.getByRole('button', { name: '确认执行 1 项' })).toBeDisabled();
@@ -412,7 +412,7 @@ describe('AssistantDock execution boundary', () => {
     render(<AssistantDock client={client} onRefresh={() => {}} />);
     await send();
     await click(screen.getByRole('button', { name: '操作记录' }));
-    await click(await screen.findByRole('button', { name: '撤销' }));
+    await click(await screen.findByRole('button', { name: '撤销早会' }));
     await screen.findByText('已撤销');
     await click(screen.getByRole('button', { name: '操作记录' }));
     expect(screen.getByRole('textbox', { name: '标题 1' })).toHaveValue('早会');
@@ -428,7 +428,7 @@ describe('AssistantDock execution boundary', () => {
     render(<AssistantDock client={client} onRefresh={() => {}} />);
     await send();
     await click(screen.getByRole('button', { name: '操作记录' }));
-    await click(await screen.findByRole('button', { name: '撤销' }));
+    await click(await screen.findByRole('button', { name: '撤销早会' }));
     await click(await screen.findByRole('button', { name: '核实操作状态' }));
     await screen.findByText('已撤销');
     await click(screen.getByRole('button', { name: '操作记录' }));
@@ -443,7 +443,7 @@ describe('AssistantDock execution boundary', () => {
     render(<AssistantDock client={client} onRefresh={() => {}} />);
     await send();
     await click(screen.getByRole('button', { name: '操作记录' }));
-    await click(await screen.findByRole('button', { name: '撤销' }));
+    await click(await screen.findByRole('button', { name: '撤销早会' }));
     await screen.findByRole('button', { name: '核实操作状态' });
     await click(screen.getByRole('button', { name: '操作记录' }));
     expect(screen.getByRole('button', { name: '确认执行 1 项' })).toBeEnabled();
@@ -455,7 +455,7 @@ describe('AssistantDock execution boundary', () => {
     const refresh = vi.fn();
     render(<AssistantDock client={client} onRefresh={refresh} />);
     await openHistory();
-    await click(await screen.findByRole('button', { name: '撤销' }));
+    await click(await screen.findByRole('button', { name: '撤销早会' }));
     await screen.findByText(/相关数据已有后续修改/);
     expect(screen.queryByText('已执行 1 项本地变更')).not.toBeInTheDocument();
     expect(refresh).not.toHaveBeenCalled();
