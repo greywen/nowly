@@ -11,3 +11,21 @@ try {
 } catch {
   // Ignore if the properties cannot be redefined.
 }
+
+// jsdom implements Blob but not the object-URL API. The rich text editor shows
+// attachments as blob: URLs, so provide a minimal stand-in that hands out stable
+// fake URLs and can resolve them back to their Blob. This lets component tests
+// exercise the real attachment code path instead of a mock of it.
+if (typeof URL.createObjectURL !== 'function') {
+  const blobs = new Map<string, Blob>();
+  let counter = 0;
+  URL.createObjectURL = (object: Blob | MediaSource) => {
+    counter += 1;
+    const url = `blob:nowly/${counter}`;
+    if (object instanceof Blob) blobs.set(url, object);
+    return url;
+  };
+  URL.revokeObjectURL = (url: string) => {
+    blobs.delete(url);
+  };
+}

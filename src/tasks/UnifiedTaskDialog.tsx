@@ -3,6 +3,7 @@ import { type RefObject, useId, useMemo, useState } from 'react';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { DatePicker } from '../components/DatePicker';
 import { Dialog } from '../components/Dialog';
+import { RichEditor } from '../components/rich-text/RichEditor';
 import { Select } from '../components/Select';
 import type { RepositoryError } from '../data/nowly-repository';
 import { t } from '../i18n';
@@ -205,9 +206,10 @@ export function UnifiedTaskDialog({ mode, restoreFocusRef, onClose }: Props) {
           {fieldError?.field === 'title' ? <span className="field-error">{fieldError.message}</span> : null}
         </div>
         <div className="good-field">
-          <label htmlFor="unified-task-description">{t('kanbanTask.description')}</label>
-          <textarea id="unified-task-description" className="good-input good-textarea" value={form.description} disabled={busy}
-            onChange={(event) => update('description', event.target.value)} />
+          <label id="unified-task-description-label">{t('kanbanTask.description')}</label>
+          <RichEditor id="unified-task-description" labelledBy="unified-task-description-label"
+            value={form.description} disabled={busy} placeholder={t('richEditor.placeholder')}
+            onChange={(markdown) => update('description', markdown)} />
         </div>
         <Select id="unified-task-priority" label={t('taskModal.quadrant')} options={priorityOptions}
           value={form.priority} disabled={busy} onChange={(value) => update('priority', value as TaskPriority | '')} />

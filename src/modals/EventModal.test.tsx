@@ -38,7 +38,9 @@ describe('EventModal', () => {
     expect(screen.getByRole('button', { name:'结束时间' })).toHaveTextContent('10:45');
     expect(screen.getByRole('combobox', { name:'分类' })).toHaveTextContent('工作');
     expect(screen.getAllByRole('radio')).toHaveLength(4);
-    expect(screen.getByLabelText('备注')).toHaveValue('');
+    // The note field is now a rich text editor (a contenteditable surface), so
+    // it has no `value`; assert it starts empty instead.
+    expect(screen.getByLabelText('备注').textContent).toBe('');
     expect(screen.queryByRole('button', { name:'删除日程' })).not.toBeInTheDocument();
     expect(container.querySelector('input[type="date"],input[type="time"],select')).toBeNull();
   });

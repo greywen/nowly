@@ -2,6 +2,7 @@ import { Pin, Plus, X } from '../components/icons';
 import { type RefObject, useId } from 'react';
 import { Dialog } from '../components/Dialog';
 import { colorStyle } from '../lib/color';
+import { markdownToPlainText } from '../components/rich-text/markdown';
 import { sortNotes } from '../lib/note-draft';
 import { noteIconSymbol, type Note } from './notes-model';
 import { t } from '../i18n';
@@ -20,7 +21,7 @@ export function NotesManagerDialog({notes,onClose,onCreate,onEdit,restoreFocusRe
       {notes.length === 0 ? <div className="empty-state"><p>{t('notesManager.empty')}</p></div> : sortNotes(notes).map(note =>
         <button key={note.id} type="button" className="note" style={colorStyle(note.color)} aria-label={t('notesManager.editNote', { title: note.title })} onClick={(e)=>onEdit(note,e.currentTarget)}>
           <div className="note-title">{note.pinned ? <Pin aria-label={t('notesManager.pinned')} /> : null}{noteIconSymbol(note.icon) ? <span className="note-icon" aria-hidden="true">{noteIconSymbol(note.icon)}</span> : null}{note.title}</div>
-          <div className="note-content">{note.content || t('notesManager.noContent')}</div>
+          <div className="note-content">{markdownToPlainText(note.content) || t('notesManager.noContent')}</div>
         </button>)}
     </div>
   </Dialog>;

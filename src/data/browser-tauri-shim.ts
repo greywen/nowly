@@ -155,6 +155,10 @@ export function installBrowserTauriBackend() {
   const store = loadStore();
   ensureTaskWorkspace(store);
 
+  // Attachment bytes and metadata, kept in memory only (see save_attachment).
+  const attachmentBytes = new Map<string, Uint8Array>();
+  const attachmentRecords = new Map<string, Dict>();
+
   const taskWorkspaceSnapshot = () => ({
     tasks: store.tasks,
     lanes: store.kanban.lanes,
@@ -613,6 +617,45 @@ export function installBrowserTauriBackend() {
       store.notes = store.notes.filter((n) => n.id !== a.id);
       persist();
     },
+
+    // Rich text attachments. Bytes stay in memory rather than in localStorage:
+    // binary does not survive a JSON round trip cleanly and a 1MB quota would
+    // fill instantly. Attachments therefore vanish on reload, which is an
+    // accepted dev-only limitation in the same spirit as the recurrence one.
+    save_attachment: (a) => {
+      const bytes = Uint8Array.from((a.bytes as number[]) ?? []);
+      if (!bytes.length) throw { code: 'validation_error', field: 'file', message: '文件内容为空。' };
+      if (bytes.length > 1024 * 1024) {
+        throw { code: 'validation_error', field: 'file', message: '文件超过 1 MB 上限，请压缩后重试。' };
+      }
+      const fileName = String(a.fileName ?? 'file');
+      const match = /\.([A-Za-z0-9]{1,16})$/.exec(fileName);
+      const extension = match ? match[1].toLowerCase() : null;
+      const stem = Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+      const attachmentId = extension ? `${stem}.${extension}` : stem;
+      const mime = extension && ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'].includes(extension)
+        ? `image/${extension === 'jpg' ? 'jpeg' : extension}`
+        : 'application/octet-stream';
+      const record = {
+        id: attachmentId,
+        fileName: fileName.split(/[\\/]/).pop() || 'file',
+        relPath: `attachments/${attachmentId}`,
+        byteSize: bytes.length,
+        mime,
+        createdAt: nowIso()
+      };
+      attachmentBytes.set(attachmentId, bytes);
+      attachmentRecords.set(attachmentId, record);
+      return record;
+    },
+    read_attachment: (a) => {
+      const bytes = attachmentBytes.get(String(a.id));
+      if (!bytes) throw { code: 'not_found', message: '未找到该附件。' };
+      return Array.from(bytes);
+    },
+    list_attachments: (a) =>
+      ((a.ids as string[]) ?? []).map((id) => attachmentRecords.get(id)).filter(Boolean),
+    collect_attachment_garbage: () => 0,
 
     // Software update check. The browser dev shim has no Cargo version and
     // should not hit the GitHub API on every page load, so it reports the

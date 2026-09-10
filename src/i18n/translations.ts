@@ -231,6 +231,14 @@ export const translations: Record<Language, Record<string, string>> = {
     'select.noOptions': '暂无可选项',
     'select.noMatch': '未找到匹配项',
 
+    // Rich text editor
+    'richEditor.placeholder': '在此输入内容…',
+    'richEditor.attachFile': '添加附件',
+    'richEditor.dropHint': '可拖放图片或文件，单个不超过 1 MB',
+    'richEditor.uploadFailed': '附件上传失败，请重试。',
+    'richEditor.attachmentPending': '附件',
+    'richEditor.removeAttachment': '移除附件“{name}”',
+
     // TimePicker
     'timePicker.placeholder': '请选择时间',
     'timePicker.select': '选择{label}',
@@ -931,6 +939,14 @@ export const translations: Record<Language, Record<string, string>> = {
     'select.search': 'Search {label}',
     'select.noOptions': 'No options',
     'select.noMatch': 'No matches found',
+
+    // Rich text editor
+    'richEditor.placeholder': 'Type your content here…',
+    'richEditor.attachFile': 'Attach a file',
+    'richEditor.dropHint': 'Drop images or files here, up to 1 MB each',
+    'richEditor.uploadFailed': 'Could not upload the attachment. Please try again.',
+    'richEditor.attachmentPending': 'Attachment',
+    'richEditor.removeAttachment': 'Remove attachment "{name}"',
 
     // TimePicker
     'timePicker.placeholder': 'Select a time',

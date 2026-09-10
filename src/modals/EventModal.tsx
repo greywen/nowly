@@ -7,6 +7,7 @@ import type { HexColor } from '../lib/color';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { DatePicker } from '../components/DatePicker';
 import { Dialog } from '../components/Dialog';
+import { RichEditor } from '../components/rich-text/RichEditor';
 import { Select } from '../components/Select';
 import { TimePicker } from '../components/TimePicker';
 import type { RepositoryError } from '../data/nowly-repository';
@@ -163,7 +164,7 @@ export function EventModal({ mode,restoreFocusRef,onClose,onSaved,onDeleted,crea
         </div>
         {!remoteTarget?<><Select id="event-category" label={t('eventModal.category')} options={categoryOptions()} value={form.category} disabled={busy} onChange={v=>update('category',v as EventCategory)}/>{errors.category?<span className="field-error">{errors.category}</span>:null}
         <ColorPicker legend={t('eventModal.color')} name="event-color" value={form.color} presets={eventColorPresets()} recentColors={recentColors} disabled={busy} onChange={color=>update('color',color)} onRememberColor={onRememberCustomColor}/>{errors.color?<span className="field-error">{errors.color}</span>:null}</>:null}
-        <div className="good-field"><label htmlFor="event-note">{t('eventModal.note')}</label><textarea id="event-note" className="good-input good-textarea" autoComplete="off" value={form.note} disabled={busy} onChange={e=>update('note',e.target.value)}/></div>
+        <div className="good-field"><label id="event-note-label">{t('eventModal.note')}</label><RichEditor id="event-note" labelledBy="event-note-label" value={form.note} disabled={busy} placeholder={t('richEditor.placeholder')} onChange={markdown=>update('note',markdown)}/></div>
       </form>
     </Dialog>
     {confirm==='discard'?<ConfirmDialog title={t('common.discardTitle')} description={t('common.discardDesc')} confirmLabel={t('common.discard')} busyLabel={t('common.discarding')} onCancel={()=>setConfirm(null)} onConfirm={onClose}/>:null}

@@ -1,0 +1,333 @@
+/* Rich text editor styling.
+ *
+ * Quill's snow theme ships a Bootstrap-ish grey/blue palette (#000 #777 #06c
+ * #ccc #f0f0f0) with 4px corners, which clashes with design.md's warm surfaces
+ * and teal accent. The rules below keep snow's structure — it is the layout the
+ * reference editor uses — and repaint it onto the design tokens. Every value
+ * here comes from design.md §2, §3, §5, §7 and §8.5; none is invented.
+ *
+ * Motion: snow contains no `transition`, `animation` or `@keyframes` at all, so
+ * the global no-motion rule in styles.css needs no exception for it. Hover,
+ * active and focus states below change colour only.
+ */
+
+@import 'quill/dist/quill.snow.css';
+
+.rich-editor {
+  display: grid;
+  gap: 8px;
+}
+
+/* One surface holds toolbar and editor, matching the single-control look of
+   .good-input rather than reading as two stacked boxes. */
+.rich-editor__surface {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-default);
+  background: var(--bg-subtle);
+  overflow: hidden;
+}
+.rich-editor__surface:focus-within {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 4px var(--focus-ring);
+}
+/* Drop target feedback is a colour change only, per design.md §9. */
+.rich-editor__surface[data-dropping='true'] {
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
+}
+
+/* ---- Toolbar ---- */
+
+.rich-editor .ql-toolbar.ql-snow {
+  padding: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  border-bottom: 1px solid var(--border-default);
+  border-radius: 0;
+  background: var(--bg-surface);
+  font-family: var(--font-sans);
+}
+.rich-editor .ql-toolbar.ql-snow .ql-formats {
+  margin: 0 8px 0 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.rich-editor .ql-toolbar.ql-snow .ql-formats:last-child {
+  margin-right: 0;
+}
+
+.rich-editor .ql-toolbar.ql-snow button {
+  width: 28px;
+  height: 28px;
+  padding: 4px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+}
+.rich-editor .ql-toolbar.ql-snow button:hover,
+.rich-editor .ql-toolbar.ql-snow button:focus {
+  background: var(--bg-secondary);
+}
+.rich-editor .ql-toolbar.ql-snow button:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 4px var(--focus-ring);
+}
+/* Quill draws its icons as stroke/fill pairs, so both must be repainted. */
+.rich-editor .ql-toolbar.ql-snow button .ql-stroke,
+.rich-editor .ql-toolbar.ql-snow .ql-picker-label .ql-stroke {
+  stroke: var(--text-secondary);
+}
+.rich-editor .ql-toolbar.ql-snow button .ql-fill,
+.rich-editor .ql-toolbar.ql-snow .ql-picker-label .ql-fill {
+  fill: var(--text-secondary);
+}
+.rich-editor .ql-toolbar.ql-snow button:hover .ql-stroke,
+.rich-editor .ql-toolbar.ql-snow button:focus .ql-stroke {
+  stroke: var(--color-primary-active);
+}
+.rich-editor .ql-toolbar.ql-snow button:hover .ql-fill,
+.rich-editor .ql-toolbar.ql-snow button:focus .ql-fill {
+  fill: var(--color-primary-active);
+}
+/* Active mark uses the light primary fill from design.md §9.3. */
+.rich-editor .ql-toolbar.ql-snow button.ql-active {
+  background: var(--color-primary-light);
+}
+.rich-editor .ql-toolbar.ql-snow button.ql-active .ql-stroke {
+  stroke: var(--color-primary-active);
+}
+.rich-editor .ql-toolbar.ql-snow button.ql-active .ql-fill {
+  fill: var(--color-primary-active);
+}
+
+/* Heading picker */
+.rich-editor .ql-toolbar.ql-snow .ql-picker {
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+}
+.rich-editor .ql-toolbar.ql-snow .ql-picker-label {
+  padding: 0 4px 0 8px;
+  display: flex;
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+}
+.rich-editor .ql-toolbar.ql-snow .ql-picker-label:hover,
+.rich-editor .ql-toolbar.ql-snow .ql-picker.ql-expanded .ql-picker-label {
+  color: var(--color-primary-active);
+  border-color: var(--border-default);
+  background: var(--bg-secondary);
+}
+.rich-editor .ql-toolbar.ql-snow .ql-picker-label:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 4px var(--focus-ring);
+}
+.rich-editor .ql-toolbar.ql-snow .ql-picker-options {
+  padding: 8px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-default);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-dropdown);
+}
+.rich-editor .ql-toolbar.ql-snow .ql-picker-item {
+  padding: 6px 8px;
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+}
+.rich-editor .ql-toolbar.ql-snow .ql-picker-item:hover {
+  color: var(--color-primary-active);
+  background: var(--bg-secondary);
+}
+.rich-editor .ql-toolbar.ql-snow .ql-picker-item.ql-selected {
+  color: var(--color-primary-active);
+  background: var(--color-primary-light);
+}
+
+/* ---- Editing surface ---- */
+
+.rich-editor .ql-container.ql-snow {
+  border: 0;
+  background: var(--bg-subtle);
+  font-family: var(--font-sans);
+  font-size: 1rem;
+}
+.rich-editor .ql-editor {
+  min-height: 96px; /* matches .good-textarea */
+  max-height: 320px;
+  padding: 11px 16px; /* matches .good-input */
+  color: var(--text-secondary);
+  line-height: 1.5;
+  overflow-y: auto;
+}
+.rich-editor .ql-editor.ql-blank::before {
+  left: 16px;
+  right: 16px;
+  color: var(--text-muted);
+  font-style: normal; /* snow italicises the placeholder; design.md does not */
+}
+.rich-editor .ql-editor > * + * {
+  margin-top: 8px;
+}
+.rich-editor .ql-editor h1,
+.rich-editor .ql-editor h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-weight: 600;
+  line-height: 1.2;
+}
+.rich-editor .ql-editor h1 {
+  font-size: 1.5rem;
+}
+.rich-editor .ql-editor h2 {
+  font-size: 1.35rem;
+}
+.rich-editor .ql-editor p {
+  margin: 0;
+}
+.rich-editor .ql-editor a {
+  color: var(--color-primary-active);
+}
+.rich-editor .ql-editor img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-sm);
+}
+/* Code block: snow uses a near-black slab (#23241f), too heavy for a warm
+   light surface, so it becomes a bordered subtle panel. */
+.rich-editor .ql-editor pre,
+.rich-editor .ql-editor .ql-syntax,
+.rich-editor .ql-editor .ql-code-block-container {
+  margin: 0;
+  padding: 8px 12px;
+  color: var(--text-strong);
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Link tooltip */
+.rich-editor .ql-snow .ql-tooltip {
+  padding: 8px 12px;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-default);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-dropdown);
+}
+.rich-editor .ql-snow .ql-tooltip input[type='text'] {
+  padding: 4px 8px;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+}
+.rich-editor .ql-snow .ql-tooltip a.ql-action,
+.rich-editor .ql-snow .ql-tooltip a.ql-remove {
+  color: var(--color-primary-active);
+}
+
+/* ---- Attach action ---- */
+
+.rich-editor__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rich-editor__actions .good-icon-button {
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  background: transparent;
+}
+.rich-editor__actions .good-icon-button:hover {
+  color: var(--color-primary);
+  background: var(--bg-secondary);
+}
+.rich-editor__actions .good-icon-button:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 4px var(--focus-ring);
+}
+.rich-editor__hint {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+.rich-editor__file-input {
+  display: none;
+}
+
+/* ---- Attachment strip ---- */
+
+.rich-editor__attachments {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  list-style: none;
+}
+.rich-editor__attachment {
+  padding: 6px 8px 6px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-default);
+  background: var(--bg-surface);
+}
+.rich-editor__attachment-icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  color: var(--color-primary-active);
+}
+.rich-editor__attachment-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rich-editor__attachment-size {
+  flex: none;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+.rich-editor__attachment-remove {
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  flex: none;
+  background: transparent;
+}
+.rich-editor__attachment-remove:hover {
+  color: var(--color-danger);
+  background: var(--color-danger-light);
+}
+.rich-editor__attachment-remove:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 4px var(--focus-ring);
+}
+
+/* ---- Disabled ---- */
+
+.rich-editor[data-disabled='true'] {
+  opacity: 0.65;
+}
+.rich-editor[data-disabled='true'] .ql-toolbar.ql-snow button,
+.rich-editor[data-disabled='true'] .ql-toolbar.ql-snow .ql-picker-label {
+  pointer-events: none;
+}

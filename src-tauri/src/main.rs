@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod assistant;
+mod attachments;
 mod calendar_api;
 mod color;
 mod commands;
@@ -255,6 +256,16 @@ fn main() {
                 .expect("failed to create dev-modules dir");
             let connection =
                 open_database(app_dir.join("nowly.sqlite")).expect("failed to open database");
+            // Reclaim attachment files that no rich text content references any
+            // more. Startup is the one safe moment: no editor can be open, so an
+            // uploaded-but-unsaved attachment cannot be collected out from under
+            // the user. A failure here must never block launch.
+            if let Err(error) = attachments::collect_garbage(
+                &connection,
+                &attachments::attachments_dir(&app_dir),
+            ) {
+                eprintln!("attachment garbage collection failed: {}", error.message);
+            }
             app.manage(AppDb(Mutex::new(connection)));
             app.manage(Mutex::new(window_lifecycle::WindowLifecycle::default()));
             app.manage(Mutex::new(focus_timer::FocusTimerCoordinator::default()));
@@ -553,6 +564,10 @@ fn main() {
             notes::create_note,
             notes::update_note,
             notes::delete_note,
+            attachments::save_attachment,
+            attachments::read_attachment,
+            attachments::list_attachments,
+            attachments::collect_attachment_garbage,
             commands::get_app_settings,
             commands::update_app_settings,
             feedback::open_external,

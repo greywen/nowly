@@ -66,6 +66,14 @@ export const tauriNowlyRepository: NowlyRepository = {
   createNote: (draft) => invoke('create_note', { draft }),
   updateNote: (id, draft) => invoke('update_note', { id, draft }),
   deleteNote: (id) => invoke('delete_note', { id }),
+  // `bytes` must be a plain number array: a Uint8Array nested inside an invoke
+  // payload is JSON-serialised as `{"0":1,...}`, which serde cannot read back
+  // into a `Vec<u8>`. The reply is likewise a number array.
+  saveAttachment: (fileName, bytes) =>
+    invoke('save_attachment', { fileName, bytes: Array.from(bytes) }),
+  readAttachment: (id) =>
+    invoke<number[]>('read_attachment', { id }).then((bytes) => new Uint8Array(bytes)),
+  listAttachments: (ids) => invoke('list_attachments', { ids }),
   getSettings: () => invoke('get_app_settings'),
   checkForUpdate: () => invoke('check_for_update'),
   updateSettings: (settings) => invoke('update_app_settings', { settings }),

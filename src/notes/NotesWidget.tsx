@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { DEFAULT_NOTES_VIEW, NOTE_STYLE_VARIANT_COUNT, noteIconSymbol, type Note, type NotesViewMode } from './notes-model';
 import { NotesSettingsDialog } from './NotesSettingsDialog';
 import { colorStyle } from '../lib/color';
+import { markdownToPlainText } from '../components/rich-text/markdown';
 import { t } from '../i18n';
 
 type LoadStatus = 'loading' | 'ready' | 'error';
@@ -119,7 +120,7 @@ export function NotesWidget({
                 {iconFor(note) ? null : <span className="sticky-note__tape" aria-hidden="true" />}
                 {iconFor(note) ? <span className={`sticky-note__icon sticky-note__icon--${iconAnchorFor(note)}`} aria-hidden="true">{iconFor(note)}</span> : null}
                 <span className="sticky-note__title">{note.title}</span>
-                <span className="sticky-note__content">{note.content}</span>
+                <span className="sticky-note__content">{markdownToPlainText(note.content)}</span>
               </button>
             ))}
           </div>
@@ -134,7 +135,7 @@ export function NotesWidget({
                 style={colorStyle(note.color)}
               >
                 <div className="note-title">{iconFor(note) ? <span className="note-icon" aria-hidden="true">{iconFor(note)}</span> : null}{note.title}</div>
-                <div className="note-content">{note.content}</div>
+                <div className="note-content">{markdownToPlainText(note.content)}</div>
               </button>
             ))}
           </div>
