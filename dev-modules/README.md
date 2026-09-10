@@ -6,4 +6,4 @@
 - 文件一保存，预览页自动重挂。
 - 这里的文件不会被打包进应用，也默认不纳入 git（`example.js` 与本说明除外）。
 
-编写规范见 `docs/custom-modules/`，AI 工具接线见 `docs/custom-modules/install/AGENTS.md`。
+编写规范见 `docs/custom-modules/SKILL.md`（主 skill，内含子 skill 路由表）。

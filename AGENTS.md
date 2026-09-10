@@ -2,13 +2,15 @@
 
 ## 写 Nowly 自定义模块
 
-如果你被要求为 Nowly 创建、修改或发布一个**自定义模块**，先读技能包主入口，它会顺着指针带你读完其余规范：
+如果你被要求为 Nowly 创建、修改或发布一个**自定义模块**，读主 skill：
 
-→ [`docs/custom-modules/install/AGENTS.md`](./docs/custom-modules/install/AGENTS.md)
+→ [`docs/custom-modules/SKILL.md`](./docs/custom-modules/SKILL.md)
 
-一句话工作流：把模块写到仓库根的 `dev-modules/<id>.js`，跑 `npm run module:preview` 实时预览，确保预览页里 lint 通过。
+先读它的 §0 硬约束，再按 §1 的路由表按需取子 skill（清单头 / 运行契约 / 样式 / 部件 / 尺寸 / 预览 / 发布 / 检查清单），按 §2 的工作流做。
 
-硬约束（详见 `docs/custom-modules/SKILL.md` §0）：纯 JS，不能 `import`/npm/React/JSX/TS；联网只走 `host.fetch`（需声明 `@permissions network` + `@network 域名`），第三方库只能内联；颜色只能 `var(--nm-*)` 或 `nm-*` 类，禁止字面量；不加任何 `transition`/`animation`；循环必须有明确边界；纯图标按钮必须带 `aria-label`；源码不超过 256 KiB。
+## 写或改 skill 文档
+
+本仓库 skill 的组织方式（主 skill 路由 + 每个子话题一个文件 + 各家 AI 工具的指针）见 [`docs/skill-authoring.md`](./docs/skill-authoring.md)。新增或重构 skill 前先读它。
 
 ## 其它改动
 

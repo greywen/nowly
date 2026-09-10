@@ -48,11 +48,25 @@ cargo test --manifest-path src-tauri/Cargo.toml    # Rust 测试
 
 ## Custom Modules
 
-- [编写 Nowly 自定义模块（技能包主规范）](./custom-modules/SKILL.md)
-- [nm-* 样式参考](./custom-modules/style.md)
+主 skill（路由 + 硬约束）：
+
+- [编写 Nowly 自定义模块（主 skill）](./custom-modules/SKILL.md)
+
+子 skill（按需读）：
+
+- [清单头与元数据](./custom-modules/manifest.md)
+- [运行契约（host / 状态 / 联网 / 弹框 / 可见性）](./custom-modules/runtime.md)
+- [视觉样式（nm-* 令牌与语义类）](./custom-modules/style.md)
+- [内置部件（Select / Tabs / DatePicker 等）](./custom-modules/widgets.md)
 - [尺寸与断点](./custom-modules/size.md)
 - [实时预览工作台](./custom-modules/preview.md)
+- [安装与发布](./custom-modules/publish.md)
+- [提交前检查清单](./custom-modules/checklist.md)
 - [给 AI 工具的入口](./custom-modules/install/AGENTS.md)
+
+## Skill 写作规范
+
+- [仓库 skill 组织方式（主 skill 路由 + 子 skill 分文件）](./skill-authoring.md)
 
 ## Prototypes
 
