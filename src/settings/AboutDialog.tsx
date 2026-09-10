@@ -1,4 +1,4 @@
-import { Download, Mail, X } from 'lucide-react';
+import { Download, Mail, X } from '../components/icons';
 import { useId } from 'react';
 import { Dialog } from '../components/Dialog';
 import type { UpdateInfo } from '../data/nowly-repository';
@@ -13,7 +13,7 @@ type Props = {
   update?: UpdateInfo | null;
 };
 
-// GitHub's brand mark as an inline SVG. lucide-react dropped its brand icons, so
+// GitHub's brand mark stays inline because general-purpose UI icon sets do not
 // we ship the logo directly to keep the channel recognizable.
 function GithubMark() {
   return (
@@ -110,6 +110,9 @@ export function AboutDialog({ onClose, update }: Props) {
             </span>
           </button>
         </div>
+
+        {/* CC BY 4.0 requires visible attribution for the icon set. */}
+        <p className="about-attribution">{t('about.iconCredit')}</p>
       </div>
     </Dialog>
   );

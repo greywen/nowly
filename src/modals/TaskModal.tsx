@@ -1,4 +1,4 @@
-import { X } from 'lucide-react';
+import { X } from '../components/icons';
 import { type RefObject, useId, useMemo, useState } from 'react';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { DatePicker } from '../components/DatePicker';

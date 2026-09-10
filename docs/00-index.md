@@ -19,6 +19,7 @@
 | 仓储边界 | `src/data/` | `NowlyRepository` 接口、Tauri 实现、注入 Context |
 | 启动装配 | `src/app/useAppBootstrap.ts`、`src/calendar/useEvents.ts`、`src/matrix/useTasks.ts`、`src/notes/useNotes.ts` | 设置与日程/任务/便签 Feature 独立加载、写入及重试 |
 | 应用外壳 | `src/app/layout/DesktopShell.tsx`、`src/app/styles.css` | 单屏栅格与全部设计令牌 |
+| 图标适配层 | `src/components/icons.tsx`、`src/components/icon-data.ts`、`scripts/generate-icons.mjs` | Solar（CC BY 4.0）字形的唯一入口；duotone/solid/outline 三态可切换 |
 | 业务组件 | `src/calendar/`、`src/matrix/`、`src/notes/` | 日历、四象限、便签 |
 | 弹窗 | `src/modals/` | 日程/任务/便签编辑弹窗 |
 
@@ -28,6 +29,7 @@
 npm test          # Vitest 单元/组件测试
 npm run build     # tsc + vite build
 npm run dev       # Vite 开发服务器（127.0.0.1:1420）
+npm run icons     # 从 @iconify-json/solar 重新生成 src/components/icon-data.ts
 npx playwright test                                # 端到端（四组视口）
 cargo test --manifest-path src-tauri/Cargo.toml    # Rust 测试
 ```

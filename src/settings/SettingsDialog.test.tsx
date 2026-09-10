@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { AppSettings } from '../data/nowly-repository';
 import { SettingsDialog } from './SettingsDialog';
 
-const settings:AppSettings={wallpaperEnabled:false,launchAtLogin:false,targetMonitorId:null,density:'balanced',weekStart:'monday',dateFormat:'localized',showWeekends:true,hideTopbarInWallpaper:true};
+const settings:AppSettings={wallpaperEnabled:false,launchAtLogin:false,targetMonitorId:null,density:'balanced',weekStart:'monday',dateFormat:'localized',showWeekends:true,iconStyle:'duotone',hideTopbarInWallpaper:true};
 
 describe('SettingsDialog',()=>{
   it('edits a copied draft and saves the complete document',async()=>{
@@ -27,5 +27,14 @@ describe('SettingsDialog',()=>{
     await user.click(screen.getByRole('button',{name:'保存设置'}));
     expect(await screen.findByRole('alert')).toHaveTextContent('设置保存失败');
     expect(screen.getByRole('dialog',{name:'设置'})).toBeInTheDocument();
+  });
+
+  it('switches the icon style between the three drawing modes',async()=>{
+    const user=userEvent.setup(); const save=vi.fn().mockImplementation(async value=>value);
+    render(<SettingsDialog settings={settings} onClose={vi.fn()} onSave={save}/>);
+    await user.click(screen.getByRole('combobox',{name:'图标风格'}));
+    await user.click(screen.getByRole('option',{name:'线性 Outline'}));
+    await user.click(screen.getByRole('button',{name:'保存设置'}));
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({iconStyle:'outline'}));
   });
 });

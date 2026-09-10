@@ -1,4 +1,4 @@
-import { BarChart3, Bell, Pause, Pencil, Play, RotateCcw, Timer } from 'lucide-react';
+import { BarChart3, Bell, Pause, Pencil, Play, RotateCcw, Timer } from '../components/icons';
 import { useState } from 'react';
 import { useTranslation } from '../i18n';
 import { useFocusTimer } from './FocusTimerContext';

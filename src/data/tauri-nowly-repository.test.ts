@@ -55,6 +55,7 @@ describe('tauriNowlyRepository', () => {
       wallpaperEnabled:false, launchAtLogin:false, targetMonitorId:null,
       density:'balanced', weekStart:'monday', dateFormat:'localized',
       showWeekends:true,
+      iconStyle:'duotone',
       hideTopbarInWallpaper:true
     });
     const layoutEntry = { id: 'calendar', x: 0, y: 0, w: 7, h: 8 };

@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Check, Minus, Plus, Trash2, X } from 'lucide-react';
+import { Check, Minus, Plus, Trash2, X } from '../components/icons';
 import { Dialog } from '../components/Dialog';
 import type { SandboxExtension, SandboxExtensionDraft } from '../data/nowly-repository';
 import {

@@ -1,4 +1,4 @@
-import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight } from '../components/icons';
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { buildMonthGrid, formatChineseDate, toIsoDate } from '../lib/date';
 import { t } from '../i18n';

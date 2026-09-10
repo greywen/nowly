@@ -1,4 +1,4 @@
-import { AlertTriangle, X } from 'lucide-react';
+import { AlertTriangle, X } from '../components/icons';
 import { Dialog } from '../components/Dialog';
 import type { SandboxPermission } from '../data/nowly-repository';
 import { t } from '../i18n';

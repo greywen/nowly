@@ -1,4 +1,4 @@
-import { Pencil, Trash2, X } from 'lucide-react';
+import { Pencil, Trash2, X } from '../components/icons';
 import { ColorPicker } from '../components/ColorPicker';
 import type { HexColor } from '../lib/color';
 import { type RefObject, useId, useMemo, useState } from 'react';

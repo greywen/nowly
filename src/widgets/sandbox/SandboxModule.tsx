@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { X } from 'lucide-react';
+import { X } from '../../components/icons';
 import type { ModuleHost } from '../extension-module';
 import type { SandboxPermission } from '../../data/nowly-repository';
 import {

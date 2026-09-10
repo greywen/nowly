@@ -1,4 +1,4 @@
-import { Plus } from 'lucide-react';
+import { Plus } from '../components/icons';
 import { colorStyle } from '../lib/color';
 import type { DragEvent } from 'react';
 import { cardsInLane, type KanbanCard as KanbanCardModel, type KanbanLane as KanbanLaneModel, type KanbanSnapshot } from './kanban-model';

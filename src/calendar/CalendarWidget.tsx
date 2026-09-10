@@ -10,8 +10,8 @@ import {
   RefreshCw,
   Settings,
   Square,
-  type LucideIcon
-} from 'lucide-react';
+  type AppIcon
+} from '../components/icons';
 import type { CalendarSettings } from './CalendarSettingsDialog';
 import {
   buildMonthGrid,
@@ -73,7 +73,7 @@ const MONTH_MAX_SINGLES = 3;
 // back-to-back network refreshes.
 const SYNC_COOLDOWN_MS = 2000;
 
-function viewOptionsList(): Array<{ view: CalendarView; label: string; Icon: LucideIcon }> {
+function viewOptionsList(): Array<{ view: CalendarView; label: string; Icon: AppIcon }> {
   return [
     { view: 'month', label: t('calendar.viewMonth'), Icon: CalendarDays },
     { view: 'week', label: t('calendar.viewWeek'), Icon: CalendarRange },

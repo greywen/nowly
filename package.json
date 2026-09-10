@@ -31,6 +31,7 @@
     "test:watch": "cross-env NODE_ENV=test vitest",
     "e2e": "playwright test",
     "tauri": "tauri",
+    "icons": "node scripts/generate-icons.mjs",
     "module:css": "node scripts/generate-module-css.mjs",
     "module:preview": "vite --open /preview.html",
     "test:tooling": "node --test scripts/generate-module-css.test.mjs registry/lint.test.mjs",
@@ -39,11 +40,11 @@
   },
   "dependencies": {
     "@tauri-apps/api": "latest",
-    "lucide-react": "latest",
     "react": "latest",
     "react-dom": "latest"
   },
   "devDependencies": {
+    "@iconify-json/solar": "^1.2.10",
     "@playwright/test": "latest",
     "@tailwindcss/postcss": "^4.3.3",
     "@tauri-apps/cli": "latest",

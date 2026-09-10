@@ -1,4 +1,4 @@
-import { Pin, Plus, X } from 'lucide-react';
+import { Pin, Plus, X } from '../components/icons';
 import { type RefObject, useId } from 'react';
 import { Dialog } from '../components/Dialog';
 import { colorStyle } from '../lib/color';

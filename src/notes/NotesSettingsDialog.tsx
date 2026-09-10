@@ -1,4 +1,4 @@
-import { Check, LayoutGrid, List, X } from 'lucide-react';
+import { Check, LayoutGrid, List, X } from '../components/icons';
 import { useId } from 'react';
 import { Dialog } from '../components/Dialog';
 import { notesViewOptions, type NotesViewMode } from './notes-model';

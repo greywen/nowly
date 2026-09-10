@@ -1,4 +1,4 @@
-import { X } from 'lucide-react';
+import { X } from '../components/icons';
 import { type RefObject, useState } from 'react';
 import { Dialog } from '../components/Dialog';
 import { Select } from '../components/Select';

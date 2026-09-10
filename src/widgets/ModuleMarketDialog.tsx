@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Check, Download, Search, X } from 'lucide-react';
+import { Check, Download, Search, X } from '../components/icons';
 import { Dialog } from '../components/Dialog';
 import { useNowlyRepository } from '../data/RepositoryContext';
 import type { SandboxExtensionDraft, SandboxPermission } from '../data/nowly-repository';

@@ -1,4 +1,4 @@
-import { Check, ChevronDown } from 'lucide-react';
+import { Check, ChevronDown } from '../components/icons';
 import { type KeyboardEvent, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 

@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus } from 'lucide-react';
+import { Plus } from '../components/icons';
 import { t } from '../i18n';
 import {
   colorStyle,

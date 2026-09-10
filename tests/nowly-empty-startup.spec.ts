@@ -51,13 +51,25 @@ test('shows the persisted-data empty dashboard without page overflow or motion',
     bodyHeight: document.body.scrollHeight,
     viewportWidth: innerWidth,
     viewportHeight: innerHeight,
+    bodyBackground: getComputedStyle(document.body).backgroundColor,
+    shellBackground: getComputedStyle(document.querySelector('.app-shell')!).backgroundColor,
+    topbarBackground: getComputedStyle(document.querySelector('.topbar')!).backgroundColor,
+    moduleBackgrounds: Array.from(document.querySelectorAll('.card'), (card) => getComputedStyle(card).backgroundColor),
     transition: getComputedStyle(document.querySelector('.btn')!).transitionDuration,
     animation: getComputedStyle(document.querySelector('.btn')!).animationName
   }));
   expect(metrics.bodyWidth).toBeLessThanOrEqual(metrics.viewportWidth);
   expect(metrics.bodyHeight).toBeLessThanOrEqual(metrics.viewportHeight);
+  expect(metrics.bodyBackground).toBe('rgb(255, 255, 255)');
+  expect(metrics.shellBackground).toBe('rgb(255, 255, 255)');
+  expect(metrics.topbarBackground).toBe('rgb(248, 246, 242)');
+  expect(metrics.moduleBackgrounds.length).toBeGreaterThan(0);
+  expect(metrics.moduleBackgrounds.every((background) => background === 'rgba(248, 246, 242, 0.3)')).toBe(true);
   expect(metrics.transition).toBe('0s');
   expect(metrics.animation).toBe('none');
+
+  await page.locator('[data-guide="edit-layout"]').evaluate((button: HTMLButtonElement) => button.click());
+  await expect(page.locator('.module-frame__toolbar').first()).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
 });
 
 test('keeps action buttons at 40px without resizing calendar content controls', async ({ page }) => {

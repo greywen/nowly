@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, History, MessageCircle, Mic, Send, Sparkles, Square } from 'lucide-react';
+import { History, MessageCircle, Mic, Send, Square } from '../components/icons';
 import { assistantClient, assistantError } from './client';
 import { AssistantChat } from './AssistantChat';
 import { AssistantHistory, historyCount, type HistoryRange } from './AssistantHistory';
@@ -287,6 +287,7 @@ export function AssistantDock({ client = assistantClient, active = true, onRefre
   }
   function dictate() {
     if (listening) { recognitionRef.current?.stop(); return; }
+    showChat();
     const Recognizer = speechRecognition();
     if (!Recognizer) { setError('当前环境不支持语音输入，请改用键盘输入。'); setExpanded(true); return; }
     const recognition = new Recognizer();
@@ -306,13 +307,12 @@ export function AssistantDock({ client = assistantClient, active = true, onRefre
   const panelTitle = surface === 'history' ? '操作记录' : '当前聊天';
   const panelBadge = surface === 'history' ? `${historyCount(history ?? [], historyRange)} 条` : `${visibleItems.length} 条`;
   const PanelIcon = surface === 'history' ? History : MessageCircle;
-  return <div ref={dockRef} className="assistant-dock" hidden={!active} aria-label="Nowly AI 助手">
+  return <div ref={dockRef} className="assistant-dock" data-expanded={expanded} hidden={!active} aria-label="Nowly AI 助手">
     <section className="assistant-panel" aria-label={panelTitle} data-state={surface} data-open={expanded} aria-hidden={!expanded}>
       <header className="assistant-panel-header"><div className="assistant-panel-title">
         <span className="assistant-state-icon" aria-hidden="true"><PanelIcon size={18} /></span>
         <h2>{panelTitle}</h2><span className="assistant-state-badge">{panelBadge}</span>
-      </div>
-        <button className="btn btn-icon" aria-label="收起助手" onClick={closePanel}><ChevronDown size={18} /></button></header>
+      </div></header>
       <div className="assistant-panel-body" aria-live="polite">
         {surface === 'history' ? <>
           {historyError && <p role="alert" className="assistant-error">{historyError}</p>}
@@ -334,7 +334,6 @@ export function AssistantDock({ client = assistantClient, active = true, onRefre
       </div>
     </section>
     <div className="assistant-composer" data-busy={reading || busy}>
-      <span className="assistant-composer-mark" aria-hidden="true"><Sparkles size={18} /></span>
       <textarea ref={inputRef} aria-label="告诉 Nowly 你想做什么" rows={1} maxLength={4000}
         placeholder="告诉 Nowly 你想做什么…" value={draft} disabled={busy || Boolean(uncertain && !uncertain.preserveCurrent)}
         onFocus={() => {
@@ -349,9 +348,11 @@ export function AssistantDock({ client = assistantClient, active = true, onRefre
           if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) { e.preventDefault(); void send(); }
         }} />
       <div className="assistant-composer-tools">
-        <button className={`btn btn-icon${surface === 'history' && expanded ? ' is-active' : ''}`} aria-label="操作记录"
-          aria-pressed={surface === 'history' && expanded} disabled={busy || reading} onClick={() => void toggleHistory()}><History size={18} /></button>
-        {reading ? <button className="btn btn-icon assistant-stop" aria-label="停止处理" onClick={() => stop()}><Square size={14} fill="currentColor" /></button>
+        {/* Collapsed the composer is only a short field in the topbar, so the
+            history toggle appears once the dock is expanded. */}
+        {expanded && <button className={`btn btn-icon${surface === 'history' ? ' is-active' : ''}`} aria-label="操作记录"
+          aria-pressed={surface === 'history'} disabled={busy || reading} onClick={() => void toggleHistory()}><History size={18} /></button>}
+        {reading ? <button className="btn btn-icon assistant-stop" aria-label="停止处理" onClick={() => stop()}><Square size={14} /></button>
           : draft.trim() ? <button className="btn btn-icon btn-primary" aria-label="发送请求" disabled={busy || Boolean(uncertain && !uncertain.preserveCurrent)} onClick={() => void send()}><Send size={18} /></button>
             : <button className={`btn btn-icon${listening ? ' assistant-listening' : ''}`} aria-label="语音输入" aria-pressed={listening}
               disabled={busy || Boolean(uncertain && !uncertain.preserveCurrent)} onClick={dictate}><Mic size={18} /></button>}

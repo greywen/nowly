@@ -1,4 +1,4 @@
-import { GripVertical, X } from 'lucide-react';
+import { GripVertical, X } from '../../components/icons';
 import type { CSSProperties, PointerEvent, ReactNode } from 'react';
 import type { WidgetDefinition } from '../../widgets/widget-registry';
 import { t } from '../../i18n';

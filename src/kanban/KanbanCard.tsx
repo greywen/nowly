@@ -1,4 +1,4 @@
-import { CalendarDays } from 'lucide-react';
+import { CalendarDays } from '../components/icons';
 import { colorStyle } from '../lib/color';
 import type { DragEvent } from 'react';
 import type { ResolvedCard } from './kanban-view';

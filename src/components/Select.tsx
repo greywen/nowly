@@ -1,4 +1,4 @@
-import { Check, ChevronDown } from 'lucide-react';
+import { Check, ChevronDown } from '../components/icons';
 import { type KeyboardEvent, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { t } from '../i18n';
 

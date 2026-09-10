@@ -1,4 +1,4 @@
-import { CalendarDays, Layers, SquareKanban } from 'lucide-react';
+import { CalendarDays, Layers, SquareKanban } from '../components/icons';
 import { TabPanel, Tabs, type TabItem } from '../components/Tabs';
 import { ChangeDetails, kinds } from './PlanCard';
 import type { Plan } from './types';

@@ -1,4 +1,4 @@
-import { Plus, Settings } from 'lucide-react';
+import { Plus, Settings } from '../components/icons';
 import { type DragEvent, useMemo, useRef, useState } from 'react';
 import { laneCardCount } from './kanban-view';
 import { KanbanLane } from './KanbanLane';

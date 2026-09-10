@@ -261,6 +261,11 @@ fn default_hide_topbar_in_wallpaper() -> bool {
     true
 }
 
+// Icon drawing style. Matches the design baseline, which renders in duotone.
+pub(crate) fn default_icon_style() -> String {
+    "duotone".to_owned()
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
@@ -271,6 +276,8 @@ pub struct AppSettings {
     pub week_start: String,
     pub date_format: String,
     pub show_weekends: bool,
+    #[serde(default = "default_icon_style")]
+    pub icon_style: String,
     #[serde(default = "default_hide_topbar_in_wallpaper")]
     pub hide_topbar_in_wallpaper: bool,
     #[serde(default)]

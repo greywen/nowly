@@ -1,4 +1,4 @@
-import { X } from 'lucide-react';
+import { X } from '../components/icons';
 import { type RefObject, useId, useMemo, useState } from 'react';
 import { eventColorPresets, type CalendarEvent, type EditScope, type EventCategory, type EventDraft, type Recurrence, type RecurrenceEnd, type RecurrenceFreq, type Weekday } from '../calendar/calendar-model';
 import { t } from '../i18n';

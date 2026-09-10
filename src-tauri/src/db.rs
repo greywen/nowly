@@ -225,6 +225,7 @@ fn migration_4_default_settings(transaction: &Transaction<'_>) -> Result<()> {
         ("week_start", "\"monday\""),
         ("date_format", "\"localized\""),
         ("show_weekends", "true"),
+        ("icon_style", "\"duotone\""),
         ("hide_topbar_in_wallpaper", "true"),
         ("calendar_enabled", "true"),
         ("matrix_enabled", "true"),

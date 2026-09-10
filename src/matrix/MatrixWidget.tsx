@@ -1,4 +1,4 @@
-import { Plus, Settings, X } from 'lucide-react';
+import { Plus, Settings, X } from '../components/icons';
 import { type DragEvent, useMemo, useState } from 'react';
 import type { MatrixTask, MatrixTaskTag, Quadrant, TaskPriority } from './matrix-model';
 import { priorityLabel, quadrantLabel, quadrantOrder } from './matrix-model';

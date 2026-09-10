@@ -1,4 +1,4 @@
-import { Pencil, Plug, RefreshCw, Trash2, Unplug } from 'lucide-react';
+import { Pencil, Plug, RefreshCw, Trash2, Unplug } from '../components/icons';
 import { useEffect, useState } from 'react';
 import { ColorPicker } from '../components/ColorPicker';
 import { ConfirmDialog } from '../components/ConfirmDialog';

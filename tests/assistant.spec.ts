@@ -81,8 +81,11 @@ test('edits a chat card, confirms once, refreshes the calendar, then undoes from
   await panel.getByRole('button', { name: '确认执行 1 项' }).click();
   await expect(panel.getByRole('region', { name: '操作状态：已执行' })).toBeVisible();
   expect(await page.evaluate(() => Reflect.get(window, '__ASSISTANT_TEST_CALLS__').filter((c: string) => c === 'assistant_execute').length)).toBe(1);
-  await page.getByRole('button', { name: '收起助手' }).click();
+  await page.mouse.click(20, 20);
   await expect(page.getByRole('button', { name: /团队早会/ }).first()).toBeVisible();
+  // Collapsed the composer is only a short topbar field; focus brings the
+  // history toggle back.
+  await input.focus();
   await page.getByRole('button', { name: '操作记录' }).click();
   await page.screenshot({ path: info.outputPath('assistant-history.png') });
   await page.getByRole('button', { name: '撤销团队早会' }).click();
@@ -162,7 +165,7 @@ test('embeds in the topbar and expands over the workspace without reserving layo
   expect(panelBounds!.y + panelBounds!.height).toBeLessThanOrEqual(viewport.height);
   expect(await workspace.boundingBox()).toEqual(bounds);
   await page.screenshot({ path: info.outputPath('assistant-topbar.png') });
-  await page.getByRole('button', { name: '收起助手' }).click();
+  await page.mouse.click(20, 20);
   await expect(page.getByRole('region', { name: '当前聊天' })).toBeHidden();
   await expect(page.getByRole('button', { name: '展开', exact: true })).toHaveCount(0);
   expect(await workspace.boundingBox()).toEqual(bounds);
@@ -195,7 +198,9 @@ test('shows keyboard focus in the topbar assistant', async ({ page }) => {
   const input = page.getByRole('textbox', { name: '告诉 Nowly 你想做什么' });
   const composer = page.locator('.assistant-composer');
   await input.focus();
-  expect(await composer.evaluate(node => getComputedStyle(node).boxShadow)).not.toBe('none');
+  // Focusing the field expands the dock instead of drawing a highlight ring.
+  expect(await composer.evaluate(node => getComputedStyle(node).boxShadow)).toBe('none');
+  await expect(page.getByRole('region', { name: '当前聊天' })).toBeVisible();
 
   await page.keyboard.press('Tab');
   const history = page.getByRole('button', { name: '操作记录' });
@@ -212,18 +217,12 @@ test('swaps the send button for voice input without animated decoration', async 
   await expect(page.getByRole('button', { name: '语音输入' })).toHaveCount(0);
   const composer = page.locator('.assistant-composer');
   expect(await composer.evaluate(node => getComputedStyle(node, '::before').animationName)).toBe('none');
-  expect(await composer.evaluate(node => node.getBoundingClientRect().height)).toBe(58);
-  // Icons in the composer and the panel header share one vertical column.
+  expect(await composer.evaluate(node => node.getBoundingClientRect().height)).toBe(46);
   await input.press('Enter');
   const panel = page.getByRole('region', { name: '当前聊天' });
   await expect(panel).toBeVisible();
   await expect.poll(() => panel.evaluate(node => getComputedStyle(node).transform)).toBe('none');
-  const mark = await page.locator('.assistant-composer-mark').boundingBox();
-  const stateIcon = await page.locator('.assistant-state-icon').boundingBox();
-  expect(stateIcon!.x).toBe(mark!.x);
-  expect(stateIcon!.width).toBe(mark!.width);
   expect(await page.locator('html').evaluate(node => getComputedStyle(node).getPropertyValue('--radius-md').trim())).toBe('10px');
-  expect(await page.locator('.assistant-composer-mark').evaluate(node => getComputedStyle(node).borderRadius)).toBe('10px');
   expect(await page.locator('.assistant-state-icon').evaluate(node => getComputedStyle(node).borderRadius)).toBe('10px');
 });
 

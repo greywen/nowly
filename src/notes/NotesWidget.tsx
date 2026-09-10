@@ -1,4 +1,4 @@
-import { Plus, Settings } from 'lucide-react';
+import { Plus, Settings } from '../components/icons';
 import { useState } from 'react';
 import { DEFAULT_NOTES_VIEW, NOTE_STYLE_VARIANT_COUNT, noteIconSymbol, type Note, type NotesViewMode } from './notes-model';
 import { NotesSettingsDialog } from './NotesSettingsDialog';

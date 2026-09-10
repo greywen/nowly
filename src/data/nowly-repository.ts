@@ -35,6 +35,7 @@ import type {
   TaskWorkspaceSnapshot
 } from '../tasks/task-model';
 import type { HexColor } from '../lib/color';
+import type { IconStyle } from '../components/icon-style';
 
 export type AppSettings = {
   wallpaperEnabled: boolean;
@@ -44,6 +45,8 @@ export type AppSettings = {
   weekStart: 'monday' | 'sunday';
   dateFormat: 'localized' | 'iso';
   showWeekends: boolean;
+  // Icon drawing style shared by every icon in the app.
+  iconStyle: IconStyle;
   // Hide the topbar while running as the desktop wallpaper. Defaults on, so the
   // wallpaper reads as a clean dashboard; the topbar returns the moment the app
   // is brought back to the foreground.

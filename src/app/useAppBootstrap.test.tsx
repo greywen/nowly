@@ -13,6 +13,7 @@ const settings: AppSettings = {
   weekStart: 'monday',
   dateFormat: 'localized',
   showWeekends: true,
+  iconStyle: 'duotone',
   hideTopbarInWallpaper: true
 };
 

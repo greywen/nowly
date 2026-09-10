@@ -19,12 +19,15 @@
   --color-danger: #f06445;
   --color-danger-active: #db5437;
   --color-danger-light: #fff0ed;
+  --bg-page: #ffffff;
   --bg-surface: #ffffff;
+  --bg-module: rgba(248, 246, 242, 0.3);
   --bg-subtle: #f8f6f2;
   --bg-secondary: #f6f1e9;
   --text-primary: #211f1c;
   --text-strong: #403d38;
   --text-secondary: #716d66;
+  --text-tertiary: #8e887a;
   --text-muted: #968e7e;
   --text-disabled: #b5b0a1;
   --border-default: #eaeaea;
@@ -101,18 +104,18 @@ body,
   overflow: hidden;
 }
 
-body { margin: 0; color: var(--text-secondary); background: var(--bg-subtle); font: 400 1rem/1.5 var(--font-sans); }
+body { margin: 0; color: var(--text-secondary); background: var(--bg-page); font: 400 1rem/1.5 var(--font-sans); }
 button, input, textarea, select { font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: default; opacity: .65; }
 :where(button, input, textarea, select):focus-visible { outline: 0; }
 
-.app-shell { position: relative; width: 100vw; height: 100vh; display: grid; grid-template-rows: 70px minmax(0, 1fr); overflow: hidden; background: var(--bg-subtle); }
+.app-shell { position: relative; width: 100vw; height: 100vh; display: grid; grid-template-rows: 70px minmax(0, 1fr); overflow: hidden; background: var(--bg-page); }
 .app-shell--no-topbar { grid-template-rows: minmax(0, 1fr); }
 /* Wallpaper layer sits behind the app content. Hidden until a wallpaper is
    configured; it only anchors the stacking order for now. */
 .wallpaper-layer { position: absolute; inset: 0; z-index: 0; background-size: cover; background-position: center; pointer-events: none; }
-.topbar { position: relative; z-index: 2; min-width: 0; padding: 0 36px; display: grid; grid-template-columns: minmax(232px, 1fr) minmax(420px, 720px) minmax(232px, 1fr); align-items: center; gap: 24px; background: var(--bg-surface); border-bottom: 1px solid var(--border-default); }
+.topbar { position: relative; z-index: 2; min-width: 0; padding: 0 24px; display: grid; grid-template-columns: minmax(232px, 1fr) minmax(420px, 720px) minmax(232px, 1fr); align-items: center; gap: 24px; background: var(--bg-subtle); border-bottom: 1px solid var(--border-default); }
 .date-copy { grid-column: 1; min-width: 0; justify-self: start; }
 .date-copy strong { display: block; color: var(--text-primary); font-size: 1.075rem; font-weight: 600; }
 .date-copy p { margin: 0; color: var(--text-muted); font-size: 0.85rem; font-weight: 500; }
@@ -145,14 +148,14 @@ button:disabled { cursor: default; opacity: .65; }
 .calendar-settings__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .calendar-settings__checks { padding: 20px; border-radius: var(--radius-default); background: var(--bg-subtle); }
 .module-grid { flex: 1; min-width: 0; min-height: 0; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); grid-template-rows: repeat(8, minmax(0, 1fr)); gap: 24px; }
-.card { min-width: 0; min-height: 0; overflow: hidden; border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-surface); box-shadow: none; }
+.card { min-width: 0; min-height: 0; overflow: hidden; border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-module); box-shadow: none; }
 .calendar-card, .priority-card, .notes-card { min-height: 0; display: flex; flex-direction: column; }
 .module-frame { position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .module-frame__body { position: relative; min-height: 0; flex: 1; display: flex; flex-direction: column; overflow: hidden; container: module / size; }
 .module-frame.is-editing { user-select: none; }
 .module-frame.is-dragging { z-index: 5; border-color: var(--color-primary); }
 .module-frame.is-invalid { border-color: var(--color-danger); }
-.module-frame__toolbar { flex: none; min-height: 40px; padding: 4px 12px; display: flex; align-items: center; gap: 8px; border-bottom: 1px dashed var(--border-default); background: var(--bg-subtle); }
+.module-frame__toolbar { flex: none; min-height: 40px; padding: 4px 12px; display: flex; align-items: center; gap: 8px; border-bottom: 1px dashed var(--border-default); background: transparent; }
 .module-frame__handle { width: 24px; height: 24px; display: inline-grid; place-items: center; color: var(--text-tertiary); cursor: grab; }
 .module-frame.is-dragging .module-frame__handle { cursor: grabbing; }
 .module-frame__handle svg { width: 18px; height: 18px; }
@@ -256,7 +259,7 @@ button:disabled { cursor: default; opacity: .65; }
 .event--spanning { border-right: 3px solid currentColor; }
 .event--resizable::after { content: ""; position: absolute; top: 0; right: 0; width: 12px; height: 100%; cursor: ew-resize; }
 .event-bar__resize-handle { position: absolute; top: 0; right: 0; width: 14px; height: 100%; cursor: ew-resize; pointer-events: auto; touch-action: none; z-index: 3; }
-.event-bar__resize-handle::after { content: ""; position: absolute; top: 50%; right: 3px; width: 3px; height: 12px; transform: translateY(-50%); border-radius: 2px; background: currentColor; opacity: 0; transition: opacity 120ms ease; }
+.event-bar__resize-handle::after { content: ""; position: absolute; top: 50%; right: 3px; width: 3px; height: 12px; transform: translateY(-50%); border-radius: 2px; background: currentColor; opacity: 0; }
 .event-bar:hover .event-bar__resize-handle::after,
 .event.event-cell:hover .event-bar__resize-handle::after { opacity: 0.55; }
 .event.event-cell:hover, .event-bar:hover { filter: brightness(0.97); }
@@ -341,7 +344,7 @@ button:disabled { cursor: default; opacity: .65; }
 .filter-select__option svg { width: 18px; height: 18px; flex: 0 0 auto; color: var(--color-primary-active); }
 .filter-select__option:focus-visible { outline: 0; }
 .quadrant-grid { min-height: 0; flex: 1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.quadrant { min-width: 0; min-height: 0; padding: 16px; display: flex; flex-direction: column; border-radius: var(--radius-default); border: 1px solid transparent; overflow: hidden; transition: border-color .12s ease, background-color .12s ease; }
+.quadrant { min-width: 0; min-height: 0; padding: 16px; display: flex; flex-direction: column; border-radius: var(--radius-default); border: 1px solid transparent; overflow: hidden; }
 .quadrant--drop { border-color: var(--color-primary); box-shadow: inset 0 0 0 1px var(--color-primary); }
 .q-danger { background: var(--color-danger-light); }
 .q-primary { background: var(--color-primary-light); }
@@ -953,6 +956,7 @@ button:disabled { cursor: default; opacity: .65; }
 .about-changelog__title { margin: 0; color: var(--text-primary); font-size: 0.95rem; font-weight: 600; line-height: 1.5; }
 .about-changelog__body { margin: 0; max-height: 220px; overflow: auto; padding: 16px; border-radius: var(--radius-default); border: 1px solid var(--border-default); background: var(--bg-surface); color: var(--text-secondary); font-family: var(--font-sans); font-size: 0.95rem; font-weight: 400; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
 .about-changelog__empty { margin: 0; padding: 16px; border-radius: var(--radius-default); background: var(--bg-subtle); color: var(--text-muted); font-size: 0.95rem; font-weight: 400; line-height: 1.5; }
+.about-attribution { margin: 0; color: var(--text-muted); font-size: 0.85rem; font-weight: 400; line-height: 1.5; }
 .about-button { position: relative; }
 .about-button__logo { width: 22px; height: 22px; object-fit: contain; border-radius: var(--radius-sm); }
 .about-button__dot { position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--color-danger); box-shadow: 0 0 0 2px var(--bg-page); }
@@ -1338,7 +1342,7 @@ button:disabled { cursor: default; opacity: .65; }
 .focus-fullscreen__center { position:relative; z-index:1; text-align:center; display:flex; flex-direction:column; align-items:center; gap:16px; }
 /* Breathing glow behind the countdown. The only motion allowed here; the digits
    themselves stay still so the reading never jitters. */
-.focus-fullscreen__glow { position:absolute; left:50%; top:50%; z-index:-1; width:min(60vw,520px); height:min(60vw,520px); transform:translate(-50%,-50%); border-radius:50%; pointer-events:none; background:radial-gradient(circle, rgba(var(--focus-glow-rgb,79,201,218),0.28) 0%, rgba(var(--focus-glow-rgb,79,201,218),0.10) 40%, rgba(var(--focus-glow-rgb,79,201,218),0) 70%); animation:focus-breathe var(--focus-glow-duration,6s) ease-in-out infinite; }
+.focus-fullscreen__glow { position:absolute; left:50%; top:50%; z-index:-1; width:min(60vw,520px); height:min(60vw,520px); transform:translate(-50%,-50%); border-radius:50%; pointer-events:none; background:radial-gradient(circle, rgba(var(--focus-glow-rgb,79,201,218),0.28) 0%, rgba(var(--focus-glow-rgb,79,201,218),0.10) 40%, rgba(var(--focus-glow-rgb,79,201,218),0) 70%); }
 @keyframes focus-breathe { 0%,100% { transform:translate(-50%,-50%) scale(var(--focus-glow-scale-min,0.9)); opacity:var(--focus-glow-opacity-min,.65); } 50% { transform:translate(-50%,-50%) scale(var(--focus-glow-scale-max,1.12)); opacity:1; } }
 @media (prefers-reduced-motion: reduce) { .focus-fullscreen__glow { animation:none; } }
 .focus-fullscreen__display { margin:0; font-family:"Segoe UI",Inter,Helvetica,Arial,sans-serif; color:var(--text-primary); font-size:clamp(80px,14vw,220px); font-weight:300; line-height:1; font-variant-numeric:tabular-nums; font-feature-settings:"tnum" 1,"lnum" 1; }

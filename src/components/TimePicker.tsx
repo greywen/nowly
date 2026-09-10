@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, Clock3 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Clock3 } from '../components/icons';
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { t } from '../i18n';
 

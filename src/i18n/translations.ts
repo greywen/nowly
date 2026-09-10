@@ -49,6 +49,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'about.changelogEmpty': '暂无法获取更新日志，请稍后重试或前往 GitHub 查看。',
     'about.githubLabel': 'GitHub 项目地址',
     'about.emailLabel': '邮件反馈',
+    'about.iconCredit': '图标采用 Solar 图标集（480 Design，CC BY 4.0）。',
     'about.mailSubject': 'Nowly 问题反馈 / 心愿单',
 
     // Onboarding guided tour
@@ -553,6 +554,10 @@ export const translations: Record<Language, Record<string, string>> = {
     'settings.densityCompact': '紧凑',
     'settings.densityBalanced': '适中',
     'settings.densityComfortable': '宽松',
+    'settings.iconStyle': '图标风格',
+    'settings.iconStyleDuotone': '双色 Duotone',
+    'settings.iconStyleSolid': '实心 Solid',
+    'settings.iconStyleOutline': '线性 Outline',
     'settings.hideTopbarInWallpaper': '设为壁纸后隐藏导航栏',
     'settings.language': '语言',
     'settings.langZh': '简体中文',
@@ -745,6 +750,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'about.changelogEmpty': 'The changelog is unavailable right now. Try again later or check GitHub.',
     'about.githubLabel': 'GitHub repository',
     'about.emailLabel': 'Email',
+    'about.iconCredit': 'Icons from the Solar icon set by 480 Design, licensed CC BY 4.0.',
     'about.mailSubject': 'Nowly feedback / wishlist',
 
     // Onboarding guided tour
@@ -1247,6 +1253,10 @@ export const translations: Record<Language, Record<string, string>> = {
     'settings.densityCompact': 'Compact',
     'settings.densityBalanced': 'Balanced',
     'settings.densityComfortable': 'Comfortable',
+    'settings.iconStyle': 'Icon style',
+    'settings.iconStyleDuotone': 'Duotone',
+    'settings.iconStyleSolid': 'Solid',
+    'settings.iconStyleOutline': 'Outline',
     'settings.hideTopbarInWallpaper': 'Hide topbar in wallpaper mode',
     'settings.language': 'Language',
     'settings.langZh': '简体中文',

@@ -1,4 +1,4 @@
-import { X } from 'lucide-react';
+import { X } from '../../components/icons';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { t, useTranslation } from '../../i18n';
 

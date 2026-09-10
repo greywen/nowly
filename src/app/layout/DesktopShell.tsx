@@ -1,4 +1,4 @@
-import { Check, LayoutGrid, MonitorDown, Plus, Settings } from 'lucide-react';
+import { Check, LayoutGrid, MonitorDown, Plus, Settings } from '../../components/icons';
 import { useState, type ReactNode } from 'react';
 import {
   builtinDefinitions,

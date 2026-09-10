@@ -1,4 +1,4 @@
-import { Droplets } from 'lucide-react';
+import { Droplets } from '../components/icons';
 import { useEffect, useRef, useState } from 'react';
 import { MAX_BLUR, MIN_BLUR } from './useBlur';
 import { t } from '../i18n';

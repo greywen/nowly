@@ -65,6 +65,11 @@ focusing. All data stays on your machine in a local SQLite database.
   Tailwind CSS.
 - **Desktop shell** — Tauri 2 with a Rust backend.
 - **Storage** — local SQLite via `rusqlite` (bundled).
+- **Icons** — the [Solar icon set](https://www.figma.com/community/file/1166831539721848736)
+  by 480 Design, licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+  Glyphs are vendored through a single adapter (`src/components/icons.tsx`) and
+  regenerated with `npm run icons`; the duotone / solid / outline style is
+  switchable in Settings.
 - **Testing** — Vitest for unit/component tests, Playwright for end-to-end,
   and `cargo test` for the Rust layer.
 

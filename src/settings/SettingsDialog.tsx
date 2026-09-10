@@ -1,4 +1,5 @@
-import { X } from 'lucide-react';
+import { X } from '../components/icons';
+import type { IconStyle } from '../components/icon-style';
 import { useEffect, useState } from 'react';
 import { AssistantSettingsPanel } from '../assistant/AssistantSettingsPanel';
 import { Dialog } from '../components/Dialog';
@@ -35,6 +36,7 @@ export function SettingsDialog({settings,monitors=[],onClose,onSave}:Props){
     <div className="settings-grid">
      <Select id="settings-language" label={t('settings.language')} value={language} options={[{value:'zh',label:t('settings.langZh')},{value:'en',label:t('settings.langEn')}]} onChange={value=>setLanguage(value as Language)}/>
      <Select id="settings-density" label={t('settings.density')} value={draft.density} options={[{value:'compact',label:t('settings.densityCompact')},{value:'balanced',label:t('settings.densityBalanced')},{value:'comfortable',label:t('settings.densityComfortable')}]} onChange={value=>setDraft({...draft,density:value as AppSettings['density']})}/>
+     <Select id="settings-icon-style" label={t('settings.iconStyle')} value={draft.iconStyle} options={[{value:'duotone',label:t('settings.iconStyleDuotone')},{value:'solid',label:t('settings.iconStyleSolid')},{value:'outline',label:t('settings.iconStyleOutline')}]} onChange={value=>setDraft({...draft,iconStyle:value as IconStyle})}/>
     </div>
     <div className="settings-checks">
      <Check label={t('settings.hideTopbarInWallpaper')} checked={draft.hideTopbarInWallpaper} onChange={toggle('hideTopbarInWallpaper')}/>

@@ -15,6 +15,7 @@ import { MatrixWidget } from '../matrix/MatrixWidget';
 import { KanbanWidget } from '../kanban/KanbanWidget';
 import { TaskWorkspaceProvider, useTaskWorkspace } from '../tasks/TaskWorkspaceContext';
 import { AssistantDock } from '../assistant/AssistantDock';
+import { IconStyleProvider } from '../components/icons';
 import { useWorkspaceTasks } from '../tasks/useWorkspaceTasks';
 import { ModalRoot } from '../modals/ModalRoot';
 import { NotesWidget } from '../notes/NotesWidget';
@@ -326,7 +327,7 @@ function AppContent() {
   ];
 
   return (
-    <>
+    <IconStyleProvider style={settingsFeature.settings.data.iconStyle}>
       <DesktopShell
         mode={windowMode}
         time={new Intl.DateTimeFormat(localeTag(), { hour: '2-digit', minute: '2-digit', hour12: false }).format(now)}
@@ -399,7 +400,7 @@ function AppContent() {
         recentColors={recentColors}
         onRememberCustomColor={rememberCustomColor}
       />
-    </>
+    </IconStyleProvider>
   );
 }
 

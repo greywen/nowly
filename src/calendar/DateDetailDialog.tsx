@@ -1,4 +1,4 @@
-import { X } from 'lucide-react';
+import { X } from '../components/icons';
 import { type RefObject, useId } from 'react';
 import { Dialog } from '../components/Dialog';
 import { formatChineseDate } from '../lib/date';

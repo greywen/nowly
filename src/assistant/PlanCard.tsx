@@ -1,5 +1,5 @@
 import { useId, useState } from 'react';
-import { Check, ChevronDown, CircleAlert, RefreshCw, Trash2, X } from 'lucide-react';
+import { Check, ChevronDown, CircleAlert, RefreshCw, Trash2, X } from '../components/icons';
 import { DatePicker } from '../components/DatePicker';
 import { TimePicker } from '../components/TimePicker';
 import { Select } from '../components/Select';

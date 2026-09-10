@@ -50,6 +50,7 @@ const defaultSettings: Dict = {
   weekStart: 'monday',
   dateFormat: 'localized',
   showWeekends: true,
+  iconStyle: 'duotone',
   hideTopbarInWallpaper: true,
   recentColors: []
 };
