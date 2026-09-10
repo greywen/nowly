@@ -30,10 +30,13 @@
   --border-default: #eaeaea;
   --border-emphasis: #dad3c3;
   --radius-sm: 7.6px;
+  --radius-md: 10px;
   --radius-default: 15.2px;
   --radius-pill: 999px;
   --focus-ring: rgba(79, 201, 218, 0.25);
   --shadow-focus: 0 0 0 4px rgba(79, 201, 218, 0.25);
+  --shadow-sm: 0 1.6px 16px 4px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 8px 24px 8px rgba(0, 0, 0, 0.075);
   --shadow-lg: 0 16px 32px 16px rgba(0, 0, 0, 0.1);
   --shadow-dropdown: 0 0 50px 0 rgba(82, 63, 105, 0.15);
   --shadow-tooltip: 0 0 30px rgba(0, 0, 0, 0.15);
@@ -109,11 +112,13 @@ button:disabled { cursor: default; opacity: .65; }
 /* Wallpaper layer sits behind the app content. Hidden until a wallpaper is
    configured; it only anchors the stacking order for now. */
 .wallpaper-layer { position: absolute; inset: 0; z-index: 0; background-size: cover; background-position: center; pointer-events: none; }
-.topbar { position: relative; z-index: 2; min-width: 0; padding: 0 36px; display: flex; align-items: center; justify-content: space-between; gap: 24px; background: var(--bg-surface); border-bottom: 1px solid var(--border-default); }
-.date-copy { min-width: 0; }
+.topbar { position: relative; z-index: 2; min-width: 0; padding: 0 36px; display: grid; grid-template-columns: minmax(232px, 1fr) minmax(420px, 720px) minmax(232px, 1fr); align-items: center; gap: 24px; background: var(--bg-surface); border-bottom: 1px solid var(--border-default); }
+.date-copy { grid-column: 1; min-width: 0; justify-self: start; }
 .date-copy strong { display: block; color: var(--text-primary); font-size: 1.075rem; font-weight: 600; }
 .date-copy p { margin: 0; color: var(--text-muted); font-size: 0.85rem; font-weight: 500; }
 .top-actions, .toolbar-actions { flex: none; display: flex; align-items: center; gap: 8px; }
+.topbar > .assistant-dock { grid-column: 2; }
+.top-actions { grid-column: 3; justify-self: end; }
 .topbar-time { color: var(--text-strong); font-size: 1.075rem; font-weight: 600; }
 .workspace { position: relative; z-index: 1; min-width: 0; min-height: 0; padding: 24px 36px 36px; display: flex; }
 
@@ -442,6 +447,13 @@ button:disabled { cursor: default; opacity: .65; }
   .quadrant-grid { gap: 8px; }
   .quadrant { padding: 12px; }
   .btn { padding-inline: 16px; font-size: 0.95rem; }
+}
+
+@media (max-width: 980px) {
+  .topbar { grid-template-columns: minmax(0, 1fr) auto; gap: 12px; }
+  .topbar .date-copy { display: none; }
+  .topbar > .assistant-dock { grid-column: 1; }
+  .top-actions { grid-column: 2; }
 }
 
 /* Interface density: "balanced" (适中) keeps the standard spacing above and is

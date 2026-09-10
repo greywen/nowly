@@ -43,6 +43,9 @@ docs/
 # continuing to ignore other newly generated files under docs/.
 !docs/
 docs/*
+# Skill 文档必须随仓库分发（组织约定见 docs/skill-authoring.md）
+!docs/skill-authoring.md
+!docs/custom-modules/
 !docs/superpowers/
 docs/superpowers/*
 !docs/superpowers/plans/
@@ -53,3 +56,4 @@ docs/superpowers/plans/*
 dev-modules/*
 !dev-modules/example.js
 !dev-modules/README.md
+app-compliance/

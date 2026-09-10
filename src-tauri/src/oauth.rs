@@ -2,7 +2,8 @@
 //!
 //! 桌面端是 public client：用 PKCE（S256）而非 client_secret 保护授权码交换
 //! （Google Desktop 客户端仍要求同时带上随包分发的 client_secret，一并携带）。
-//! 回调走本机 loopback（`http://127.0.0.1:<临时端口>`），用完即关，`state` 防 CSRF。
+//! 回调走本机 loopback（Microsoft 使用 localhost，Google 使用 127.0.0.1，
+//! 均带临时端口），用完即关，`state` 防 CSRF。
 //!
 //! 申请日历读写权限：Google `calendar`，Microsoft `Calendars.ReadWrite`。
 //! （加 `offline_access` 换 refresh_token）。token 交给 `token_store` 用 DPAPI 加密落库。
@@ -213,23 +214,56 @@ fn wait_for_callback(listener: &TcpListener) -> Result<Vec<(String, String)>, Co
     }
 }
 
-/// 读取 HTTP 请求首行并解析查询参数。只读到首行即可。
+/// 完整消费 GET 请求头再解析回调，避免带未读数据关闭 socket 导致浏览器收到 RST。
 fn read_request_query(stream: &mut TcpStream) -> Option<Vec<(String, String)>> {
-    stream
-        .set_read_timeout(Some(StdDuration::from_secs(2)))
-        .ok()?;
+    const MAX_HEADER_BYTES: usize = 32 * 1024;
+    let deadline = Instant::now() + StdDuration::from_secs(2);
+    stream.set_nonblocking(false).ok()?;
+    let mut request = Vec::new();
     let mut buf = [0u8; 2048];
-    let n = stream.read(&mut buf).ok()?;
-    if n == 0 {
-        return None;
+    while request.len() < MAX_HEADER_BYTES {
+        let remaining = deadline.checked_duration_since(Instant::now())?;
+        if remaining.is_zero() {
+            return None;
+        }
+        stream.set_read_timeout(Some(remaining)).ok()?;
+        let capacity = buf.len().min(MAX_HEADER_BYTES - request.len());
+        let n = stream.read(&mut buf[..capacity]).ok()?;
+        if n == 0 {
+            return None;
+        }
+        request.extend_from_slice(&buf[..n]);
+        if let Some(end) = request.windows(4).position(|part| part == b"\r\n\r\n") {
+            let text = std::str::from_utf8(&request[..end]).ok()?;
+            let mut lines = text.split("\r\n");
+            let first_line = lines.next()?;
+            let parts: Vec<_> = first_line.split_whitespace().collect();
+            if parts.len() != 3
+                || parts[0] != "GET"
+                || !parts[1].starts_with('/')
+                || !matches!(parts[2], "HTTP/1.1" | "HTTP/1.0")
+            {
+                return None;
+            }
+            // OAuth query-mode callbacks have no body. Never accept a partial body.
+            for line in lines {
+                let (name, value) = line.split_once(':')?;
+                if name.eq_ignore_ascii_case("transfer-encoding")
+                    || (name.eq_ignore_ascii_case("content-length")
+                        && value.trim().parse::<usize>().ok()? != 0)
+                {
+                    return None;
+                }
+            }
+            return Some(parse_callback_query(first_line));
+        }
     }
-    let text = String::from_utf8_lossy(&buf[..n]);
-    let first_line = text.lines().next()?;
-    Some(parse_callback_query(first_line))
+    None
 }
 
 /// 给浏览器回一个简单的成功页，提示用户可以关闭并回到 Nowly。
 fn respond_done(stream: &mut TcpStream) {
+    let _ = stream.set_write_timeout(Some(StdDuration::from_secs(2)));
     let body = "<!DOCTYPE html><html lang=\"zh\"><head><meta charset=\"utf-8\">\
         <title>Nowly</title></head><body style=\"font-family:sans-serif;\
         text-align:center;margin-top:15vh;color:#333\">\
@@ -241,8 +275,10 @@ fn respond_done(stream: &mut TcpStream) {
         body.as_bytes().len(),
         body
     );
-    let _ = stream.write_all(response.as_bytes());
-    let _ = stream.flush();
+    if stream.write_all(response.as_bytes()).is_ok() {
+        let _ = stream.flush();
+        let _ = stream.shutdown(std::net::Shutdown::Write);
+    }
 }
 
 // ---- 打开系统浏览器 -------------------------------------------------------
@@ -417,6 +453,17 @@ fn fetch_account_label(
     }
 }
 
+fn loopback_redirect_uri(provider: &str, port: u16) -> String {
+    // Entra 注册 http://localhost，匹配时忽略动态端口；监听仍仅绑定本机 IPv4。
+    // 同一 URI 同时用于授权请求和授权码交换。
+    let host = if provider == "microsoft" {
+        "localhost"
+    } else {
+        "127.0.0.1"
+    };
+    format!("http://{host}:{port}")
+}
+
 // ---- 授权命令 -------------------------------------------------------------
 
 /// 发起一次 OAuth 授权：起 loopback → 开浏览器 → 等回调 → 换 token → 存账户。
@@ -432,7 +479,7 @@ pub fn start_login(db: &AppDb, provider: &str) -> Result<OAuthAccount, CommandEr
     }
 
     let (listener, port) = bind_loopback()?;
-    let redirect_uri = format!("http://127.0.0.1:{port}");
+    let redirect_uri = loopback_redirect_uri(provider, port);
     let verifier = random_token();
     let challenge = code_challenge(&verifier);
     let state = random_token();
@@ -560,6 +607,92 @@ pub fn disconnect_oauth_account(db: State<'_, AppDb>, id: String) -> Result<(), 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn callback_exchange(request: String) -> (Option<Vec<(String, String)>>, std::io::Result<String>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let query = read_request_query(&mut stream);
+            if query.is_some() {
+                respond_done(&mut stream);
+            }
+            query
+        });
+        let mut client = TcpStream::connect(address).unwrap();
+        client.set_read_timeout(Some(StdDuration::from_secs(5))).unwrap();
+        client.write_all(request.as_bytes()).unwrap();
+        client.shutdown(std::net::Shutdown::Write).unwrap();
+        let mut response = String::new();
+        let result = client.read_to_string(&mut response).map(|_| response);
+        (server.join().unwrap(), result)
+    }
+
+    #[test]
+    fn callback_http_consumes_large_headers_before_closing() {
+        let (query, response) = callback_exchange(format!(
+            "GET /?code=test&state=expected HTTP/1.1\r\nHost: localhost\r\nX-Test: {}\r\n\r\n",
+            "x".repeat(16000)
+        ));
+        assert_eq!(query.unwrap()[1].1, "expected");
+        let response = response.expect("HTTP response must end without connection reset");
+        let (headers, body) = response.split_once("\r\n\r\n").unwrap();
+        assert!(headers.starts_with("HTTP/1.1 200 OK"));
+        assert!(headers.contains(&format!("Content-Length: {}", body.len())));
+        assert!(body.ends_with("</html>"));
+    }
+
+    #[test]
+    fn callback_http_preserves_long_authorization_code_and_state() {
+        let code = "a".repeat(6000);
+        let (query, _) = callback_exchange(format!(
+            "GET /?code={code}&state=expected HTTP/1.1\r\nHost: localhost\r\n\r\n"
+        ));
+        assert_eq!(query.unwrap(), vec![
+            ("code".to_owned(), code),
+            ("state".to_owned(), "expected".to_owned())
+        ]);
+    }
+
+    #[test]
+    fn callback_http_rejects_incomplete_headers() {
+        let (query, _) = callback_exchange(
+            "GET /?code=test&state=expected HTTP/1.1\r\nHost: localhost\r\n".to_owned()
+        );
+        assert!(query.is_none());
+    }
+
+    #[test]
+    fn callback_http_rejects_oversized_headers_and_request_bodies() {
+        let (query, _) = callback_exchange(format!(
+            "GET /?code=test HTTP/1.1\r\nX-Test: {}\r\n\r\n", "x".repeat(33000)
+        ));
+        assert!(query.is_none());
+        for framing in ["Content-Length: 1", "Transfer-Encoding: chunked"] {
+            let (query, _) = callback_exchange(format!(
+                "GET /?code=test HTTP/1.1\r\n{framing}\r\n\r\n"
+            ));
+            assert!(query.is_none());
+        }
+    }
+
+    #[test]
+    fn microsoft_loopback_redirect_matches_registered_localhost() {
+        for port in [12345, 54321] {
+            assert_eq!(
+                loopback_redirect_uri("microsoft", port),
+                format!("http://localhost:{port}")
+            );
+        }
+    }
+
+    #[test]
+    fn google_loopback_redirect_preserves_ip_address() {
+        assert_eq!(
+            loopback_redirect_uri("google", 12345),
+            "http://127.0.0.1:12345"
+        );
+    }
 
     #[test]
     fn base64url_matches_known_vectors() {

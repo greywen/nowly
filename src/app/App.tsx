@@ -13,7 +13,8 @@ import { isEventWritable } from '../calendar/calendar-model';
 import { enterForegroundMode, enterWallpaperMode } from '../lib/window-mode';
 import { MatrixWidget } from '../matrix/MatrixWidget';
 import { KanbanWidget } from '../kanban/KanbanWidget';
-import { TaskWorkspaceProvider } from '../tasks/TaskWorkspaceContext';
+import { TaskWorkspaceProvider, useTaskWorkspace } from '../tasks/TaskWorkspaceContext';
+import { AssistantDock } from '../assistant/AssistantDock';
 import { useWorkspaceTasks } from '../tasks/useWorkspaceTasks';
 import { ModalRoot } from '../modals/ModalRoot';
 import { NotesWidget } from '../notes/NotesWidget';
@@ -58,6 +59,7 @@ function AppContent() {
   const settingsFeature = useSettings();
   const eventsFeature = useEvents({ weekStart: settingsFeature.settings.data.weekStart });
   const tasksFeature = useWorkspaceTasks();
+  const taskWorkspace = useTaskWorkspace();
   const notesFeature = useNotes();
   const notesView = useNotesView();
   const extensionsFeature = useExtensions();
@@ -343,6 +345,21 @@ function AppContent() {
         hideTopbarInWallpaper={settingsFeature.settings.data.hideTopbarInWallpaper}
         overlay={windowMode === 'wallpaper' ? <FocusWallpaperOverlay /> : null}
         update={update}
+        assistant={active => <AssistantDock active={active && !modal && !focusStatisticsOpen && !onboarding.shouldShow}
+          onRefresh={() => Promise.all([eventsFeature.retryEvents(), tasksFeature.retryTasks()])}
+          onOpenSettings={() => setModal({type:'settings',trigger:null})}
+          onOpenRecord={(record, trigger) => {
+            if (record.domain === 'calendar') {
+              const date = String(record.data.startAt ?? '').slice(0, 10);
+              if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('该日程日期不可用，请重新查询。');
+              eventsFeature.goToMonthContaining(date);
+              setModal({ type: 'date', isoDate: date, trigger });
+            } else {
+              const task = taskWorkspace.workspace.data.tasks.find(t => t.id === record.data.id);
+              if (!task) throw new Error('该任务已变化，请重新查询。');
+              setModal({ type: 'workspace-task-edit', task, trigger });
+            }
+          }} />}
       />
       {focusStatisticsOpen ? <FocusStatisticsDialog onClose={() => setFocusStatisticsOpen(false)} /> : null}
       <OnboardingGuide

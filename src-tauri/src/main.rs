@@ -1,6 +1,7 @@
 // Prevents an extra console window on Windows in release builds. DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod assistant;
 mod calendar_api;
 mod color;
 mod commands;
@@ -36,6 +37,7 @@ mod token_store;
 mod update;
 mod wallpaper;
 mod window_lifecycle;
+mod write_scope;
 
 use db::{open_database, AppDb};
 use std::sync::Mutex;
@@ -231,6 +233,7 @@ fn main() {
     set_app_user_model_id();
 
     tauri::Builder::default()
+        .manage(assistant::commands::Requests::default())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             show_main_window(app)
         }))
@@ -510,6 +513,16 @@ fn main() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            assistant::commands::assistant_get_config,
+            assistant::commands::assistant_save_config,
+            assistant::commands::assistant_interpret,
+            assistant::commands::assistant_cancel_request,
+            assistant::commands::assistant_revise,
+            assistant::commands::assistant_cancel_plan,
+            assistant::commands::assistant_execute,
+            assistant::commands::assistant_undo,
+            assistant::commands::assistant_history,
+            assistant::commands::assistant_status,
             task_workspace::get_task_workspace_snapshot,
             task_workspace::create_task,
             task_workspace::update_task,

@@ -29,7 +29,17 @@ const MIGRATIONS: &[(i64, Migration)] = &[
     (20, migration_20_backfill_last_attempted_at),
     (21, migration_21_external_event_reminders),
     (22, migration_22_remove_reminder_dispatch_foreign_key),
+    (23, migration_23_assistant),
+    (24, migration_24_assistant_watch_scope),
 ];
+
+fn migration_23_assistant(transaction: &Transaction<'_>) -> Result<()> {
+    crate::assistant::store::migrate(transaction)
+}
+
+fn migration_24_assistant_watch_scope(transaction: &Transaction<'_>) -> Result<()> {
+    crate::assistant::store::install_triggers(transaction)
+}
 
 pub fn open_database(path: PathBuf) -> Result<Connection> {
     // Before the first destructive unified-task migration runs, copy the
@@ -1301,6 +1311,10 @@ mod tests {
             .expect("table lookup succeeds")
     }
 
+    fn all_migration_versions() -> Vec<i64> {
+        MIGRATIONS.iter().map(|(version, _)| *version).collect()
+    }
+
     fn migrate_through(connection: &mut Connection, max_version: i64) -> Result<()> {
         connection.execute_batch(
             "CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -1347,10 +1361,7 @@ mod tests {
             .unwrap()
             .collect::<Result<_, _>>()
             .unwrap();
-        assert_eq!(
-            versions,
-            vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,]
-        );
+        assert_eq!(versions, all_migration_versions());
 
         let event_fks: Vec<(String, String, String)> = connection
             .prepare("PRAGMA foreign_key_list(events)")
@@ -1574,10 +1585,7 @@ mod tests {
             .collect::<Result<_, _>>()
             .expect("versions collect");
 
-        assert_eq!(
-            versions,
-            vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,]
-        );
+        assert_eq!(versions, all_migration_versions());
         for table in [
             "events",
             "tasks",
@@ -1855,10 +1863,7 @@ mod tests {
             .unwrap()
             .collect::<Result<_, _>>()
             .unwrap();
-        assert_eq!(
-            versions,
-            vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,]
-        );
+        assert_eq!(versions, all_migration_versions());
 
         // 新列存在。
         let columns: Vec<String> = connection

@@ -21,6 +21,10 @@ iana-time-zone = "0.1"
 uuid = { version = "1", features = ["v4"] }
 sha2 = "0.10"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
+rig-core = { version = "=0.42.0", default-features = false, features = ["reqwest", "rustls"] }
+bytes = "1"
+tokio = { version = "1", features = ["time"] }
+reqwest-rig = { package = "reqwest", version = "0.13", default-features = false, features = ["rustls"] }
 windows = { version = "0.61", features = [
   "Win32_Foundation",
   "Win32_Graphics_Gdi",

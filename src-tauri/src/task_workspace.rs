@@ -4,8 +4,9 @@ use crate::models::{
     Task, TaskCollaborator, TaskCollaboratorDraft, TaskDraft, TaskLane, TaskLaneDraft, TaskTag,
     TaskTagDraft, TaskWorkspaceSnapshot,
 };
+use crate::write_scope::DomainWrite;
 use chrono::{NaiveDate, SecondsFormat, Utc};
-use rusqlite::{params, Connection, OptionalExtension, Row, Transaction, TransactionBehavior};
+use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value;
 use std::collections::HashSet;
@@ -58,7 +59,7 @@ fn read_setting<T: DeserializeOwned>(
 }
 
 fn write_setting<T: Serialize>(
-    transaction: &Transaction<'_>,
+    transaction: &Connection,
     key: &str,
     value: &T,
 ) -> Result<(), CommandError> {
@@ -370,7 +371,7 @@ fn require_ids(
     Ok(())
 }
 
-fn require_event(transaction: &Transaction<'_>, event_id: &str) -> Result<(), CommandError> {
+fn require_event(transaction: &Connection, event_id: &str) -> Result<(), CommandError> {
     let exists: bool = transaction
         .query_row(
             "SELECT EXISTS(SELECT 1 FROM events WHERE id=?1)",
@@ -389,7 +390,7 @@ fn require_event(transaction: &Transaction<'_>, event_id: &str) -> Result<(), Co
 }
 
 fn relink_event(
-    transaction: &Transaction<'_>,
+    transaction: &Connection,
     task_id: &str,
     old_event_id: Option<&str>,
     new_event_id: Option<&str>,
@@ -453,7 +454,7 @@ fn next_position(connection: &Connection, lane_id: &str) -> Result<i64, CommandE
         .map_err(CommandError::database)
 }
 
-fn renumber_lane(transaction: &Transaction<'_>, lane_id: &str) -> Result<(), CommandError> {
+fn renumber_lane(transaction: &Connection, lane_id: &str) -> Result<(), CommandError> {
     let ids = transaction
         .prepare("SELECT id FROM tasks WHERE lane_id=?1 ORDER BY board_position,created_at,id")
         .map_err(CommandError::database)?
@@ -473,7 +474,7 @@ fn renumber_lane(transaction: &Transaction<'_>, lane_id: &str) -> Result<(), Com
 }
 
 fn replace_task_links(
-    transaction: &Transaction<'_>,
+    transaction: &Connection,
     task_id: &str,
     tag_ids: &[String],
     collaborator_ids: &[String],
@@ -514,7 +515,7 @@ fn replace_task_links(
 }
 
 fn membership(
-    transaction: &Transaction<'_>,
+    transaction: &Connection,
     task_id: &str,
     view: &str,
     present: bool,
@@ -553,10 +554,7 @@ fn task_structure(
         .ok_or_else(|| CommandError::not_found("未找到该任务。"))
 }
 
-fn coordinate_memberships(
-    transaction: &Transaction<'_>,
-    task_id: &str,
-) -> Result<(), CommandError> {
+fn coordinate_memberships(transaction: &Connection, task_id: &str) -> Result<(), CommandError> {
     let (priority, due_date) = task_structure(transaction, task_id)?;
     membership(transaction, task_id, "kanban", true)?;
     membership(transaction, task_id, "matrix", priority.is_some())?;
@@ -564,10 +562,7 @@ fn coordinate_memberships(
     Ok(())
 }
 
-fn prune_invalid_memberships(
-    transaction: &Transaction<'_>,
-    task_id: &str,
-) -> Result<(), CommandError> {
+fn prune_invalid_memberships(transaction: &Connection, task_id: &str) -> Result<(), CommandError> {
     let (priority, due_date) = task_structure(transaction, task_id)?;
     if priority.is_none() {
         membership(transaction, task_id, "matrix", false)?;
@@ -589,7 +584,7 @@ fn prune_invalid_memberships(
 }
 
 fn set_memberships(
-    transaction: &Transaction<'_>,
+    transaction: &Connection,
     task_id: &str,
     views: &[String],
 ) -> Result<(), CommandError> {
@@ -619,7 +614,7 @@ fn set_memberships(
     Ok(())
 }
 
-fn reconcile_memberships(transaction: &Transaction<'_>, task_id: &str) -> Result<(), CommandError> {
+fn reconcile_memberships(transaction: &Connection, task_id: &str) -> Result<(), CommandError> {
     if linking_enabled(transaction)? {
         coordinate_memberships(transaction, task_id)
     } else {
@@ -628,15 +623,13 @@ fn reconcile_memberships(transaction: &Transaction<'_>, task_id: &str) -> Result
 }
 
 pub fn create(
-    connection: &mut Connection,
+    connection: &Connection,
     origin_view: &str,
     draft: TaskDraft,
 ) -> Result<Task, CommandError> {
     validate_view(origin_view)?;
     let draft = validate_draft(draft)?;
-    let transaction = connection
-        .transaction_with_behavior(TransactionBehavior::Immediate)
-        .map_err(CommandError::database)?;
+    let transaction = connection.domain_write().map_err(CommandError::database)?;
     require_lane(&transaction, &draft.lane_id)?;
     require_ids(&transaction, "task_tags", "tagIds", &draft.tag_ids)?;
     require_ids(
@@ -708,15 +701,9 @@ pub fn create(
     Ok(task)
 }
 
-pub fn update(
-    connection: &mut Connection,
-    id: &str,
-    draft: TaskDraft,
-) -> Result<Task, CommandError> {
+pub fn update(connection: &Connection, id: &str, draft: TaskDraft) -> Result<Task, CommandError> {
     let draft = validate_draft(draft)?;
-    let transaction = connection
-        .transaction_with_behavior(TransactionBehavior::Immediate)
-        .map_err(CommandError::database)?;
+    let transaction = connection.domain_write().map_err(CommandError::database)?;
     let existing =
         task_by_id(&transaction, id)?.ok_or_else(|| CommandError::not_found("未找到该任务。"))?;
     require_lane(&transaction, &draft.lane_id)?;
@@ -780,10 +767,8 @@ pub fn update(
     Ok(task)
 }
 
-pub fn delete(connection: &mut Connection, id: &str) -> Result<(), CommandError> {
-    let transaction = connection
-        .transaction_with_behavior(TransactionBehavior::Immediate)
-        .map_err(CommandError::database)?;
+pub fn delete(connection: &Connection, id: &str) -> Result<(), CommandError> {
+    let transaction = connection.domain_write().map_err(CommandError::database)?;
     let task =
         task_by_id(&transaction, id)?.ok_or_else(|| CommandError::not_found("未找到该任务。"))?;
     if let Some(event_id) = task.linked_event_id.as_deref() {
@@ -803,14 +788,12 @@ pub fn delete(connection: &mut Connection, id: &str) -> Result<(), CommandError>
 }
 
 fn move_to_lane(
-    connection: &mut Connection,
+    connection: &Connection,
     id: &str,
     target_lane_id: &str,
     target_index: usize,
 ) -> Result<Task, CommandError> {
-    let transaction = connection
-        .transaction_with_behavior(TransactionBehavior::Immediate)
-        .map_err(CommandError::database)?;
+    let transaction = connection.domain_write().map_err(CommandError::database)?;
     require_lane(&transaction, target_lane_id)?;
     let task =
         task_by_id(&transaction, id)?.ok_or_else(|| CommandError::not_found("未找到该任务。"))?;
@@ -856,14 +839,12 @@ fn move_to_lane(
 }
 
 fn set_completed_value(
-    connection: &mut Connection,
+    connection: &Connection,
     id: &str,
     completed: bool,
 ) -> Result<Task, CommandError> {
     let lane = {
-        let transaction = connection
-            .transaction_with_behavior(TransactionBehavior::Immediate)
-            .map_err(CommandError::database)?;
+        let transaction = connection.domain_write().map_err(CommandError::database)?;
         if task_by_id(&transaction, id)?.is_none() {
             return Err(CommandError::not_found("未找到该任务。"));
         }
@@ -880,7 +861,7 @@ fn set_completed_value(
 }
 
 fn update_priority(
-    connection: &mut Connection,
+    connection: &Connection,
     id: &str,
     priority: Option<String>,
 ) -> Result<Task, CommandError> {
@@ -889,9 +870,7 @@ fn update_priority(
             return Err(CommandError::validation("priority", "请选择有效优先分类。"));
         }
     }
-    let transaction = connection
-        .transaction_with_behavior(TransactionBehavior::Immediate)
-        .map_err(CommandError::database)?;
+    let transaction = connection.domain_write().map_err(CommandError::database)?;
     let affected = transaction
         .execute(
             "UPDATE tasks SET priority=?2,updated_at=?3 WHERE id=?1",
@@ -909,7 +888,7 @@ fn update_priority(
 }
 
 fn update_date(
-    connection: &mut Connection,
+    connection: &Connection,
     id: &str,
     due_date: Option<String>,
 ) -> Result<Task, CommandError> {
@@ -918,9 +897,7 @@ fn update_date(
             return Err(CommandError::validation("dueDate", "截止日期格式无效。"));
         }
     }
-    let transaction = connection
-        .transaction_with_behavior(TransactionBehavior::Immediate)
-        .map_err(CommandError::database)?;
+    let transaction = connection.domain_write().map_err(CommandError::database)?;
     let affected = transaction
         .execute(
             "UPDATE tasks SET due_date=?2,updated_at=?3 WHERE id=?1",
@@ -938,13 +915,11 @@ fn update_date(
 }
 
 fn set_task_memberships(
-    connection: &mut Connection,
+    connection: &Connection,
     id: &str,
     views: Vec<String>,
 ) -> Result<Task, CommandError> {
-    let transaction = connection
-        .transaction_with_behavior(TransactionBehavior::Immediate)
-        .map_err(CommandError::database)?;
+    let transaction = connection.domain_write().map_err(CommandError::database)?;
     if linking_enabled(&transaction)? {
         return Err(CommandError::conflict(
             "任务视图联动开启时不能手动修改显示视图。",
@@ -961,12 +936,10 @@ fn set_task_memberships(
 }
 
 fn set_linking(
-    connection: &mut Connection,
+    connection: &Connection,
     enabled: bool,
 ) -> Result<TaskWorkspaceSnapshot, CommandError> {
-    let transaction = connection
-        .transaction_with_behavior(TransactionBehavior::Immediate)
-        .map_err(CommandError::database)?;
+    let transaction = connection.domain_write().map_err(CommandError::database)?;
     write_setting(&transaction, LINKING_KEY, &enabled)?;
     if enabled {
         let ids = transaction
@@ -996,14 +969,12 @@ fn lane_by_id(connection: &Connection, id: &str) -> Result<Option<TaskLane>, Com
 }
 
 fn create_lane_value(
-    connection: &mut Connection,
+    connection: &Connection,
     draft: TaskLaneDraft,
 ) -> Result<TaskLane, CommandError> {
     let name = normalize_name(&draft.name, "name", "请输入泳道名称。")?;
     let color = normalize_color(&draft.color)?;
-    let transaction = connection
-        .transaction_with_behavior(TransactionBehavior::Immediate)
-        .map_err(CommandError::database)?;
+    let transaction = connection.domain_write().map_err(CommandError::database)?;
     let position: i64 = transaction
         .query_row(
             "SELECT COALESCE(MAX(position)+1,0) FROM task_lanes",
@@ -1027,7 +998,7 @@ fn create_lane_value(
 }
 
 fn update_lane_value(
-    connection: &mut Connection,
+    connection: &Connection,
     id: &str,
     draft: TaskLaneDraft,
 ) -> Result<TaskLane, CommandError> {
@@ -1046,13 +1017,11 @@ fn update_lane_value(
 }
 
 fn delete_lane_value(
-    connection: &mut Connection,
+    connection: &Connection,
     id: &str,
     replacement_lane_id: Option<String>,
 ) -> Result<TaskWorkspaceSnapshot, CommandError> {
-    let transaction = connection
-        .transaction_with_behavior(TransactionBehavior::Immediate)
-        .map_err(CommandError::database)?;
+    let transaction = connection.domain_write().map_err(CommandError::database)?;
     require_lane(&transaction, id)?;
     let default_lane = default_lane_id(&transaction)?;
     let completion_lane = completion_lane_id(&transaction)?;
@@ -1118,12 +1087,10 @@ fn delete_lane_value(
 }
 
 fn reorder_lanes_value(
-    connection: &mut Connection,
+    connection: &Connection,
     ordered_ids: Vec<String>,
 ) -> Result<Vec<TaskLane>, CommandError> {
-    let transaction = connection
-        .transaction_with_behavior(TransactionBehavior::Immediate)
-        .map_err(CommandError::database)?;
+    let transaction = connection.domain_write().map_err(CommandError::database)?;
     let existing = list_lanes(&transaction)?;
     let existing_ids: HashSet<String> = existing.into_iter().map(|lane| lane.id).collect();
     let ordered_set: HashSet<String> = ordered_ids.iter().cloned().collect();
@@ -1147,13 +1114,11 @@ fn reorder_lanes_value(
 }
 
 fn set_lane_setting(
-    connection: &mut Connection,
+    connection: &Connection,
     key: &str,
     id: &str,
 ) -> Result<TaskWorkspaceSnapshot, CommandError> {
-    let transaction = connection
-        .transaction_with_behavior(TransactionBehavior::Immediate)
-        .map_err(CommandError::database)?;
+    let transaction = connection.domain_write().map_err(CommandError::database)?;
     require_lane(&transaction, id)?;
     write_setting(&transaction, key, &id.to_owned())?;
     if key == COMPLETION_LANE_KEY {
@@ -1194,10 +1159,7 @@ fn tag_by_id(connection: &Connection, id: &str) -> Result<Option<TaskTag>, Comma
         .map_err(CommandError::database)
 }
 
-fn create_tag_value(
-    connection: &mut Connection,
-    draft: TaskTagDraft,
-) -> Result<TaskTag, CommandError> {
+fn create_tag_value(connection: &Connection, draft: TaskTagDraft) -> Result<TaskTag, CommandError> {
     let name = normalize_name(&draft.name, "name", "请输入标签名称。")?;
     let color = normalize_color(&draft.color)?;
     if duplicate_name(connection, "task_tags", &name, None)? {
@@ -1216,7 +1178,7 @@ fn create_tag_value(
 }
 
 fn update_tag_value(
-    connection: &mut Connection,
+    connection: &Connection,
     id: &str,
     draft: TaskTagDraft,
 ) -> Result<TaskTag, CommandError> {
@@ -1238,7 +1200,7 @@ fn update_tag_value(
 }
 
 fn archive_tag_value(
-    connection: &mut Connection,
+    connection: &Connection,
     id: &str,
     archived: bool,
 ) -> Result<TaskTag, CommandError> {
@@ -1270,7 +1232,7 @@ fn collaborator_by_id(
 }
 
 fn create_collaborator_value(
-    connection: &mut Connection,
+    connection: &Connection,
     draft: TaskCollaboratorDraft,
 ) -> Result<TaskCollaborator, CommandError> {
     let name = normalize_name(&draft.name, "name", "请输入协作人名称。")?;
@@ -1291,7 +1253,7 @@ fn create_collaborator_value(
 }
 
 fn update_collaborator_value(
-    connection: &mut Connection,
+    connection: &Connection,
     id: &str,
     draft: TaskCollaboratorDraft,
 ) -> Result<TaskCollaborator, CommandError> {
@@ -1312,7 +1274,7 @@ fn update_collaborator_value(
 }
 
 fn archive_collaborator_value(
-    connection: &mut Connection,
+    connection: &Connection,
     id: &str,
     archived: bool,
 ) -> Result<TaskCollaborator, CommandError> {
@@ -1570,10 +1532,8 @@ pub fn set_task_view_preferences(
             "任务视图设置格式无效。",
         ));
     }
-    let mut connection = db.0.lock().map_err(CommandError::database)?;
-    let transaction = connection
-        .transaction_with_behavior(TransactionBehavior::Immediate)
-        .map_err(CommandError::database)?;
+    let connection = db.0.lock().map_err(CommandError::database)?;
+    let transaction = connection.domain_write().map_err(CommandError::database)?;
     write_setting(&transaction, VIEW_PREFERENCES_KEY, &preferences)?;
     transaction.commit().map_err(sql_write_error)?;
     snapshot(&connection)

@@ -1,5 +1,6 @@
 import { X } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { AssistantSettingsPanel } from '../assistant/AssistantSettingsPanel';
 import { Dialog } from '../components/Dialog';
 import { Select } from '../components/Select';
 import { TabPanel, Tabs, type TabItem } from '../components/Tabs';
@@ -7,7 +8,7 @@ import type { AppSettings, MonitorInfo } from '../data/nowly-repository';
 import { t, useTranslation, type Language } from '../i18n';
 
 type Props={settings:AppSettings;monitors?:MonitorInfo[];onClose():void;onSave(settings:AppSettings):Promise<AppSettings>};
-type SettingsTab='interface'|'desktop';
+type SettingsTab='interface'|'desktop'|'model';
 function errorMessage(error:unknown){return typeof error==='object'&&error!==null&&'message'in error&&typeof error.message==='string'?error.message:t('settings.saveError')}
 
 export function SettingsDialog({settings,monitors=[],onClose,onSave}:Props){
@@ -26,7 +27,7 @@ export function SettingsDialog({settings,monitors=[],onClose,onSave}:Props){
  useEffect(()=>{if(resolvedMonitorId&&resolvedMonitorId!==draft.targetMonitorId)setDraft(current=>({...current,targetMonitorId:resolvedMonitorId}));},[resolvedMonitorId,draft.targetMonitorId]);
  const toggle=(key:keyof AppSettings)=>(event:React.ChangeEvent<HTMLInputElement>)=>setDraft(current=>({...current,[key]:event.target.checked}));
  async function save(){setSaving(true);setError(null);try{await onSave(draft);onClose();}catch(reason){setError(errorMessage(reason));}finally{setSaving(false)}}
- const tabs:TabItem<SettingsTab>[]=[{id:'interface',label:t('settings.interface')},{id:'desktop',label:t('settings.desktopStartup')}];
+ const tabs:TabItem<SettingsTab>[]=[{id:'interface',label:t('settings.interface')},{id:'desktop',label:t('settings.desktopStartup')},{id:'model',label:t('settings.model')}];
  return <Dialog title={t('settings.title')} ariaLabelledBy="settings-title" onRequestClose={onClose} className="settings-dialog" headerActions={<button className="good-icon-button" aria-label={t('settings.close')} onClick={onClose}><X aria-hidden="true"/></button>} footer={<><button className="good-button" onClick={onClose}>{t('common.cancel')}</button><button className="good-button good-button--primary" disabled={saving} onClick={()=>void save()}>{saving?t('common.saving'):t('settings.saveSettings')}</button></>}>
   <div className="settings-form">
    <Tabs idPrefix="settings" label={t('settings.title')} items={tabs} value={tab} onChange={setTab}/>
@@ -44,6 +45,9 @@ export function SettingsDialog({settings,monitors=[],onClose,onSave}:Props){
     <div className="settings-checks">
      <Check label={t('settings.restoreWallpaper')} checked={draft.wallpaperEnabled} onChange={toggle('wallpaperEnabled')}/><Check label={t('settings.launchAtLogin')} checked={draft.launchAtLogin} onChange={toggle('launchAtLogin')}/>
     </div>
+   </TabPanel>
+   <TabPanel idPrefix="settings" tabId="model" active={tab==='model'}>
+    <AssistantSettingsPanel/>
    </TabPanel>
    {error?<div className="dialog-error" role="alert">{error}</div>:null}
   </div>

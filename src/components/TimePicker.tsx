@@ -13,6 +13,8 @@ type TimePickerProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onChange: (value: string) => void;
+  // Confirmation-sensitive forms must observe keyboard edits before blur.
+  commitOnChange?: boolean;
   now?: () => Date;
 };
 
@@ -51,6 +53,7 @@ export function TimePicker({
   open,
   onOpenChange,
   onChange,
+  commitOnChange = false,
   now = () => new Date()
 }: TimePickerProps) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -104,9 +107,10 @@ export function TimePicker({
   }
 
   function change(next: TimeValue) {
-    dirtyRef.current = true;
+    dirtyRef.current = !commitOnChange;
     timeRef.current = next;
     setTime(next);
+    if (commitOnChange) onChange(formatTime(next));
   }
 
   function changeHour(offset: number) {

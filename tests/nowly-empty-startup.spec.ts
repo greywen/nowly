@@ -19,6 +19,11 @@ test('shows the persisted-data empty dashboard without page overflow or motion',
       value: {
         invoke: async (command: string) => {
           if (command === 'get_app_settings') return settings;
+          // The app reads the shared task workspace, not just legacy list_tasks.
+          if (command === 'get_task_workspace_snapshot') return {
+            tasks: [], lanes: [], tags: [], collaborators: [], linkingEnabled: true,
+            defaultLaneId: 'kanban-lane-todo', completionLaneId: 'kanban-lane-done', viewPreferences: {}
+          };
           if (command === 'list_events_in_range' || command === 'list_tasks' || command === 'list_notes') return [];
           if (command === 'create_task' || command === 'update_task' || command === 'delete_task' || command === 'set_task_completed') {
             throw new Error('Unexpected task write in empty-startup test');
@@ -58,6 +63,9 @@ test('shows the persisted-data empty dashboard without page overflow or motion',
 test('keeps action buttons at 40px without resizing calendar content controls', async ({ page }) => {
   await page.addInitScript(() => {
     try { localStorage.setItem('nowly:onboarding-seen', 'true'); } catch { /* storage disabled */ }
+    localStorage.setItem('nowly:browser-backend', JSON.stringify({
+      moduleLayout: [{ id: 'calendar', x: 0, y: 0, w: 12, h: 8 }]
+    }));
   });
   await page.goto('/');
 

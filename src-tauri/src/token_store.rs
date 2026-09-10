@@ -28,16 +28,8 @@ fn dpapi_protect(plain: &[u8]) -> Result<Vec<u8>, CommandError> {
     // SAFETY: 传入合法的输入 BLOB 指针与输出 BLOB 接收指针；成功后 out_blob.pbData
     // 指向 LocalAlloc 分配的内存，拷贝出来后立即 LocalFree，不留悬垂。
     unsafe {
-        CryptProtectData(
-            &mut in_blob,
-            None,
-            None,
-            None,
-            None,
-            0,
-            &mut out_blob,
-        )
-        .map_err(CommandError::system)?;
+        CryptProtectData(&mut in_blob, None, None, None, None, 0, &mut out_blob)
+            .map_err(CommandError::system)?;
         let slice = std::slice::from_raw_parts(out_blob.pbData, out_blob.cbData as usize);
         let owned = slice.to_vec();
         let _ = LocalFree(Some(HLOCAL(out_blob.pbData as *mut _)));
@@ -57,16 +49,8 @@ fn dpapi_unprotect(cipher: &[u8]) -> Result<Vec<u8>, CommandError> {
     let mut out_blob = CRYPT_INTEGER_BLOB::default();
     // SAFETY: 同 protect；解密失败（密文被篡改/换用户/换机器）返回 Err。
     unsafe {
-        CryptUnprotectData(
-            &mut in_blob,
-            None,
-            None,
-            None,
-            None,
-            0,
-            &mut out_blob,
-        )
-        .map_err(CommandError::system)?;
+        CryptUnprotectData(&mut in_blob, None, None, None, None, 0, &mut out_blob)
+            .map_err(CommandError::system)?;
         let slice = std::slice::from_raw_parts(out_blob.pbData, out_blob.cbData as usize);
         let owned = slice.to_vec();
         let _ = LocalFree(Some(HLOCAL(out_blob.pbData as *mut _)));
@@ -92,8 +76,29 @@ fn encrypt_token(token: &str) -> Result<Vec<u8>, CommandError> {
 
 fn decrypt_token(cipher: &[u8]) -> Result<String, CommandError> {
     let bytes = dpapi_unprotect(cipher)?;
-    String::from_utf8(bytes)
-        .map_err(|_| CommandError::system("token 密文解码失败"))
+    String::from_utf8(bytes).map_err(|_| CommandError::system("token 密文解码失败"))
+}
+
+// The assistant reuses the OS credential boundary, never the OAuth account
+// tokens themselves. Unlike the legacy non-Windows test fallback, fail closed.
+pub(crate) fn protect_secret(secret: &str) -> Result<Vec<u8>, CommandError> {
+    if !cfg!(target_os = "windows") {
+        return Err(CommandError::validation(
+            "apiKey",
+            "当前平台未提供安全凭据存储。",
+        ));
+    }
+    encrypt_token(secret)
+}
+
+pub(crate) fn unprotect_secret(cipher: &[u8]) -> Result<String, CommandError> {
+    if !cfg!(target_os = "windows") {
+        return Err(CommandError::validation(
+            "apiKey",
+            "当前平台未提供安全凭据存储。",
+        ));
+    }
+    decrypt_token(cipher)
 }
 
 // ---- 账户存储 -------------------------------------------------------------
@@ -186,7 +191,14 @@ pub fn upsert_account(
                         SET access_token_enc=?2, refresh_token_enc=?3,
                             token_expires_at=?4, scopes=?5, updated_at=?6
                      WHERE id=?1",
-                    params![id, access_enc, refresh, tokens.expires_at, tokens.scopes, now],
+                    params![
+                        id,
+                        access_enc,
+                        refresh,
+                        tokens.expires_at,
+                        tokens.scopes,
+                        now
+                    ],
                 )
                 .map_err(CommandError::database)?;
         } else {
@@ -298,7 +310,10 @@ pub fn update_access_token(
 /// 删除账户（其订阅与外部事件经外键级联删除）。
 pub fn delete_account(connection: &mut Connection, account_id: &str) -> Result<(), CommandError> {
     let affected = connection
-        .execute("DELETE FROM oauth_accounts WHERE id=?1", params![account_id])
+        .execute(
+            "DELETE FROM oauth_accounts WHERE id=?1",
+            params![account_id],
+        )
         .map_err(CommandError::database)?;
     if affected == 0 {
         return Err(CommandError::validation("accountId", "账户不存在。"));
@@ -349,8 +364,7 @@ mod tests {
         let mut next = token_set();
         next.access_token = "access-2".into();
         next.refresh_token = None; // 刷新响应不带新 refresh_token
-        let second =
-            upsert_account(&mut connection, "google", "me@example.com", &next).unwrap();
+        let second = upsert_account(&mut connection, "google", "me@example.com", &next).unwrap();
         assert_eq!(first, second);
         assert_eq!(list_accounts(&connection).unwrap().len(), 1);
 

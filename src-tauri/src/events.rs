@@ -3,8 +3,9 @@ use crate::error::CommandError;
 use crate::event_exceptions::{self, Exception};
 use crate::models::{EditScope, Event, EventDraft, EventRange, EventTarget};
 use crate::recurrence::{self, parse_by_day, Recurrence, Series};
+use crate::write_scope::DomainWrite;
 use chrono::{Duration, NaiveDateTime, SecondsFormat, Utc};
-use rusqlite::{params, Connection, OptionalExtension, Row, Transaction, TransactionBehavior};
+use rusqlite::{params, Connection, OptionalExtension, Row};
 use tauri::State;
 use uuid::Uuid;
 
@@ -316,6 +317,71 @@ pub fn list_in_range(
     Ok(results)
 }
 
+/// Conflict checks need interval intersection, unlike the calendar's start-in-
+/// window listing. Include enclosing singles and earlier long occurrences.
+pub(crate) fn list_overlapping(
+    connection: &Connection,
+    range: &EventRange,
+) -> Result<Vec<Event>, CommandError> {
+    let device = crate::timezone::device_tz();
+    let start = parse_local(&range.start_at, "startAt")?;
+    let end = parse_local(&range.end_at_exclusive, "endAtExclusive")?;
+    let start_utc = crate::timezone::format_utc(crate::timezone::wall_to_utc(start, device));
+    let end_utc = crate::timezone::format_utc(crate::timezone::wall_to_utc(end, device));
+    let mut stmt = connection
+        .prepare(&format!(
+            "SELECT {EVENT_COLUMNS} FROM events WHERE rrule IS NULL AND (
+          (start_tz IS NULL AND start_at < ?2 AND end_at > ?1)
+          OR (start_tz IS NOT NULL AND start_utc < ?4 AND end_utc > ?3))"
+        ))
+        .map_err(CommandError::database)?;
+    let mut out = stmt
+        .query_map(
+            params![range.start_at, range.end_at_exclusive, start_utc, end_utc],
+            read_event,
+        )
+        .map_err(CommandError::database)?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(CommandError::database)?;
+    let mut stmt = connection
+        .prepare(&format!(
+            "SELECT {EVENT_COLUMNS} FROM events WHERE rrule IS NOT NULL"
+        ))
+        .map_err(CommandError::database)?;
+    let series = stmt
+        .query_map([], read_series_row)
+        .map_err(CommandError::database)?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(CommandError::database)?;
+    for row in series {
+        let base_duration =
+            parse_local(&row.end_wall, "endAt")? - parse_local(&row.start_wall, "startAt")?;
+        let exception_minutes: f64 = connection
+            .query_row(
+                "SELECT COALESCE(MAX((julianday(end_at)-julianday(start_at))*1440),0)
+             FROM event_exceptions WHERE series_id=?1 AND kind='overridden'",
+                [&row.id],
+                |r| r.get(0),
+            )
+            .map_err(CommandError::database)?;
+        // Extra days cover timezone/DST boundary differences in wall durations.
+        let lookback = base_duration
+            .max(chrono::Duration::minutes(exception_minutes.ceil() as i64))
+            + chrono::Duration::days(2);
+        let window_start = start
+            .checked_sub_signed(lookback)
+            .ok_or_else(|| CommandError::validation("startAt", "日程跨度超出安全冲突检查范围。"))?;
+        let mut instances = vec![];
+        expand_series_into(connection, &row, window_start, end, device, &mut instances)?;
+        out.extend(
+            instances
+                .into_iter()
+                .filter(|e| e.start_at < range.end_at_exclusive && e.end_at > range.start_at),
+        );
+    }
+    Ok(out)
+}
+
 /// 把一个系列在设备窗口内展开，叠加例外（excluded 剔除、overridden 覆盖）。
 /// 例外身份键与展开都在系列自身时区的钟面下进行；两路补入：
 /// Pass 1 遍历窗内展开槽位（未被例外改动的照常产出，被移出窗口的丢弃）；
@@ -448,7 +514,10 @@ fn timestamp() -> String {
     Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true)
 }
 
-fn event_by_id(connection: &Connection, id: &str) -> Result<Option<Event>, CommandError> {
+pub(crate) fn event_by_id(
+    connection: &Connection,
+    id: &str,
+) -> Result<Option<Event>, CommandError> {
     connection
         .query_row(
             &format!("SELECT {EVENT_COLUMNS} FROM events WHERE id=?1"),
@@ -608,7 +677,7 @@ fn sql_write_error(error: rusqlite::Error) -> CommandError {
     }
 }
 
-fn require_task(transaction: &Transaction<'_>, task_id: &str) -> Result<(), CommandError> {
+fn require_task(transaction: &Connection, task_id: &str) -> Result<(), CommandError> {
     let exists: bool = transaction
         .query_row(
             "SELECT EXISTS(SELECT 1 FROM tasks WHERE id=?1)",
@@ -627,7 +696,7 @@ fn require_task(transaction: &Transaction<'_>, task_id: &str) -> Result<(), Comm
 }
 
 fn relink(
-    transaction: &Transaction<'_>,
+    transaction: &Connection,
     event_id: &str,
     old_task_id: Option<&str>,
     new_task_id: Option<&str>,
@@ -681,13 +750,11 @@ fn relink(
     Ok(())
 }
 
-pub fn create(connection: &mut Connection, draft: EventDraft) -> Result<Event, CommandError> {
+pub fn create(connection: &Connection, draft: EventDraft) -> Result<Event, CommandError> {
     let draft = validate_and_normalize(draft)?;
     let id = Uuid::new_v4().hyphenated().to_string();
     let now = timestamp();
-    let transaction = connection
-        .transaction_with_behavior(TransactionBehavior::Immediate)
-        .map_err(CommandError::database)?;
+    let transaction = connection.domain_write().map_err(CommandError::database)?;
     if let Some(task_id) = draft.linked_task_id.as_deref() {
         require_task(&transaction, task_id)?;
     }
@@ -740,7 +807,7 @@ pub fn create(connection: &mut Connection, draft: EventDraft) -> Result<Event, C
 }
 
 pub fn update(
-    connection: &mut Connection,
+    connection: &Connection,
     target: &EventTarget,
     draft: EventDraft,
     scope: EditScope,
@@ -759,9 +826,7 @@ pub fn update(
         validate_and_normalize(draft)?
     };
     let now = timestamp();
-    let transaction = connection
-        .transaction_with_behavior(TransactionBehavior::Immediate)
-        .map_err(CommandError::database)?;
+    let transaction = connection.domain_write().map_err(CommandError::database)?;
 
     let existing = event_by_id(&transaction, &target.id)?
         .ok_or_else(|| CommandError::not_found("未找到该日程。"))?;
@@ -957,7 +1022,7 @@ fn occurrences_before(existing: &Event, slot: NaiveDateTime) -> Result<u32, Comm
 /// 三个结束条件列受同一条跨列 CHECK 约束，UPDATE 时整行重新求值，
 /// 因此必须在同一条语句里写成一致状态。
 fn rewrite_end(
-    transaction: &Transaction<'_>,
+    transaction: &Connection,
     existing: &Event,
     end: recurrence::RecurrenceEnd,
     now: &str,
@@ -996,7 +1061,7 @@ fn rewrite_end(
 /// 把结束条件截断到该槽位之前。本规则模型下每个日期至多产生一个槽位，
 /// 因此日期粒度的 `until` 足以精确切在该次之前。
 fn truncate_before(
-    transaction: &Transaction<'_>,
+    transaction: &Connection,
     existing: &Event,
     slot: NaiveDateTime,
     now: &str,
@@ -1013,7 +1078,7 @@ fn truncate_before(
 }
 
 /// 删除整行日程并解除与任务的双向关联。例外行由外键 CASCADE 清理。
-fn delete_series(transaction: &Transaction<'_>, id: &str, now: &str) -> Result<(), CommandError> {
+fn delete_series(transaction: &Connection, id: &str, now: &str) -> Result<(), CommandError> {
     let linked_task_id: Option<Option<String>> = transaction
         .query_row(
             "SELECT linked_task_id FROM events WHERE id=?1",
@@ -1044,7 +1109,7 @@ fn delete_series(transaction: &Transaction<'_>, id: &str, now: &str) -> Result<(
 }
 
 pub fn delete(
-    connection: &mut Connection,
+    connection: &Connection,
     target: &EventTarget,
     scope: EditScope,
 ) -> Result<(), CommandError> {
@@ -1052,9 +1117,7 @@ pub fn delete(
         return Err(CommandError::validation("scope", "单次日程只能整体删除。"));
     }
     let now = timestamp();
-    let transaction = connection
-        .transaction_with_behavior(TransactionBehavior::Immediate)
-        .map_err(CommandError::database)?;
+    let transaction = connection.domain_write().map_err(CommandError::database)?;
 
     // 槽位校验先于任何写入：非法槽位既不得写出孤儿例外行，也不得截断系列。
     let occurrence = match target.occurrence_start_at.as_deref() {
