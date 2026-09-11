@@ -5,6 +5,9 @@ use crate::settings::{read_app_settings, write_app_settings};
 use rusqlite::Connection;
 use tauri::State;
 use tauri_plugin_autostart::ManagerExt;
+use tauri_plugin_global_shortcut::GlobalShortcutExt;
+use tauri_plugin_global_shortcut::Shortcut;
+use std::str::FromStr;
 
 fn with_connection<T>(
     db: State<'_, AppDb>,
@@ -32,6 +35,7 @@ pub fn update_app_settings(
         other => CommandError::database(other),
     })?;
     let mut connection = db.0.lock().map_err(CommandError::database)?;
+    let previous_shortcut = read_app_settings(&connection).map(|s| s.quick_panel_shortcut).unwrap_or_else(|_| "Ctrl+Space".to_owned());
     // Only touch the OS autostart registration when the preference actually
     // changes. Toggling it on every save let an autostart-plugin failure (which
     // is common in dev and on some platforms) reject unrelated settings writes
@@ -46,10 +50,13 @@ pub fn update_app_settings(
             app.autolaunch().disable().map_err(CommandError::system)?;
         }
     }
-    write_app_settings(&mut connection, &settings).map_err(|error| match error {
+    let saved = write_app_settings(&mut connection, &settings).map_err(|error| match error {
         rusqlite::Error::InvalidParameterName(field) => {
             CommandError::validation(&field, "设置值无效。")
         }
         other => CommandError::database(other),
-    })
+    })?;
+    if let Ok(previous) = Shortcut::from_str(&previous_shortcut) { let _ = app.global_shortcut().unregister(previous); }
+    if settings.quick_panel_enabled { crate::register_quick_shortcut(&app, &settings.quick_panel_shortcut).map_err(CommandError::system)?; }
+    Ok(saved)
 }

@@ -1,3 +1,4 @@
-.quick-panel-root { min-height: 100vh; box-sizing: border-box; padding: 16px; background: var(--bg-page, #fff); }
+.quick-panel-root { min-height: 100vh; box-sizing: border-box; padding: 16px; background: var(--bg-page, #fff); border-radius: 0 0 var(--radius-default) var(--radius-default); }
+.quick-panel-title { margin: 0 0 12px; color: var(--text-primary); font-size: 1.25rem; font-weight: 600; }
 .quick-panel-root .assistant-dock { position: relative; inset: auto; width: 100%; }
 .quick-panel-root .assistant-panel { max-height: calc(100vh - 96px); }

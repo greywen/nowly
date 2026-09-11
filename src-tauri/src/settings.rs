@@ -46,6 +46,8 @@ pub fn read_app_settings(connection: &Connection) -> Result<AppSettings, rusqlit
             crate::models::default_icon_style(),
         )?,
         hide_topbar_in_wallpaper: read_value_or(connection, "hide_topbar_in_wallpaper", true)?,
+        quick_panel_enabled: read_value_or(connection, "quick_panel_enabled", true)?,
+        quick_panel_shortcut: read_value_or(connection, "quick_panel_shortcut", "Ctrl+Space".to_owned())?,
         recent_colors: read_value_or(connection, "recent_colors", Vec::new())?,
     })
 }
@@ -56,6 +58,9 @@ pub(crate) fn validate(settings: &AppSettings) -> Result<(), rusqlite::Error> {
         "compact" | "balanced" | "comfortable"
     ) {
         return Err(rusqlite::Error::InvalidParameterName("density".into()));
+    }
+    if settings.quick_panel_shortcut.trim().is_empty() || settings.quick_panel_shortcut.len() > 80 {
+        return Err(rusqlite::Error::InvalidParameterName("quickPanelShortcut".into()));
     }
     if !matches!(settings.week_start.as_str(), "monday" | "sunday") {
         return Err(rusqlite::Error::InvalidParameterName("weekStart".into()));
@@ -102,6 +107,14 @@ pub fn write_app_settings(
         (
             "hide_topbar_in_wallpaper",
             serde_json::to_string(&settings.hide_topbar_in_wallpaper),
+        ),
+        (
+            "quick_panel_enabled",
+            serde_json::to_string(&settings.quick_panel_enabled),
+        ),
+        (
+            "quick_panel_shortcut",
+            serde_json::to_string(&settings.quick_panel_shortcut),
         ),
         (
             "recent_colors",

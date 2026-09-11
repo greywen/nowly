@@ -48,6 +48,15 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutEvent, ShortcutState};
 
+pub fn register_quick_shortcut<R: Runtime>(app: &AppHandle<R>, shortcut: &str) -> Result<(), tauri_plugin_global_shortcut::Error> {
+    let panel = app.get_webview_window("quick-panel").expect("quick-panel window must be configured");
+    app.global_shortcut().on_shortcut(shortcut, move |_app, _shortcut, event: ShortcutEvent| {
+        if event.state() != ShortcutState::Pressed { return; }
+        if panel.is_visible().unwrap_or(false) { let _ = panel.hide(); }
+        else { let _ = panel.show(); let _ = panel.set_focus(); let _ = panel.emit("quick-panel-open", "ai-assistant"); }
+    })
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TrayClickKind {
     Single(MouseButtonState),
@@ -248,18 +257,6 @@ fn main() {
                 .build(),
         )
         .setup(|app| {
-            let quick_panel = app.get_webview_window("quick-panel").expect("quick-panel window must be configured");
-            let quick_panel_handle = quick_panel.clone();
-            app.global_shortcut().on_shortcut("Ctrl+Space", move |_app, _shortcut, event: ShortcutEvent| {
-                if event.state() != ShortcutState::Pressed { return; }
-                if quick_panel_handle.is_visible().unwrap_or(false) {
-                    let _ = quick_panel_handle.hide();
-                } else {
-                    let _ = quick_panel_handle.show();
-                    let _ = quick_panel_handle.set_focus();
-                    let _ = quick_panel_handle.emit("quick-panel-open", "ai-assistant");
-                }
-            })?;
             let app_dir = app
                 .path()
                 .app_data_dir()
@@ -282,6 +279,15 @@ fn main() {
                 eprintln!("attachment garbage collection failed: {}", error.message);
             }
             app.manage(AppDb(Mutex::new(connection)));
+            let quick_settings = settings::read_app_settings(&app.state::<AppDb>().0.lock().unwrap()).unwrap_or_else(|_| crate::models::AppSettings {
+                wallpaper_enabled: false, launch_at_login: false, target_monitor_id: None, density: "balanced".into(),
+                week_start: "monday".into(), date_format: "localized".into(), show_weekends: true, icon_style: "duotone".into(),
+                hide_topbar_in_wallpaper: true, quick_panel_enabled: true, quick_panel_shortcut: "Ctrl+Space".into(), recent_colors: vec![]
+            });
+            if quick_settings.quick_panel_enabled {
+                register_quick_shortcut(&app.handle(), &quick_settings.quick_panel_shortcut)
+                    .map_err(|error| tauri::Error::PluginInitialization("global-shortcut".into(), error.to_string()))?;
+            }
             app.manage(Mutex::new(window_lifecycle::WindowLifecycle::default()));
             app.manage(Mutex::new(focus_timer::FocusTimerCoordinator::default()));
             let timer_handle = app.handle().clone();

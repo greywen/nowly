@@ -52,6 +52,8 @@ const defaultSettings: Dict = {
   showWeekends: true,
   iconStyle: 'duotone',
   hideTopbarInWallpaper: true,
+  quickPanelEnabled: true,
+  quickPanelShortcut: 'Ctrl+Space',
   recentColors: []
 };
 
