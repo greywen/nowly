@@ -2,33 +2,11 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, Runtime};
 
-const ANIMATION_DURATION: Duration = Duration::from_millis(200);
+const PANEL_ANIMATION_DURATION: Duration = Duration::from_millis(220);
+const HANDLE_ANIMATION_DURATION: Duration = Duration::from_millis(120);
+const OPEN_PANEL_DELAY: Duration = Duration::from_millis(60);
+const CLOSE_HANDLE_DELAY: Duration = Duration::from_millis(100);
 const FRAME_DURATION: Duration = Duration::from_millis(16);
-
-#[cfg(target_os = "windows")]
-fn animations_enabled() -> bool {
-    use windows::core::BOOL;
-    use windows::Win32::UI::WindowsAndMessaging::{
-        SystemParametersInfoW, SPI_GETCLIENTAREAANIMATION, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS,
-    };
-
-    let mut enabled = BOOL::default();
-    unsafe {
-        SystemParametersInfoW(
-            SPI_GETCLIENTAREAANIMATION,
-            0,
-            Some((&mut enabled as *mut BOOL).cast()),
-            SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
-        )
-        .is_ok()
-            && enabled.as_bool()
-    }
-}
-
-#[cfg(not(target_os = "windows"))]
-fn animations_enabled() -> bool {
-    true
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PanelPhase {
@@ -49,6 +27,12 @@ pub struct PanelPositions {
     pub collapsed_y: i32,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HandlePositions {
+    pub visible_y: i32,
+    pub hidden_y: i32,
+}
+
 pub fn panel_positions(
     monitor_width: u32,
     monitor_x: i32,
@@ -57,8 +41,15 @@ pub fn panel_positions(
 ) -> PanelPositions {
     PanelPositions {
         x: monitor_x + (monitor_width.saturating_sub(panel_width) / 2) as i32,
-        expanded_y: 0,
+        expanded_y: 8,
         collapsed_y: -(panel_height as i32),
+    }
+}
+
+pub fn handle_positions(monitor_y: i32, handle_height: u32) -> HandlePositions {
+    HandlePositions {
+        visible_y: monitor_y,
+        hidden_y: monitor_y - handle_height as i32,
     }
 }
 
@@ -90,6 +81,26 @@ fn ease_out(progress: f64) -> f64 {
             (parameter - (bezier(parameter, 0.23, 0.32) - progress) / slope).clamp(0.0, 1.0);
     }
     bezier(parameter, 1.0, 1.0)
+}
+
+fn delayed_progress(elapsed: Duration, delay: Duration, duration: Duration) -> f64 {
+    elapsed.checked_sub(delay).map_or(0.0, |active| {
+        (active.as_secs_f64() / duration.as_secs_f64()).clamp(0.0, 1.0)
+    })
+}
+
+fn opening_progress(elapsed: Duration) -> (f64, f64) {
+    (
+        delayed_progress(elapsed, Duration::ZERO, HANDLE_ANIMATION_DURATION),
+        delayed_progress(elapsed, OPEN_PANEL_DELAY, PANEL_ANIMATION_DURATION),
+    )
+}
+
+fn closing_progress(elapsed: Duration) -> (f64, f64) {
+    (
+        delayed_progress(elapsed, Duration::ZERO, PANEL_ANIMATION_DURATION),
+        delayed_progress(elapsed, CLOSE_HANDLE_DELAY, HANDLE_ANIMATION_DURATION),
+    )
 }
 
 #[derive(Debug)]
@@ -186,7 +197,7 @@ impl PanelController {
 
 fn window_positions<R: Runtime>(
     app: &AppHandle<R>,
-) -> Result<(PanelPositions, PhysicalPosition<i32>), String> {
+) -> Result<(PanelPositions, i32, HandlePositions), String> {
     let panel = app
         .get_webview_window("quick-panel")
         .ok_or_else(|| "quick-panel window not found".to_owned())?;
@@ -213,7 +224,8 @@ fn window_positions<R: Runtime>(
         monitor_position.x + (monitor_size.width.saturating_sub(handle_size.width) / 2) as i32;
     Ok((
         positions,
-        PhysicalPosition::new(handle_x, monitor_position.y),
+        handle_x,
+        handle_positions(monitor_position.y, handle_size.height),
     ))
 }
 
@@ -224,6 +236,23 @@ fn restore_handle<R: Runtime>(
 ) {
     if !controller.may_restore_handle(generation) {
         return;
+    }
+    let position_result = (|| {
+        let monitor = handle
+            .primary_monitor()
+            .map_err(|error| error.to_string())?
+            .ok_or_else(|| "primary monitor not found".to_owned())?;
+        let monitor_position = monitor.position();
+        let monitor_size = monitor.size();
+        let handle_size = handle.outer_size().map_err(|error| error.to_string())?;
+        let x =
+            monitor_position.x + (monitor_size.width.saturating_sub(handle_size.width) / 2) as i32;
+        handle
+            .set_position(PhysicalPosition::new(x, monitor_position.y))
+            .map_err(|error| error.to_string())
+    })();
+    if let Err(error) = position_result {
+        eprintln!("failed to reposition quick panel handle while restoring: {error}");
     }
     if let Err(error) = handle.show() {
         eprintln!("failed to restore quick panel handle: {error}");
@@ -259,7 +288,8 @@ pub fn reposition_handle<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
     if !app.state::<PanelController>().is_enabled() {
         return Ok(());
     }
-    let (_, handle_position) = window_positions(app)?;
+    let (_, handle_x, handle_positions) = window_positions(app)?;
+    let handle_position = PhysicalPosition::new(handle_x, handle_positions.visible_y);
     let handle = app
         .get_webview_window("quick-panel-handle")
         .ok_or_else(|| "quick-panel-handle window not found".to_owned())?;
@@ -277,7 +307,7 @@ pub fn reconcile_positions<R: Runtime>(app: &AppHandle<R>) -> Result<(), String>
     let _animation = controller.animation.lock().unwrap();
     reposition_handle(app)?;
     if controller.is_open() {
-        let (positions, _) = window_positions(app)?;
+        let (positions, _, _) = window_positions(app)?;
         let panel = app
             .get_webview_window("quick-panel")
             .ok_or_else(|| "quick-panel window not found".to_owned())?;
@@ -359,13 +389,20 @@ fn animate<R: Runtime>(app: AppHandle<R>, transition: PanelTransition) {
         if !controller.is_current(transition.generation) {
             return;
         }
-        let (positions, handle_position) = match window_positions(&app) {
+        let (positions, handle_x, handle_positions) = match window_positions(&app) {
             Ok(value) => value,
             Err(error) => {
                 if transition.phase == PanelPhase::Opening {
                     fail_open(&app, &controller, transition.generation, error);
                 } else {
+                    eprintln!("failed to prepare quick panel close: {error}");
                     controller.reconcile(transition.generation, false);
+                    if let Some(panel) = app.get_webview_window("quick-panel") {
+                        let _ = panel.hide();
+                    }
+                    if let Some(handle) = app.get_webview_window("quick-panel-handle") {
+                        restore_handle(&controller, &handle, transition.generation);
+                    }
                 }
                 return;
             }
@@ -380,6 +417,9 @@ fn animate<R: Runtime>(app: AppHandle<R>, transition: PanelTransition) {
                 );
             } else {
                 controller.reconcile(transition.generation, false);
+                if let Some(handle) = app.get_webview_window("quick-panel-handle") {
+                    restore_handle(&controller, &handle, transition.generation);
+                }
             }
             return;
         };
@@ -387,17 +427,14 @@ fn animate<R: Runtime>(app: AppHandle<R>, transition: PanelTransition) {
             controller.reconcile(transition.generation, false);
             return;
         };
-        let (start_y, end_y, hide_after) = match transition.phase {
+        let (start_y, end_y, handle_start_y, handle_end_y, hide_after) = match transition.phase {
             PanelPhase::Opening => {
-                if let Err(error) = handle.set_position(handle_position) {
+                let handle_start_y = handle
+                    .outer_position()
+                    .map_or(handle_positions.visible_y, |position| position.y);
+                if let Err(error) = handle.show() {
                     fail_open(&app, &controller, transition.generation, error);
                     return;
-                }
-                if !handle_visible(transition.phase, false) {
-                    if let Err(error) = handle.hide() {
-                        fail_open(&app, &controller, transition.generation, error);
-                        return;
-                    }
                 }
                 let visible = panel.is_visible().unwrap_or(false);
                 let start_y = if visible {
@@ -427,47 +464,63 @@ fn animate<R: Runtime>(app: AppHandle<R>, transition: PanelTransition) {
                 if let Err(error) = panel.emit("quick-panel-open", "ai-assistant") {
                     eprintln!("failed to notify quick panel frontend: {error}");
                 }
-                (start_y, positions.expanded_y, false)
+                (
+                    start_y,
+                    positions.expanded_y,
+                    handle_start_y,
+                    handle_positions.hidden_y,
+                    false,
+                )
             }
             PanelPhase::Closing => {
                 let start_y = panel
                     .outer_position()
                     .map_or(positions.expanded_y, |position| position.y);
-                (start_y, positions.collapsed_y, true)
+                let handle_start_y = if handle.is_visible().unwrap_or(false) {
+                    handle
+                        .outer_position()
+                        .map_or(handle_positions.hidden_y, |position| position.y)
+                } else {
+                    if let Err(error) = handle
+                        .set_position(PhysicalPosition::new(handle_x, handle_positions.hidden_y))
+                    {
+                        eprintln!("failed to position quick panel handle before closing: {error}");
+                        let _ = panel.hide();
+                        controller.reconcile(transition.generation, false);
+                        restore_handle(&controller, &handle, transition.generation);
+                        return;
+                    }
+                    handle_positions.hidden_y
+                };
+                if let Err(error) = handle.show() {
+                    eprintln!("failed to show quick panel handle before closing: {error}");
+                    let _ = panel.hide();
+                    controller.reconcile(transition.generation, false);
+                    restore_handle(&controller, &handle, transition.generation);
+                    return;
+                }
+                (
+                    start_y,
+                    positions.collapsed_y,
+                    handle_start_y,
+                    handle_positions.visible_y,
+                    true,
+                )
             }
         };
-        if !animations_enabled() {
-            if !controller.is_current(transition.generation) {
-                return;
-            }
-            let positioned = panel
-                .set_position(PhysicalPosition::new(positions.x, end_y))
-                .is_ok();
-            let hidden = if hide_after || !positioned {
-                panel.hide().is_ok()
-            } else {
-                false
-            };
-            controller.reconcile(
-                transition.generation,
-                if hide_after || !positioned {
-                    !hidden
-                } else {
-                    true
-                },
-            );
-            if hidden && handle_visible(transition.phase, true) {
-                restore_handle(&controller, &handle, transition.generation);
-            } else if !positioned {
-                restore_handle(&controller, &handle, transition.generation);
-            }
-            return;
-        }
         let started = Instant::now();
         loop {
-            let progress = (started.elapsed().as_secs_f64() / ANIMATION_DURATION.as_secs_f64())
-                .clamp(0.0, 1.0);
-            let y = start_y as f64 + (end_y - start_y) as f64 * ease_out(progress);
+            let elapsed = started.elapsed();
+            let (panel_progress, handle_progress) = match transition.phase {
+                PanelPhase::Opening => {
+                    let (handle, panel) = opening_progress(elapsed);
+                    (panel, handle)
+                }
+                PanelPhase::Closing => closing_progress(elapsed),
+            };
+            let y = start_y as f64 + (end_y - start_y) as f64 * ease_out(panel_progress);
+            let handle_y = handle_start_y as f64
+                + (handle_end_y - handle_start_y) as f64 * ease_out(handle_progress);
             if !controller.is_current(transition.generation) {
                 return;
             }
@@ -482,10 +535,23 @@ fn animate<R: Runtime>(app: AppHandle<R>, transition: PanelTransition) {
                 }
                 return;
             }
-            if progress >= 1.0 {
+            if let Err(error) =
+                handle.set_position(PhysicalPosition::new(handle_x, handle_y.round() as i32))
+            {
+                eprintln!("failed to animate quick panel handle: {error}");
+                if transition.phase == PanelPhase::Opening {
+                    let _ = handle.hide();
+                }
+            }
+            if panel_progress >= 1.0 && handle_progress >= 1.0 {
                 break;
             }
             std::thread::sleep(FRAME_DURATION);
+        }
+        if !hide_after {
+            if let Err(error) = handle.hide() {
+                eprintln!("failed to hide quick panel handle after opening: {error}");
+            }
         }
         if hide_after {
             if !controller.is_current(transition.generation) {
@@ -542,14 +608,19 @@ pub fn close_quick_panel(app: AppHandle) -> Result<(), crate::error::CommandErro
 
 #[cfg(test)]
 mod tests {
-    use super::{ease_out, handle_visible, panel_positions, PanelController, PanelPhase};
+    use std::time::Duration;
+
+    use super::{
+        closing_progress, ease_out, handle_positions, handle_visible, opening_progress,
+        panel_positions, PanelController, PanelPhase,
+    };
 
     #[test]
     fn panel_is_centered_and_collapses_above_the_monitor() {
         let positions = panel_positions(1920, 0, 520, 640);
 
         assert_eq!(positions.x, 700);
-        assert_eq!(positions.expanded_y, 0);
+        assert_eq!(positions.expanded_y, 8);
         assert_eq!(positions.collapsed_y, -640);
     }
 
@@ -558,7 +629,7 @@ mod tests {
         let positions = panel_positions(1280, -1080, 520, 640);
 
         assert_eq!(positions.x, -700);
-        assert_eq!(positions.expanded_y, 0);
+        assert_eq!(positions.expanded_y, 8);
         assert_eq!(positions.collapsed_y, -640);
     }
 
@@ -568,8 +639,16 @@ mod tests {
         positions.expanded_y += -900;
         positions.collapsed_y += -900;
 
-        assert_eq!(positions.expanded_y, -900);
+        assert_eq!(positions.expanded_y, -892);
         assert_eq!(positions.collapsed_y, -1540);
+    }
+
+    #[test]
+    fn indicator_slides_above_the_monitor_when_the_panel_opens() {
+        let positions = handle_positions(0, 20);
+
+        assert_eq!(positions.visible_y, 0);
+        assert_eq!(positions.hidden_y, -20);
     }
 
     #[test]
@@ -621,5 +700,27 @@ mod tests {
         assert_eq!(ease_out(0.0), 0.0);
         assert_eq!(ease_out(1.0), 1.0);
         assert!(ease_out(0.5) > 0.9);
+    }
+
+    #[test]
+    fn opening_indicator_leads_the_panel_with_a_short_overlap() {
+        let (handle, panel) = opening_progress(Duration::from_millis(30));
+        assert!(handle > 0.0);
+        assert_eq!(panel, 0.0);
+
+        let (handle, panel) = opening_progress(Duration::from_millis(100));
+        assert!(handle > panel);
+        assert!(panel > 0.0);
+    }
+
+    #[test]
+    fn closing_panel_leads_indicator_return() {
+        let (panel, handle) = closing_progress(Duration::from_millis(80));
+        assert!(panel > 0.0);
+        assert_eq!(handle, 0.0);
+
+        let (panel, handle) = closing_progress(Duration::from_millis(240));
+        assert_eq!(panel, 1.0);
+        assert!(handle > 0.0);
     }
 }
