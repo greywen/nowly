@@ -655,6 +655,25 @@ export function installBrowserTauriBackend() {
     },
     list_attachments: (a) =>
       ((a.ids as string[]) ?? []).map((id) => attachmentRecords.get(id)).filter(Boolean),
+    // No OS handler in a browser. A download under the real file name is the
+    // closest equivalent, and here it is also the only way to get that name: the
+    // stored file is named by its id.
+    open_attachment: (a) => {
+      const id = String(a.id);
+      const bytes = attachmentBytes.get(id);
+      const record = attachmentRecords.get(id);
+      if (!bytes || !record) throw { code: 'not_found', message: '未找到该附件。' };
+      if (typeof document === 'undefined') return;
+      // Copy into a fresh array so the blob part is backed by a plain
+      // ArrayBuffer, as the resolver does when it builds thumbnail URLs.
+      const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: String(record.mime) }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = String(record.fileName);
+      link.click();
+      // The download has started; the URL only needs to outlive the click.
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    },
     collect_attachment_garbage: () => 0,
 
     // Software update check. The browser dev shim has no Cargo version and

@@ -74,6 +74,7 @@ export const tauriNowlyRepository: NowlyRepository = {
   readAttachment: (id) =>
     invoke<number[]>('read_attachment', { id }).then((bytes) => new Uint8Array(bytes)),
   listAttachments: (ids) => invoke('list_attachments', { ids }),
+  openAttachment: (id) => invoke('open_attachment', { id }),
   getSettings: () => invoke('get_app_settings'),
   checkForUpdate: () => invoke('check_for_update'),
   updateSettings: (settings) => invoke('update_app_settings', { settings }),

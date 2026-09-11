@@ -606,6 +606,34 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* The file name doubles as the control that opens it. Same layout metrics as
+   `-name` above so the strip does not shift depending on whether an attachment
+   has resolved; link colouring follows the one existing precedent
+   (`.custom-block--link`): colour only, no underline. */
+.rich-editor__attachment-open {
+  min-width: 0;
+  flex: 1;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  background: transparent;
+  color: var(--color-primary);
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 500;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.rich-editor__attachment-open:hover {
+  color: var(--color-primary-active);
+}
+.rich-editor__attachment-open:focus-visible {
+  outline: 0;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 0 0 4px var(--focus-ring);
+}
 .rich-editor__attachment-size {
   flex: none;
   color: var(--text-muted);

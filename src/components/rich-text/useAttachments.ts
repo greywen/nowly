@@ -40,6 +40,16 @@ export type AttachmentBridge = {
   resolveIds(ids: readonly string[]): Promise<void>;
   /** Upload one file and cache it, returning its record. */
   upload(file: File): Promise<Attachment>;
+  /**
+   * Hand one attachment to the OS to open in its default application.
+   *
+   * Rejects when the backend refuses, which it does for a file type the OS would
+   * execute rather than open, and for an attachment whose file is gone. Callers
+   * are expected to surface the message.
+   */
+  open(id: string): Promise<void>;
+  /** True when the backend can open attachments at all. */
+  canOpen: boolean;
   /** Storage form -> display form, for loading into the editor. */
   mapToDisplay(url: string): string;
   /** Display form -> storage form, for saving out of the editor. */
@@ -134,6 +144,14 @@ export function useAttachments(): AttachmentBridge {
     [remember, repository]
   );
 
+  const open = useCallback(
+    async (id: string) => {
+      if (!repository.openAttachment) throw new Error('opening attachments unsupported');
+      await repository.openAttachment(id);
+    },
+    [repository]
+  );
+
   const mapToDisplay = useCallback((url: string) => {
     const id = attachmentIdFromUrl(url);
     if (!id) return url;
@@ -146,7 +164,27 @@ export function useAttachments(): AttachmentBridge {
   }, []);
 
   return useMemo(
-    () => ({ supported, resolved, resolve, resolveIds, upload, mapToDisplay, mapToStorage }),
-    [supported, resolved, resolve, resolveIds, upload, mapToDisplay, mapToStorage]
+    () => ({
+      supported,
+      canOpen: typeof repository.openAttachment === 'function',
+      resolved,
+      resolve,
+      resolveIds,
+      upload,
+      open,
+      mapToDisplay,
+      mapToStorage
+    }),
+    [
+      supported,
+      repository.openAttachment,
+      resolved,
+      resolve,
+      resolveIds,
+      upload,
+      open,
+      mapToDisplay,
+      mapToStorage
+    ]
   );
 }

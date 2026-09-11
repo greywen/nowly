@@ -20,12 +20,40 @@ test.beforeEach(async ({ page }) => {
     let notes: any[] = [];
     let sequence = 1;
     (window as any).__notes = () => notes;
+    // Attachments, mirroring the backend's stored shape: the file is named by a
+    // 32-hex id plus the uploaded extension, never by the display name. That is
+    // why opening needs a command at all — the webview cannot navigate to it.
+    const attachmentBytes = new Map<string, number[]>();
+    const attachmentRecords = new Map<string, any>();
+    const opened: string[] = [];
+    (window as any).__opened = () => opened;
     Object.defineProperty(window, '__TAURI_INTERNALS__', { value: { invoke: async (command: string, args: any = {}) => {
       if (command === 'list_events_in_range' || command === 'list_tasks') return [];
       if (command === 'list_notes') return notes;
       if (command === 'get_app_settings') return settings;
       if (command === 'create_note') { const note = { id:`n${sequence++}`, ...args.draft, createdAt:'x', updatedAt:'x' }; notes.push(note); return note; }
-      if (command === 'list_attachments') return [];
+      if (command === 'save_attachment') {
+        const fileName = String(args.fileName ?? 'file');
+        const match = /\.([A-Za-z0-9]{1,16})$/.exec(fileName);
+        const extension = match ? match[1].toLowerCase() : null;
+        const stem = Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+        const id = extension ? `${stem}.${extension}` : stem;
+        const mime = extension && ['png','jpg','jpeg','gif','webp','bmp'].includes(extension)
+          ? `image/${extension === 'jpg' ? 'jpeg' : extension}`
+          : extension === 'docx' || extension === 'doc' ? 'application/msword'
+          : 'application/octet-stream';
+        const record = { id, fileName, relPath:`attachments/${id}`, byteSize:(args.bytes as number[]).length, mime, createdAt:'x' };
+        attachmentBytes.set(id, args.bytes as number[]);
+        attachmentRecords.set(id, record);
+        return record;
+      }
+      if (command === 'read_attachment') {
+        const bytes = attachmentBytes.get(String(args.id));
+        if (!bytes) throw new Error('not found');
+        return bytes;
+      }
+      if (command === 'list_attachments') return ((args.ids as string[]) ?? []).map((id) => attachmentRecords.get(id)).filter(Boolean);
+      if (command === 'open_attachment') { opened.push(String(args.id)); return null; }
       if (command === 'enter_wallpaper_mode' || command === 'enter_foreground_mode') return 'ok';
       throw new Error(`Unexpected command: ${command}`);
     }, transformCallback: (cb: unknown) => { const id = Math.floor(Math.random() * 2 ** 32); Reflect.set(window, `_${id}`, cb); return id; } } });
@@ -251,4 +279,63 @@ test('flips the tooltip above a link on the last visible line', async ({ page })
     )
   );
   expect(spillBottom).toBeLessThanOrEqual(0);
+});
+
+test('opens an uploaded file, which has no other way in', async ({ page }) => {
+  // The reported gap: a Word file could be attached but not opened. It is stored
+  // under a 32-hex id, so the webview cannot navigate to it and only a backend
+  // command can hand it to the OS.
+  await openEditor(page);
+  await page.locator('.rich-editor input[type="file"]').setInputFiles({
+    name: '季度报告.docx',
+    mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    buffer: Buffer.from('word bytes')
+  });
+
+  // The strip names the file, and the name is the control that opens it.
+  const open = page.getByRole('button', { name: '打开“季度报告.docx”' });
+  await expect(open).toBeVisible();
+  await expect(open).toHaveText('季度报告.docx');
+  await open.click();
+  await expect.poll(() => page.evaluate(() => (window as any).__opened())).toHaveLength(1);
+
+  // Clicking the link in the body works too, which is the obvious thing to try.
+  // Its href is `attachment:<id>`, so without interception the click does nothing.
+  const link = page.locator('.ql-editor a').first();
+  await expect(link).toBeVisible();
+  const href = await link.getAttribute('href');
+  expect(href).toMatch(/^attachment:[0-9a-f]{32}\.docx$/);
+  await link.click();
+  await expect.poll(() => page.evaluate(() => (window as any).__opened())).toHaveLength(2);
+
+  // Both routes opened the same attachment, and it is the id the link points at.
+  const opened = await page.evaluate(() => (window as any).__opened());
+  expect(new Set(opened).size).toBe(1);
+  expect(`attachment:${opened[0]}`).toBe(href);
+});
+
+test('reports a refusal from the backend instead of failing silently', async ({ page }) => {
+  // The backend refuses a file type it would have to execute. That refusal has to
+  // reach the user, or clicking appears to do nothing.
+  await page.evaluate(() => {
+    const internals = (window as any).__TAURI_INTERNALS__;
+    const inner = internals.invoke;
+    internals.invoke = async (command: string, args: any = {}) => {
+      if (command === 'open_attachment') {
+        throw { code: 'validation_error', field: 'id', message: '为了安全，不能直接打开可执行文件。' };
+      }
+      return inner(command, args);
+    };
+  });
+  await openEditor(page);
+  await page.locator('.rich-editor input[type="file"]').setInputFiles({
+    name: 'setup.exe',
+    mimeType: 'application/octet-stream',
+    buffer: Buffer.from('MZ')
+  });
+
+  await page.getByRole('button', { name: '打开“setup.exe”' }).click();
+  // Scoped to the editor's own error element: this spec's fixture throws on
+  // unrelated commands, so the page holds another role="alert" module message.
+  await expect(page.locator('.rich-editor .field-error')).toHaveText('为了安全，不能直接打开可执行文件。');
 });

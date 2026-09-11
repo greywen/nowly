@@ -32,6 +32,7 @@ function repository(overrides: Partial<NowlyRepository> = {}) {
     saveAttachment: vi.fn().mockResolvedValue(attachment()),
     readAttachment: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3])),
     listAttachments: vi.fn().mockResolvedValue([attachment()]),
+    openAttachment: vi.fn().mockResolvedValue(undefined),
     ...overrides
   } as unknown as NowlyRepository;
 }
@@ -349,6 +350,100 @@ describe('RichEditor', () => {
     );
     expect(await screen.findByText('合同.pdf')).toBeInTheDocument();
     expect(screen.getByText('512 B')).toBeInTheDocument();
+  });
+
+  it('opens an attachment from the strip', async () => {
+    // Files are stored under their id, so the webview cannot navigate to one and
+    // nothing else in the app can open it. This button is the affordance.
+    const user = userEvent.setup();
+    const repo = repository({
+      listAttachments: vi
+        .fn()
+        .mockResolvedValue([attachment({ id: FILE_ID, fileName: '合同.pdf', mime: 'application/pdf' })])
+    });
+    renderEditor(
+      { value: envelope([{ insert: '合同.pdf', attributes: { link: `attachment:${FILE_ID}` } }, { insert: '\n' }]) },
+      repo
+    );
+    await user.click(await screen.findByRole('button', { name: '打开“合同.pdf”' }));
+    expect(repo.openAttachment).toHaveBeenCalledWith(FILE_ID);
+  });
+
+  it('opens an attachment when its link in the text is clicked', async () => {
+    // Clicking the file name in the body is the obvious thing to try. The href is
+    // `attachment:<id>`, which the webview cannot navigate to, so the click is
+    // intercepted and sent to the OS instead of appearing to do nothing.
+    const user = userEvent.setup();
+    const repo = repository({
+      listAttachments: vi
+        .fn()
+        .mockResolvedValue([attachment({ id: FILE_ID, fileName: '合同.pdf', mime: 'application/pdf' })])
+    });
+    renderEditor(
+      { value: envelope([{ insert: '合同.pdf', attributes: { link: `attachment:${FILE_ID}` } }, { insert: '\n' }]) },
+      repo
+    );
+    const surface = await editorSurface();
+    await waitFor(() => expect(surface.querySelector('a')).toBeInTheDocument());
+    await user.click(surface.querySelector('a')!);
+    await waitFor(() => expect(repo.openAttachment).toHaveBeenCalledWith(FILE_ID));
+  });
+
+  it('reports why an attachment could not be opened', async () => {
+    // The backend refuses a file type it would have to execute, and reports one
+    // whose file has gone missing. Both messages have to reach the user.
+    const user = userEvent.setup();
+    const repo = repository({
+      listAttachments: vi
+        .fn()
+        .mockResolvedValue([attachment({ id: FILE_ID, fileName: '合同.pdf', mime: 'application/pdf' })]),
+      openAttachment: vi.fn().mockRejectedValue({ message: '附件文件已丢失。' })
+    });
+    renderEditor(
+      { value: envelope([{ insert: '合同.pdf', attributes: { link: `attachment:${FILE_ID}` } }, { insert: '\n' }]) },
+      repo
+    );
+    await user.click(await screen.findByRole('button', { name: '打开“合同.pdf”' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('附件文件已丢失。');
+  });
+
+  it('still opens attachments when the field is read-only', async () => {
+    // Opening a file is reading it, so a disabled editor must not take the one
+    // way of getting at an attachment away.
+    const user = userEvent.setup();
+    const repo = repository({
+      listAttachments: vi
+        .fn()
+        .mockResolvedValue([attachment({ id: FILE_ID, fileName: '合同.pdf', mime: 'application/pdf' })])
+    });
+    renderEditor(
+      {
+        value: envelope([{ insert: '合同.pdf', attributes: { link: `attachment:${FILE_ID}` } }, { insert: '\n' }]),
+        disabled: true
+      },
+      repo
+    );
+    const open = await screen.findByRole('button', { name: '打开“合同.pdf”' });
+    expect(open).toBeEnabled();
+    await user.click(open);
+    expect(repo.openAttachment).toHaveBeenCalledWith(FILE_ID);
+  });
+
+  it('shows a plain name when the backend cannot open attachments', async () => {
+    // An older or lightweight backend has no open command. The strip must fall
+    // back to text rather than offering a button that cannot work.
+    const repo = repository({
+      openAttachment: undefined,
+      listAttachments: vi
+        .fn()
+        .mockResolvedValue([attachment({ id: FILE_ID, fileName: '合同.pdf', mime: 'application/pdf' })])
+    });
+    renderEditor(
+      { value: envelope([{ insert: '合同.pdf', attributes: { link: `attachment:${FILE_ID}` } }, { insert: '\n' }]) },
+      repo
+    );
+    expect(await screen.findByText('合同.pdf')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '打开“合同.pdf”' })).not.toBeInTheDocument();
   });
 
   it('hides the attach action when the backend cannot store attachments', async () => {

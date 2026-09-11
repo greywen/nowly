@@ -58,3 +58,30 @@ if (typeof URL.createObjectURL !== 'function') {
     blobs.delete(url);
   };
 }
+
+// jsdom has no layout engine, so `Range` lacks the geometry methods. Quill's snow
+// theme calls `Range.getBoundingClientRect` whenever the selection changes, to
+// position its link tooltip. That happens inside a DOM event handler, so the
+// resulting TypeError surfaces as an unhandled exception that no test can catch:
+// the suite passes but the run still exits non-zero.
+//
+// Zero rects are the right stand-in. Nothing under test asserts on tooltip
+// coordinates, and the one thing that does care about its position — that the
+// tooltip stays inside the surface that clips it — is covered by an end-to-end
+// test in a real browser, where the geometry is real.
+if (typeof Range.prototype.getBoundingClientRect !== 'function') {
+  const emptyRect = (): DOMRect => ({
+    x: 0,
+    y: 0,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: 0,
+    height: 0,
+    toJSON: () => ({})
+  });
+  Range.prototype.getBoundingClientRect = emptyRect;
+  Range.prototype.getClientRects = () =>
+    Object.assign([] as unknown as DOMRectList, { item: () => null });
+}

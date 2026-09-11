@@ -244,6 +244,14 @@ export type NowlyRepository = {
   saveAttachment?(fileName: string, bytes: Uint8Array): Promise<Attachment>;
   readAttachment?(id: string): Promise<Uint8Array>;
   listAttachments?(ids: string[]): Promise<Attachment[]>;
+  /**
+   * Hand one attachment to the OS to open in its default application.
+   *
+   * The desktop backend opens the stored file in place, so an edit saved from
+   * that application stays with the note. Rejects for a file type the OS would
+   * execute rather than open.
+   */
+  openAttachment?(id: string): Promise<void>;
   getSettings(): Promise<AppSettings>;
   // Check GitHub for a newer release. Optional so lightweight test doubles and
   // the browser dev shim need not implement it.

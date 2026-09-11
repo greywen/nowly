@@ -24,9 +24,10 @@
 // use. See useAttachments for the blob-URL bridge.
 
 import Quill from 'quill';
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { t } from '../../i18n';
 import {
+  attachmentIdFromUrl,
   attachmentIdsIn,
   formatByteSize,
   isDisplayableImage,
@@ -296,6 +297,40 @@ export function RichEditor({ id, value, onChange, disabled = false, placeholder,
 
   const referenced = attachmentIdsIn(value);
 
+  // Hand an attachment to the OS. Failures are shown in the same place upload
+  // failures are: the backend refuses a file type it would have to execute, and
+  // reports an attachment whose file has gone missing.
+  const openAttachment = useCallback(async (attachmentId: string) => {
+    setUploadError('');
+    try {
+      await attachmentsRef.current.open(attachmentId);
+    } catch (error) {
+      const message =
+        typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string'
+          ? error.message
+          : t('richEditor.openFailed');
+      setUploadError(message);
+    }
+  }, []);
+
+  // A file in the body is a link whose href is `attachment:<id>`, or the blob URL
+  // it resolved to. Neither is something the webview can navigate to, so a click
+  // is intercepted and sent to the OS instead. Without this the only way to open
+  // a file would be the strip below, and clicking its name in the text — the
+  // obvious thing to try — would appear to do nothing.
+  const onSurfaceClick = useCallback(
+    (event: ReactMouseEvent<HTMLDivElement>) => {
+      const anchor = (event.target as HTMLElement | null)?.closest('a');
+      const href = anchor?.getAttribute('href');
+      if (!href) return;
+      const attachmentId = attachmentIdFromUrl(attachments.mapToStorage(href));
+      if (!attachmentId) return;
+      event.preventDefault();
+      void openAttachment(attachmentId);
+    },
+    [attachments, openAttachment]
+  );
+
   const tableAction = (run: (table: TableModule) => void) => () => {
     const quill = quillRef.current;
     if (!quill) return;
@@ -327,6 +362,7 @@ export function RichEditor({ id, value, onChange, disabled = false, placeholder,
           setDropping(false);
           void uploadFiles(files);
         }}
+        onClick={attachments.canOpen ? onSurfaceClick : undefined}
       >
         <div ref={wrapperRef} className="rich-editor__quill" aria-busy={deps ? undefined : 'true'} />
         {deps ? null : <p className="rich-editor__loading">{t('richEditor.loading')}</p>}
@@ -402,9 +438,29 @@ export function RichEditor({ id, value, onChange, disabled = false, placeholder,
             return (
               <li key={attachmentId} className="rich-editor__attachment">
                 <FileText aria-hidden="true" className="rich-editor__attachment-icon" />
-                <span className="rich-editor__attachment-name">
-                  {record?.fileName ?? t('richEditor.attachmentPending')}
-                </span>
+                {record && attachments.canOpen ? (
+                  // Not gated on `disabled`: opening a file is reading it, which a
+                  // read-only field should still allow.
+                  <button
+                    type="button"
+                    className="rich-editor__attachment-open"
+                    // The visible label is the file name, which does not say what
+                    // clicking does. The accessible name adds the action and keeps
+                    // the file name inside it, so it still matches what is on
+                    // screen (WCAG 2.5.3 Label in Name).
+                    aria-label={t('richEditor.openAttachment', { name: record.fileName })}
+                    // Long names are ellipsized, so a hover tooltip with the full
+                    // name is worth having.
+                    title={record.fileName}
+                    onClick={() => void openAttachment(attachmentId)}
+                  >
+                    {record.fileName}
+                  </button>
+                ) : (
+                  <span className="rich-editor__attachment-name">
+                    {record?.fileName ?? t('richEditor.attachmentPending')}
+                  </span>
+                )}
                 {record ? (
                   <span className="rich-editor__attachment-size">{formatByteSize(record.byteSize)}</span>
                 ) : null}

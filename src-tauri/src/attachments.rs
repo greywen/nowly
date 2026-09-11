@@ -248,6 +248,86 @@ pub fn read(connection: &Connection, dir: &Path, id: &str) -> Result<Vec<u8>, Co
     })
 }
 
+/// Extensions Windows would *execute* rather than open. Handing one of these to
+/// the shell turns clicking an attachment into running a program, so they are
+/// refused.
+///
+/// A denylist rather than an allowlist: the point of opening with the default
+/// handler is that it works for file types this code has never heard of, and an
+/// allowlist would reject `.odt`, `.psd`, `.dwg` and every other format nobody
+/// thought to enumerate. The risk being closed off is narrow and well known.
+///
+/// `extension_of` already restricts stored extensions to lowercase ASCII
+/// alphanumerics, so entries needing a dash (`appref-ms`) cannot be stored in the
+/// first place and are not listed.
+const NON_OPENABLE_EXTENSIONS: &[&str] = &[
+    "exe", "com", "scr", "pif", "bat", "cmd", "lnk", "ps1", "psm1", "vbs", "vbe", "js", "jse",
+    "wsf", "wsh", "msi", "msp", "cpl", "hta", "reg", "jar", "msc", "sct", "inf", "dll",
+];
+
+/// Resolve an attachment to a path the OS may be asked to open.
+///
+/// Split out from `open` so the refusals are testable without launching
+/// anything: every branch below is a reason not to call the shell at all.
+fn path_to_open(connection: &Connection, dir: &Path, id: &str) -> Result<PathBuf, CommandError> {
+    let path = path_for(dir, id)?;
+
+    // The extension is the only thing that decides which program the shell picks,
+    // so it is what has to be checked. Taken from the stored id, not from the
+    // display name in the row: the id is what is actually on disk, and the two
+    // can disagree.
+    let extension = id.rsplit_once('.').map(|(_, extension)| extension);
+    if let Some(extension) = extension {
+        if NON_OPENABLE_EXTENSIONS.contains(&extension) {
+            return Err(CommandError::validation(
+                "id",
+                "为了安全，不能直接打开可执行文件。",
+            ));
+        }
+    } else {
+        // With no extension the shell has nothing to associate, and would show its
+        // own "open with" chooser. Saying so is more useful than that dialog.
+        return Err(CommandError::validation(
+            "id",
+            "该附件没有文件类型，无法确定用什么程序打开。",
+        ));
+    }
+
+    let exists: bool = connection
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM attachments WHERE id=?1)",
+            [id],
+            |row| row.get(0),
+        )
+        .map_err(CommandError::database)?;
+    if !exists {
+        return Err(CommandError::not_found("未找到该附件。"));
+    }
+    // Check the file rather than letting the shell fail: a missing file is a
+    // broken attachment, which is worth reporting as such.
+    if !path.is_file() {
+        return Err(CommandError::not_found("附件文件已丢失。"));
+    }
+    Ok(path)
+}
+
+/// Open one attachment in the user's default application for its type.
+///
+/// The file is opened where it is stored, so an edit saved from that application
+/// lands back in the attachment and the note keeps the newer copy. The trade-off
+/// is that the application shows the stored name, which is the attachment id
+/// rather than the name the user uploaded.
+pub fn open(connection: &Connection, dir: &Path, id: &str) -> Result<(), CommandError> {
+    let path = path_to_open(connection, dir, id)?;
+    if crate::shell::open_with_default_handler(&path) {
+        Ok(())
+    } else {
+        Err(CommandError::system(
+            "无法打开附件，系统中可能没有关联的程序。",
+        ))
+    }
+}
+
 /// Metadata for a set of ids, skipping ids that are invalid or unknown so a
 /// stale reference in content cannot fail the whole lookup.
 pub fn list(connection: &Connection, ids: &[String]) -> Result<Vec<Attachment>, CommandError> {
@@ -382,6 +462,16 @@ pub fn list_attachments(
 }
 
 #[tauri::command]
+pub fn open_attachment(
+    app: tauri::AppHandle,
+    db: State<'_, AppDb>,
+    id: String,
+) -> Result<(), CommandError> {
+    let connection = db.0.lock().map_err(CommandError::database)?;
+    open(&connection, &dir_for(&app)?, &id)
+}
+
+#[tauri::command]
 pub fn collect_attachment_garbage(
     app: tauri::AppHandle,
     db: State<'_, AppDb>,
@@ -393,7 +483,8 @@ pub fn collect_attachment_garbage(
 #[cfg(test)]
 mod tests {
     use super::{
-        collect_garbage, is_valid_id, list, read, save, scan_references, MAX_ATTACHMENT_BYTES,
+        collect_garbage, is_valid_id, list, path_to_open, read, save, scan_references,
+        MAX_ATTACHMENT_BYTES,
     };
     use crate::db::migrate;
     use rusqlite::Connection;
@@ -409,6 +500,88 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("nowly-attach-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    #[test]
+    fn open_resolves_a_saved_attachment_to_its_stored_path() {
+        let connection = database();
+        let dir = temp_dir();
+        let record = save(&connection, &dir, "季度报告.docx", b"word bytes").unwrap();
+
+        // The file is opened where it is stored, so an edit saved from Word lands
+        // back in the attachment instead of in a throwaway copy.
+        assert_eq!(
+            path_to_open(&connection, &dir, &record.id).unwrap(),
+            dir.join(&record.id)
+        );
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn open_refuses_executables_rather_than_running_them() {
+        let connection = database();
+        let dir = temp_dir();
+        // `extension_of` accepts any lowercase-alnum extension, so an executable is
+        // storable. Handing one to the shell would make clicking an attachment run
+        // a program, so opening is refused even though saving is not.
+        for name in [
+            "setup.exe",
+            "run.bat",
+            "payload.cmd",
+            "link.lnk",
+            "script.ps1",
+            "x.vbs",
+        ] {
+            let record = save(&connection, &dir, name, b"x").unwrap();
+            let error = path_to_open(&connection, &dir, &record.id).unwrap_err();
+            assert_eq!(error.field, Some("id".into()), "{name} should be refused");
+            // The bytes stay readable: this blocks launching, not access.
+            assert!(read(&connection, &dir, &record.id).is_ok());
+        }
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn open_refuses_an_attachment_with_no_extension() {
+        let connection = database();
+        let dir = temp_dir();
+        // Nothing to associate, so the shell would show its own "open with"
+        // chooser. Saying why is more useful than that dialog appearing.
+        let record = save(&connection, &dir, "README", b"x").unwrap();
+        assert!(!record.id.contains('.'));
+        assert_eq!(
+            path_to_open(&connection, &dir, &record.id)
+                .unwrap_err()
+                .field,
+            Some("id".into())
+        );
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn open_reports_unknown_and_missing_attachments_before_calling_the_shell() {
+        let connection = database();
+        let dir = temp_dir();
+
+        // Well-formed id that was never saved.
+        let unknown = format!("{}.docx", "a".repeat(32));
+        assert!(path_to_open(&connection, &dir, &unknown).is_err());
+
+        // Row present, file deleted underneath it: a broken attachment rather than
+        // a shell failure, so it is caught before the shell is ever called.
+        let record = save(&connection, &dir, "a.docx", b"x").unwrap();
+        std::fs::remove_file(dir.join(&record.id)).unwrap();
+        assert!(path_to_open(&connection, &dir, &record.id).is_err());
+
+        // A malformed id is rejected by the same validation every other command
+        // uses, so no traversal reaches the shell.
+        assert_eq!(
+            path_to_open(&connection, &dir, "../../evil.docx")
+                .unwrap_err()
+                .field,
+            Some("id".into())
+        );
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

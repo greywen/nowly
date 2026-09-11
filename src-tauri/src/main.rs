@@ -30,6 +30,7 @@ mod remote_events;
 mod rrule_bridge;
 mod rrule_engine;
 mod settings;
+mod shell;
 mod subscription_sync;
 mod subscriptions;
 mod task_workspace;
@@ -587,6 +588,7 @@ fn main() {
             attachments::save_attachment,
             attachments::read_attachment,
             attachments::list_attachments,
+            attachments::open_attachment,
             attachments::collect_attachment_garbage,
             commands::get_app_settings,
             commands::update_app_settings,
