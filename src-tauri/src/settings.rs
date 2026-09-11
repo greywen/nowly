@@ -176,6 +176,11 @@ mod tests {
             show_weekends: false,
             icon_style: "outline".into(),
             hide_topbar_in_wallpaper: false,
+            // Non-default values, like every field above: the assertion below is a
+            // round trip, so a field left at its default would pass even if it were
+            // never written.
+            quick_panel_enabled: false,
+            quick_panel_shortcut: "Ctrl+Shift+K".into(),
             recent_colors: vec![],
         };
 
