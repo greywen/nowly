@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
+import Quill from 'quill';
 import { RepositoryProvider } from '../../data/RepositoryContext';
 import type { NowlyRepository } from '../../data/nowly-repository';
 import type { Attachment } from '../../lib/attachment';
@@ -172,6 +173,25 @@ describe('RichEditor', () => {
     expect(container.querySelector('.ql-size .ql-picker-label')).toHaveAttribute('data-label', '默认');
     expect(container.querySelector('.ql-font .ql-picker-label')).toHaveAttribute('data-label', '无衬线');
     expect(container.querySelector('.ql-header .ql-picker-label')).toHaveAttribute('data-label', '正文');
+  });
+
+  it('bounds the tooltip to the surface, which clips overflow', async () => {
+    // Quill defaults `bounds` to document.body and only keeps the tooltip inside
+    // whatever it is given, so it will place a link tooltip outside the editor
+    // (measured at left:-165px for a link at the start of a line) where our
+    // `overflow:hidden` surface clips it. Position itself needs layout and is
+    // covered in tests/nowly-rich-editor.spec.ts; this guards the wiring.
+    const { container } = renderEditor();
+    await editorSurface();
+    // Quill keys its instance registry on the host it was given, and the toolbar
+    // module inserts itself *before* that host, so the host is not the wrapper's
+    // first child. It is the one carrying .ql-container.
+    const host = container.querySelector('.rich-editor__quill .ql-container')!;
+    const quill = Quill.find(host) as Quill;
+    expect(quill).toBeTruthy();
+    // The element, not a selector: `resolveSelector` takes the document's first
+    // match, which would be another editor's surface when two are mounted.
+    expect(quill.options.bounds).toBe(container.querySelector('.rich-editor__surface'));
   });
 
   it('is reachable by its label and announced as multiline', async () => {

@@ -73,6 +73,7 @@ type Props = {
 export function RichEditor({ id, value, onChange, disabled = false, placeholder, labelledBy }: Props) {
   const attachments = useAttachments();
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const surfaceRef = useRef<HTMLDivElement>(null);
   const quillRef = useRef<Quill | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -180,6 +181,14 @@ export function RichEditor({ id, value, onChange, disabled = false, placeholder,
       theme: 'snow',
       formats: richTextFormats,
       placeholder,
+      // Keeps the link / formula / video tooltip inside the surface. Quill
+      // defaults this to document.body, and since it only checks that boundary
+      // it will place the tooltip outside the editor entirely (measured at
+      // left:-165px for a link at the start of a line) where our
+      // `overflow:hidden` clips it. Must be the element rather than a selector:
+      // `resolveSelector` takes the first match in the document, which would be
+      // the wrong editor whenever two are mounted.
+      bounds: surfaceRef.current ?? host,
       modules: {
         toolbar: {
           container: richTextToolbar,
@@ -296,6 +305,7 @@ export function RichEditor({ id, value, onChange, disabled = false, placeholder,
   return (
     <div className="rich-editor" data-disabled={disabled ? 'true' : undefined}>
       <div
+        ref={surfaceRef}
         className="rich-editor__surface"
         data-dropping={dropping ? 'true' : undefined}
         onDragOver={(event) => {

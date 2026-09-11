@@ -178,3 +178,77 @@ test('adds no motion, which design.md forbids and the suite asserts', async ({ p
   });
   expect(moving).toEqual([]);
 });
+
+test('keeps the link tooltip inside the editor, which clips its overflow', async ({ page }) => {
+  await openEditor(page);
+  const editor = page.locator('.ql-editor');
+  await editor.click();
+
+  // A link at the very start of a line is the worst case: snow centres the
+  // tooltip on its anchor, so an unbounded tooltip lands left of the editor.
+  await page.keyboard.type('abc');
+  await page.keyboard.press('Home');
+  await page.keyboard.down('Shift');
+  for (let i = 0; i < 3; i += 1) await page.keyboard.press('ArrowRight');
+  await page.keyboard.up('Shift');
+
+  await page.locator('button.ql-link').click();
+  const input = page.locator('.ql-tooltip input[type="text"]');
+  await expect(input).toBeVisible();
+  await input.fill('https://example.com/a-fairly-long-url');
+  await page.keyboard.press('Enter');
+
+  await editor.locator('a').first().click();
+  await expect(page.locator('.ql-tooltip')).toBeVisible();
+
+  // Quill bounds the tooltip to whatever it is given and defaults to
+  // document.body, which our `overflow:hidden` surface then clips. Measured at
+  // left:-165px before the surface was passed as `bounds`.
+  const spill = await page.evaluate(() => {
+    const tip = document.querySelector('.ql-tooltip')!.getBoundingClientRect();
+    const surface = document.querySelector('.rich-editor__surface')!.getBoundingClientRect();
+    return {
+      left: Math.round(surface.left - tip.left),
+      right: Math.round(tip.right - surface.right),
+      top: Math.round(surface.top - tip.top),
+      bottom: Math.round(tip.bottom - surface.bottom)
+    };
+  });
+  expect(spill.left).toBeLessThanOrEqual(0);
+  expect(spill.right).toBeLessThanOrEqual(0);
+  expect(spill.top).toBeLessThanOrEqual(0);
+  expect(spill.bottom).toBeLessThanOrEqual(0);
+});
+
+test('flips the tooltip above a link on the last visible line', async ({ page }) => {
+  await openEditor(page);
+  const editor = page.locator('.ql-editor');
+  await editor.click();
+  // Overflow the editor's 320px max-height so it scrolls.
+  for (let i = 0; i < 24; i += 1) {
+    await page.keyboard.type(`第 ${i} 行`);
+    await page.keyboard.press('Enter');
+  }
+  await page.keyboard.type('末行链接');
+  await page.keyboard.down('Shift');
+  for (let i = 0; i < 4; i += 1) await page.keyboard.press('ArrowLeft');
+  await page.keyboard.up('Shift');
+
+  await page.locator('button.ql-link').click();
+  await page.locator('.ql-tooltip input[type="text"]').fill('https://example.com/bottom');
+  await page.keyboard.press('Enter');
+
+  await editor.locator('a').last().click();
+  const tooltip = page.locator('.ql-tooltip');
+  await expect(tooltip).toBeVisible();
+  // Below the anchor there is no room, so Quill flips it above rather than
+  // letting the surface clip it.
+  await expect(tooltip).toHaveClass(/ql-flip/);
+  const spillBottom = await page.evaluate(() =>
+    Math.round(
+      document.querySelector('.ql-tooltip')!.getBoundingClientRect().bottom
+      - document.querySelector('.rich-editor__surface')!.getBoundingClientRect().bottom
+    )
+  );
+  expect(spillBottom).toBeLessThanOrEqual(0);
+});
