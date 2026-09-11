@@ -11,7 +11,6 @@ vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn(async (name, handler) =>
   ipc.handlers.set(name, handler);
   return ipc.remove;
 }) }));
-vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({ hide: vi.fn() }) }));
 beforeEach(() => {
   ipc.handlers.clear();
   ipc.invoke.mockReset();
@@ -19,7 +18,7 @@ beforeEach(() => {
     if (command === 'quick_panel_state') return { visible: true, panel: 'ai-assistant' };
     if (command === 'assistant_get_config') return { endpoint: '', model: '', hasKey: false, permissions: { calendar: false, tasks: false, external: false } };
     if (command === 'get_app_settings') return { iconStyle: 'duotone', density: 'balanced' };
-    if (command === 'quick_panel_hide') return;
+    if (command === 'close_quick_panel') return;
     throw new Error(`Unexpected IPC ${command}`);
   });
 });
@@ -35,6 +34,7 @@ it('Escape hides the native window while preserving draft across visibility even
   const input = await screen.findByRole('textbox');
   fireEvent.change(input, { target: { value: '明天安排评审' } });
   fireEvent.keyDown(input, { key: 'Escape' });
+  expect(ipc.invoke).toHaveBeenCalledWith('close_quick_panel');
   await waitFor(() => expect(document.querySelector('.assistant-panel')).toHaveAttribute('data-open', 'false'));
   await act(async () => ipc.handlers.get('quick-panel-open')?.({ payload: 'ai-assistant' }));
   expect(screen.getByRole('textbox')).toHaveValue('明天安排评审');

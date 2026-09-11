@@ -35,28 +35,106 @@ pub fn update_app_settings(
         other => CommandError::database(other),
     })?;
     let mut connection = db.0.lock().map_err(CommandError::database)?;
-    let previous_shortcut = read_app_settings(&connection).map(|s| s.quick_panel_shortcut).unwrap_or_else(|_| "Ctrl+Space".to_owned());
-    // Only touch the OS autostart registration when the preference actually
-    // changes. Toggling it on every save let an autostart-plugin failure (which
-    // is common in dev and on some platforms) reject unrelated settings writes
-    // — e.g. changing a calendar preference — and roll the value back in the UI.
-    let previous_launch_at_login = read_app_settings(&connection)
-        .map(|current| current.launch_at_login)
-        .unwrap_or(!settings.launch_at_login);
-    if settings.launch_at_login != previous_launch_at_login {
-        if settings.launch_at_login {
-            app.autolaunch().enable().map_err(CommandError::system)?;
-        } else {
-            app.autolaunch().disable().map_err(CommandError::system)?;
+    let previous_settings = read_app_settings(&connection).map_err(CommandError::database)?;
+    let requested_shortcut = if settings.quick_panel_enabled {
+        Some(Shortcut::from_str(&settings.quick_panel_shortcut).map_err(|_| {
+            CommandError::validation("quickPanelShortcut", "快捷键格式无效。")
+        })?)
+    } else {
+        None
+    };
+    let shortcut_changed = settings.quick_panel_enabled
+        && (!previous_settings.quick_panel_enabled
+            || settings.quick_panel_shortcut != previous_settings.quick_panel_shortcut);
+    let previous_launch_at_login = previous_settings.launch_at_login;
+    if shortcut_changed {
+        crate::register_quick_shortcut(&app, &settings.quick_panel_shortcut)
+            .map_err(CommandError::system)?;
+    }
+    let quick_panel_enabled_changed =
+        settings.quick_panel_enabled != previous_settings.quick_panel_enabled;
+    if quick_panel_enabled_changed {
+        if let Err(error) = crate::quick_panel::set_enabled(&app, settings.quick_panel_enabled) {
+            if shortcut_changed {
+                if let Some(shortcut) = requested_shortcut {
+                    let _ = app.global_shortcut().unregister(shortcut);
+                }
+            }
+            return Err(CommandError::system(error));
         }
     }
-    let saved = write_app_settings(&mut connection, &settings).map_err(|error| match error {
-        rusqlite::Error::InvalidParameterName(field) => {
-            CommandError::validation(&field, "设置值无效。")
+    if settings.launch_at_login != previous_launch_at_login {
+        let autostart_result = if settings.launch_at_login {
+            app.autolaunch().enable()
+        } else {
+            app.autolaunch().disable()
+        };
+        if let Err(error) = autostart_result {
+            let _ = crate::quick_panel::set_enabled(&app, previous_settings.quick_panel_enabled);
+            if shortcut_changed {
+                if let Some(shortcut) = requested_shortcut {
+                    let _ = app.global_shortcut().unregister(shortcut);
+                }
+            }
+            return Err(CommandError::system(error));
         }
-        other => CommandError::database(other),
-    })?;
-    if let Ok(previous) = Shortcut::from_str(&previous_shortcut) { let _ = app.global_shortcut().unregister(previous); }
-    if settings.quick_panel_enabled { crate::register_quick_shortcut(&app, &settings.quick_panel_shortcut).map_err(CommandError::system)?; }
+    }
+    let saved = match write_app_settings(&mut connection, &settings) {
+        Ok(saved) => saved,
+        Err(error) => {
+            let _ = crate::quick_panel::set_enabled(&app, previous_settings.quick_panel_enabled);
+            if settings.launch_at_login != previous_launch_at_login {
+                let rollback = if previous_launch_at_login {
+                    app.autolaunch().enable()
+                } else {
+                    app.autolaunch().disable()
+                };
+                if let Err(rollback_error) = rollback {
+                    eprintln!("failed to restore autostart setting: {rollback_error}");
+                }
+            }
+            if shortcut_changed {
+                if let Some(shortcut) = requested_shortcut {
+                    let _ = app.global_shortcut().unregister(shortcut);
+                }
+            }
+            return Err(match error {
+                rusqlite::Error::InvalidParameterName(field) => {
+                    CommandError::validation(&field, "设置值无效。")
+                }
+                other => CommandError::database(other),
+            });
+        }
+    };
+    if previous_settings.quick_panel_enabled
+        && (!settings.quick_panel_enabled
+            || settings.quick_panel_shortcut != previous_settings.quick_panel_shortcut)
+    {
+        if let Ok(previous) = Shortcut::from_str(&previous_settings.quick_panel_shortcut) {
+            if let Err(error) = app.global_shortcut().unregister(previous) {
+                let _ = write_app_settings(&mut connection, &previous_settings);
+                let _ = crate::quick_panel::set_enabled(
+                    &app,
+                    previous_settings.quick_panel_enabled,
+                );
+                if settings.launch_at_login != previous_launch_at_login {
+                    let rollback = if previous_launch_at_login {
+                        app.autolaunch().enable()
+                    } else {
+                        app.autolaunch().disable()
+                    };
+                    if let Err(rollback_error) = rollback {
+                        eprintln!("failed to restore autostart setting: {rollback_error}");
+                    }
+                }
+                if shortcut_changed {
+                    if let Some(shortcut) = requested_shortcut {
+                        let _ = app.global_shortcut().unregister(shortcut);
+                    }
+                }
+                return Err(CommandError::system(error));
+            }
+        }
+    }
     Ok(saved)
 }

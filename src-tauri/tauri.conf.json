@@ -30,8 +30,21 @@
         "decorations": false,
         "alwaysOnTop": true,
         "visible": false,
-        "center": true,
+        "skipTaskbar": true,
         "focus": true
+      },
+      {
+        "label": "quick-panel-handle",
+        "title": "Nowly 快捷面板把手",
+        "width": 72,
+        "height": 20,
+        "resizable": false,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "transparent": true,
+        "visible": false,
+        "focus": false
       }
     ],
     "security": {

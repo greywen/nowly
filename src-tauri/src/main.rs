@@ -29,6 +29,7 @@ mod reminders;
 mod remote_events;
 mod rrule_bridge;
 mod rrule_engine;
+mod quick_panel;
 mod settings;
 mod shell;
 mod subscription_sync;
@@ -49,11 +50,11 @@ use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutEvent, ShortcutState};
 
 pub fn register_quick_shortcut<R: Runtime>(app: &AppHandle<R>, shortcut: &str) -> Result<(), tauri_plugin_global_shortcut::Error> {
-    let panel = app.get_webview_window("quick-panel").expect("quick-panel window must be configured");
     app.global_shortcut().on_shortcut(shortcut, move |_app, _shortcut, event: ShortcutEvent| {
         if event.state() != ShortcutState::Pressed { return; }
-        if panel.is_visible().unwrap_or(false) { let _ = panel.hide(); }
-        else { let _ = panel.show(); let _ = panel.set_focus(); let _ = panel.emit("quick-panel-open", "ai-assistant"); }
+        if let Err(error) = quick_panel::toggle(_app) {
+            eprintln!("failed to toggle quick panel: {error}");
+        }
     })
 }
 
@@ -284,9 +285,19 @@ fn main() {
                 week_start: "monday".into(), date_format: "localized".into(), show_weekends: true, icon_style: "duotone".into(),
                 hide_topbar_in_wallpaper: true, quick_panel_enabled: true, quick_panel_shortcut: "Ctrl+Space".into(), recent_colors: vec![]
             });
+            let quick_panel_controller = quick_panel::PanelController::default();
+            quick_panel_controller.set_enabled(quick_settings.quick_panel_enabled);
+            app.manage(quick_panel_controller);
+            quick_panel::start_monitor_watch(app.handle().clone());
             if quick_settings.quick_panel_enabled {
-                register_quick_shortcut(&app.handle(), &quick_settings.quick_panel_shortcut)
-                    .map_err(|error| tauri::Error::PluginInitialization("global-shortcut".into(), error.to_string()))?;
+                quick_panel::initialize(&app.handle())
+                    .map_err(std::io::Error::other)?;
+                if let Err(error) = register_quick_shortcut(
+                    &app.handle(),
+                    &quick_settings.quick_panel_shortcut,
+                ) {
+                    eprintln!("failed to register quick panel shortcut: {error}");
+                }
             }
             app.manage(Mutex::new(window_lifecycle::WindowLifecycle::default()));
             app.manage(Mutex::new(focus_timer::FocusTimerCoordinator::default()));
@@ -492,9 +503,21 @@ fn main() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            if window.label() == "quick-panel-handle" {
+                if matches!(
+                    event,
+                    tauri::WindowEvent::ScaleFactorChanged { .. }
+                        | tauri::WindowEvent::Resized(_)
+                ) {
+                    quick_panel::request_position_reconcile(window.app_handle().clone());
+                }
+                return;
+            }
             if window.label() == "quick-panel" {
                 if let tauri::WindowEvent::Focused(false) = event {
-                    let _ = window.hide();
+                    if let Err(error) = quick_panel::close(window.app_handle()) {
+                        eprintln!("failed to close quick panel after focus loss: {error}");
+                    }
                 }
                 return;
             }
@@ -645,6 +668,8 @@ fn main() {
             remote_events::delete_remote_event,
             wallpaper::enter_wallpaper_mode,
             wallpaper::enter_foreground_mode,
+            quick_panel::open_quick_panel,
+            quick_panel::close_quick_panel,
             window_lifecycle::get_window_mode
         ])
         .run(tauri::generate_context!())

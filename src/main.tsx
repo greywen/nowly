@@ -7,6 +7,7 @@ import { installBrowserTauriBackend } from './data/browser-tauri-shim';
 import { FocusTimerProvider } from './focus/FocusTimerContext';
 import './app/styles.css';
 import { QuickPanelApp } from './quick-panel/QuickPanelApp';
+import { QuickPanelHandle } from './quick-panel/QuickPanelHandle';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
 // Outside the Tauri desktop shell (e.g. the plain Vite page in a browser) there
@@ -28,19 +29,19 @@ if (!('__TAURI_INTERNALS__' in window)) {
 // `render` and leaves a blank page rather than a degraded feature. Falling back
 // to the main app is the right answer either way: the quick panel is the special
 // case, so anything we cannot identify should be the app.
-function isQuickPanelWindow(): boolean {
-  if (!('__TAURI_INTERNALS__' in window)) return false;
+function currentWindowLabel(): string {
+  if (!('__TAURI_INTERNALS__' in window)) return 'main';
   try {
-    return getCurrentWindow().label === 'quick-panel';
+    return getCurrentWindow().label;
   } catch {
-    return false;
+    return 'main';
   }
 }
 
-const isQuickPanel = isQuickPanelWindow();
+const windowLabel = currentWindowLabel();
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
-    {isQuickPanel ? <QuickPanelApp /> : <RepositoryProvider repository={tauriNowlyRepository}>
+    {windowLabel === 'quick-panel' ? <QuickPanelApp /> : windowLabel === 'quick-panel-handle' ? <QuickPanelHandle /> : <RepositoryProvider repository={tauriNowlyRepository}>
       <FocusTimerProvider><App /></FocusTimerProvider>
     </RepositoryProvider>}
   </React.StrictMode>
