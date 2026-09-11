@@ -38,6 +38,7 @@ Thumbs.db
 
 # Local agent artifacts
 .superpowers/
+.worktrees/
 docs/
 # Keep the approved unified-task implementation baseline versioned while
 # continuing to ignore other newly generated files under docs/.
