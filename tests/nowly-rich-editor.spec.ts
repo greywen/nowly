@@ -315,27 +315,75 @@ test('opens an uploaded file, which has no other way in', async ({ page }) => {
 });
 
 test('reports a refusal from the backend instead of failing silently', async ({ page }) => {
-  // The backend refuses a file type it would have to execute. That refusal has to
-  // reach the user, or clicking appears to do nothing.
+  // A refusal on open has to reach the user, or clicking appears to do nothing.
+  //
+  // Uses a missing file rather than an executable: the upload allowlist now blocks
+  // .exe outright, so that premise is unreachable from the UI. The backend still
+  // refuses executables on open — for attachments stored before the allowlist
+  // existed — which the Rust suite covers directly.
   await page.evaluate(() => {
     const internals = (window as any).__TAURI_INTERNALS__;
     const inner = internals.invoke;
     internals.invoke = async (command: string, args: any = {}) => {
       if (command === 'open_attachment') {
-        throw { code: 'validation_error', field: 'id', message: '为了安全，不能直接打开可执行文件。' };
+        throw { code: 'not_found', message: '附件文件已丢失。' };
       }
       return inner(command, args);
     };
   });
   await openEditor(page);
   await page.locator('.rich-editor input[type="file"]').setInputFiles({
-    name: 'setup.exe',
-    mimeType: 'application/octet-stream',
-    buffer: Buffer.from('MZ')
+    name: '季度报告.docx',
+    mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    buffer: Buffer.from('word bytes')
   });
 
-  await page.getByRole('button', { name: '打开“setup.exe”' }).click();
+  await page.getByRole('button', { name: '打开“季度报告.docx”' }).click();
   // Scoped to the editor's own error element: this spec's fixture throws on
   // unrelated commands, so the page holds another role="alert" module message.
-  await expect(page.locator('.rich-editor .field-error')).toHaveText('为了安全，不能直接打开可执行文件。');
+  await expect(page.locator('.rich-editor .field-error')).toHaveText('附件文件已丢失。');
+});
+
+test('accepts office documents and images only', async ({ page }) => {
+  await openEditor(page);
+
+  // The picker is filtered by extension. Real browser, so this is the attribute
+  // the OS dialog actually consumes.
+  const accept = await page.locator('.rich-editor input[type="file"]').getAttribute('accept');
+  expect(accept).toContain('.docx');
+  expect(accept).toContain('.png');
+  expect(accept?.split(',')).not.toContain('.exe');
+  expect(accept?.split(',')).not.toContain('.svg');
+
+  // setInputFiles bypasses `accept`, which is exactly the case the check guards:
+  // the filter can be overridden in the OS dialog, and never applies to a drop.
+  await page.locator('.rich-editor input[type="file"]').setInputFiles({
+    name: 'setup.exe', mimeType: 'application/octet-stream', buffer: Buffer.from('MZ')
+  });
+  await expect(page.locator('.rich-editor .field-error')).toHaveText(/不支持“setup\.exe”/);
+  // Nothing was stored, so no attachment strip appeared.
+  await expect(page.locator('.rich-editor__attachment')).toHaveCount(0);
+
+  // An allowed file still uploads afterwards, and clears the message.
+  await page.locator('.rich-editor input[type="file"]').setInputFiles({
+    name: '季度报告.docx',
+    mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    buffer: Buffer.from('word bytes')
+  });
+  await expect(page.locator('.rich-editor__attachment')).toHaveCount(1);
+  await expect(page.locator('.rich-editor .field-error')).toHaveCount(0);
+});
+
+test('keeps the allowed files in a mixed selection', async ({ page }) => {
+  // A rejected file must not discard the ones beside it.
+  await openEditor(page);
+  await page.locator('.rich-editor input[type="file"]').setInputFiles([
+    { name: 'a.zip', mimeType: 'application/zip', buffer: Buffer.from('PK') },
+    { name: '图.png', mimeType: 'image/png', buffer: Buffer.from([137, 80, 78, 71]) },
+    { name: 'b.exe', mimeType: 'application/octet-stream', buffer: Buffer.from('MZ') }
+  ]);
+
+  await expect(page.locator('.rich-editor .field-error')).toHaveText(/有 2 个文件类型不支持/);
+  // The image landed as an inline image, so it is in the body rather than the strip.
+  await expect(page.locator('.ql-editor img')).toHaveCount(1);
 });

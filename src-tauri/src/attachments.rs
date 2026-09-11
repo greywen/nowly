@@ -29,6 +29,31 @@ use uuid::Uuid;
 /// local-first SQLite database and its backups from being dwarfed by media.
 pub const MAX_ATTACHMENT_BYTES: usize = 1024 * 1024;
 
+/// File types an attachment may be uploaded as: everyday office documents and
+/// images, and nothing else.
+///
+/// An allowlist here, unlike the denylist guarding *opening* below. The two ask
+/// different questions. Uploading is a choice made now, from a file picker that
+/// can be filtered, so it is reasonable to enumerate what is wanted. Opening also
+/// has to deal with attachments stored before this list existed, where the only
+/// safe move is to name the handful of types that must never be launched. Keeping
+/// both means a `.exe` stored by an older build still cannot be run.
+///
+/// `svg` is deliberately absent. It is an image, but it can carry script, which
+/// is why `safeUrl` on the frontend excludes it from its data-URL allowance too.
+///
+/// Mirrored by `ALLOWED_ATTACHMENT_EXTENSIONS` in src/lib/attachment.ts, which
+/// filters the picker and pre-checks drops. A drift test asserts the two match:
+/// a frontend list wider than this one would offer files the backend then refuses.
+pub const ALLOWED_EXTENSIONS: &[&str] = &[
+    // Images
+    "png", "jpg", "jpeg", "gif", "webp", "bmp",
+    // Documents
+    "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "rtf", "txt", "md", "csv",
+    // OpenDocument equivalents
+    "odt", "ods", "odp",
+];
+
 /// Content columns scanned when reclaiming unreferenced files. `external_events`
 /// is intentionally absent: it holds read-only synced data that can never carry
 /// an attachment.
@@ -120,6 +145,11 @@ fn extension_of(file_name: &str) -> Option<String> {
 /// Best-effort content type from the extension. Kept as a small local table
 /// rather than a dependency; unknown types fall back to a generic binary type
 /// so the browser never sniffs something surprising out of them.
+///
+/// Every entry in `ALLOWED_EXTENSIONS` appears here, which a test asserts:
+/// admitting a type and then describing it as `octet-stream` would be
+/// contradictory, and the type is what the frontend uses to decide whether an
+/// attachment can be shown inline.
 fn mime_for(extension: Option<&str>) -> &'static str {
     match extension {
         Some("png") => "image/png",
@@ -130,10 +160,24 @@ fn mime_for(extension: Option<&str>) -> &'static str {
         Some("pdf") => "application/pdf",
         Some("txt" | "md") => "text/plain",
         Some("csv") => "text/csv",
+        Some("rtf") => "application/rtf",
         Some("json") => "application/json",
         Some("zip") => "application/zip",
-        Some("doc" | "docx") => "application/msword",
-        Some("xls" | "xlsx") => "application/vnd.ms-excel",
+        // The OOXML formats are their own types. Reporting `docx` as
+        // `application/msword` (the legacy .doc type) was simply wrong.
+        Some("doc") => "application/msword",
+        Some("docx") => {
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        }
+        Some("xls") => "application/vnd.ms-excel",
+        Some("xlsx") => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        Some("ppt") => "application/vnd.ms-powerpoint",
+        Some("pptx") => {
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        }
+        Some("odt") => "application/vnd.oasis.opendocument.text",
+        Some("ods") => "application/vnd.oasis.opendocument.spreadsheet",
+        Some("odp") => "application/vnd.oasis.opendocument.presentation",
         _ => "application/octet-stream",
     }
 }
@@ -184,6 +228,27 @@ pub fn save(
 
     let display_name = clean_file_name(file_name);
     let extension = extension_of(&display_name);
+    // Gate on type before storing anything. This is the authoritative check: the
+    // frontend filters its picker and pre-checks drops, but neither can be relied
+    // on, and the command is reachable without them.
+    match extension.as_deref() {
+        Some(extension) if ALLOWED_EXTENSIONS.contains(&extension) => {}
+        Some(extension) => {
+            return Err(CommandError::validation(
+                "file",
+                format!("不支持 .{extension} 文件，只能上传办公文档与图片。"),
+            ));
+        }
+        // No usable extension, so there is nothing to check the type against. Such
+        // a file could not be opened afterwards either, since the shell has
+        // nothing to associate it with.
+        None => {
+            return Err(CommandError::validation(
+                "file",
+                "无法识别文件类型，只能上传办公文档与图片。",
+            ));
+        }
+    }
     let id = match &extension {
         Some(extension) => format!("{}.{extension}", Uuid::new_v4().simple()),
         None => Uuid::new_v4().simple().to_string(),
@@ -483,12 +548,12 @@ pub fn collect_attachment_garbage(
 #[cfg(test)]
 mod tests {
     use super::{
-        collect_garbage, is_valid_id, list, path_to_open, read, save, scan_references,
-        MAX_ATTACHMENT_BYTES,
+        collect_garbage, is_valid_id, list, mime_for, path_to_open, read, save, scan_references,
+        ALLOWED_EXTENSIONS, MAX_ATTACHMENT_BYTES,
     };
     use crate::db::migrate;
     use rusqlite::Connection;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     fn database() -> Connection {
         let mut connection = Connection::open_in_memory().unwrap();
@@ -500,6 +565,24 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("nowly-attach-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    /// Store an attachment without going through `save`, to stand in for one
+    /// written by a build predating the upload allowlist.
+    ///
+    /// `save` now refuses these types outright, so the tests covering what may be
+    /// *opened* cannot use it to build their fixtures — and those tests exist
+    /// precisely because such rows can already be in a user's database.
+    fn seed_legacy(connection: &Connection, dir: &Path, id: &str, name: &str) {
+        std::fs::create_dir_all(dir).unwrap();
+        std::fs::write(dir.join(id), b"x").unwrap();
+        connection
+            .execute(
+                "INSERT INTO attachments(id,file_name,rel_path,byte_size,mime,created_at)
+                 VALUES (?1,?2,?3,1,'application/octet-stream','2026-01-01T00:00:00Z')",
+                rusqlite::params![id, name, format!("attachments/{id}")],
+            )
+            .unwrap();
     }
 
     #[test]
@@ -521,22 +604,32 @@ mod tests {
     fn open_refuses_executables_rather_than_running_them() {
         let connection = database();
         let dir = temp_dir();
-        // `extension_of` accepts any lowercase-alnum extension, so an executable is
-        // storable. Handing one to the shell would make clicking an attachment run
-        // a program, so opening is refused even though saving is not.
-        for name in [
+        // An executable can be present from a build predating the upload
+        // allowlist, so opening still has to refuse it: handing one to the shell
+        // would make clicking an attachment run a program.
+        for (index, name) in [
             "setup.exe",
             "run.bat",
             "payload.cmd",
             "link.lnk",
             "script.ps1",
             "x.vbs",
-        ] {
-            let record = save(&connection, &dir, name, b"x").unwrap();
-            let error = path_to_open(&connection, &dir, &record.id).unwrap_err();
+        ]
+        .iter()
+        .enumerate()
+        {
+            let extension = name.rsplit_once('.').unwrap().1;
+            let id = format!("{:032x}.{extension}", index + 1);
+            seed_legacy(&connection, &dir, &id, name);
+            let error = path_to_open(&connection, &dir, &id).unwrap_err();
             assert_eq!(error.field, Some("id".into()), "{name} should be refused");
             // The bytes stay readable: this blocks launching, not access.
-            assert!(read(&connection, &dir, &record.id).is_ok());
+            assert!(read(&connection, &dir, &id).is_ok());
+            // And such a file can no longer be uploaded in the first place.
+            assert_eq!(
+                save(&connection, &dir, name, b"x").unwrap_err().field,
+                Some("file".into())
+            );
         }
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -547,12 +640,10 @@ mod tests {
         let dir = temp_dir();
         // Nothing to associate, so the shell would show its own "open with"
         // chooser. Saying why is more useful than that dialog appearing.
-        let record = save(&connection, &dir, "README", b"x").unwrap();
-        assert!(!record.id.contains('.'));
+        let id = "a".repeat(32);
+        seed_legacy(&connection, &dir, &id, "README");
         assert_eq!(
-            path_to_open(&connection, &dir, &record.id)
-                .unwrap_err()
-                .field,
+            path_to_open(&connection, &dir, &id).unwrap_err().field,
             Some("id".into())
         );
         std::fs::remove_dir_all(&dir).ok();
@@ -582,6 +673,105 @@ mod tests {
             Some("id".into())
         );
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn save_accepts_office_documents_and_images_only() {
+        let connection = database();
+        let dir = temp_dir();
+
+        // Everything on the list stores, under a matching extension.
+        for extension in ALLOWED_EXTENSIONS {
+            let record = save(&connection, &dir, &format!("文件.{extension}"), b"x").unwrap();
+            assert!(record.id.ends_with(&format!(".{extension}")), "{extension}");
+        }
+
+        // Everything else is refused, whether it is dangerous, merely unwanted, or
+        // an image format that can carry script.
+        for name in [
+            "setup.exe", "run.bat", "lib.dll", "archive.zip", "data.json", "clip.mp4", "song.mp3",
+            "drawing.svg", "page.html", "styles.css", "backup.db", "photo.tiff",
+        ] {
+            let error = save(&connection, &dir, name, b"x").unwrap_err();
+            assert_eq!(error.field, Some("file".into()), "{name} should be refused");
+            // The message names the type, so the reason is obvious in the dialog.
+            let extension = name.rsplit_once('.').unwrap().1;
+            assert!(
+                error.message.contains(extension),
+                "{name}: {}",
+                error.message
+            );
+        }
+
+        // A name with no extension has nothing to check, and could not be opened
+        // afterwards either.
+        assert_eq!(
+            save(&connection, &dir, "README", b"x").unwrap_err().field,
+            Some("file".into())
+        );
+        // Uppercase is normalised before the check, so .PNG is the same as .png.
+        assert!(save(&connection, &dir, "报告.PNG", b"x").is_ok());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn every_allowed_type_has_a_content_type() {
+        // Admitting a type and then describing it as octet-stream would be
+        // contradictory, and the mime is what decides whether the frontend shows an
+        // attachment inline.
+        for extension in ALLOWED_EXTENSIONS {
+            assert_ne!(
+                mime_for(Some(extension)),
+                "application/octet-stream",
+                "{extension} has no content type"
+            );
+        }
+        // Images are typed as images, which is what drives inline display.
+        for extension in ["png", "jpg", "jpeg", "gif", "webp", "bmp"] {
+            assert!(mime_for(Some(extension)).starts_with("image/"), "{extension}");
+        }
+        // The OOXML formats get their own types rather than the legacy ones.
+        assert!(mime_for(Some("docx")).contains("wordprocessingml"));
+        assert!(mime_for(Some("xlsx")).contains("spreadsheetml"));
+        assert!(mime_for(Some("pptx")).contains("presentationml"));
+    }
+
+    #[test]
+    fn allowlist_matches_the_frontend_copy() {
+        // The frontend keeps its own copy to filter the file picker and to reject a
+        // drop before reading its bytes. This gate is authoritative, so drift in the
+        // widening direction is what hurts: a picker offering files that are then
+        // refused. Read the TypeScript source so the two cannot silently diverge.
+        //
+        // The assertion lives here rather than in the frontend suite because that
+        // project has no `@types/node`, and adding it just to read a file would
+        // change the type surface of the whole app.
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("src-tauri has a parent")
+            .join("src/lib/attachment.ts");
+        let source = std::fs::read_to_string(&path)
+            .unwrap_or_else(|error| panic!("cannot read {}: {error}", path.display()));
+
+        let start = source
+            .find("ALLOWED_ATTACHMENT_EXTENSIONS = [")
+            .expect("ALLOWED_ATTACHMENT_EXTENSIONS not found in attachment.ts");
+        let block = &source[start..];
+        let end = block.find(']').expect("unterminated array literal");
+        // Quoted entries only, so the comments inside the literal are ignored.
+        let mut frontend: Vec<String> = block[..end]
+            .split('\'')
+            .skip(1)
+            .step_by(2)
+            .map(|entry| entry.to_owned())
+            .collect();
+        frontend.sort();
+        assert!(!frontend.is_empty(), "parsed no entries from attachment.ts");
+
+        let mut backend: Vec<String> =
+            ALLOWED_EXTENSIONS.iter().map(|e| (*e).to_owned()).collect();
+        backend.sort();
+        assert_eq!(backend, frontend, "upload allowlists have drifted");
     }
 
     #[test]

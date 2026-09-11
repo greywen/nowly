@@ -17,6 +17,11 @@
 // The shim is only installed when no real (or test-injected) Tauri IPC is
 // present, so it never interferes with the desktop build or e2e runs.
 
+// The upload allowlist is shared with the editor rather than copied again, so a
+// file the desktop build would refuse is refused here too. ("Self-contained"
+// above means it needs no Tauri runtime, not that it avoids imports.)
+import { isAllowedAttachmentName } from '../lib/attachment';
+
 type Dict = Record<string, unknown>;
 
 const STORAGE_KEY = 'nowly:browser-backend';
@@ -631,6 +636,15 @@ export function installBrowserTauriBackend() {
         throw { code: 'validation_error', field: 'file', message: '文件超过 1 MB 上限，请压缩后重试。' };
       }
       const fileName = String(a.fileName ?? 'file');
+      // Same allowlist the desktop backend enforces, so a file that would be
+      // refused there is refused here rather than appearing to work in dev.
+      if (!isAllowedAttachmentName(fileName)) {
+        throw {
+          code: 'validation_error',
+          field: 'file',
+          message: '不支持该文件类型，只能上传办公文档与图片。'
+        };
+      }
       const match = /\.([A-Za-z0-9]{1,16})$/.exec(fileName);
       const extension = match ? match[1].toLowerCase() : null;
       const stem = Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('');

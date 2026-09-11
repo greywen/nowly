@@ -30,8 +30,10 @@ import {
   attachmentIdFromUrl,
   attachmentIdsIn,
   formatByteSize,
+  isAllowedAttachmentName,
   isDisplayableImage,
   attachmentUrl,
+  ATTACHMENT_ACCEPT,
   type Attachment
 } from '../../lib/attachment';
 import { FileText, Paperclip, X } from '../icons';
@@ -147,7 +149,29 @@ export function RichEditor({ id, value, onChange, disabled = false, placeholder,
       const quill = quillRef.current;
       if (!quill || !files.length) return;
       setUploadError('');
+
+      // Screen by type before reading any bytes. `accept` on the picker is only a
+      // filter — it can be overridden in the dialog, and it does not apply to a
+      // drop at all. The backend is still the authority; this exists so the user
+      // hears about it now instead of after a round trip that was always going to
+      // fail, and so a rejected file does not cost a 1MB read.
+      const allowed: File[] = [];
+      const rejected: File[] = [];
       for (const file of files) {
+        (isAllowedAttachmentName(file.name) ? allowed : rejected).push(file);
+      }
+      if (rejected.length) {
+        // Named individually when there is one, counted when there are several, so
+        // a mixed drop does not produce an unbounded message.
+        setUploadError(
+          rejected.length === 1
+            ? t('richEditor.unsupportedType', { name: rejected[0].name })
+            : t('richEditor.unsupportedTypes', { count: rejected.length })
+        );
+      }
+      // The allowed files still upload: in a mixed drop the position of a rejected
+      // file should not decide whether the rest land.
+      for (const file of allowed) {
         try {
           const record = await attachmentsRef.current.upload(file);
           insertFile(quill, record, attachmentsRef.current.mapToDisplay(attachmentUrl(record.id)));
@@ -414,6 +438,9 @@ export function RichEditor({ id, value, onChange, disabled = false, placeholder,
         ref={fileInputRef}
         type="file"
         multiple
+        // Filters the OS picker to office documents and images. Not a guarantee:
+        // it can be overridden in the dialog, so `uploadFiles` re-checks.
+        accept={ATTACHMENT_ACCEPT}
         className="rich-editor__file-input"
         tabIndex={-1}
         aria-hidden="true"

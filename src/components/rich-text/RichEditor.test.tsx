@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -350,6 +350,81 @@ describe('RichEditor', () => {
     );
     expect(await screen.findByText('合同.pdf')).toBeInTheDocument();
     expect(screen.getByText('512 B')).toBeInTheDocument();
+  });
+
+  it('filters the picker to office documents and images', async () => {
+    renderEditor();
+    await editorSurface();
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    // Extensions, not MIME types: the OS maps extensions to types inconsistently,
+    // so filtering by type hides files that are in fact allowed.
+    expect(input.accept).toContain('.docx');
+    expect(input.accept).toContain('.png');
+    expect(input.accept).toContain('.pdf');
+    expect(input.accept).not.toContain('/');
+    // Not offered: executables, archives, and an image that can carry script.
+    for (const absent of ['.exe', '.zip', '.svg', '.json']) {
+      expect(input.accept.split(',')).not.toContain(absent);
+    }
+  });
+
+  it('refuses an unsupported file chosen despite the picker filter', async () => {
+    // `accept` can be overridden in the OS dialog by typing a name, so the editor
+    // re-checks. `applyAccept: false` models exactly that: without it user-event
+    // applies the filter itself and no file ever reaches the handler.
+    const user = userEvent.setup({ applyAccept: false });
+    const repo = repository();
+    const onChange = vi.fn();
+    renderEditor({ onChange }, repo);
+    await editorSurface();
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(input, new File(['MZ'], 'setup.exe', { type: 'application/octet-stream' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('不支持“setup.exe”');
+    // Screened before any bytes are read, so no round trip is spent on it.
+    expect(repo.saveAttachment).not.toHaveBeenCalled();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('uploads the allowed files in a mixed drop and counts the rest', async () => {
+    // A rejected file must not decide the fate of the others: previously the loop
+    // stopped at the first failure, so one .zip could discard the images after it.
+    const user = userEvent.setup({ applyAccept: false });
+    const repo = repository();
+    renderEditor({}, repo);
+    await editorSurface();
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(input, [
+      new File(['x'], 'a.zip', { type: 'application/zip' }),
+      new File([new Uint8Array([1, 2, 3])], '报告.png', { type: 'image/png' }),
+      new File(['y'], 'b.exe', { type: 'application/octet-stream' })
+    ]);
+
+    // Counted rather than listed, so a large mixed drop cannot produce an
+    // unbounded message.
+    expect(await screen.findByRole('alert')).toHaveTextContent('有 2 个文件类型不支持');
+    // The image still landed.
+    await waitFor(() => expect(repo.saveAttachment).toHaveBeenCalledTimes(1));
+    expect((repo.saveAttachment as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBe('报告.png');
+  });
+
+  it('screens a dropped file, which the picker filter never sees', async () => {
+    // `accept` does not apply to drag and drop at all, so this path has to check
+    // for itself.
+    const repo = repository();
+    renderEditor({}, repo);
+    // Quill must exist first: uploadFiles returns early without it.
+    await editorSurface();
+    const surface = document.querySelector('.rich-editor__surface')!;
+    fireEvent.drop(surface, {
+      dataTransfer: {
+        types: ['Files'],
+        files: [new File(['MZ'], 'setup.exe', { type: 'application/octet-stream' })]
+      }
+    });
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('不支持“setup.exe”');
+    expect(repo.saveAttachment).not.toHaveBeenCalled();
   });
 
   it('opens an attachment from the strip', async () => {

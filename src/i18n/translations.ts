@@ -234,7 +234,9 @@ export const translations: Record<Language, Record<string, string>> = {
     // Rich text editor
     'richEditor.placeholder': '在此输入内容…',
     'richEditor.attachFile': '添加附件',
-    'richEditor.dropHint': '可拖放图片或文件，单个不超过 1 MB',
+    'richEditor.dropHint': '可拖放办公文档与图片，单个不超过 1 MB',
+    'richEditor.unsupportedType': '不支持“{name}”，只能上传办公文档与图片。',
+    'richEditor.unsupportedTypes': '有 {count} 个文件类型不支持，只能上传办公文档与图片。',
     'richEditor.uploadFailed': '附件上传失败，请重试。',
     'richEditor.openFailed': '无法打开附件。',
     'richEditor.openAttachment': '打开“{name}”',
@@ -1005,7 +1007,9 @@ export const translations: Record<Language, Record<string, string>> = {
     // Rich text editor
     'richEditor.placeholder': 'Type your content here…',
     'richEditor.attachFile': 'Attach a file',
-    'richEditor.dropHint': 'Drop images or files here, up to 1 MB each',
+    'richEditor.dropHint': 'Drop office documents or images here, up to 1 MB each',
+    'richEditor.unsupportedType': '"{name}" is not a supported type. Only office documents and images can be uploaded.',
+    'richEditor.unsupportedTypes': '{count, plural, one {# file is} other {# files are}} not a supported type. Only office documents and images can be uploaded.',
     'richEditor.uploadFailed': 'Could not upload the attachment. Please try again.',
     'richEditor.openFailed': 'Could not open the attachment.',
     'richEditor.openAttachment': 'Open "{name}"',
