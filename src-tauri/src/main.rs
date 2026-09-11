@@ -45,6 +45,7 @@ use std::sync::Mutex;
 use tauri::menu::MenuBuilder;
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutEvent, ShortcutState};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TrayClickKind {
@@ -239,12 +240,25 @@ fn main() {
             show_main_window(app)
         }))
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(
             tauri_plugin_autostart::Builder::new()
                 .args(["--background"])
                 .build(),
         )
         .setup(|app| {
+            let quick_panel = app.get_webview_window("quick-panel").expect("quick-panel window must be configured");
+            let quick_panel_handle = quick_panel.clone();
+            app.global_shortcut().on_shortcut("Ctrl+Space", move |_app, _shortcut, event: ShortcutEvent| {
+                if event.state() != ShortcutState::Pressed { return; }
+                if quick_panel_handle.is_visible().unwrap_or(false) {
+                    let _ = quick_panel_handle.hide();
+                } else {
+                    let _ = quick_panel_handle.show();
+                    let _ = quick_panel_handle.set_focus();
+                    let _ = quick_panel_handle.emit("quick-panel-open", "ai-assistant");
+                }
+            })?;
             let app_dir = app
                 .path()
                 .app_data_dir()
@@ -471,6 +485,12 @@ fn main() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            if window.label() == "quick-panel" {
+                if let tauri::WindowEvent::Focused(false) = event {
+                    let _ = window.hide();
+                }
+                return;
+            }
             #[cfg(target_os = "windows")]
             match event {
                 tauri::WindowEvent::Moved(_)

@@ -13,12 +13,25 @@
     "windows": [
       {
         "title": "Nowly",
+        "label": "main",
         "width": 1280,
         "height": 720,
         "resizable": true,
         "fullscreen": false,
         "decorations": true,
         "dragDropEnabled": false
+      },
+      {
+        "label": "quick-panel",
+        "title": "Nowly 快捷面板",
+        "width": 520,
+        "height": 640,
+        "resizable": false,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "visible": false,
+        "center": true,
+        "focus": true
       }
     ],
     "security": {

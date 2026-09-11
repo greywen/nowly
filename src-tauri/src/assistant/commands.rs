@@ -82,10 +82,10 @@ fn cancel_request(requests: &mut RequestRegistry, id: String) {
     requests.cancelled.insert(id, Instant::now());
 }
 fn main_only(window: &WebviewWindow) -> Result<(), CommandError> {
-    if window.label() != "main" {
+    if !matches!(window.label(), "main" | "quick-panel") {
         return Err(CommandError::validation(
             "assistant",
-            "此操作只允许在主窗口中执行。",
+            "此操作只允许在 Nowly 窗口中执行。",
         ));
     }
     Ok(())
