@@ -8,7 +8,7 @@ export type NotePreview = {
   text: string;
   /** Object URL of the note's first image, once fetched. */
   thumbnailUrl: string | null;
-  /** Images plus files, for the paperclip badge. */
+  /** Attached files, for the paperclip badge. Images are not counted. */
   attachmentCount: number;
 };
 
@@ -33,7 +33,10 @@ export function useNotePreviews(notes: readonly Note[]): ReadonlyMap<string, Not
       map.set(note.id, {
         text: contentToPlainText(note.content),
         firstImageId: imageIds[0] ?? null,
-        count: imageIds.length + fileIds.length
+        // Files only. An inline image is content the note already shows as a
+        // thumbnail, not an attachment, so counting it would double-report the
+        // one thing the reader can already see.
+        count: fileIds.length
       });
     }
     return map;

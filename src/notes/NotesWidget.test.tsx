@@ -127,7 +127,7 @@ describe('NotesWidget', () => {
     expect(screen.getByText(`${sampleNotes.length} 条便签`)).toBeInTheDocument();
   });
 
-  it('shows an image thumbnail and an attachment count on a board note', async () => {
+  it('shows an image thumbnail and counts only the attached file on a board note', async () => {
     const note = {
       ...sampleNotes[0],
       content: content([
@@ -139,23 +139,28 @@ describe('NotesWidget', () => {
     };
     const { repo } = renderWithAttachments([note], 'board');
 
-    // Both the image and the file are counted, but only the image is fetched:
-    // reading a file's bytes would build an object URL nothing ever renders.
-    expect(await screen.findByLabelText('2 个附件')).toHaveTextContent('2');
+    // The image is shown, not counted: it is content, and the thumbnail already
+    // reports it. Only the file is an attachment.
+    expect(await screen.findByLabelText('1 个附件')).toHaveTextContent('1');
     await waitFor(() => expect(document.querySelector('.sticky-note__thumb')).toBeInTheDocument());
     expect(document.querySelector<HTMLImageElement>('.sticky-note__thumb')!.src).toMatch(/^blob:/);
+    // Its file name stays out of the body, where the thumbnail speaks for it.
+    expect(document.querySelector('.sticky-note__content')!.textContent).toBe('见下图：报告');
+    // Only the image is fetched: reading a file's bytes would build an object URL
+    // nothing ever renders.
     expect(repo.listAttachments).toHaveBeenCalledWith([IMAGE_ID]);
     expect(repo.readAttachment).toHaveBeenCalledTimes(1);
   });
 
-  it('shows the thumbnail beside the text in list view', async () => {
+  it('shows the thumbnail beside the text in list view, with no paperclip', async () => {
     const note = {
       ...sampleNotes[0],
       content: content([{ insert: { image: `attachment:${IMAGE_ID}` } }, { insert: '说明\n' }])
     };
     renderWithAttachments([note], 'list');
     await waitFor(() => expect(document.querySelector('.note-thumb')).toBeInTheDocument());
-    expect(await screen.findByLabelText('1 个附件')).toBeInTheDocument();
+    // An image alone is not an attachment, so the note carries no badge.
+    expect(document.querySelector('.note-clip')).toBeNull();
   });
 
   it('counts a file-only note but renders no thumbnail', async () => {

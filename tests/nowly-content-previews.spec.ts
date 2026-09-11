@@ -127,12 +127,11 @@ test('a kanban card shows its description and an attachment count', async ({ pag
   await expect(card).toBeVisible();
 
   // Flattened, not rendered: a clamped preview reads badly as markup, and this
-  // keeps innerHTML out of the card. The space before 预览图.png matters — an
-  // embed's stand-in text must not fuse with the prose beside it.
-  await expect(card.locator('.kanban-card__desc')).toHaveText('季度回顾的要点：设计稿已定稿，待评审。 预览图.png 附件清单');
-  // Images and files both count; the card has no room for a thumbnail, so the
-  // paperclip is the only signal that anything is attached.
-  await expect(card.getByLabel('2 个附件')).toHaveText('2');
+  // keeps innerHTML out of the card. The image contributes nothing to the text —
+  // its alt is a file name, which is noise here.
+  await expect(card.locator('.kanban-card__desc')).toHaveText('季度回顾的要点：设计稿已定稿，待评审。 附件清单');
+  // Files only. An inline image is content, not an attachment.
+  await expect(card.getByLabel('1 个附件')).toHaveText('1');
 
   const style = await card.locator('.kanban-card__desc').evaluate((node) => {
     const s = getComputedStyle(node);
@@ -179,7 +178,9 @@ test('a note in list view shows a thumbnail beside its text', async ({ page }) =
   expect(probe.radius).toBe('7.6px');
   expect(probe.objectFit).toBe('cover');
 
-  await expect(page.locator('.note-clip').first()).toHaveText('2');
+  await expect(page.locator('.note-clip').first()).toHaveText('1');
+  // The image's file name stays out of the body; the thumbnail speaks for it.
+  await expect(page.locator('.note-content').first()).toHaveText('季度回顾的要点：设计稿已定稿，待评审。 附件清单');
   // Only the image is fetched. Reading the file's bytes would build an object
   // URL nothing renders, at up to 1MB each.
   expect(await page.evaluate(() => (window as unknown as { __reads(): string[] }).__reads())).toEqual([IMAGE_ID]);
@@ -221,5 +222,5 @@ test('a sticky note shows its thumbnail without breaking the sheet', async ({ pa
   expect(probe.spillsRight).toBeLessThanOrEqual(0);
   expect(probe.spillsBottom).toBeLessThanOrEqual(0);
 
-  await expect(page.locator('.sticky-note__clip').first()).toHaveText('2');
+  await expect(page.locator('.sticky-note__clip').first()).toHaveText('1');
 });

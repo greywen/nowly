@@ -108,24 +108,45 @@ describe('flattening to plain text for previews', () => {
     expect(contentToPlainText(stored)).toBe('标题\n正文');
   });
 
-  it('separates embed stand-ins from the prose around them', () => {
-    // An alt or formula is not part of the surrounding sentence. Fusing them
-    // produces a run-on token in a clamped preview: the kanban card description
-    // showed '预览图.png附件清单' before this.
+  it('drops images, keeping the alt file name out of the preview', () => {
+    // An image is shown as a thumbnail, so repeating its file name in the body
+    // is noise: the card description read '预览图.png 附件清单' before this.
     const stored = envelope([
-      { insert: { image: 'attachment:a.png' }, attributes: { alt: '示意图' } },
-      { insert: { formula: 'e=mc^2' } },
+      { insert: '完成了初稿。\n' },
+      { insert: { image: 'attachment:a.png' }, attributes: { alt: '预览图.png' } },
       { insert: '\n' }
     ]);
-    expect(contentToPlainText(stored)).toBe('示意图 e=mc^2');
+    expect(contentToPlainText(stored)).toBe('完成了初稿。');
 
-    // Text on both sides of an embed, which is how an inline image is written.
+    // An inline image between words leaves the prose joined as written.
     const inline = envelope([
-      { insert: '见下图：' },
+      { insert: '见' },
       { insert: { image: 'attachment:a.png' }, attributes: { alt: '报告.png' } },
-      { insert: '请查阅\n' }
+      { insert: '下图\n' }
     ]);
-    expect(contentToPlainText(inline)).toBe('见下图： 报告.png 请查阅');
+    expect(contentToPlainText(inline)).toBe('见下图');
+  });
+
+  it('renders an image-only note as empty text, though it still has content', () => {
+    // The thumbnail carries it, so there is nothing to say. It must not count as
+    // an empty document, or the note would be discarded unsaved.
+    const stored = envelope([
+      { insert: { image: 'attachment:a.png' }, attributes: { alt: '图.png' } },
+      { insert: '\n' }
+    ]);
+    expect(contentToPlainText(stored)).toBe('');
+    expect(isContentEmpty(stored)).toBe(false);
+  });
+
+  it('keeps a formula source, separated from the prose beside it', () => {
+    // Unlike an image there is nothing else to show for a formula, and its
+    // source is text the user typed.
+    const stored = envelope([
+      { insert: '质能等价：' },
+      { insert: { formula: 'e=mc^2' } },
+      { insert: '就是它\n' }
+    ]);
+    expect(contentToPlainText(stored)).toBe('质能等价： e=mc^2 就是它');
   });
 
   it('adds no separator where one already exists', () => {
@@ -133,26 +154,17 @@ describe('flattening to plain text for previews', () => {
     // waste a line of a two-line clamp.
     const afterNewline = envelope([
       { insert: '上文\n' },
-      { insert: { image: 'attachment:a.png' }, attributes: { alt: '图' } },
+      { insert: { formula: 'x^2' } },
       { insert: '\n' }
     ]);
-    expect(contentToPlainText(afterNewline)).toBe('上文\n图');
+    expect(contentToPlainText(afterNewline)).toBe('上文\nx^2');
 
     const alreadySpaced = envelope([
       { insert: '前 ' },
-      { insert: { image: 'attachment:a.png' }, attributes: { alt: '图' } },
+      { insert: { formula: 'x^2' } },
       { insert: ' 后\n' }
     ]);
-    expect(contentToPlainText(alreadySpaced)).toBe('前 图 后');
-  });
-
-  it('skips an embed with no stand-in text rather than leaving a stray space', () => {
-    const stored = envelope([
-      { insert: '前' },
-      { insert: { image: 'attachment:a.png' } },
-      { insert: '后\n' }
-    ]);
-    expect(contentToPlainText(stored)).toBe('前后');
+    expect(contentToPlainText(alreadySpaced)).toBe('前 x^2 后');
   });
 
   it('collapses blank lines so a clamped preview is not mostly whitespace', () => {

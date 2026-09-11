@@ -45,12 +45,13 @@ export function KanbanCard({
   // reads badly as rendered markup and this keeps innerHTML out of the card.
   const description = card.description ? contentToPlainText(card.description) : '';
   // Counting attachments is a pure content parse, so a card costs no IO to show
-  // its paperclip. Images count too: the card has no room for a thumbnail, so
-  // the badge is the only signal that anything is attached.
-  const { imageIds, fileIds } = card.description
+  // its paperclip. Files only: an inline image is content rather than an
+  // attachment, and its alt text is left out of the description for the same
+  // reason.
+  const { fileIds } = card.description
     ? contentAttachments(card.description)
-    : { imageIds: [], fileIds: [] };
-  const attachmentCount = imageIds.length + fileIds.length;
+    : { fileIds: [] };
+  const attachmentCount = fileIds.length;
 
   const hasTop = Boolean(card.dueDate) || Boolean(priority) || attachmentCount > 0;
 

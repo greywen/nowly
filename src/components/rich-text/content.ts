@@ -142,40 +142,37 @@ export function isContentEmpty(content: string): boolean {
  *
  * Previews are line-clamped to a few lines, where rendered rich text reads
  * badly, and flattening also keeps `dangerouslySetInnerHTML` out of the app
- * entirely. Images contribute their alt text and formulas their source, which
- * keeps both greppable.
+ * entirely.
+ *
+ * Images are dropped rather than contributing their alt text. An image is
+ * content the preview shows as a thumbnail, and its alt is usually the file
+ * name, which is noise in a clamped body. A formula's source is kept, because it
+ * is text the user authored and there is nothing else to show for it.
  */
 export function contentToPlainText(content: string): string {
   const envelope = parseEnvelope(content);
   if (!envelope) return markdownToPlainText(content);
 
   let out = '';
-  // An embed's stand-in text (an image's alt, a formula's source) is not part of
-  // the prose around it, so it needs a separator. Without one it fuses to the
-  // words beside it: '见下图：' followed by an image reads as a single run-on
-  // token in a clamped preview. One space keeps both halves readable, and keeps
-  // the alt greppable as its own word.
-  let previousWasEmbed = false;
+  // A formula's source is not part of the sentence beside it, so it needs a
+  // separator. Without one it fuses into a single run-on token.
+  let previousWasFormula = false;
   const separate = () => {
     if (out && !/\s$/.test(out)) out += ' ';
   };
   for (const op of envelope.ops) {
     if (typeof op.insert === 'string') {
-      if (previousWasEmbed && !/^\s/.test(op.insert)) separate();
+      if (previousWasFormula && !/^\s/.test(op.insert)) separate();
       out += op.insert;
-      previousWasEmbed = false;
+      previousWasFormula = false;
       continue;
     }
-    // Images and videos cannot be shown in a text preview; an image's alt text
-    // is the closest readable stand-in.
-    const alt = op.attributes?.alt;
-    const standIn = typeof op.insert.formula === 'string'
-      ? op.insert.formula
-      : typeof alt === 'string' ? alt : '';
-    if (!standIn) continue;
+    // Skips images and videos alike: neither has a readable stand-in worth
+    // putting in a preview.
+    if (typeof op.insert.formula !== 'string') continue;
     separate();
-    out += standIn;
-    previousWasEmbed = true;
+    out += op.insert.formula;
+    previousWasFormula = true;
   }
   return out
     .replace(/[ \t]+$/gm, '')
@@ -186,9 +183,10 @@ export function contentToPlainText(content: string): string {
 /**
  * The attachments a piece of stored content references, split by kind.
  *
- * Images are separated from files because previews treat them differently: an
- * image can be shown, a file can only be counted. Both lists are deduped and in
- * document order.
+ * Images are separated from files because they are not the same thing to a
+ * reader: an inline image is content, shown as a thumbnail, while a file is an
+ * attachment and can only be counted. Callers that show a paperclip should count
+ * files alone. Both lists are deduped and in document order.
  *
  * This is a pure parse with no IO, so a preview can show an attachment count
  * without reading a single byte from disk. Only thumbnails need the bytes.
