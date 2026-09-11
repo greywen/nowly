@@ -381,6 +381,13 @@ button:disabled { cursor: default; opacity: .65; }
 .note-title { display: flex; align-items: center; gap: 8px; color: var(--text-primary); font-size: 0.95rem; font-weight: 600; }
 .note-icon { font-size: 1rem; line-height: 1; }
 .note-content { margin: 4px 0; color: var(--text-secondary); font-size: 0.85rem; }
+/* List rows put the thumbnail beside the text rather than above it, so a row
+   stays one glance tall. 48px is 2x the 24px rhythm used elsewhere. */
+.note-row { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+.note-row .note-content { flex: 1; min-width: 0; }
+.note-thumb { width: 48px; height: 48px; flex: none; object-fit: cover; border-radius: var(--radius-sm); }
+.note-clip { display: inline-flex; align-items: center; gap: 4px; color: var(--text-muted); font-size: 0.85rem; }
+.note-clip svg { width: 16px; height: 16px; flex: none; color: var(--text-tertiary); }
 /* Sticky-board view: static tilt and edge pins create depth without motion. */
 .notes-board { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 32px 28px; padding: 20px 18px 24px; }
 .sticky-note { --note-tilt: 0deg; position: relative; min-height: 136px; padding: 20px 16px 26px; display: flex; flex-direction: column; gap: 2px; border: 1px solid rgba(64, 61, 56, .08); border-radius: var(--radius-sm); background-color: #fdfaf1; background-image: repeating-linear-gradient(180deg, transparent 0 23px, rgba(33, 31, 28, .06) 23px 24px); box-shadow: 0 2px 3px rgba(33, 31, 28, .14), 0 12px 24px rgba(33, 31, 28, .13); font-family: "Ink Free", "Segoe Script", "Bradley Hand", KaiTi, var(--font-sans); text-align: left; overflow: visible; transform: rotate(var(--note-tilt)); }
@@ -397,6 +404,12 @@ button:disabled { cursor: default; opacity: .65; }
 .sticky-note__icon--left-center { top: 50%; left: -14px; transform: translateY(-50%); }
 .sticky-note__title { position: relative; z-index: 1; color: var(--selected-color-fg); font-size: 1.075rem; font-weight: 600; line-height: 24px; overflow-wrap: anywhere; }
 .sticky-note__content { position: relative; z-index: 1; order: 3; display: -webkit-box; overflow: hidden; color: var(--text-secondary); font-size: 0.95rem; line-height: 24px; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow-wrap: anywhere; }
+/* Thumbnail height is 3x the sheet's 24px rule spacing, so the ruled background
+   stays in step with the text above it. Radius matches the sheet's own corner
+   per design.md §5 (embedded images match the card's inner radius). */
+.sticky-note__thumb { position: relative; z-index: 1; order: 4; width: 100%; height: 72px; object-fit: cover; border-radius: var(--radius-sm); }
+.sticky-note__clip { position: relative; z-index: 1; order: 5; display: inline-flex; align-items: center; gap: 4px; color: var(--text-muted); font-size: 0.85rem; line-height: 24px; }
+.sticky-note__clip svg { width: 16px; height: 16px; flex: none; color: var(--text-tertiary); }
 /* Tape sticks across a paper corner and slightly overhangs the sheet. */
 .sticky-note__tape { position: absolute; top: 10px; left: -12px; width: 54px; height: 16px; background: var(--selected-color); opacity: .32; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .5); transform: rotate(-45deg); }
 .sticky-note--style-0 { background-color: #fdfaf1; background-image: repeating-linear-gradient(180deg, transparent 0 23px, rgba(33, 31, 28, .06) 23px 24px); }
@@ -1196,6 +1209,11 @@ button:disabled { cursor: default; opacity: .65; }
 .kanban-card__top-right { display: inline-flex; align-items: center; gap: 4px; flex: none; }
 .kanban-card__title { min-width: 0; padding: 0; overflow: hidden; border: 0; color: var(--text-primary); background: transparent; font-size: 1rem; font-weight: 600; line-height: 1.4; text-align: left; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .kanban-card__title:hover { color: var(--color-primary-active); }
+/* Description and attachment count reuse .kanban-card__date's Caption size,
+   muted colour and 16px icon, so the card's meta text stays one scale. */
+.kanban-card__desc { margin: 0; min-width: 0; display: -webkit-box; overflow: hidden; color: var(--text-muted); font-size: 0.85rem; line-height: 1.5; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; white-space: pre-line; }
+.kanban-card__clip { display: inline-flex; align-items: center; gap: 4px; flex: none; color: var(--text-muted); font-size: 0.85rem; font-weight: 500; }
+.kanban-card__clip svg { width: 16px; height: 16px; flex: none; color: var(--text-tertiary); }
 .kanban-card__top-right .kanban-menu .good-icon-button { width: 28px; height: 28px; min-height: 28px; }
 .kanban-card__footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .kanban-card__people { display: inline-flex; align-items: center; min-width: 0; }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  contentAttachments,
   contentToPlainText,
   deltaOpsAreEmpty,
   isContentEmpty,
@@ -107,13 +108,51 @@ describe('flattening to plain text for previews', () => {
     expect(contentToPlainText(stored)).toBe('标题\n正文');
   });
 
-  it('keeps an image alt and a formula source, so both stay greppable', () => {
+  it('separates embed stand-ins from the prose around them', () => {
+    // An alt or formula is not part of the surrounding sentence. Fusing them
+    // produces a run-on token in a clamped preview: the kanban card description
+    // showed '预览图.png附件清单' before this.
     const stored = envelope([
       { insert: { image: 'attachment:a.png' }, attributes: { alt: '示意图' } },
       { insert: { formula: 'e=mc^2' } },
       { insert: '\n' }
     ]);
-    expect(contentToPlainText(stored)).toBe('示意图e=mc^2');
+    expect(contentToPlainText(stored)).toBe('示意图 e=mc^2');
+
+    // Text on both sides of an embed, which is how an inline image is written.
+    const inline = envelope([
+      { insert: '见下图：' },
+      { insert: { image: 'attachment:a.png' }, attributes: { alt: '报告.png' } },
+      { insert: '请查阅\n' }
+    ]);
+    expect(contentToPlainText(inline)).toBe('见下图： 报告.png 请查阅');
+  });
+
+  it('adds no separator where one already exists', () => {
+    // A newline or existing space is separation enough; adding another would
+    // waste a line of a two-line clamp.
+    const afterNewline = envelope([
+      { insert: '上文\n' },
+      { insert: { image: 'attachment:a.png' }, attributes: { alt: '图' } },
+      { insert: '\n' }
+    ]);
+    expect(contentToPlainText(afterNewline)).toBe('上文\n图');
+
+    const alreadySpaced = envelope([
+      { insert: '前 ' },
+      { insert: { image: 'attachment:a.png' }, attributes: { alt: '图' } },
+      { insert: ' 后\n' }
+    ]);
+    expect(contentToPlainText(alreadySpaced)).toBe('前 图 后');
+  });
+
+  it('skips an embed with no stand-in text rather than leaving a stray space', () => {
+    const stored = envelope([
+      { insert: '前' },
+      { insert: { image: 'attachment:a.png' } },
+      { insert: '后\n' }
+    ]);
+    expect(contentToPlainText(stored)).toBe('前后');
   });
 
   it('collapses blank lines so a clamped preview is not mostly whitespace', () => {
@@ -191,5 +230,48 @@ describe('degrading formulas when KaTeX is unavailable', () => {
   it('leaves everything else untouched', () => {
     const ops: DeltaOp[] = [{ insert: { image: 'a.png' } }, { insert: '文', attributes: { bold: true } }];
     expect(stripFormulas(ops)).toEqual(ops);
+  });
+});
+
+describe('finding the attachments a preview needs', () => {
+  const IMAGE = '0123456789abcdef0123456789abcdef.png';
+  const FILE = 'fedcba9876543210fedcba9876543210.pdf';
+
+  it('separates image embeds from file links', () => {
+    const content = envelope([
+      { insert: '见下图：' },
+      { insert: { image: `attachment:${IMAGE}` }, attributes: { alt: '报告.png' } },
+      { insert: '明细' , attributes: { link: `attachment:${FILE}` } },
+      { insert: '\n' }
+    ]);
+    expect(contentAttachments(content)).toEqual({ imageIds: [IMAGE], fileIds: [FILE] });
+  });
+
+  it('reads legacy Markdown too, so old notes still show their images', () => {
+    // Content written before the Delta format is never migrated, so previews
+    // have to find attachments through the Markdown path as well.
+    expect(contentAttachments(`![图](attachment:${IMAGE})`)).toEqual({ imageIds: [IMAGE], fileIds: [] });
+    expect(contentAttachments(`[报告](attachment:${FILE})`)).toEqual({ imageIds: [], fileIds: [FILE] });
+  });
+
+  it('dedupes repeats and keeps document order', () => {
+    const content = envelope([
+      { insert: { image: `attachment:${IMAGE}` } },
+      { insert: 'x', attributes: { link: `attachment:${FILE}` } },
+      { insert: { image: `attachment:${IMAGE}` } },
+      { insert: '\n' }
+    ]);
+    expect(contentAttachments(content)).toEqual({ imageIds: [IMAGE], fileIds: [FILE] });
+  });
+
+  it('ignores remote URLs and plain text', () => {
+    const content = envelope([
+      { insert: { image: 'https://example.com/a.png' } },
+      { insert: { video: 'https://example.com/v' } },
+      { insert: '外链', attributes: { link: 'https://example.com' } },
+      { insert: '没有附件\n' }
+    ]);
+    expect(contentAttachments(content)).toEqual({ imageIds: [], fileIds: [] });
+    expect(contentAttachments('')).toEqual({ imageIds: [], fileIds: [] });
   });
 });

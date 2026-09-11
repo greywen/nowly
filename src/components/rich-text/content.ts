@@ -24,7 +24,7 @@
 //      the JSON, so the backend's regex scan for live references works on the
 //      envelope unchanged.
 
-import { attachmentUrl, isAttachmentId, removeAttachmentReference } from '../../lib/attachment';
+import { attachmentIdFromUrl, attachmentUrl, isAttachmentId, removeAttachmentReference } from '../../lib/attachment';
 import { markdownToDelta, type DeltaOp } from './delta';
 import { markdownToPlainText } from './markdown';
 
@@ -150,24 +150,76 @@ export function contentToPlainText(content: string): string {
   if (!envelope) return markdownToPlainText(content);
 
   let out = '';
+  // An embed's stand-in text (an image's alt, a formula's source) is not part of
+  // the prose around it, so it needs a separator. Without one it fuses to the
+  // words beside it: '见下图：' followed by an image reads as a single run-on
+  // token in a clamped preview. One space keeps both halves readable, and keeps
+  // the alt greppable as its own word.
+  let previousWasEmbed = false;
+  const separate = () => {
+    if (out && !/\s$/.test(out)) out += ' ';
+  };
   for (const op of envelope.ops) {
     if (typeof op.insert === 'string') {
+      if (previousWasEmbed && !/^\s/.test(op.insert)) separate();
       out += op.insert;
-      continue;
-    }
-    if (typeof op.insert.formula === 'string') {
-      out += op.insert.formula;
+      previousWasEmbed = false;
       continue;
     }
     // Images and videos cannot be shown in a text preview; an image's alt text
     // is the closest readable stand-in.
     const alt = op.attributes?.alt;
-    if (typeof alt === 'string' && alt) out += alt;
+    const standIn = typeof op.insert.formula === 'string'
+      ? op.insert.formula
+      : typeof alt === 'string' ? alt : '';
+    if (!standIn) continue;
+    separate();
+    out += standIn;
+    previousWasEmbed = true;
   }
   return out
     .replace(/[ \t]+$/gm, '')
     .replace(/\n{2,}/g, '\n')
     .trim();
+}
+
+/**
+ * The attachments a piece of stored content references, split by kind.
+ *
+ * Images are separated from files because previews treat them differently: an
+ * image can be shown, a file can only be counted. Both lists are deduped and in
+ * document order.
+ *
+ * This is a pure parse with no IO, so a preview can show an attachment count
+ * without reading a single byte from disk. Only thumbnails need the bytes.
+ */
+export function contentAttachments(content: string): { imageIds: string[]; fileIds: string[] } {
+  const imageIds: string[] = [];
+  const fileIds: string[] = [];
+  // parseContent covers both the envelope and legacy Markdown, so previews of
+  // content written before the Delta format still find their attachments.
+  for (const op of parseContent(content)) {
+    const insert = op.insert;
+    if (isRecord(insert)) {
+      const image = typeof insert.image === 'string' ? attachmentIdFromUrl(insert.image) : null;
+      if (image) {
+        if (!imageIds.includes(image)) imageIds.push(image);
+        continue;
+      }
+      // A video embed only ever holds a remote URL, but treat any other embed
+      // pointing at an attachment as a file rather than dropping it silently.
+      for (const key of EMBED_URL_KEYS) {
+        const value = insert[key];
+        const id = typeof value === 'string' ? attachmentIdFromUrl(value) : null;
+        if (id && !fileIds.includes(id)) fileIds.push(id);
+      }
+      continue;
+    }
+    const link = op.attributes?.link;
+    const id = typeof link === 'string' ? attachmentIdFromUrl(link) : null;
+    if (id && !fileIds.includes(id)) fileIds.push(id);
+  }
+  return { imageIds, fileIds };
 }
 
 /**

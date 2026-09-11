@@ -30,6 +30,14 @@ export type AttachmentBridge = {
   resolved: ReadonlyMap<string, ResolvedAttachment>;
   /** Fetch and cache every attachment referenced by this Markdown. */
   resolve(markdown: string): Promise<void>;
+  /**
+   * Fetch and cache an explicit set of ids.
+   *
+   * Previews use this to ask for images only. Going through `resolve` would read
+   * the bytes of every referenced file as well, up to 1MB each, to build object
+   * URLs that nothing ever renders.
+   */
+  resolveIds(ids: readonly string[]): Promise<void>;
   /** Upload one file and cache it, returning its record. */
   upload(file: File): Promise<Attachment>;
   /** Storage form -> display form, for loading into the editor. */
@@ -70,10 +78,10 @@ export function useAttachments(): AttachmentBridge {
     setResolved(new Map(cache.current));
   }, []);
 
-  const resolve = useCallback(
-    async (markdown: string) => {
+  const resolveIds = useCallback(
+    async (ids: readonly string[]) => {
       if (!repository.listAttachments || !repository.readAttachment) return;
-      const pending = attachmentIdsIn(markdown).filter(
+      const pending = ids.filter(
         (id) => !cache.current.has(id) && !inFlight.current.has(id)
       );
       if (!pending.length) return;
@@ -106,6 +114,11 @@ export function useAttachments(): AttachmentBridge {
     [remember, repository]
   );
 
+  const resolve = useCallback(
+    (markdown: string) => resolveIds(attachmentIdsIn(markdown)),
+    [resolveIds]
+  );
+
   const upload = useCallback(
     async (file: File) => {
       if (!repository.saveAttachment) throw new Error('attachments unsupported');
@@ -133,7 +146,7 @@ export function useAttachments(): AttachmentBridge {
   }, []);
 
   return useMemo(
-    () => ({ supported, resolved, resolve, upload, mapToDisplay, mapToStorage }),
-    [supported, resolved, resolve, upload, mapToDisplay, mapToStorage]
+    () => ({ supported, resolved, resolve, resolveIds, upload, mapToDisplay, mapToStorage }),
+    [supported, resolved, resolve, resolveIds, upload, mapToDisplay, mapToStorage]
   );
 }

@@ -1,6 +1,7 @@
-import { CalendarDays } from '../components/icons';
+import { CalendarDays, Paperclip } from '../components/icons';
 import { colorStyle } from '../lib/color';
 import type { DragEvent } from 'react';
+import { contentAttachments, contentToPlainText } from '../components/rich-text/content';
 import type { ResolvedCard } from './kanban-view';
 import { formatDueDate } from './kanban-view';
 import { t } from '../i18n';
@@ -39,7 +40,19 @@ export function KanbanCard({
   const visibleCollaborators = collaborators.slice(0, MAX_AVATARS);
   const overflowCount = collaborators.length - visibleCollaborators.length;
   const hasFooter = collaborators.length > 0 || tags.length > 0;
-  const hasTop = Boolean(card.dueDate) || Boolean(priority);
+
+  // The description is stored rich text; flatten it, because a clamped preview
+  // reads badly as rendered markup and this keeps innerHTML out of the card.
+  const description = card.description ? contentToPlainText(card.description) : '';
+  // Counting attachments is a pure content parse, so a card costs no IO to show
+  // its paperclip. Images count too: the card has no room for a thumbnail, so
+  // the badge is the only signal that anything is attached.
+  const { imageIds, fileIds } = card.description
+    ? contentAttachments(card.description)
+    : { imageIds: [], fileIds: [] };
+  const attachmentCount = imageIds.length + fileIds.length;
+
+  const hasTop = Boolean(card.dueDate) || Boolean(priority) || attachmentCount > 0;
 
   return (
     <article
@@ -60,6 +73,15 @@ export function KanbanCard({
             <span className="kanban-card__date kanban-card__date--empty" aria-hidden="true" />
           )}
           <div className="kanban-card__top-right">
+            {attachmentCount > 0 ? (
+              <span
+                className="kanban-card__clip"
+                aria-label={t('kanbanCard.attachments', { count: attachmentCount })}
+              >
+                <Paperclip aria-hidden="true" />
+                {attachmentCount}
+              </span>
+            ) : null}
             {priority ? (
               <span className="kanban-badge" style={colorStyle(priority.color)}>
                 {priority.name}
@@ -72,6 +94,8 @@ export function KanbanCard({
       <button type="button" className="kanban-card__title" onClick={onOpen}>
         {card.title}
       </button>
+
+      {description ? <p className="kanban-card__desc">{description}</p> : null}
 
       {hasFooter ? (
         <div className="kanban-card__footer">

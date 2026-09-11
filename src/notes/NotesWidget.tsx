@@ -1,9 +1,9 @@
-import { Plus, Settings } from '../components/icons';
+import { Paperclip, Plus, Settings } from '../components/icons';
 import { useState } from 'react';
 import { DEFAULT_NOTES_VIEW, NOTE_STYLE_VARIANT_COUNT, noteIconSymbol, type Note, type NotesViewMode } from './notes-model';
 import { NotesSettingsDialog } from './NotesSettingsDialog';
 import { colorStyle } from '../lib/color';
-import { contentToPlainText } from '../components/rich-text/content';
+import { useNotePreviews } from './useNotePreviews';
 import { t } from '../i18n';
 
 type LoadStatus = 'loading' | 'ready' | 'error';
@@ -48,6 +48,7 @@ export function NotesWidget({
 }: NotesWidgetProps) {
   const sortedNotes = [...notes].sort((left, right) => Number(right.pinned) - Number(left.pinned));
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const previews = useNotePreviews(notes);
 
   function styleVariantFor(note: Note): number {
     return Math.abs(note.styleVariant) % NOTE_STYLE_VARIANT_COUNT;
@@ -109,35 +110,61 @@ export function NotesWidget({
         ) : null}
         {view === 'board' ? (
           <div data-testid="notes-board" className="notes-board">
-            {sortedNotes.map((note, index) => (
-              <button
-                key={note.id}
-                type="button"
-                onClick={(event) => onOpenNote(note, event.currentTarget)}
-                className={`sticky-note sticky-note--tilt-${index % BOARD_TILTS} sticky-note--style-${styleVariantFor(note)}`}
-                style={colorStyle(note.color)}
-              >
-                {iconFor(note) ? null : <span className="sticky-note__tape" aria-hidden="true" />}
-                {iconFor(note) ? <span className={`sticky-note__icon sticky-note__icon--${iconAnchorFor(note)}`} aria-hidden="true">{iconFor(note)}</span> : null}
-                <span className="sticky-note__title">{note.title}</span>
-                <span className="sticky-note__content">{contentToPlainText(note.content)}</span>
-              </button>
-            ))}
+            {sortedNotes.map((note, index) => {
+              const preview = previews.get(note.id);
+              return (
+                <button
+                  key={note.id}
+                  type="button"
+                  onClick={(event) => onOpenNote(note, event.currentTarget)}
+                  className={`sticky-note sticky-note--tilt-${index % BOARD_TILTS} sticky-note--style-${styleVariantFor(note)}`}
+                  style={colorStyle(note.color)}
+                >
+                  {iconFor(note) ? null : <span className="sticky-note__tape" aria-hidden="true" />}
+                  {iconFor(note) ? <span className={`sticky-note__icon sticky-note__icon--${iconAnchorFor(note)}`} aria-hidden="true">{iconFor(note)}</span> : null}
+                  <span className="sticky-note__title">{note.title}</span>
+                  <span className="sticky-note__content">{preview?.text}</span>
+                  {preview?.thumbnailUrl ? (
+                    <img className="sticky-note__thumb" src={preview.thumbnailUrl} alt="" />
+                  ) : null}
+                  {preview?.attachmentCount ? (
+                    <span className="sticky-note__clip" aria-label={t('notesWidget.attachments', { count: preview.attachmentCount })}>
+                      <Paperclip aria-hidden="true" />
+                      {preview.attachmentCount}
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
           </div>
         ) : (
           <div data-testid="notes-list" className="notes-list">
-            {sortedNotes.map((note) => (
-              <button
-                key={note.id}
-                type="button"
-                onClick={(event) => onOpenNote(note, event.currentTarget)}
-                className="note"
-                style={colorStyle(note.color)}
-              >
-                <div className="note-title">{iconFor(note) ? <span className="note-icon" aria-hidden="true">{iconFor(note)}</span> : null}{note.title}</div>
-                <div className="note-content">{contentToPlainText(note.content)}</div>
-              </button>
-            ))}
+            {sortedNotes.map((note) => {
+              const preview = previews.get(note.id);
+              return (
+                <button
+                  key={note.id}
+                  type="button"
+                  onClick={(event) => onOpenNote(note, event.currentTarget)}
+                  className="note"
+                  style={colorStyle(note.color)}
+                >
+                  <div className="note-title">{iconFor(note) ? <span className="note-icon" aria-hidden="true">{iconFor(note)}</span> : null}{note.title}</div>
+                  <div className="note-row">
+                    {preview?.thumbnailUrl ? (
+                      <img className="note-thumb" src={preview.thumbnailUrl} alt="" />
+                    ) : null}
+                    <div className="note-content">{preview?.text}</div>
+                  </div>
+                  {preview?.attachmentCount ? (
+                    <span className="note-clip" aria-label={t('notesWidget.attachments', { count: preview.attachmentCount })}>
+                      <Paperclip aria-hidden="true" />
+                      {preview.attachmentCount}
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
           </div>
         )}
       </div>

@@ -319,6 +319,7 @@ export const translations: Record<Language, Record<string, string>> = {
 
     // KanbanCard
     'kanbanCard.task': '任务：{title}',
+    'kanbanCard.attachments': '{count} 个附件',
     'kanbanCard.collaborators': '协作人：{names}',
 
     // Unified task settings
@@ -590,6 +591,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'notesWidget.viewBoard': '便利贴视图',
     'notesWidget.newNote': '新增便签',
     'notesWidget.count': '{count} 条便签',
+    'notesWidget.attachments': '{count} 个附件',
     'notesWidget.settings': '便签显示设置',
     'notesWidget.settingsDialogTitle': '便签设置',
     'notesWidget.settingsTitle': '便签显示方式',
@@ -1082,6 +1084,7 @@ export const translations: Record<Language, Record<string, string>> = {
 
     // KanbanCard
     'kanbanCard.task': 'Task: {title}',
+    'kanbanCard.attachments': '{count, plural, one {# attachment} other {# attachments}}',
     'kanbanCard.collaborators': 'Collaborators: {names}',
 
     // Unified task settings
@@ -1349,6 +1352,7 @@ export const translations: Record<Language, Record<string, string>> = {
     // NotesWidget
     'notesWidget.viewAll': 'View all notes',
     'notesWidget.count': '{count, plural, one {# note} other {# notes}}',
+    'notesWidget.attachments': '{count, plural, one {# attachment} other {# attachments}}',
     'notesWidget.settings': 'Notes display settings',
     'notesWidget.settingsDialogTitle': 'Notes settings',
     'notesWidget.settingsTitle': 'Notes layout',
