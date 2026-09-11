@@ -616,6 +616,22 @@ mod tests {
     };
 
     #[test]
+    fn handle_window_has_no_native_shadow_or_background() {
+        let config: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        let handle = config["app"]["windows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|window| window["label"] == "quick-panel-handle")
+            .unwrap();
+        assert_eq!(handle["decorations"], false);
+        assert_eq!(handle["shadow"], false);
+        assert_eq!(handle["transparent"], true);
+        assert_eq!(handle["backgroundColor"], "#00000000");
+    }
+
+    #[test]
     fn panel_is_centered_and_collapses_above_the_monitor() {
         let positions = panel_positions(1920, 0, 520, 640);
 

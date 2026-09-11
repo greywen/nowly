@@ -4,9 +4,10 @@ import './quick-panel.css';
 
 export function QuickPanelHandle() {
   useEffect(() => {
-    document.documentElement.style.backgroundColor = 'transparent';
-    document.body.style.backgroundColor = 'transparent';
-    document.getElementById('root')?.style.setProperty('background-color', 'transparent');
+    for (const element of [document.documentElement, document.body, document.getElementById('root')]) {
+      element?.style.setProperty('background', 'transparent', 'important');
+      element?.style.setProperty('background-color', 'transparent', 'important');
+    }
   }, []);
 
   function open() {
