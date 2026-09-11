@@ -19,7 +19,25 @@ if (!('__TAURI_INTERNALS__' in window)) {
   installBrowserTauriBackend();
 }
 
-const isQuickPanel = '__TAURI_INTERNALS__' in window && getCurrentWindow().label === 'quick-panel';
+// Which window this document is depends on the Tauri metadata, which only the
+// real desktop shell provides. A test-injected IPC stub, or any future host that
+// supplies `invoke` without full metadata, satisfies the `in` check above while
+// leaving `getCurrentWindow()` to throw on `metadata.currentWindow`.
+//
+// This runs at module top level, so an unguarded throw here happens before
+// `render` and leaves a blank page rather than a degraded feature. Falling back
+// to the main app is the right answer either way: the quick panel is the special
+// case, so anything we cannot identify should be the app.
+function isQuickPanelWindow(): boolean {
+  if (!('__TAURI_INTERNALS__' in window)) return false;
+  try {
+    return getCurrentWindow().label === 'quick-panel';
+  } catch {
+    return false;
+  }
+}
+
+const isQuickPanel = isQuickPanelWindow();
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
     {isQuickPanel ? <QuickPanelApp /> : <RepositoryProvider repository={tauriNowlyRepository}>
