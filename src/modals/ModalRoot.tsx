@@ -2,17 +2,15 @@ import { DateDetailDialog } from '../calendar/DateDetailDialog';
 import { ExternalEventDialog } from '../calendar/ExternalEventDialog';
 import type { CalendarEvent, EditScope, EventDraft } from '../calendar/calendar-model';
 import type { ModalState } from '../lib/modal-store';
-import type { MatrixTask, TaskDraft } from '../matrix/matrix-model';
 import { EventModal } from './EventModal';
 import { NoteModal } from './NoteModal';
-import { TaskModal } from './TaskModal';
 import { NotesManagerDialog } from '../notes/NotesManagerDialog';
 import type { Note, NoteDraft } from '../notes/notes-model';
 import type { AppSettings, MonitorInfo } from '../data/nowly-repository';
 import { SettingsDialog } from '../settings/SettingsDialog';
 import { CalendarSettingsDialog } from '../calendar/CalendarSettingsDialog';
 import type { CalendarSubscription, SubscriptionDraft } from '../calendar/subscription-model';
-import { useOptionalTaskWorkspace } from '../tasks/TaskWorkspaceContext';
+import { useTaskWorkspace } from '../tasks/TaskWorkspaceContext';
 import { UnifiedTaskDialog } from '../tasks/UnifiedTaskDialog';
 import { TaskSettingsDialog } from '../tasks/TaskSettingsDialog';
 import { isEventWritable } from '../calendar/calendar-model';
@@ -20,7 +18,6 @@ import { isEventWritable } from '../calendar/calendar-model';
 type Props = {
   modal: ModalState;
   events: CalendarEvent[];
-  tasks: MatrixTask[];
   onClose(): void;
   onChangeModal(modal: ModalState): void;
   createEvent(draft: EventDraft, subscriptionId?: string | null): Promise<CalendarEvent | void>;
@@ -28,11 +25,6 @@ type Props = {
   deleteEvent(event: CalendarEvent, scope: EditScope): Promise<void>;
   onSaved(): void | Promise<void>;
   onDeleted(event: CalendarEvent): void | Promise<void>;
-  createTask(draft: TaskDraft): Promise<MatrixTask>;
-  updateTask(task: MatrixTask, draft: TaskDraft): Promise<MatrixTask>;
-  deleteTask(task: MatrixTask): Promise<void>;
-  onTaskSaved(task: MatrixTask): void | Promise<void>;
-  onTaskDeleted(task: MatrixTask): void | Promise<void>;
   notes: Note[];
   createNote(draft: NoteDraft): Promise<Note>;
   updateNote(note: Note, draft: NoteDraft): Promise<Note>;
@@ -51,14 +43,13 @@ type Props = {
 };
 
 export function ModalRoot({
-  modal, events, tasks, onClose, onChangeModal,
+  modal, events, onClose, onChangeModal,
   createEvent, updateEvent, deleteEvent, onSaved, onDeleted,
-  createTask, updateTask, deleteTask, onTaskSaved, onTaskDeleted,
   notes, createNote, updateNote, deleteNote, settings, monitors, saveSettings,
   subscriptions, onSubscriptionsChanged, createSubscription, updateSubscription, deleteSubscription, refreshSubscription,
   recentColors = [], onRememberCustomColor
 }: Props) {
-  const workspace = useOptionalTaskWorkspace();
+  const workspace = useTaskWorkspace();
   if (!modal) return null;
   const isEventChild = modal.type === 'event-create' || modal.type === 'event-edit';
   const isTaskChild = modal.type === 'task-create' || modal.type === 'task-edit' || modal.type === 'workspace-task-edit';
@@ -98,7 +89,7 @@ export function ModalRoot({
         subscriptions={subscriptions}
       />
     ) : null}
-    {isTaskChild ? workspace ? (
+    {isTaskChild ? (
       <UnifiedTaskDialog
         mode={modal.type === 'task-create'
           ? { type:'create', originView: 'matrix', dueDate:modal.dueDate }
@@ -115,18 +106,7 @@ export function ModalRoot({
         restoreFocusRef={{ current:modal.trigger }}
         onClose={returnFromChild}
       />
-    ) : modal.type !== 'workspace-task-edit' ? (
-      <TaskModal
-        mode={modal.type === 'task-create' ? { type:'create', dueDate:modal.dueDate } : { type:'edit', task:modal.task }}
-        restoreFocusRef={{ current:modal.trigger }}
-        onClose={returnFromChild}
-        createTask={createTask}
-        updateTask={updateTask}
-        deleteTask={deleteTask}
-        onSaved={onTaskSaved}
-        onDeleted={onTaskDeleted}
-      />
-    ) : null : null}
+    ) : null}
     {modal.type === 'notes-manager' ? <NotesManagerDialog notes={notes} restoreFocusRef={{current:modal.trigger}} onClose={onClose} onCreate={(trigger)=>onChangeModal({type:'note-create',trigger,parentManager:true})} onEdit={(note,trigger)=>onChangeModal({type:'note-edit',note,trigger,parentManager:true})} /> : null}
     {modal.type === 'note-create' || modal.type === 'note-edit' ? <NoteModal mode={modal.type === 'note-create' ? {type:'create'} : {type:'edit',note:modal.note}} restoreFocusRef={{current:modal.trigger}} onClose={()=>modal.parentManager?onChangeModal({type:'notes-manager',trigger:modal.trigger}):onClose()} onSaved={()=>undefined} onDeleted={()=>undefined} createNote={createNote} updateNote={updateNote} deleteNote={deleteNote} recentColors={recentColors} onRememberCustomColor={onRememberCustomColor} /> : null}
     {modal.type === 'settings' ? <SettingsDialog settings={settings} monitors={monitors} onClose={onClose} onSave={saveSettings} /> : null}
@@ -138,7 +118,7 @@ export function ModalRoot({
         onClose={onClose}
       />
     ) : null}
-    {modal.type === 'task-settings' && workspace ? (
+    {modal.type === 'task-settings' ? (
       <TaskSettingsDialog
         restoreFocusRef={{ current: modal.trigger }}
         onClose={onClose}

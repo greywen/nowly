@@ -1,9 +1,9 @@
 // Rich text editor shared by every long-form field: event notes, task
 // descriptions and note bodies.
 //
-// Value in and out is Markdown (see markdown.ts for why). Quill is uncontrolled
-// internally and this component reconciles it against the `value` prop, which
-// needs care on two fronts:
+// Value in and out is a Delta JSON envelope (see content.ts). Quill is
+// uncontrolled internally and this component reconciles it against the `value`
+// prop, which needs care on four fronts:
 //
 //   1. IME composition. Rewriting Quill's contents mid-composition drops or
 //      duplicates Chinese input, so reloads are skipped while the editor holds
@@ -12,9 +12,15 @@
 //   2. StrictMode. Effects run twice in development, so setup must be
 //      idempotent and teardown must remove the toolbar Quill injects as a
 //      sibling of its own root.
+//   3. Lazy dependencies. KaTeX and highlight.js must exist *before* Quill is
+//      constructed, so construction waits on `loadRichTextDeps`. A failure
+//      degrades to an editor without highlighting or formula rendering rather
+//      than taking the dialog down.
+//   4. Localisation. Quill labels its controls in English and snow.css hardcodes
+//      its popover labels, so both are overridden after construction.
 //
 // Attachments are uploaded through the repository and referenced from the
-// Markdown as `attachment:<id>`; the content is the only record of what is in
+// content as `attachment:<id>`; the content is the only record of what is in
 // use. See useAttachments for the blob-URL bridge.
 
 import Quill from 'quill';
@@ -24,20 +30,40 @@ import {
   attachmentIdsIn,
   formatByteSize,
   isDisplayableImage,
-  removeAttachmentReference,
   attachmentUrl,
   type Attachment
 } from '../../lib/attachment';
 import { FileText, Paperclip, X } from '../icons';
-import { deltaToMarkdown, markdownToDelta, type DeltaOp } from './delta';
-import { registerRichTextFormats, richTextFormats, richTextToolbar } from './quill-setup';
+import { parseContent, removeAttachmentFromContent, serializeContent, stripFormulas } from './content';
+import type { DeltaOp } from './delta';
+import { loadRichTextDeps, type RichTextDeps } from './rich-deps';
+import {
+  applyToolbarLabels,
+  applyTooltipLabels,
+  registerRichTextFormats,
+  richTextFormats,
+  richTextToolbar
+} from './quill-setup';
 import { useAttachments } from './useAttachments';
 import './rich-editor.css';
+
+/** Quill's table module surface, narrowed to what the context bar drives. */
+type TableModule = {
+  insertTable(rows: number, columns: number): void;
+  insertRowAbove(): void;
+  insertRowBelow(): void;
+  insertColumnLeft(): void;
+  insertColumnRight(): void;
+  deleteRow(): void;
+  deleteColumn(): void;
+  deleteTable(): void;
+  getTable(): [unknown, unknown, unknown, number];
+};
 
 type Props = {
   id: string;
   value: string;
-  onChange(markdown: string): void;
+  onChange(content: string): void;
   disabled?: boolean;
   placeholder?: string;
   /** Id of the visible label, wired to the editing surface for screen readers. */
@@ -56,16 +82,16 @@ export function RichEditor({ id, value, onChange, disabled = false, placeholder,
   const attachmentsRef = useRef(attachments);
   attachmentsRef.current = attachments;
 
-  // Signature of what is currently loaded into Quill: the Markdown plus how each
+  // Signature of what is currently loaded into Quill: the content plus how each
   // of its attachments currently maps to a display URL. The mapping has to be
   // part of it because an unresolved `attachment:` URL turns into a `blob:` URL
-  // once its bytes arrive, without the Markdown changing at all. Comparing the
-  // Markdown alone would leave every image permanently unresolved.
+  // once its bytes arrive, without the content changing at all. Comparing the
+  // content alone would leave every image permanently unresolved.
   const signatureOf = useCallback(
-    (markdown: string) =>
+    (content: string) =>
       [
-        markdown,
-        ...attachmentIdsIn(markdown).map((id) => attachmentsRef.current.mapToDisplay(attachmentUrl(id)))
+        content,
+        ...attachmentIdsIn(content).map((id) => attachmentsRef.current.mapToDisplay(attachmentUrl(id)))
       ].join('\u0000'),
     []
   );
@@ -73,7 +99,29 @@ export function RichEditor({ id, value, onChange, disabled = false, placeholder,
   const composing = useRef(false);
   const [dropping, setDropping] = useState(false);
   const [uploadError, setUploadError] = useState('');
+  const [deps, setDeps] = useState<{ value: RichTextDeps | null } | null>(null);
+  const [inTable, setInTable] = useState(false);
   const errorId = useId();
+
+  // Load the optional dependencies. Wrapped in an object so a failed load
+  // (`{ value: null }`) is distinguishable from "still loading" (`null`).
+  useEffect(() => {
+    let active = true;
+    loadRichTextDeps().then(
+      (loaded) => {
+        if (active) setDeps({ value: loaded });
+      },
+      (error: unknown) => {
+        // Degrade rather than block: the editor still works without syntax
+        // highlighting, and formulas fall back to their LaTeX source.
+        console.error('Rich text dependencies failed to load', error);
+        if (active) setDeps({ value: null });
+      }
+    );
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const insertFile = useCallback((quill: Quill, record: Attachment, displayUrl: string | null) => {
     // Taken from Quill's own registry rather than importing `quill-delta`
@@ -116,10 +164,10 @@ export function RichEditor({ id, value, onChange, disabled = false, placeholder,
     [insertFile]
   );
 
-  // Create Quill once per mount.
+  // Create Quill once the dependencies have settled.
   useEffect(() => {
     const wrapper = wrapperRef.current;
-    if (!wrapper) return;
+    if (!wrapper || !deps) return;
     registerRichTextFormats();
 
     // Quill inserts its toolbar as a sibling of the editor root, so give it a
@@ -138,12 +186,18 @@ export function RichEditor({ id, value, onChange, disabled = false, placeholder,
           handlers: {
             // Replace the stock handler, which base64-inlines the image into the
             // document and would bloat the database.
-            image: () => fileInputRef.current?.click()
+            image: () => fileInputRef.current?.click(),
+            // Quill ships the table model but no UI, so the button seeds a table
+            // and the context bar below edits it.
+            table: () => (quill.getModule('table') as TableModule).insertTable(3, 3)
           }
         },
         // Quill's uploader only accepts image mimetypes and base64-inlines them.
         // Disabled so the drop handler below owns every dropped file.
-        uploader: { mimetypes: [] }
+        uploader: { mimetypes: [] },
+        table: true,
+        // `false` disables highlighting entirely, which is the degraded path.
+        syntax: deps.value ? { hljs: deps.value.hljs, languages: [...deps.value.languages] } : false
       }
     });
     quillRef.current = quill;
@@ -151,23 +205,27 @@ export function RichEditor({ id, value, onChange, disabled = false, placeholder,
     // Emit for every source except 'silent', which is what the load path below
     // uses. Loading normalised content must not look like a user edit, or every
     // dialog would open already dirty and prompt to discard on close.
-    const emit = (
-      _delta: unknown,
-      _old: unknown,
-      source: string
-    ) => {
+    const emit = (_delta: unknown, _old: unknown, source: string) => {
       if (source === 'silent') return;
-      const markdown = deltaToMarkdown(
+      const content = serializeContent(
         quill.getContents().ops as DeltaOp[],
         attachmentsRef.current.mapToStorage
       );
       // Record the echo of our own emit so the reconcile effect below does not
       // treat the value coming back down as an external change and reset the
       // caret mid-typing.
-      loadedSignature.current = signatureOf(markdown);
-      onChangeRef.current(markdown);
+      loadedSignature.current = signatureOf(content);
+      onChangeRef.current(content);
     };
     quill.on('text-change', emit);
+
+    // Show the table bar only while the caret is inside a table.
+    const table = quill.getModule('table') as TableModule;
+    const syncTableState = () => {
+      const range = quill.getSelection();
+      setInTable(Boolean(range) && table.getTable()[0] !== null);
+    };
+    quill.on('editor-change', syncTableState);
 
     // Quill exposes no composition state, so track it on the DOM directly.
     const onCompositionStart = () => {
@@ -183,15 +241,23 @@ export function RichEditor({ id, value, onChange, disabled = false, placeholder,
     quill.root.setAttribute('aria-multiline', 'true');
     quill.root.id = id;
 
+    // Localise the generated toolbar and, if snow built one, its popover.
+    const toolbarRoot = host.previousElementSibling;
+    if (toolbarRoot instanceof HTMLElement) applyToolbarLabels(toolbarRoot);
+    const tooltip = quill.container.querySelector('.ql-tooltip');
+    if (tooltip instanceof HTMLElement) applyTooltipLabels(tooltip);
+
     return () => {
       quill.off('text-change', emit);
+      quill.off('editor-change', syncTableState);
       quill.root.removeEventListener('compositionstart', onCompositionStart);
       quill.root.removeEventListener('compositionend', onCompositionEnd);
       quillRef.current = null;
       loadedSignature.current = null;
+      setInTable(false);
       wrapper.replaceChildren();
     };
-  }, [id, labelledBy, placeholder]);
+  }, [deps, id, labelledBy, placeholder, signatureOf]);
 
   // Fetch bytes for any attachment the content references.
   useEffect(() => {
@@ -202,23 +268,30 @@ export function RichEditor({ id, value, onChange, disabled = false, placeholder,
   // attachments resolve, since resolving swaps `attachment:` URLs for blob URLs.
   useEffect(() => {
     const quill = quillRef.current;
-    if (!quill) return;
+    if (!quill || !deps) return;
     // Never rewrite under the user's cursor: it would collapse the selection and
     // break IME composition.
     if (quill.hasFocus() || composing.current) return;
     const signature = signatureOf(value);
     if (signature === loadedSignature.current) return;
 
-    const ops = markdownToDelta(value, attachments.mapToDisplay);
+    const ops = parseContent(value, attachments.mapToDisplay);
     loadedSignature.current = signature;
-    quill.setContents(ops, 'silent');
-  }, [attachments.mapToDisplay, attachments.resolved, signatureOf, value]);
+    // Without KaTeX the formula blot throws on creation, so degrade to source.
+    quill.setContents(deps.value ? ops : stripFormulas(ops), 'silent');
+  }, [attachments.mapToDisplay, attachments.resolved, deps, signatureOf, value]);
 
   useEffect(() => {
     quillRef.current?.enable(!disabled);
-  }, [disabled]);
+  }, [disabled, deps]);
 
   const referenced = attachmentIdsIn(value);
+
+  const tableAction = (run: (table: TableModule) => void) => () => {
+    const quill = quillRef.current;
+    if (!quill) return;
+    run(quill.getModule('table') as TableModule);
+  };
 
   return (
     <div className="rich-editor" data-disabled={disabled ? 'true' : undefined}>
@@ -245,8 +318,35 @@ export function RichEditor({ id, value, onChange, disabled = false, placeholder,
           void uploadFiles(files);
         }}
       >
-        <div ref={wrapperRef} className="rich-editor__quill" />
+        <div ref={wrapperRef} className="rich-editor__quill" aria-busy={deps ? undefined : 'true'} />
+        {deps ? null : <p className="rich-editor__loading">{t('richEditor.loading')}</p>}
       </div>
+
+      {inTable ? (
+        <div className="rich-editor__table-bar" role="group" aria-label={t('richEditor.tableControls')}>
+          {(
+            [
+              ['richEditor.tableRowAbove', (table: TableModule) => table.insertRowAbove()],
+              ['richEditor.tableRowBelow', (table: TableModule) => table.insertRowBelow()],
+              ['richEditor.tableColumnLeft', (table: TableModule) => table.insertColumnLeft()],
+              ['richEditor.tableColumnRight', (table: TableModule) => table.insertColumnRight()],
+              ['richEditor.tableDeleteRow', (table: TableModule) => table.deleteRow()],
+              ['richEditor.tableDeleteColumn', (table: TableModule) => table.deleteColumn()],
+              ['richEditor.tableDelete', (table: TableModule) => table.deleteTable()]
+            ] as const
+          ).map(([key, run]) => (
+            <button
+              key={key}
+              type="button"
+              className="rich-editor__table-button"
+              disabled={disabled}
+              onClick={tableAction(run)}
+            >
+              {t(key)}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       {attachments.supported ? (
         <div className="rich-editor__actions">
@@ -305,7 +405,7 @@ export function RichEditor({ id, value, onChange, disabled = false, placeholder,
                   aria-label={t('richEditor.removeAttachment', {
                     name: record?.fileName ?? t('richEditor.attachmentPending')
                   })}
-                  onClick={() => onChange(removeAttachmentReference(value, attachmentId))}
+                  onClick={() => onChange(removeAttachmentFromContent(value, attachmentId))}
                 >
                   <X aria-hidden="true" />
                 </button>

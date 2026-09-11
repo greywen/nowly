@@ -1,40 +1,65 @@
 import { describe, expect, it } from 'vitest';
-import { markdownToHtml, markdownToPlainText, parseMarkdown, safeUrl } from './markdown';
+import { markdownToPlainText, parseMarkdown, safeUrl } from './markdown';
+import { markdownToDelta } from './delta';
 
-describe('markdown to html', () => {
-  it('renders the closed block and inline subset', () => {
-    expect(markdownToHtml('# 标题')).toBe('<h1>标题</h1>');
-    expect(markdownToHtml('## 小标题')).toBe('<h2>小标题</h2>');
-    expect(markdownToHtml('正文')).toBe('<p>正文</p>');
-    expect(markdownToHtml('**粗** *斜* <u>下划线</u>')).toBe('<p><strong>粗</strong> <em>斜</em> <u>下划线</u></p>');
-    expect(markdownToHtml('```\ncode\n```')).toBe('<pre>code</pre>');
-    expect(markdownToHtml('第一段\n\n第二段')).toBe('<p>第一段</p><p>第二段</p>');
-    // A soft break still renders as <br> so legacy multi-line plain text keeps
-    // its shape when displayed, even though editing normalises it.
-    expect(markdownToHtml('一行\n二行')).toBe('<p>一行<br>二行</p>');
-    expect(markdownToHtml('   ')).toBe('');
+// This parser now only reads legacy content: notes written before Delta storage,
+// and the plain text every note held before there was an editor. Its output is
+// asserted through the two things that actually consume it — the token stream and
+// the Delta ops built from it — rather than through the old HTML renderer, which
+// went away with the Markdown storage format.
+
+describe('parsing blocks', () => {
+  it('reads the closed set of block kinds', () => {
+    expect(parseMarkdown('# 标题')).toEqual([{ kind: 'heading', level: 1, inline: [{ kind: 'text', text: '标题' }] }]);
+    expect(parseMarkdown('## 小标题')).toEqual([
+      { kind: 'heading', level: 2, inline: [{ kind: 'text', text: '小标题' }] }
+    ]);
+    expect(parseMarkdown('正文')).toEqual([{ kind: 'paragraph', inline: [{ kind: 'text', text: '正文' }] }]);
+    expect(parseMarkdown('```\na\nb\n```')).toEqual([{ kind: 'code', code: 'a\nb' }]);
+    expect(parseMarkdown('第一段\n\n第二段')).toEqual([
+      { kind: 'paragraph', inline: [{ kind: 'text', text: '第一段' }] },
+      { kind: 'paragraph', inline: [{ kind: 'text', text: '第二段' }] }
+    ]);
+    expect(parseMarkdown('')).toEqual([]);
+    expect(parseMarkdown('   ')).toEqual([]);
   });
 
-  it('clamps headings deeper than h2 so hand-edited content degrades predictably', () => {
-    expect(markdownToHtml('### 三级')).toBe('<h2>三级</h2>');
-    expect(markdownToHtml('###### 六级')).toBe('<h2>六级</h2>');
+  it('reads the inline marks the old editor could produce', () => {
+    expect(parseMarkdown('**粗** *斜* <u>下划线</u>')[0]).toEqual({
+      kind: 'paragraph',
+      inline: [
+        { kind: 'strong', children: [{ kind: 'text', text: '粗' }] },
+        { kind: 'text', text: ' ' },
+        { kind: 'em', children: [{ kind: 'text', text: '斜' }] },
+        { kind: 'text', text: ' ' },
+        { kind: 'underline', children: [{ kind: 'text', text: '下划线' }] }
+      ]
+    });
   });
 
-  it('keeps attacker-controlled markup out of the output', () => {
-    // A literal script tag is text, never an element.
-    expect(markdownToHtml('<script>alert(1)</script>')).toBe('<p>&lt;script&gt;alert(1)&lt;/script&gt;</p>');
-    // Inline HTML other than <u> is not honoured.
-    expect(markdownToHtml('<img src=x onerror=alert(1)>')).toBe('<p>&lt;img src=x onerror=alert(1)&gt;</p>');
-    // Dangerous URL schemes collapse to their visible text.
-    expect(markdownToHtml('[点我](javascript:alert(1))')).toBe('<p>点我</p>');
-    expect(markdownToHtml('![图](vbscript:x)')).toBe('<p>图</p>');
-    expect(markdownToHtml('![图](file:///etc/passwd)')).toBe('<p>图</p>');
-    // SVG can carry script, so it is excluded from the data: allow-list.
-    expect(markdownToHtml('![图](data:image/svg+xml;base64,PHN2Zz4=)')).toBe('<p>图</p>');
-    // Quotes in a URL cannot break out of the attribute.
-    expect(markdownToHtml('![](https://e.com/a"onload="x)')).toContain('&quot;');
+  it('keeps a single newline as a soft break', () => {
+    expect(parseMarkdown('一行\n二行')[0]).toEqual({
+      kind: 'paragraph',
+      inline: [{ kind: 'text', text: '一行' }, { kind: 'break' }, { kind: 'text', text: '二行' }]
+    });
   });
 
+  it('clamps headings deeper than h2, which is all the old format had', () => {
+    expect(parseMarkdown('### 三级')[0]).toMatchObject({ kind: 'heading', level: 2 });
+    expect(parseMarkdown('###### 六级')[0]).toMatchObject({ kind: 'heading', level: 2 });
+  });
+
+  it('honours backslash escapes instead of re-parsing them as syntax', () => {
+    expect(parseMarkdown('\\*不是斜体\\*')).toEqual([
+      { kind: 'paragraph', inline: [{ kind: 'text', text: '*不是斜体*' }] }
+    ]);
+    expect(parseMarkdown('\\# 不是标题')).toEqual([
+      { kind: 'paragraph', inline: [{ kind: 'text', text: '# 不是标题' }] }
+    ]);
+  });
+});
+
+describe('URL handling', () => {
   it('allows only the schemes attachments and previews rely on', () => {
     expect(safeUrl('attachment:abc.png')).toBe('attachment:abc.png');
     expect(safeUrl('blob:nowly/1')).toBe('blob:nowly/1');
@@ -44,32 +69,51 @@ describe('markdown to html', () => {
     expect(safeUrl('javascript:alert(1)')).toBe('');
     expect(safeUrl('JAVASCRIPT:alert(1)')).toBe('');
     expect(safeUrl('data:text/html;base64,x')).toBe('');
-    expect(markdownToHtml('![图](attachment:abc.png)')).toBe('<p><img src="attachment:abc.png" alt="图"></p>');
+    // SVG is excluded even as an image: it can carry script.
+    expect(safeUrl('data:image/svg+xml;base64,PHN2Zz4=')).toBe('');
+  });
+
+  it('carries an attachment reference through to the Delta ops', () => {
+    expect(markdownToDelta('![图](attachment:abc.png)')).toEqual([
+      { insert: { image: 'attachment:abc.png' }, attributes: { alt: '图' } },
+      { insert: '\n' }
+    ]);
   });
 
   it('reads balanced parentheses inside URLs the way CommonMark does', () => {
-    expect(markdownToHtml('[条目](https://ex.com/Foo_(bar))')).toBe('<p><a href="https://ex.com/Foo_(bar)">条目</a></p>');
+    expect(parseMarkdown('[条目](https://ex.com/Foo_(bar))')[0]).toEqual({
+      kind: 'paragraph',
+      inline: [{ kind: 'link', url: 'https://ex.com/Foo_(bar)', children: [{ kind: 'text', text: '条目' }] }]
+    });
     // A rejected scheme must consume the whole link, leaving no stray `)`.
-    expect(markdownToHtml('[点我](javascript:alert(1))')).toBe('<p>点我</p>');
+    expect(markdownToPlainText('[点我](javascript:alert(1))')).toBe('点我');
     // Incomplete syntax stays literal instead of half-parsing.
-    expect(markdownToHtml('[未闭合](https://ex.com')).toBe('<p>[未闭合](https://ex.com</p>');
+    expect(markdownToPlainText('[未闭合](https://ex.com')).toBe('[未闭合](https://ex.com');
   });
 
-  it('honours backslash escapes instead of re-parsing them as syntax', () => {
-    expect(markdownToHtml('\\*不是斜体\\*')).toBe('<p>*不是斜体*</p>');
-    expect(markdownToHtml('\\# 不是标题')).toBe('<p># 不是标题</p>');
+  it('drops an embed with a rejected scheme but keeps its label', () => {
+    for (const source of ['![图](vbscript:x)', '![图](file:///etc/passwd)', '![图](data:image/svg+xml;base64,PHN2Zz4=)']) {
+      // No image op survives, so nothing reaches a src attribute.
+      expect(markdownToDelta(source), source).toEqual([{ insert: '图' }, { insert: '\n' }]);
+    }
   });
 });
 
-describe('parseMarkdown', () => {
-  it('tokenises blocks with semantic, unescaped text', () => {
-    expect(parseMarkdown('# 标题')).toEqual([{ kind: 'heading', level: 1, inline: [{ kind: 'text', text: '标题' }] }]);
-    expect(parseMarkdown('```\na\nb\n```')).toEqual([{ kind: 'code', code: 'a\nb' }]);
-    expect(parseMarkdown('\\*x\\*')).toEqual([{ kind: 'paragraph', inline: [{ kind: 'text', text: '*x*' }] }]);
-    expect(parseMarkdown('![图](attachment:a.png)')).toEqual([
-      { kind: 'paragraph', inline: [{ kind: 'image', alt: '图', url: 'attachment:a.png' }] }
+describe('markup in legacy content stays inert', () => {
+  it('treats raw HTML as text, never as markup', () => {
+    // There is no HTML rendering path left in the app: content goes
+    // Markdown -> Delta -> Quill's own DOM, and Quill inserts text as text. So
+    // the guarantee is that a script tag stays a single text token.
+    expect(parseMarkdown('<script>alert(1)</script>')).toEqual([
+      { kind: 'paragraph', inline: [{ kind: 'text', text: '<script>alert(1)</script>' }] }
     ]);
-    expect(parseMarkdown('')).toEqual([]);
+    expect(parseMarkdown('<img src=x onerror=alert(1)>')).toEqual([
+      { kind: 'paragraph', inline: [{ kind: 'text', text: '<img src=x onerror=alert(1)>' }] }
+    ]);
+    // `<u>` is the one exception, because the old editor's underline needed it.
+    expect(parseMarkdown('<u>线</u>')[0]).toMatchObject({
+      inline: [{ kind: 'underline', children: [{ kind: 'text', text: '线' }] }]
+    });
   });
 });
 
@@ -84,9 +128,9 @@ describe('markdown to plain text', () => {
     expect(markdownToPlainText('   ')).toBe('');
   });
 
-  it('leaves legacy plain text untouched, which is why Markdown needs no migration', () => {
+  it('leaves legacy plain text untouched, which is why no migration is needed', () => {
     expect(markdownToPlainText('买牛奶')).toBe('买牛奶');
-    expect(markdownToHtml('买牛奶')).toBe('<p>买牛奶</p>');
     expect(markdownToPlainText('第一行\n第二行')).toBe('第一行\n第二行');
+    expect(markdownToDelta('买牛奶')).toEqual([{ insert: '买牛奶' }, { insert: '\n' }]);
   });
 });

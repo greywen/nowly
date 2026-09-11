@@ -511,6 +511,41 @@ mod tests {
     }
 
     #[test]
+    fn scan_finds_ids_inside_the_delta_json_envelope() {
+        // The editor stores Delta JSON, not Markdown. This scanner decides which
+        // files get deleted, so a reference it fails to see here is permanent data
+        // loss. An id inside JSON is terminated by the closing quote, which is
+        // neither alphanumeric nor '.', so the same scan works unchanged — but that
+        // has to be proved, not assumed.
+        let stem = "0123456789abcdef0123456789abcdef";
+
+        // An image embed, as serializeContent writes it.
+        let image = format!(
+            r#"{{"v":1,"ops":[{{"insert":{{"image":"attachment:{stem}.png"}},"attributes":{{"alt":"图"}}}},{{"insert":"\n"}}]}}"#
+        );
+        assert_eq!(scan_references(&image), vec![format!("{stem}.png")]);
+
+        // A file link, which is how non-images are referenced.
+        let link = format!(
+            r#"{{"v":1,"ops":[{{"insert":"报告.pdf","attributes":{{"link":"attachment:{stem}.pdf"}}}},{{"insert":"\n"}}]}}"#
+        );
+        assert_eq!(scan_references(&link), vec![format!("{stem}.pdf")]);
+
+        // Several references in one document, deduped in order.
+        let many = format!(
+            r#"{{"v":1,"ops":[{{"insert":{{"image":"attachment:{stem}.png"}}}},{{"insert":{{"image":"attachment:{stem}.jpg"}}}},{{"insert":{{"image":"attachment:{stem}.png"}}}}]}}"#
+        );
+        assert_eq!(
+            scan_references(&many),
+            vec![format!("{stem}.png"), format!("{stem}.jpg"), format!("{stem}.png")]
+        );
+
+        // A video embed points at a remote URL and must contribute nothing.
+        let video = r#"{"v":1,"ops":[{"insert":{"video":"https://example.com/e/1"}}]}"#;
+        assert!(scan_references(video).is_empty());
+    }
+
+    #[test]
     fn garbage_collection_keeps_referenced_files_and_reclaims_the_rest() {
         let connection = database();
         let dir = temp_dir();

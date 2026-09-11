@@ -16,6 +16,12 @@
 .rich-editor {
   display: grid;
   gap: 8px;
+
+  /* design.md defines only --font-sans, but the code formats and the font
+     picker's second option both need a monospace stack. Scoped to this
+     component rather than added to :root, so it stays a local decision until
+     the design system defines a token for it. */
+  --rich-font-mono: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
 }
 
 /* One surface holds toolbar and editor, matching the single-control look of
@@ -105,11 +111,42 @@
   fill: var(--color-primary-active);
 }
 
-/* Heading picker */
+/* Pickers. snow pins ql-header to 98px, ql-font to 108px and ql-size to 98px,
+   which clips the Chinese labels, so width is released back to the content. */
+.rich-editor .ql-toolbar.ql-snow .ql-picker.ql-header,
+.rich-editor .ql-toolbar.ql-snow .ql-picker.ql-font,
+.rich-editor .ql-toolbar.ql-snow .ql-picker.ql-size {
+  width: auto;
+  min-width: 64px;
+}
 .rich-editor .ql-toolbar.ql-snow .ql-picker {
   color: var(--text-secondary);
   font-family: var(--font-sans);
   font-size: 0.95rem;
+}
+/* snow scales its heading options by the same em ladder it uses in the editor
+   (2em down to .67em), which makes the menu unreadable at our root size. */
+.rich-editor .ql-toolbar.ql-snow .ql-picker.ql-header .ql-picker-item::before {
+  font-size: 1rem;
+}
+.rich-editor .ql-toolbar.ql-snow .ql-picker.ql-size .ql-picker-item::before {
+  font-size: 1rem;
+}
+/* Colour swatches: square, bordered, and legible against the warm surface. */
+.rich-editor .ql-toolbar.ql-snow .ql-color-picker .ql-picker-options {
+  width: auto;
+  padding: 8px;
+}
+.rich-editor .ql-toolbar.ql-snow .ql-color-picker .ql-picker-item {
+  width: 18px;
+  height: 18px;
+  margin: 2px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+}
+.rich-editor .ql-toolbar.ql-snow .ql-color-picker .ql-picker-item:hover,
+.rich-editor .ql-toolbar.ql-snow .ql-color-picker .ql-picker-item.ql-selected {
+  border-color: var(--color-primary-active);
 }
 .rich-editor .ql-toolbar.ql-snow .ql-picker-label {
   padding: 0 4px 0 8px;
@@ -206,7 +243,7 @@
   margin: 0;
   padding: 8px 12px;
   color: var(--text-strong);
-  font-family: Consolas, "Courier New", monospace;
+  font-family: var(--rich-font-mono);
   font-size: 0.95rem;
   line-height: 1.5;
   border: 1px solid var(--border-default);
@@ -215,8 +252,227 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+/* Inline code, distinct from a code block: snow gives it #f0f0f0 and 3px. */
+.rich-editor .ql-editor code {
+  padding: 1px 4px;
+  color: var(--text-strong);
+  font-family: var(--rich-font-mono);
+  font-size: 0.95rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+}
+.rich-editor .ql-editor .ql-code-block-container code {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+/* Language select the syntax module injects into each code block. */
+.rich-editor .ql-editor .ql-code-block-container select.ql-ui {
+  padding: 2px 4px;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+}
 
-/* Link tooltip */
+/* Syntax tokens. highlight.js themes ship palettes of their own, so the tokens
+   are repainted from design.md instead. The palette is small by necessity:
+   measured against --bg-secondary (#F6F1E9), most of the semantic colours fail
+   the 4.5:1 body-text threshold — success 1.44, warning 1.50, danger 2.82,
+   primary-active 2.57. Only these clear it:
+
+     text-primary    14.62      info-active   7.23
+     text-strong      9.61      info          5.13
+     text-secondary   4.58
+
+   So weight and italics carry the distinctions colour cannot. design.md defines
+   no syntax palette; this is the same documented gap as the monospace stack. */
+.rich-editor .ql-editor .hljs-comment,
+.rich-editor .ql-editor .hljs-quote {
+  color: var(--text-secondary);
+  font-style: italic;
+}
+.rich-editor .ql-editor .hljs-keyword,
+.rich-editor .ql-editor .hljs-selector-tag,
+.rich-editor .ql-editor .hljs-built_in,
+.rich-editor .ql-editor .hljs-type,
+.rich-editor .ql-editor .hljs-literal,
+.rich-editor .ql-editor .hljs-section,
+.rich-editor .ql-editor .hljs-doctag {
+  color: var(--color-info-active);
+  font-weight: 600;
+}
+.rich-editor .ql-editor .hljs-string,
+.rich-editor .ql-editor .hljs-number,
+.rich-editor .ql-editor .hljs-regexp,
+.rich-editor .ql-editor .hljs-symbol,
+.rich-editor .ql-editor .hljs-attr,
+.rich-editor .ql-editor .hljs-template-variable,
+.rich-editor .ql-editor .hljs-variable {
+  color: var(--color-info);
+}
+.rich-editor .ql-editor .hljs-title,
+.rich-editor .ql-editor .hljs-name,
+.rich-editor .ql-editor .hljs-attribute,
+.rich-editor .ql-editor .hljs-selector-id,
+.rich-editor .ql-editor .hljs-selector-class {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.rich-editor .ql-editor .hljs-meta,
+.rich-editor .ql-editor .hljs-tag,
+.rich-editor .ql-editor .hljs-punctuation {
+  color: var(--text-secondary);
+}
+.rich-editor .ql-editor .hljs-emphasis {
+  font-style: italic;
+}
+.rich-editor .ql-editor .hljs-strong {
+  font-weight: 600;
+}
+.rich-editor .ql-editor .hljs-deletion {
+  color: var(--color-danger);
+}
+.rich-editor .ql-editor .hljs-addition {
+  color: var(--text-primary);
+}
+
+/* ---- The rest of the formats ---- */
+
+/* Headings. snow sizes these on an em ladder (2em / 1.5em / 1.17em / 1em);
+   design.md §3.3 fixes them in rem so the whole scale tracks the root size.
+   H5 and H6 are absent from the toolbar because §3.3 stops at H4. */
+.rich-editor .ql-editor h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.rich-editor .ql-editor h4 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 1.15rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+/* Font picker's second option. `mono` is our own value, so snow has no rule. */
+.rich-editor .ql-editor .ql-font-mono {
+  font-family: var(--rich-font-mono);
+}
+
+/* Blockquote: snow uses a 4px #ccc bar. */
+.rich-editor .ql-editor blockquote {
+  margin: 0;
+  padding: 4px 0 4px 12px;
+  color: var(--text-secondary);
+  border-left: 2px solid var(--color-primary);
+  background: var(--bg-secondary);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+/* Sub- and superscript, which snow leaves to the browser default of 0.83em. */
+.rich-editor .ql-editor sub,
+.rich-editor .ql-editor sup {
+  font-size: 0.85rem;
+  line-height: 0;
+}
+
+/* Lists. snow already draws the markers through ::before counters; only the
+   colour and the checklist affordance need design values. */
+.rich-editor .ql-editor ol {
+  margin: 0;
+  padding-left: 1.5em;
+}
+.rich-editor .ql-editor li > .ql-ui::before {
+  color: var(--text-muted);
+}
+.rich-editor .ql-editor li[data-list='checked'] > .ql-ui::before,
+.rich-editor .ql-editor li[data-list='unchecked'] > .ql-ui::before {
+  color: var(--color-primary-active);
+}
+.rich-editor .ql-editor li[data-list='checked'] {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+/* Tables. snow draws 1px solid #000 cell borders, which is far heavier than
+   anything in design.md §7. */
+.rich-editor .ql-editor table {
+  width: 100%;
+  margin: 0;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 0.95rem;
+}
+.rich-editor .ql-editor table td {
+  padding: 6px 8px;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
+  vertical-align: top;
+}
+
+/* Video embeds. */
+.rich-editor .ql-editor iframe.ql-video {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  height: auto;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+}
+
+/* KaTeX renders at 1.21em by default, which reads oversized next to body text. */
+.rich-editor .ql-editor .ql-formula .katex {
+  font-size: 1.05em;
+}
+.rich-editor .ql-editor .ql-formula {
+  color: var(--text-primary);
+}
+
+/* Link / video / formula popover.
+ *
+ * snow hardcodes every label as a `content:` literal in English ('Visit URL:',
+ * 'Edit', 'Remove', 'Save', 'Enter link:'). They are replaced with `attr()`
+ * reads of data attributes that applyTooltipLabels writes from the i18n layer.
+ * `attr()` only sees the attributes of its own element, which is why the action
+ * labels are read off the action elements. */
+.rich-editor .ql-snow .ql-tooltip::before {
+  content: attr(data-label-visit);
+  color: var(--text-muted);
+  line-height: 26px;
+  margin-right: 8px;
+}
+.rich-editor .ql-snow .ql-tooltip[data-mode='link']::before {
+  content: attr(data-label-link);
+}
+.rich-editor .ql-snow .ql-tooltip[data-mode='formula']::before {
+  content: attr(data-label-formula);
+}
+.rich-editor .ql-snow .ql-tooltip[data-mode='video']::before {
+  content: attr(data-label-video);
+}
+.rich-editor .ql-snow .ql-tooltip a.ql-action::after {
+  content: attr(data-label-edit);
+  border-right: 1px solid var(--border-default);
+  margin-left: 16px;
+  padding-right: 8px;
+}
+.rich-editor .ql-snow .ql-tooltip.ql-editing a.ql-action::after {
+  content: attr(data-label-save);
+  border-right: 0;
+  padding-right: 0;
+}
+.rich-editor .ql-snow .ql-tooltip a.ql-remove::before {
+  content: attr(data-label-remove);
+  margin-left: 8px;
+}
+
 .rich-editor .ql-snow .ql-tooltip {
   padding: 8px 12px;
   color: var(--text-secondary);
@@ -224,6 +480,9 @@
   border-radius: var(--radius-default);
   background: var(--bg-surface);
   box-shadow: var(--shadow-dropdown);
+}
+.rich-editor .ql-snow .ql-tooltip a.ql-preview {
+  color: var(--color-primary-active);
 }
 .rich-editor .ql-snow .ql-tooltip input[type='text'] {
   padding: 4px 8px;
@@ -235,6 +494,53 @@
 .rich-editor .ql-snow .ql-tooltip a.ql-action,
 .rich-editor .ql-snow .ql-tooltip a.ql-remove {
   color: var(--color-primary-active);
+}
+
+/* ---- Loading and table controls ---- */
+
+/* Placeholder while the KaTeX / highlight.js chunk arrives. Sized to the
+   editor's own min-height so the dialog does not jump when it is replaced. */
+.rich-editor__loading {
+  margin: 0;
+  min-height: 96px;
+  padding: 11px 16px;
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+/* Shown only while the caret sits inside a table: Quill ships the table model
+   but no UI for it. Text buttons rather than icons because the icon set has no
+   glyph that distinguishes a row operation from a column one. */
+.rich-editor__table-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.rich-editor__table-button {
+  padding: 4px 8px;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  cursor: pointer;
+}
+.rich-editor__table-button:hover {
+  color: var(--color-primary-active);
+  border-color: var(--color-primary);
+  background: var(--bg-secondary);
+}
+.rich-editor__table-button:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 4px var(--focus-ring);
+}
+.rich-editor__table-button:disabled {
+  color: var(--text-disabled);
+  cursor: not-allowed;
 }
 
 /* ---- Attach action ---- */

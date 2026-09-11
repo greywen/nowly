@@ -4,31 +4,38 @@ import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { RepositoryProvider } from '../data/RepositoryContext';
 import type { NowlyRepository } from '../data/nowly-repository';
-import type { KanbanCard, KanbanLane, KanbanSnapshot } from './kanban-model';
+import { TaskWorkspaceProvider } from '../tasks/TaskWorkspaceContext';
+import type { Task, TaskLane, TaskWorkspaceSnapshot } from '../tasks/task-model';
 import { KanbanWidget } from './KanbanWidget';
 
-function lane(id: string, name: string, position: number): KanbanLane {
-  return { id, name, color: 'primary', position, createdAt: 'x', updatedAt: 'x' };
+function lane(id: string, name: string, position: number): TaskLane {
+  return { id, name, color: '#4FC9DA', position, createdAt: 'x', updatedAt: 'x' };
 }
 
-function card(id: string, laneId: string, position: number, overrides: Partial<KanbanCard> = {}): KanbanCard {
+function task(id: string, laneId: string, boardPosition: number, overrides: Partial<Task> = {}): Task {
   return {
-    id, laneId, title: id, description: null, dueDate: null, priorityId: null,
-    position, tagIds: [], collaboratorIds: [], createdAt: 'x', updatedAt: 'x', ...overrides
+    id, title: id, description: '', priority: null, dueDate: null, completed: false,
+    laneId, boardPosition, tagIds: [], collaboratorIds: [], views: ['kanban'],
+    createdAt: 'x', updatedAt: 'x', ...overrides
   };
 }
 
-const snapshot: KanbanSnapshot = {
+const snapshot: TaskWorkspaceSnapshot = {
   lanes: [lane('lane-a', '待处理', 0), lane('lane-b', '进行中', 1), lane('lane-c', '已完成', 2)],
-  cards: [
-    card('c1', 'lane-a', 0, { title: '写文档' }),
-    card('c2', 'lane-a', 1, { title: '修 bug' }),
-    card('c3', 'lane-b', 0, { title: '评审' })
+  tasks: [
+    task('c1', 'lane-a', 0, { title: '写文档' }),
+    task('c2', 'lane-a', 1, { title: '修 bug' }),
+    task('c3', 'lane-b', 0, { title: '评审' })
   ],
-  priorities: [],
   tags: [],
-  collaborators: []
+  collaborators: [],
+  linkingEnabled: true,
+  defaultLaneId: 'lane-a',
+  completionLaneId: 'lane-c',
+  viewPreferences: {}
 };
+
+const emptySnapshot: TaskWorkspaceSnapshot = { ...snapshot, lanes: [], tasks: [] };
 
 function repository(overrides: Partial<NowlyRepository> = {}): NowlyRepository {
   return {
@@ -39,7 +46,7 @@ function repository(overrides: Partial<NowlyRepository> = {}): NowlyRepository {
     listModuleLayout: vi.fn().mockResolvedValue([]), saveModuleLayout: vi.fn(),
     getModuleState: vi.fn().mockResolvedValue(null), setModuleState: vi.fn().mockResolvedValue(undefined), createFocusSession:vi.fn().mockImplementation((session)=>Promise.resolve(session)), listFocusSessions:vi.fn().mockResolvedValue([]), getFocusStatistics:vi.fn().mockResolvedValue({totalFocusedSeconds:0,completedCount:0,interruptedCount:0,completionRate:0,points:[]}),
     listExtensions: vi.fn().mockResolvedValue([]), installExtension: vi.fn(), uninstallExtension: vi.fn(),
-    getKanbanSnapshot: vi.fn().mockResolvedValue(snapshot),
+    getKanbanSnapshot: vi.fn().mockResolvedValue({ lanes: [], cards: [], priorities: [], tags: [], collaborators: [] }),
     createKanbanLane: vi.fn(), updateKanbanLane: vi.fn(), deleteKanbanLane: vi.fn().mockResolvedValue(undefined),
     reorderKanbanLanes: vi.fn().mockResolvedValue([]),
     createKanbanCard: vi.fn(), updateKanbanCard: vi.fn(), deleteKanbanCard: vi.fn().mockResolvedValue(undefined),
@@ -47,27 +54,40 @@ function repository(overrides: Partial<NowlyRepository> = {}): NowlyRepository {
     createKanbanPriority: vi.fn(), updateKanbanPriority: vi.fn(), deleteKanbanPriority: vi.fn(), reorderKanbanPriorities: vi.fn(),
     createKanbanTag: vi.fn(), updateKanbanTag: vi.fn(), deleteKanbanTag: vi.fn(),
     createKanbanCollaborator: vi.fn(), updateKanbanCollaborator: vi.fn(), deleteKanbanCollaborator: vi.fn(), proxyFetch: vi.fn(), fetchRegistry: vi.fn(), downloadModule: vi.fn(), listCalendarSubscriptions: vi.fn().mockResolvedValue([]), createCalendarSubscription: vi.fn(), updateCalendarSubscription: vi.fn(), deleteCalendarSubscription: vi.fn(), refreshCalendarSubscription: vi.fn(), startOAuthLogin: vi.fn(), listOAuthAccounts: vi.fn().mockResolvedValue([]), disconnectOAuthAccount: vi.fn(), listRemoteCalendars: vi.fn().mockResolvedValue([]), subscribeRemoteCalendar: vi.fn(), updateSubscriptionDisplay: vi.fn(), listExternalEventsInRange: vi.fn().mockResolvedValue([]),
+    // The board reads the unified task workspace. Mocking this rather than the
+    // legacy pair keeps the fixture on the same path production takes, and gives
+    // exact control over lanes — `workspaceFromLegacy` substitutes three default
+    // lanes when a legacy snapshot has none, which would mask the empty state.
+    getTaskWorkspaceSnapshot: vi.fn().mockResolvedValue(snapshot),
+    deleteTaskLane: vi.fn().mockResolvedValue(emptySnapshot),
     ...overrides
   };
 }
 
 function renderWidget(repo: NowlyRepository) {
   function Wrapper({ children }: { children: ReactNode }) {
-    return <RepositoryProvider repository={repo}>{children}</RepositoryProvider>;
+    return (
+      <RepositoryProvider repository={repo}>
+        <TaskWorkspaceProvider>{children}</TaskWorkspaceProvider>
+      </RepositoryProvider>
+    );
   }
   return render(<KanbanWidget todayIso="2026-08-12" />, { wrapper: Wrapper });
 }
 
 describe('KanbanWidget', () => {
-  it('shows the header with add-lane and a settings button that opens field management', async () => {
+  it('shows the header with add-lane and a settings button that opens task settings', async () => {
     const user = userEvent.setup();
     renderWidget(repository());
     expect(await screen.findByRole('button', { name: '添加泳道' })).toBeInTheDocument();
     // The settings gear opens the field dialog directly; there is no intermediate menu.
     await user.click(screen.getByRole('button', { name: '看板设置' }));
     expect(screen.queryByRole('menuitem')).not.toBeInTheDocument();
-    expect(screen.getByRole('dialog', { name: '看板设置' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: '优先级(0)' })).toHaveAttribute('aria-selected', 'true');
+    // Board settings are now the unified task settings, which lead with the
+    // view-linking tab. Priorities are the four fixed quadrants, not editable rows.
+    expect(screen.getByRole('dialog', { name: '任务设置' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '视图联动' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: '优先级(4)' })).toBeInTheDocument();
   });
 
   it('renders each lane with an accessible add-card button and a single scroll viewport', async () => {
@@ -83,7 +103,10 @@ describe('KanbanWidget', () => {
     renderWidget(repository());
     await screen.findByRole('region', { name: '泳道：进行中' });
     await user.click(screen.getByRole('button', { name: '在进行中新增任务' }));
-    expect(screen.getByRole('heading', { name: '在“进行中”新建任务' })).toBeInTheDocument();
+    // The unified dialog carries one title for every origin and states the lane in
+    // a field, where it stays editable, rather than baking it into the heading.
+    expect(screen.getByRole('dialog', { name: '新建任务' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: '看板泳道' })).toHaveTextContent('进行中');
   });
 
   it('opens the lane editor by clicking the lane name', async () => {
@@ -115,12 +138,13 @@ describe('KanbanWidget', () => {
     await user.click(screen.getByRole('button', { name: '删除泳道' }));
     expect(screen.getByText(/该泳道包含 2 张任务/)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '永久删除' }));
-    expect(repo.deleteKanbanLane).toHaveBeenCalledWith('lane-a');
+    // Cards move to the first surviving lane rather than being orphaned.
+    expect(repo.deleteTaskLane).toHaveBeenCalledWith('lane-a', 'lane-b');
   });
 
   it('shows an empty state when there are no lanes', async () => {
     renderWidget(repository({
-      getKanbanSnapshot: vi.fn().mockResolvedValue({ lanes: [], cards: [], priorities: [], tags: [], collaborators: [] })
+      getTaskWorkspaceSnapshot: vi.fn().mockResolvedValue(emptySnapshot)
     }));
     expect(await screen.findByText(/还没有泳道/)).toBeInTheDocument();
   });

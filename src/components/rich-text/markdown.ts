@@ -1,6 +1,11 @@
-// Markdown is the storage format for every rich text field (event notes, task
-// descriptions, note bodies). This module owns the single parser for that
-// format; renderers consume its tokens.
+// Parser for legacy content: notes written before the Delta storage format, and
+// the plain text every note held before there was an editor at all.
+//
+// Content is stored as Delta JSON now (see content.ts), so nothing writes
+// Markdown any more. This module only reads it, which is why the serialising
+// half — the escapers, the fence builder, the URL encoder and the HTML renderer
+// — was removed along with that format. Its remaining jobs are producing Delta
+// ops on load (delta.ts) and flattening for previews.
 //
 // The supported subset is deliberately closed:
 //
@@ -8,19 +13,12 @@
 //   ``` fenced code / ![alt](src) images / [text](href) links
 //
 // `<u>` is the one inline HTML form accepted, because Markdown has no underline
-// syntax but the editor toolbar offers underline, so it must survive a round
-// trip.
+// syntax but the old editor offered underline, so it had to survive a round trip.
 //
-// Security note: `markdownToHtml` builds output from parsed tokens rather than
-// passing source through, so the only markup it can emit is the tag set above
-// and the result needs no separate sanitiser. URLs are the sole place
-// attacker-controlled text reaches an attribute, so they go through `safeUrl`.
+// URLs are the one place attacker-controlled text from old content reaches an
+// attribute, so they go through `safeUrl`.
 //
-// Token text is *semantic* (already unescaped). Each serialiser re-escapes for
-// its own target, which is why `escapeMarkdownText` is exported.
-
-/** Tags `markdownToHtml` can produce. Exported so tests can pin the closed set. */
-export const richTextTags = ['p', 'h1', 'h2', 'pre', 'strong', 'em', 'u', 'a', 'img', 'br'] as const;
+// Token text is *semantic* (already unescaped).
 
 const escapedMarkdownChars = '\\*[]`<>#';
 
@@ -38,13 +36,6 @@ export type Block =
   | { kind: 'paragraph'; inline: InlineToken[] }
   | { kind: 'code'; code: string };
 
-function escapeHtml(value: string): string {
-  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
-function escapeAttribute(value: string): string {
-  return escapeHtml(value).replace(/"/g, '&quot;');
-}
 
 /**
  * Reject any URL scheme not explicitly allowed. Relative paths and fragments
@@ -63,54 +54,8 @@ export function safeUrl(raw: string): string {
   return '';
 }
 
-function longestBacktickRun(value: string): number {
-  let longest = 0;
-  for (const run of value.match(/`+/g) ?? []) longest = Math.max(longest, run.length);
-  return longest;
-}
-
-/** Wrap code in a fence wide enough to survive backticks inside the code. */
-export function fenceCodeBlock(code: string): string {
-  const fence = '`'.repeat(Math.max(3, longestBacktickRun(code) + 1));
-  return `${fence}\n${code}\n${fence}`;
-}
-
-/** Escape text so it survives being written back as Markdown inline content. */
-export function escapeMarkdownText(value: string): string {
-  // Quill emits U+00A0 for runs of spaces; normalise so stored text stays
-  // greppable and diffable.
-  return value.replace(/\u00a0/g, ' ').replace(/([\\*[\]`<>])/g, '\\$1');
-}
-
-/** Prevent a block that happens to start with `#` from re-parsing as a heading. */
-export function escapeLeadingHash(value: string): string {
-  return value.replace(/^(\s*)(#+)/, '$1\\$2');
-}
-
 function unescapeMarkdown(value: string): string {
   return value.replace(/\\([\\*[\]`<>#])/g, '$1');
-}
-
-function hasBalancedParens(value: string): boolean {
-  let depth = 0;
-  for (const char of value) {
-    if (char === '(') depth += 1;
-    else if (char === ')') {
-      depth -= 1;
-      if (depth < 0) return false;
-    }
-  }
-  return depth === 0;
-}
-
-/**
- * Percent-encode only URLs that could not be written back between parentheses.
- * Balanced parens stay readable, because links such as
- * `https://en.wikipedia.org/wiki/Foo_(bar)` are common and round-trip fine.
- */
-export function encodeUrlForMarkdown(url: string): string {
-  if (hasBalancedParens(url) && !/\s/.test(url)) return url;
-  return url.replace(/\(/g, '%28').replace(/\)/g, '%29').replace(/\s/g, '%20');
 }
 
 type InlineLink = { label: string; url: string; length: number };
@@ -153,7 +98,7 @@ function matchLink(source: string, image: boolean): InlineLink | null {
 }
 
 /** Tokenise inline Markdown. Token text is unescaped, semantic content. */
-export function tokenizeInline(source: string): InlineToken[] {
+function tokenizeInline(source: string): InlineToken[] {
   const tokens: InlineToken[] = [];
   let buffer = '';
   const flush = () => {
@@ -289,29 +234,6 @@ export function parseMarkdown(markdown: string): Block[] {
   return blocks;
 }
 
-function renderInlineHtml(tokens: InlineToken[]): string {
-  return tokens
-    .map((token) => {
-      switch (token.kind) {
-        case 'text':
-          return escapeHtml(token.text);
-        case 'break':
-          return '<br>';
-        case 'image':
-          return `<img src="${escapeAttribute(token.url)}" alt="${escapeAttribute(token.alt)}">`;
-        case 'link':
-          return `<a href="${escapeAttribute(token.url)}">${renderInlineHtml(token.children)}</a>`;
-        case 'strong':
-          return `<strong>${renderInlineHtml(token.children)}</strong>`;
-        case 'em':
-          return `<em>${renderInlineHtml(token.children)}</em>`;
-        case 'underline':
-          return `<u>${renderInlineHtml(token.children)}</u>`;
-      }
-    })
-    .join('');
-}
-
 function renderInlinePlain(tokens: InlineToken[]): string {
   return tokens
     .map((token) => {
@@ -329,24 +251,7 @@ function renderInlinePlain(tokens: InlineToken[]): string {
     .join('');
 }
 
-/**
- * Render stored Markdown as HTML restricted to `richTextTags`. Safe to inject:
- * every tag is constructed here and every URL passed through `safeUrl`.
- */
-export function markdownToHtml(markdown: string): string {
-  if (!markdown.trim()) return '';
-  return parseMarkdown(markdown)
-    .map((block) => {
-      if (block.kind === 'code') return `<pre>${escapeHtml(block.code)}</pre>`;
-      if (block.kind === 'heading') {
-        return `<h${block.level}>${renderInlineHtml(block.inline)}</h${block.level}>`;
-      }
-      return `<p>${renderInlineHtml(block.inline)}</p>`;
-    })
-    .join('');
-}
-
-/** Flatten Markdown for list previews and search. */
+/** Flatten legacy Markdown for list previews and search. */
 export function markdownToPlainText(markdown: string): string {
   if (!markdown.trim()) return '';
   return parseMarkdown(markdown)

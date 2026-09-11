@@ -371,7 +371,6 @@ function AppContent() {
       <ModalRoot
         modal={modal}
         events={events}
-        tasks={tasks}
         onClose={() => setModal(null)}
         onChangeModal={setModal}
         createEvent={eventsFeature.createEvent}
@@ -379,11 +378,6 @@ function AppContent() {
         deleteEvent={eventsFeature.deleteEvent}
         onSaved={() => undefined}
         onDeleted={() => undefined}
-        createTask={tasksFeature.createTask}
-        updateTask={tasksFeature.updateTask}
-        deleteTask={tasksFeature.deleteTask}
-        onTaskSaved={() => undefined}
-        onTaskDeleted={() => undefined}
         notes={notes}
         createNote={notesFeature.createNote}
         updateNote={notesFeature.updateNote}

@@ -1,4 +1,33 @@
 import '@testing-library/jest-dom/vitest';
+import { vi } from 'vitest';
+
+// The rich text editor defers construction until KaTeX (~4 MB) and highlight.js
+// have loaded. Paying Vite's transform cost for those on the critical path of
+// every dialog-opening test made the suite flaky: under parallel load the import
+// overran `waitFor`'s 1000ms default and three App tests failed intermittently.
+//
+// So the loader is stubbed for the suite and the real one is covered directly by
+// rich-deps.test.ts, which is the only place that pays for it.
+//
+// The hljs stub mirrors the v11 API Quill's syntax module calls —
+// `highlight(text, { language }).value` — and escapes its output because Quill
+// assigns the result straight to `innerHTML`.
+vi.mock('./components/rich-text/rich-deps', () => ({
+  loadRichTextDeps: () =>
+    Promise.resolve({
+      hljs: {
+        versionString: '11.12.0',
+        highlight: (text: string) => ({
+          value: text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        })
+      },
+      languages: [
+        { key: 'plain', label: 'Plain' },
+        { key: 'javascript', label: 'JavaScript' }
+      ]
+    }),
+  resetRichTextDeps: () => {}
+}));
 
 // The i18n store reads its initial language from the system (navigator), and
 // the existing unit tests assert Chinese output from the pure formatters /

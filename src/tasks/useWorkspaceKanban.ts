@@ -1,15 +1,12 @@
 import { useCallback, useMemo, useState } from 'react';
-import type {
-  KanbanCardDraft,
-  KanbanCollaboratorDraft,
-  KanbanLaneDraft,
-  KanbanPriorityDraft,
-  KanbanTagDraft
-} from '../kanban/kanban-model';
+import type { KanbanLaneDraft } from '../kanban/kanban-model';
 import { useTaskWorkspace } from './TaskWorkspaceContext';
-import { kanbanSnapshotFromWorkspace, taskToKanbanCard } from './task-projections';
-import type { TaskDraft } from './task-model';
+import { kanbanSnapshotFromWorkspace } from './task-projections';
 
+// Projects the unified task workspace into the shape the board renders, and adds
+// the drag-error handling the board needs on top of it. Card and field writes are
+// not here: the task dialog and the task settings dialog both talk to the
+// workspace directly.
 export function useWorkspaceKanban() {
   const workspace = useTaskWorkspace();
   const [dragError, setDragError] = useState<string | null>(null);
@@ -23,35 +20,8 @@ export function useWorkspaceKanban() {
       ? { status: 'loading' as const, data }
       : { status: 'ready' as const, data };
 
-  const taskDraft = useCallback((card: KanbanCardDraft): TaskDraft => {
-    const current = workspace.workspace.data.tasks.find((task) => task.id === card.title);
-    void current;
-    return {
-      title: card.title,
-      description: card.description ?? '',
-      priority: card.priorityId as TaskDraft['priority'],
-      dueDate: card.dueDate,
-      completed: card.laneId === workspace.workspace.data.completionLaneId,
-      laneId: card.laneId,
-      tagIds: card.tagIds,
-      collaboratorIds: card.collaboratorIds
-    };
-  }, [workspace.workspace.data.completionLaneId, workspace.workspace.data.tasks]);
-
-  const createCard = useCallback(async (draft: KanbanCardDraft) => {
-    const created = await workspace.createTask('kanban', taskDraft(draft));
-    return taskToKanbanCard(created);
-  }, [taskDraft, workspace]);
-
-  const updateCard = useCallback(async (id: string, draft: KanbanCardDraft) => {
-    const current = workspace.workspace.data.tasks.find((task) => task.id === id);
-    const saved = await workspace.updateTask(id, {
-      ...taskDraft(draft),
-      views: current?.views
-    });
-    return taskToKanbanCard(saved);
-  }, [taskDraft, workspace]);
-
+  // Drag failures surface inline on the board instead of throwing, because the
+  // gesture has already visually completed by the time the write is rejected.
   const moveCard = useCallback(async (id: string, laneId: string, targetIndex: number) => {
     setDragError(null);
     try {
@@ -89,37 +59,12 @@ export function useWorkspaceKanban() {
     createLane: (draft: KanbanLaneDraft) => workspace.createLane(draft),
     updateLane: (id: string, draft: KanbanLaneDraft) => workspace.updateLane(id, draft),
     deleteLane: (id: string) => {
+      // Cards in a deleted lane move to the first survivor rather than being
+      // orphaned, which would hide them from the board entirely.
       const fallback = workspace.workspace.data.lanes.find((lane) => lane.id !== id)?.id ?? null;
       return workspace.deleteLane(id, fallback);
     },
     reorderLanes,
-    createCard,
-    updateCard,
-    deleteCard: (id: string) => workspace.deleteTask(id),
-    moveCard,
-    // Fixed priorities are immutable. These methods reject if an old dialog
-    // attempts to mutate them; the new field manager renders them read-only.
-    createPriority: async (_draft: KanbanPriorityDraft) => { throw new Error('四象限优先分类不可新增。'); },
-    updatePriority: async (_id: string, _draft: KanbanPriorityDraft) => { throw new Error('四象限优先分类不可修改。'); },
-    deletePriority: async (_id: string) => { throw new Error('四象限优先分类不可删除。'); },
-    reorderPriorities: async () => data.priorities,
-    createTag: async (draft: KanbanTagDraft) => {
-      await workspace.createTag(draft);
-      return data.tags[0];
-    },
-    updateTag: async (id: string, draft: KanbanTagDraft) => {
-      await workspace.updateTag(id, draft);
-      return data.tags.find((tag) => tag.id === id)!;
-    },
-    deleteTag: (id: string) => workspace.deleteTag(id),
-    createCollaborator: async (draft: KanbanCollaboratorDraft) => {
-      await workspace.createCollaborator(draft);
-      return data.collaborators[0];
-    },
-    updateCollaborator: async (id: string, draft: KanbanCollaboratorDraft) => {
-      await workspace.updateCollaborator(id, draft);
-      return data.collaborators.find((person) => person.id === id)!;
-    },
-    deleteCollaborator: (id: string) => workspace.deleteCollaborator(id)
+    moveCard
   };
 }
