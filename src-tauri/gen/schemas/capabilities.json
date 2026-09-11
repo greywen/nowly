@@ -1,1 +1,1 @@
-{"default":{"identifier":"default","description":"Permissions for Nowly application windows","local":true,"windows":["main","quick-panel"],"permissions":["core:default","core:event:default","notification:default"]}}
+{"default":{"identifier":"default","description":"Permissions for Nowly application windows","local":true,"windows":["main","quick-panel"],"permissions":["core:default","core:event:default","global-shortcut:default","notification:default"]}}

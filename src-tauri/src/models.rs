@@ -260,6 +260,8 @@ pub struct ExternalEvent {
 fn default_hide_topbar_in_wallpaper() -> bool {
     true
 }
+fn default_quick_panel_enabled() -> bool { true }
+fn default_quick_panel_shortcut() -> String { "Ctrl+Space".to_owned() }
 
 // Icon drawing style. Matches the design baseline, which renders in duotone.
 pub(crate) fn default_icon_style() -> String {
@@ -280,6 +282,10 @@ pub struct AppSettings {
     pub icon_style: String,
     #[serde(default = "default_hide_topbar_in_wallpaper")]
     pub hide_topbar_in_wallpaper: bool,
+    #[serde(default = "default_quick_panel_enabled")]
+    pub quick_panel_enabled: bool,
+    #[serde(default = "default_quick_panel_shortcut")]
+    pub quick_panel_shortcut: String,
     #[serde(default)]
     pub recent_colors: Vec<String>,
 }
