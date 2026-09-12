@@ -24,12 +24,12 @@ mod net;
 mod notes;
 mod oauth;
 mod oauth_config;
+mod quick_panel;
 mod recurrence;
 mod reminders;
 mod remote_events;
 mod rrule_bridge;
 mod rrule_engine;
-mod quick_panel;
 mod settings;
 mod shell;
 mod subscription_sync;
@@ -49,13 +49,19 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutEvent, ShortcutState};
 
-pub fn register_quick_shortcut<R: Runtime>(app: &AppHandle<R>, shortcut: &str) -> Result<(), tauri_plugin_global_shortcut::Error> {
-    app.global_shortcut().on_shortcut(shortcut, move |_app, _shortcut, event: ShortcutEvent| {
-        if event.state() != ShortcutState::Pressed { return; }
-        if let Err(error) = quick_panel::toggle(_app) {
-            eprintln!("failed to toggle quick panel: {error}");
-        }
-    })
+pub fn register_quick_shortcut<R: Runtime>(
+    app: &AppHandle<R>,
+    shortcut: &str,
+) -> Result<(), tauri_plugin_global_shortcut::Error> {
+    app.global_shortcut()
+        .on_shortcut(shortcut, move |_app, _shortcut, event: ShortcutEvent| {
+            if event.state() != ShortcutState::Pressed {
+                return;
+            }
+            if let Err(error) = quick_panel::toggle(_app) {
+                eprintln!("failed to toggle quick panel: {error}");
+            }
+        })
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

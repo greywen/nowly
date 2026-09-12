@@ -3,11 +3,11 @@ use crate::error::CommandError;
 use crate::models::AppSettings;
 use crate::settings::{read_app_settings, write_app_settings};
 use rusqlite::Connection;
+use std::str::FromStr;
 use tauri::State;
 use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 use tauri_plugin_global_shortcut::Shortcut;
-use std::str::FromStr;
 
 fn with_connection<T>(
     db: State<'_, AppDb>,
@@ -37,9 +37,10 @@ pub fn update_app_settings(
     let mut connection = db.0.lock().map_err(CommandError::database)?;
     let previous_settings = read_app_settings(&connection).map_err(CommandError::database)?;
     let requested_shortcut = if settings.quick_panel_enabled {
-        Some(Shortcut::from_str(&settings.quick_panel_shortcut).map_err(|_| {
-            CommandError::validation("quickPanelShortcut", "快捷键格式无效。")
-        })?)
+        Some(
+            Shortcut::from_str(&settings.quick_panel_shortcut)
+                .map_err(|_| CommandError::validation("quickPanelShortcut", "快捷键格式无效。"))?,
+        )
     } else {
         None
     };
@@ -113,10 +114,8 @@ pub fn update_app_settings(
         if let Ok(previous) = Shortcut::from_str(&previous_settings.quick_panel_shortcut) {
             if let Err(error) = app.global_shortcut().unregister(previous) {
                 let _ = write_app_settings(&mut connection, &previous_settings);
-                let _ = crate::quick_panel::set_enabled(
-                    &app,
-                    previous_settings.quick_panel_enabled,
-                );
+                let _ =
+                    crate::quick_panel::set_enabled(&app, previous_settings.quick_panel_enabled);
                 if settings.launch_at_login != previous_launch_at_login {
                     let rollback = if previous_launch_at_login {
                         app.autolaunch().enable()

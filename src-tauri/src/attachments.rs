@@ -47,8 +47,7 @@ pub const MAX_ATTACHMENT_BYTES: usize = 1024 * 1024;
 /// a frontend list wider than this one would offer files the backend then refuses.
 pub const ALLOWED_EXTENSIONS: &[&str] = &[
     // Images
-    "png", "jpg", "jpeg", "gif", "webp", "bmp",
-    // Documents
+    "png", "jpg", "jpeg", "gif", "webp", "bmp", // Documents
     "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "rtf", "txt", "md", "csv",
     // OpenDocument equivalents
     "odt", "ods", "odp",
@@ -166,15 +165,11 @@ fn mime_for(extension: Option<&str>) -> &'static str {
         // The OOXML formats are their own types. Reporting `docx` as
         // `application/msword` (the legacy .doc type) was simply wrong.
         Some("doc") => "application/msword",
-        Some("docx") => {
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        }
+        Some("docx") => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         Some("xls") => "application/vnd.ms-excel",
         Some("xlsx") => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         Some("ppt") => "application/vnd.ms-powerpoint",
-        Some("pptx") => {
-            "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-        }
+        Some("pptx") => "application/vnd.openxmlformats-officedocument.presentationml.presentation",
         Some("odt") => "application/vnd.oasis.opendocument.text",
         Some("ods") => "application/vnd.oasis.opendocument.spreadsheet",
         Some("odp") => "application/vnd.oasis.opendocument.presentation",
@@ -398,7 +393,9 @@ pub fn open(connection: &Connection, dir: &Path, id: &str) -> Result<(), Command
 pub fn list(connection: &Connection, ids: &[String]) -> Result<Vec<Attachment>, CommandError> {
     let mut found = Vec::new();
     let mut statement = connection
-        .prepare("SELECT id,file_name,rel_path,byte_size,mime,created_at FROM attachments WHERE id=?1")
+        .prepare(
+            "SELECT id,file_name,rel_path,byte_size,mime,created_at FROM attachments WHERE id=?1",
+        )
         .map_err(CommandError::database)?;
     for id in ids {
         if !is_valid_id(id) {
@@ -416,7 +413,9 @@ pub fn list(connection: &Connection, ids: &[String]) -> Result<Vec<Attachment>, 
 }
 
 /// Collect every `attachment:<id>` reference appearing in rich text content.
-pub fn referenced_ids(connection: &Connection) -> Result<std::collections::HashSet<String>, CommandError> {
+pub fn referenced_ids(
+    connection: &Connection,
+) -> Result<std::collections::HashSet<String>, CommandError> {
     let mut referenced = std::collections::HashSet::new();
     for (table, column) in CONTENT_COLUMNS {
         let mut statement = connection
@@ -689,8 +688,18 @@ mod tests {
         // Everything else is refused, whether it is dangerous, merely unwanted, or
         // an image format that can carry script.
         for name in [
-            "setup.exe", "run.bat", "lib.dll", "archive.zip", "data.json", "clip.mp4", "song.mp3",
-            "drawing.svg", "page.html", "styles.css", "backup.db", "photo.tiff",
+            "setup.exe",
+            "run.bat",
+            "lib.dll",
+            "archive.zip",
+            "data.json",
+            "clip.mp4",
+            "song.mp3",
+            "drawing.svg",
+            "page.html",
+            "styles.css",
+            "backup.db",
+            "photo.tiff",
         ] {
             let error = save(&connection, &dir, name, b"x").unwrap_err();
             assert_eq!(error.field, Some("file".into()), "{name} should be refused");
@@ -728,7 +737,10 @@ mod tests {
         }
         // Images are typed as images, which is what drives inline display.
         for extension in ["png", "jpg", "jpeg", "gif", "webp", "bmp"] {
-            assert!(mime_for(Some(extension)).starts_with("image/"), "{extension}");
+            assert!(
+                mime_for(Some(extension)).starts_with("image/"),
+                "{extension}"
+            );
         }
         // The OOXML formats get their own types rather than the legacy ones.
         assert!(mime_for(Some("docx")).contains("wordprocessingml"));
@@ -768,8 +780,7 @@ mod tests {
         frontend.sort();
         assert!(!frontend.is_empty(), "parsed no entries from attachment.ts");
 
-        let mut backend: Vec<String> =
-            ALLOWED_EXTENSIONS.iter().map(|e| (*e).to_owned()).collect();
+        let mut backend: Vec<String> = ALLOWED_EXTENSIONS.iter().map(|e| (*e).to_owned()).collect();
         backend.sort();
         assert_eq!(backend, frontend, "upload allowlists have drifted");
     }
@@ -866,7 +877,9 @@ mod tests {
             vec![format!("{stem}.png")]
         );
         assert_eq!(
-            scan_references(&format!("[报告](attachment:{stem}.pdf) 和 ![](attachment:{stem}.jpg)")),
+            scan_references(&format!(
+                "[报告](attachment:{stem}.pdf) 和 ![](attachment:{stem}.jpg)"
+            )),
             vec![format!("{stem}.pdf"), format!("{stem}.jpg")]
         );
         assert!(scan_references("attachment:../escape").is_empty());
@@ -900,7 +913,11 @@ mod tests {
         );
         assert_eq!(
             scan_references(&many),
-            vec![format!("{stem}.png"), format!("{stem}.jpg"), format!("{stem}.png")]
+            vec![
+                format!("{stem}.png"),
+                format!("{stem}.jpg"),
+                format!("{stem}.png")
+            ]
         );
 
         // A video embed points at a remote URL and must contribute nothing.

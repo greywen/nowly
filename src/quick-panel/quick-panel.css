@@ -1,4 +1,7 @@
-.quick-panel-root { min-height: 100vh; box-sizing: border-box; padding: 16px; background: var(--bg-page, #fff); border-radius: 0 0 var(--radius-default) var(--radius-default); }
+:root:has(.quick-panel-root),
+body:has(.quick-panel-root),
+#root:has(.quick-panel-root) { background: transparent !important; }
+.quick-panel-root { height: 100vh; box-sizing: border-box; overflow: clip; padding: 16px; background: var(--bg-page, #fff); border-radius: var(--radius-default); }
 .quick-panel-title { margin: 0 0 12px; color: var(--text-primary); font-size: 1.25rem; font-weight: 600; }
 .quick-panel-root .assistant-dock { position: relative; inset: auto; width: 100%; }
 .quick-panel-root .assistant-panel { max-height: calc(100vh - 96px); }
@@ -7,7 +10,8 @@ body:has(.quick-panel-handle-root),
 #root:has(.quick-panel-handle-root),
 .quick-panel-handle-root { background: transparent !important; }
 .quick-panel-handle-root { width: 100vw; height: 100vh; display: grid; place-items: center; background: transparent; }
-.quick-panel-handle { width: 100%; height: 100%; padding: 0; display: grid; place-items: center; border: 0; border-radius: 0; appearance: none; background: transparent; box-shadow: none; }
-.quick-panel-handle span { width: 72px; height: 5px; border-radius: var(--radius-pill); background: var(--color-primary-inverse, #fff); }
+/* Only the visible capsule is interactive; the transparent window margins are not. */
+.quick-panel-handle { width: 64px; height: 5px; align-self: start; margin-top: 8px; padding: 0; display: grid; place-items: center; border: 0; border-radius: var(--radius-pill); clip-path: inset(0 round var(--radius-pill)); appearance: none; background: transparent; box-shadow: none; }
+.quick-panel-handle span { width: 100%; height: 100%; border-radius: var(--radius-pill); background: var(--color-primary-inverse, #fff); }
 .quick-panel-handle:hover span,
 .quick-panel-handle:focus-visible span { background: var(--color-primary-inverse, #fff); }

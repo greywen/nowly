@@ -7,6 +7,7 @@ const HANDLE_ANIMATION_DURATION: Duration = Duration::from_millis(120);
 const OPEN_PANEL_DELAY: Duration = Duration::from_millis(60);
 const CLOSE_HANDLE_DELAY: Duration = Duration::from_millis(100);
 const FRAME_DURATION: Duration = Duration::from_millis(16);
+const PANEL_TOP_MARGIN: f64 = 16.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PanelPhase {
@@ -38,10 +39,11 @@ pub fn panel_positions(
     monitor_x: i32,
     panel_width: u32,
     panel_height: u32,
+    scale_factor: f64,
 ) -> PanelPositions {
     PanelPositions {
         x: monitor_x + (monitor_width.saturating_sub(panel_width) / 2) as i32,
-        expanded_y: 8,
+        expanded_y: (PANEL_TOP_MARGIN * scale_factor).round() as i32,
         collapsed_y: -(panel_height as i32),
     }
 }
@@ -216,6 +218,7 @@ fn window_positions<R: Runtime>(
         monitor_position.x,
         panel_size.width,
         panel_size.height,
+        monitor.scale_factor(),
     );
     let handle_size = handle.outer_size().map_err(|error| error.to_string())?;
     positions.expanded_y += monitor_position.y;
@@ -632,30 +635,58 @@ mod tests {
     }
 
     #[test]
+    fn panel_disables_native_shadow_that_adds_a_windows_border() {
+        let config: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        let panel = config["app"]["windows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|window| window["label"] == "quick-panel")
+            .unwrap();
+        assert_eq!(panel["decorations"], false);
+        assert_eq!(panel["shadow"], false);
+    }
+
+    #[test]
+    fn panel_window_is_transparent_behind_the_rounded_surface() {
+        let config: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        let panel = config["app"]["windows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|window| window["label"] == "quick-panel")
+            .unwrap();
+        assert_eq!(panel["transparent"], true);
+        assert_eq!(panel["backgroundColor"], "#00000000");
+    }
+
+    #[test]
     fn panel_is_centered_and_collapses_above_the_monitor() {
-        let positions = panel_positions(1920, 0, 520, 640);
+        let positions = panel_positions(1920, 0, 520, 640, 1.0);
 
         assert_eq!(positions.x, 700);
-        assert_eq!(positions.expanded_y, 8);
+        assert_eq!(positions.expanded_y, 16);
         assert_eq!(positions.collapsed_y, -640);
     }
 
     #[test]
     fn negative_monitor_origins_are_preserved() {
-        let positions = panel_positions(1280, -1080, 520, 640);
+        let positions = panel_positions(1280, -1080, 520, 640, 1.0);
 
         assert_eq!(positions.x, -700);
-        assert_eq!(positions.expanded_y, 8);
+        assert_eq!(positions.expanded_y, 16);
         assert_eq!(positions.collapsed_y, -640);
     }
 
     #[test]
     fn monitor_origin_is_added_without_a_handle_gap() {
-        let mut positions = panel_positions(1920, 0, 520, 640);
+        let mut positions = panel_positions(1920, 0, 520, 640, 1.0);
         positions.expanded_y += -900;
         positions.collapsed_y += -900;
 
-        assert_eq!(positions.expanded_y, -892);
+        assert_eq!(positions.expanded_y, -884);
         assert_eq!(positions.collapsed_y, -1540);
     }
 
@@ -665,6 +696,29 @@ mod tests {
 
         assert_eq!(positions.visible_y, 0);
         assert_eq!(positions.hidden_y, -20);
+    }
+
+    #[test]
+    fn panel_margin_scales_without_rescaling_physical_window_dimensions() {
+        for (scale, margin) in [(1.0, 16), (1.25, 20), (1.5, 24), (2.0, 32)] {
+            let positions = panel_positions(2560, -2560, 780, 960, scale);
+            assert_eq!(positions.expanded_y, margin);
+            assert_eq!(positions.x, -1670);
+            assert_eq!(positions.collapsed_y, -960);
+        }
+    }
+
+    #[test]
+    fn window_dimensions_match_the_approved_layout() {
+        let config: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        let windows = config["app"]["windows"].as_array().unwrap();
+        let panel = windows.iter().find(|window| window["label"] == "quick-panel").unwrap();
+        let handle = windows.iter().find(|window| window["label"] == "quick-panel-handle").unwrap();
+        assert_eq!(panel["width"], 520);
+        assert_eq!(panel["height"], 640);
+        assert_eq!(handle["width"], 64);
+        assert_eq!(handle["height"], 20);
     }
 
     #[test]
