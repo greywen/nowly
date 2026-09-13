@@ -459,7 +459,9 @@ fn subscribe_remote_calendar_blocking(
         )?
     };
     // 锁外首次同步；失败不阻塞订阅创建（状态字段会记为 failed，可稍后重试）。
-    let _ = crate::subscription_sync::sync_one_db(db, &created);
+    if crate::subscription_sync::sync_one_db(db, &created).is_ok() {
+        crate::status_island::invalidate_registered()?;
+    }
     // 回读最新状态。
     let connection = db.0.lock().map_err(CommandError::database)?;
     fetch_one(&connection, &created.id)

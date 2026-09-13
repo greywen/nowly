@@ -1,17 +1,12 @@
-.assistant-dock { position: relative; z-index: 5; min-width: 0; }
+.assistant-dock { position: absolute; z-index: 5; left: 0; right: 0; bottom: 16px; width: min(860px, calc(100% - 32px)); margin: 0 auto; }
 .assistant-dock[hidden] { display: none; }
-/* The composer is a topbar control, not a floating card: collapsed it is a
-   short field, and focusing it (or starting dictation) widens it to the panel. */
-.assistant-composer { position: relative; box-sizing: border-box; width: min(340px, 100%); margin-inline: auto; display: flex; align-items: center; gap: 12px; padding: 4px 16px; border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-surface); }
-.assistant-dock[data-expanded="true"] .assistant-composer { width: 100%; }
+.assistant-composer { position: relative; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 8px 16px; border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-surface); box-shadow: var(--shadow-sm); }
 .assistant-composer-tools { display: flex; align-items: center; flex: none; gap: 8px; }
-.assistant-composer .btn-icon { width: 36px; height: 36px; min-height: 36px; }
-.assistant-composer .btn-icon:focus-visible { outline: 0; box-shadow: var(--shadow-focus); }
-/* line-height matches the field height so the single line sits centred. */
-.assistant-composer textarea { box-sizing: border-box; flex: 1; min-width: 0; height: 36px; resize: none; overflow: hidden; padding: 0; border: 0; background: transparent; color: var(--text-strong); font: inherit; line-height: 36px; white-space: nowrap; }
+.assistant-composer-mark { width: 36px; height: 36px; display: grid; place-items: center; flex: none; border-radius: var(--radius-md); color: var(--color-primary-active); background: var(--color-primary-light); }
+.assistant-composer textarea { box-sizing: border-box; flex: 1; min-width: 0; height: 40px; resize: none; overflow: hidden; padding: 10px 0; border: 0; background: transparent; color: var(--text-strong); font: inherit; line-height: 1.5; white-space: nowrap; }
 .assistant-composer textarea::placeholder { color: var(--text-muted); }
 .assistant-composer textarea:focus-visible { outline: none; box-shadow: none; }
-.assistant-panel { position: absolute; top: calc(100% + 16px); left: 0; right: 0; max-height: calc(100vh - 98px); display: flex; flex-direction: column; overflow: clip; border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-surface); box-shadow: var(--shadow-md); visibility: hidden; pointer-events: none; }
+.assistant-panel { position: absolute; bottom: calc(100% + 12px); left: 0; right: 0; max-height: calc(100vh - 208px); display: flex; flex-direction: column; overflow: clip; border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-surface); box-shadow: var(--shadow-md); visibility: hidden; pointer-events: none; }
 .assistant-panel[data-open="true"] { visibility: visible; pointer-events: auto; }
 .assistant-panel-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex: none; min-height: 56px; padding: 8px 16px; border-bottom: 1px solid var(--border-default); background: var(--bg-surface); }
 .assistant-panel-title { display: flex; align-items: center; min-width: 0; gap: 12px; }
@@ -61,9 +56,10 @@
 .assistant-panel summary { cursor: pointer; margin: 12px 0; }
 .assistant-chat { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
 .assistant-chat-empty { color: var(--text-muted); }
-.assistant-chat-message { box-sizing: border-box; width: fit-content; max-width: min(78%, 640px); padding: 12px 16px; border-radius: var(--radius-default); background: var(--bg-subtle); }
-.assistant-chat-message[data-role="user"] { justify-self: end; background: var(--color-primary-light); }
-.assistant-chat-message > p { margin: 0; color: var(--text-strong); }
+.assistant-chat-message { box-sizing: border-box; width: min(78%, 640px); padding: 12px 16px; border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-subtle); }
+.assistant-chat-message[data-role="user"] { justify-self: end; border-color: var(--color-primary-border-subtle); background: var(--color-primary-light); }
+.assistant-chat-message > span { color: var(--text-muted); font-size: .85rem; font-weight: 600; }
+.assistant-chat-message > p { margin: 4px 0 0; color: var(--text-strong); }
 .assistant-chat-card { min-width: 0; }
 .assistant-chat-card > section { box-sizing: border-box; width: 100%; padding: 16px; border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-surface); }
 .assistant-system-card { padding: 12px 16px; border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-subtle); }
@@ -86,15 +82,8 @@
 .assistant-timeline-group + .assistant-timeline-group { margin-top: 20px; }
 .assistant-timeline-date { margin: 0 0 12px; color: var(--text-primary); font-size: 1rem; font-weight: 600; line-height: 1.5; }
 .assistant-timeline { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
-/* Each entry is a marker column plus a body. The dashed rule is drawn on the
-   item itself and runs the full row height, so consecutive rows join into one
-   continuous line through the markers; :last-child stops it at the final entry
-   instead of trailing into empty space. */
-.assistant-timeline-item { position: relative; display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 12px; }
-.assistant-timeline-item::before { content: ""; position: absolute; top: 18px; bottom: -12px; left: 17px; width: 0; border-left: 1px dashed var(--border-default); }
-.assistant-timeline-item:last-child::before { display: none; }
-/* Opaque background keeps the dashed rule from showing through the glyph. */
-.assistant-timeline-marker { position: relative; z-index: 1; width: 36px; height: 36px; display: grid; place-items: center; border-radius: var(--radius-md); color: var(--color-primary-active); background: var(--color-primary-light); }
+.assistant-timeline-item { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 12px; }
+.assistant-timeline-marker { width: 36px; height: 36px; display: grid; place-items: center; border-radius: var(--radius-md); color: var(--color-primary-active); background: var(--color-primary-light); }
 .assistant-timeline-item[data-status="undone"] .assistant-timeline-marker,
 .assistant-timeline-item[data-status="cancelled"] .assistant-timeline-marker,
 .assistant-timeline-item[data-status="expired"] .assistant-timeline-marker { color: var(--text-tertiary); background: var(--bg-subtle); }
@@ -103,9 +92,6 @@
 .assistant-timeline-heading { min-width: 0; }
 .assistant-timeline-title { color: var(--text-primary); font-size: 1.075rem; font-weight: 600; }
 .assistant-timeline-meta { margin: 4px 0 0; color: var(--text-muted); font-size: .85rem; }
-.assistant-history-actions { flex: none; display: flex; align-items: center; gap: 8px; }
-.assistant-history-actions .btn-icon { width: 32px; min-width: 32px; height: 32px; min-height: 32px; }
-.assistant-history-actions .btn-icon svg { width: 16px; height: 16px; }
 .assistant-timeline-changes { margin: 12px 0 0; padding: 12px 0 0; border-top: 1px solid var(--border-subtle); list-style: none; }
 .assistant-timeline-changes > li + li { margin-top: 8px; }
 .assistant-timeline-detail { margin-top: 8px; padding: 12px; border-radius: var(--radius-default); background: var(--bg-subtle); }
@@ -129,7 +115,7 @@
 .assistant-dock .assistant-listening { color: var(--color-danger-active); background: var(--color-danger-light); }
 @media (max-width: 640px) {
   .assistant-edit { grid-template-columns: minmax(0, 1fr); }
-  .assistant-chat-message { max-width: 90%; }
+  .assistant-chat-message { width: 90%; }
   .assistant-history-bar, .assistant-timeline-head { align-items: stretch; flex-direction: column; }
   .assistant-change-row { flex-wrap: wrap; gap: 8px; }
   .assistant-state-badge { display: none; }

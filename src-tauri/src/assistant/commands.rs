@@ -236,7 +236,10 @@ pub fn assistant_execute(
 ) -> Result<Plan, CommandError> {
     main_only(&window)?;
     let db = db.0.lock().map_err(CommandError::database)?;
-    store::execute(&db, &plan_id, &provider::get_config(&db)?.permissions)
+    let plan = store::execute(&db, &plan_id, &provider::get_config(&db)?.permissions)?;
+    drop(db);
+    crate::status_island::invalidate_registered()?;
+    Ok(plan)
 }
 #[tauri::command]
 pub fn assistant_undo(
@@ -246,7 +249,10 @@ pub fn assistant_undo(
 ) -> Result<Plan, CommandError> {
     main_only(&window)?;
     let db = db.0.lock().map_err(CommandError::database)?;
-    store::undo(&db, &plan_id, &provider::get_config(&db)?.permissions)
+    let plan = store::undo(&db, &plan_id, &provider::get_config(&db)?.permissions)?;
+    drop(db);
+    crate::status_island::invalidate_registered()?;
+    Ok(plan)
 }
 #[tauri::command]
 pub fn assistant_history(

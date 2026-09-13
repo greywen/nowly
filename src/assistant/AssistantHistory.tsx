@@ -1,7 +1,7 @@
-import { CalendarDays, ChevronDown, ChevronUp, Layers, RotateCcw, SquareKanban } from '../components/icons';
+import { CalendarDays, Layers, SquareKanban } from 'lucide-react';
 import { TabPanel, Tabs, type TabItem } from '../components/Tabs';
-import { ChangeDetails, kinds } from './PlanCard';
-import type { Plan } from './types';
+import { ChangeDetails, displayField, kinds } from './PlanCard';
+import type { Change, Plan } from './types';
 
 export type HistoryRange = '1' | '3' | '7';
 
@@ -21,22 +21,17 @@ const ranges: TabItem<HistoryRange>[] = [
   { id: '3', label: '近 3 天' },
   { id: '7', label: '近 7 天' }
 ];
+const dayMs = 86400000;
 const statuses: Record<Plan['status'], string> = { pending: '待确认', committed: '已执行', undone: '已撤销', cancelled: '已取消', expired: '已过期' };
 
 function dayStart(time: number) { const date = new Date(time); date.setHours(0, 0, 0, 0); return date.getTime(); }
-function rangeStart(range: HistoryRange) {
-  const date = new Date(dayStart(Date.now()));
-  date.setDate(date.getDate() - (Number(range) - 1));
-  return date.getTime();
-}
 export function historyCount(plans: Plan[], range: HistoryRange) {
-  return plans.filter(plan => plan.createdAt >= rangeStart(range)).length;
+  return plans.filter(plan => plan.createdAt >= dayStart(Date.now()) - (Number(range) - 1) * dayMs).length;
 }
 function dayLabel(time: number) {
-  const today = new Date(dayStart(Date.now()));
-  if (dayStart(time) === today.getTime()) return '今天';
-  today.setDate(today.getDate() - 1);
-  if (dayStart(time) === today.getTime()) return '昨天';
+  const distance = Math.round((dayStart(Date.now()) - dayStart(time)) / dayMs);
+  if (distance === 0) return '今天';
+  if (distance === 1) return '昨天';
   return new Date(time).toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'short' });
 }
 function groupByDay(plans: Plan[]) {
@@ -56,9 +51,14 @@ function planIcon(plan: Plan) {
 function planSummary(plan: Plan) {
   return `${[...new Set(plan.actions.map(action => kinds[action.kind]))].join('、')} · ${plan.changes.length} 项`;
 }
+function keyField(change: Change) {
+  const data = change.after ?? change.before ?? {};
+  const event = change.kind.endsWith('Event');
+  return `${event ? '开始' : '截止'} ${displayField(event ? 'startAt' : 'dueDate', data[event ? 'startAt' : 'dueDate'])}`;
+}
 
 export function AssistantHistory({ plans, range, openChange, busy, uncertain, onRangeChange, onOpenChange, onUndo }: Props) {
-  const visiblePlans = plans.filter(plan => plan.createdAt >= rangeStart(range));
+  const visiblePlans = plans.filter(plan => plan.createdAt >= dayStart(Date.now()) - (Number(range) - 1) * dayMs);
   const groups = groupByDay(visiblePlans);
 
   return <div className="assistant-history">
@@ -73,29 +73,33 @@ export function AssistantHistory({ plans, range, openChange, busy, uncertain, on
         <ol className="assistant-timeline">
           {group.items.map(plan => {
             const Marker = planIcon(plan);
-            const changeId = `${plan.id}:details`; const open = openChange === changeId;
-            const title = plan.changes.map(change => change.title).join('、');
             return <li className="assistant-timeline-item" key={plan.id} data-status={plan.status}>
-              <span className="assistant-timeline-marker" aria-hidden="true"><Marker size={16} /></span>
+              <span className="assistant-timeline-marker" role="img" aria-label={statuses[plan.status]}><Marker size={16} /></span>
               <div className="assistant-timeline-body">
                 <div className="assistant-timeline-head">
                   <div className="assistant-timeline-heading">
-                    <strong className="assistant-timeline-title">{title}</strong>
-                    <p className="assistant-timeline-meta">{planSummary(plan)}</p>
+                    <strong className="assistant-timeline-title">{planSummary(plan)}</strong>
+                    <p className="assistant-timeline-meta">记录于 <time dateTime={new Date(plan.createdAt).toISOString()}>{new Date(plan.createdAt).toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit' })}</time></p>
                   </div>
-                  <div className="assistant-history-actions">
-                    <span className="assistant-status-badge" data-status={plan.status}>{statuses[plan.status]}</span>
-                    <button className="btn btn-icon" aria-label={`查看${title}详情`} title="查看详情" aria-expanded={open} aria-controls={`assistant-history-${changeId}`}
-                      onClick={() => onOpenChange(open ? null : changeId)}>{open ? <ChevronUp /> : <ChevronDown />}</button>
-                    {plan.status === 'committed' && <button className="btn btn-icon" aria-label={`撤销${title}`} title="撤销" disabled={busy || uncertain} onClick={() => onUndo(plan)}><RotateCcw /></button>}
-                  </div>
+                  {plan.status === 'committed' && <button className="btn" disabled={busy || uncertain} onClick={() => onUndo(plan)}>撤销</button>}
                 </div>
-                {open && <div className="assistant-timeline-detail" id={`assistant-history-${changeId}`}>
-                  {plan.changes.map(change => <section className="assistant-history-change" key={change.key}>
-                    <h4>{change.title}</h4><ChangeDetails change={change} plan={plan} />
-                  </section>)}
-                  {plan.warnings.map((warning, index) => <p key={index}>{warning}</p>)}
-                </div>}
+                <ul className="assistant-timeline-changes">
+                  {plan.changes.map(change => {
+                    const changeId = `${plan.id}:${change.key}`; const open = openChange === changeId;
+                    return <li key={change.key}>
+                      <div className="assistant-change-row">
+                        <span className="assistant-change-title">{change.title}</span>
+                        <span className="assistant-change-key">{keyField(change)}</span>
+                        <span className="assistant-status-badge" data-status={plan.status}>{statuses[plan.status]}</span>
+                        <button className="btn" aria-expanded={open} aria-controls={`assistant-history-${changeId}`} onClick={() => onOpenChange(open ? null : changeId)}>查看</button>
+                      </div>
+                      {open && <div className="assistant-timeline-detail" id={`assistant-history-${changeId}`}>
+                        <ChangeDetails change={change} plan={plan} />
+                        {plan.warnings.map((warning, index) => <p key={index}>{warning}</p>)}
+                      </div>}
+                    </li>;
+                  })}
+                </ul>
               </div>
             </li>;
           })}

@@ -7,7 +7,8 @@ import { installBrowserTauriBackend } from './data/browser-tauri-shim';
 import { FocusTimerProvider } from './focus/FocusTimerContext';
 import './app/styles.css';
 import { QuickPanelApp } from './quick-panel/QuickPanelApp';
-import { QuickPanelHandle } from './quick-panel/QuickPanelHandle';
+import { StatusIslandApp } from './quick-panel/StatusIslandApp';
+import { StatusIslandDetailsApp } from './quick-panel/StatusIslandDetailsApp';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
 // Outside the Tauri desktop shell (e.g. the plain Vite page in a browser) there
@@ -41,7 +42,7 @@ function currentWindowLabel(): string {
 const windowLabel = currentWindowLabel();
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
-    {windowLabel === 'quick-panel' ? <QuickPanelApp /> : windowLabel === 'quick-panel-handle' ? <QuickPanelHandle /> : <RepositoryProvider repository={tauriNowlyRepository}>
+    {windowLabel === 'quick-panel' ? <QuickPanelApp /> : windowLabel === 'quick-panel-handle' ? <StatusIslandApp /> : windowLabel === 'status-island-details' ? <StatusIslandDetailsApp /> : <RepositoryProvider repository={tauriNowlyRepository}>
       <FocusTimerProvider><App /></FocusTimerProvider>
     </RepositoryProvider>}
   </React.StrictMode>

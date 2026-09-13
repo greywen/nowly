@@ -28,9 +28,6 @@
         "height": 640,
         "resizable": false,
         "decorations": false,
-        "shadow": false,
-        "transparent": true,
-        "backgroundColor": "#00000000",
         "alwaysOnTop": true,
         "visible": false,
         "skipTaskbar": true,
@@ -39,7 +36,7 @@
       {
         "label": "quick-panel-handle",
         "title": "Nowly 快捷面板把手",
-        "width": 64,
+        "width": 72,
         "height": 20,
         "resizable": false,
         "decorations": false,
@@ -50,6 +47,21 @@
         "backgroundColor": "#00000000",
         "visible": false,
         "focus": false
+      },
+      {
+        "label": "status-island-details",
+        "title": "Nowly 状态详情",
+        "width": 330,
+        "height": 240,
+        "resizable": false,
+        "decorations": false,
+        "shadow": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "transparent": true,
+        "backgroundColor": "#00000000",
+        "visible": false,
+        "focus": true
       }
     ],
     "security": {

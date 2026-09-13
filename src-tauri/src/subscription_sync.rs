@@ -275,7 +275,8 @@ pub async fn refresh_calendar_subscription<R: tauri::Runtime>(
             crate::subscriptions::fetch_one(&connection, &id)?
         };
         // ②③ 锁外拉取，短锁写库。
-        sync_one_db(db.inner(), &source)
+        sync_one_db(db.inner(), &source)?;
+        crate::status_island::invalidate_registered()
     })
     .await
     .map_err(|_| CommandError::system("刷新任务执行失败。"))?

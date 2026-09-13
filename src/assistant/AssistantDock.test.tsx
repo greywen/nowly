@@ -43,13 +43,6 @@ async function send() {
   return input;
 }
 async function click(element: HTMLElement) { await act(async () => { fireEvent.click(element); }); }
-// Collapsed the composer is only a short topbar field; the history toggle
-// appears once focus expands the dock.
-async function openHistory() {
-  const input = await screen.findByRole('textbox', { name: '告诉 Nowly 你想做什么' });
-  await act(async () => { fireEvent.focus(input); });
-  await click(await screen.findByRole('button', { name: '操作记录' }));
-}
 describe('AssistantDock execution boundary', () => {
   it('presents a generated plan as a card inside the single chat stream', async () => {
     const client = clientFixture();
@@ -97,7 +90,7 @@ describe('AssistantDock execution boundary', () => {
     render(<AssistantDock client={client} onRefresh={() => {}} />);
     await send();
     await click(await screen.findByRole('button', { name: '确认执行 1 项' }));
-    const details = screen.getByRole('button', { name: '查看早会详情' });
+    const details = screen.getByRole('button', { name: '查看详情' });
     expect(details).toHaveAttribute('aria-controls');
     await click(details);
     expect(document.getElementById(details.getAttribute('aria-controls')!)).toBeInTheDocument();
@@ -183,10 +176,10 @@ describe('AssistantDock execution boundary', () => {
     const client = clientFixture(); client.history.mockResolvedValue([{ ...plan(), status: 'committed' }]);
     const refresh = vi.fn();
     render(<AssistantDock client={client} onRefresh={refresh} />);
-    await openHistory();
-    await click(await screen.findByRole('button', { name: '查看早会详情' }));
+    await click(await screen.findByRole('button', { name: '操作记录' }));
+    await click(await screen.findByRole('button', { name: '查看' }));
     expect(screen.getByText('2026-09-09 08:00')).toBeInTheDocument();
-    await click(await screen.findByRole('button', { name: '撤销早会' }));
+    await click(await screen.findByRole('button', { name: '撤销' }));
     await screen.findByText('已撤销');
     expect(client.undo).toHaveBeenCalledWith('plan-1');
     expect(refresh).toHaveBeenCalledTimes(1);
@@ -239,10 +232,11 @@ describe('AssistantDock execution boundary', () => {
     client.history.mockResolvedValueOnce([{ ...plan(), status: 'committed' }])
       .mockResolvedValueOnce([{ ...plan(), status: 'undone' }]);
     render(<AssistantDock client={client} onRefresh={() => {}} />);
-    await openHistory();
+    const button = await screen.findByRole('button', { name: '操作记录' });
+    await click(button);
     expect(screen.getByText('已执行')).toBeInTheDocument();
-    fireEvent.pointerDown(document.body);
-    await openHistory();
+    await click(screen.getByRole('button', { name: '收起助手' }));
+    await click(button);
     expect(screen.getByText('已撤销')).toBeInTheDocument();
     expect(screen.queryByText('已执行')).not.toBeInTheDocument();
     expect(client.history).toHaveBeenCalledTimes(2);
@@ -255,7 +249,7 @@ describe('AssistantDock execution boundary', () => {
       { ...plan('older'), status: 'committed', createdAt: now - 1000, changes: [{ ...plan().changes[0], title: '较早操作' }] }
     ]);
     render(<AssistantDock client={client} onRefresh={() => {}} />);
-    await openHistory();
+    await click(await screen.findByRole('button', { name: '操作记录' }));
     const history = screen.getByRole('region', { name: '操作记录' });
     expect(within(history).getByText('较早操作')).toBeInTheDocument();
     expect(within(history).getByText('较新操作')).toBeInTheDocument();
@@ -292,11 +286,12 @@ describe('AssistantDock execution boundary', () => {
   it('closes history on an outside pointer press and refreshes it when reopened', async () => {
     const client = clientFixture();
     render(<AssistantDock client={client} onRefresh={() => {}} />);
-    await openHistory();
+    const button = await screen.findByRole('button', { name: '操作记录' });
+    await click(button);
     const panel = screen.getByRole('region', { name: '操作记录' });
     fireEvent.pointerDown(document.body);
     expect(panel).toHaveAttribute('data-open', 'false');
-    await openHistory();
+    await click(button);
     expect(panel).toHaveAttribute('data-state', 'history');
     expect(panel).toHaveAttribute('data-open', 'true');
     expect(client.history).toHaveBeenCalledTimes(2);
@@ -305,9 +300,10 @@ describe('AssistantDock execution boundary', () => {
     const client = clientFixture();
     client.history.mockResolvedValueOnce([]).mockResolvedValueOnce([{ ...plan(), status: 'committed' }]);
     render(<AssistantDock client={client} onRefresh={() => {}} />);
-    await openHistory();
-    fireEvent.pointerDown(document.body);
-    await openHistory();
+    const button = await screen.findByRole('button', { name: '操作记录' });
+    await click(button);
+    await click(screen.getByRole('button', { name: '收起助手' }));
+    await click(button);
     expect(await screen.findByText('已执行')).toBeInTheDocument();
     expect(client.history).toHaveBeenCalledTimes(2);
   });
@@ -342,8 +338,8 @@ describe('AssistantDock execution boundary', () => {
       { ...plan('history-2'), status: 'committed' }
     ]);
     render(<AssistantDock client={client} onRefresh={() => {}} />);
-    await openHistory();
-    await click(screen.getAllByRole('button', { name: '查看早会详情' })[0]);
+    await click(await screen.findByRole('button', { name: '操作记录' }));
+    await click(screen.getAllByRole('button', { name: '查看' })[0]);
     expect(document.querySelectorAll('.assistant-timeline-detail')).toHaveLength(1);
   });
   it('opens current chat when configuration finishes loading under a focused composer', async () => {
@@ -389,7 +385,7 @@ describe('AssistantDock execution boundary', () => {
     fireEvent.change(await screen.findByRole('textbox', { name: '标题 1' }), { target: { value: '团队早会' } });
     await screen.findByText('无法核实旧预览已取消。请重新发送请求。');
     await click(screen.getByRole('button', { name: '操作记录' }));
-    await click(await screen.findByRole('button', { name: '撤销早会' }));
+    await click(await screen.findByRole('button', { name: '撤销' }));
     await screen.findByText('已撤销');
     await click(screen.getByRole('button', { name: '操作记录' }));
     expect(screen.getByRole('button', { name: '确认执行 1 项' })).toBeDisabled();
@@ -412,7 +408,7 @@ describe('AssistantDock execution boundary', () => {
     render(<AssistantDock client={client} onRefresh={() => {}} />);
     await send();
     await click(screen.getByRole('button', { name: '操作记录' }));
-    await click(await screen.findByRole('button', { name: '撤销早会' }));
+    await click(await screen.findByRole('button', { name: '撤销' }));
     await screen.findByText('已撤销');
     await click(screen.getByRole('button', { name: '操作记录' }));
     expect(screen.getByRole('textbox', { name: '标题 1' })).toHaveValue('早会');
@@ -428,7 +424,7 @@ describe('AssistantDock execution boundary', () => {
     render(<AssistantDock client={client} onRefresh={() => {}} />);
     await send();
     await click(screen.getByRole('button', { name: '操作记录' }));
-    await click(await screen.findByRole('button', { name: '撤销早会' }));
+    await click(await screen.findByRole('button', { name: '撤销' }));
     await click(await screen.findByRole('button', { name: '核实操作状态' }));
     await screen.findByText('已撤销');
     await click(screen.getByRole('button', { name: '操作记录' }));
@@ -443,7 +439,7 @@ describe('AssistantDock execution boundary', () => {
     render(<AssistantDock client={client} onRefresh={() => {}} />);
     await send();
     await click(screen.getByRole('button', { name: '操作记录' }));
-    await click(await screen.findByRole('button', { name: '撤销早会' }));
+    await click(await screen.findByRole('button', { name: '撤销' }));
     await screen.findByRole('button', { name: '核实操作状态' });
     await click(screen.getByRole('button', { name: '操作记录' }));
     expect(screen.getByRole('button', { name: '确认执行 1 项' })).toBeEnabled();
@@ -454,8 +450,8 @@ describe('AssistantDock execution boundary', () => {
     client.undo.mockRejectedValueOnce(new Error('相关数据已有后续修改，无法安全撤销'));
     const refresh = vi.fn();
     render(<AssistantDock client={client} onRefresh={refresh} />);
-    await openHistory();
-    await click(await screen.findByRole('button', { name: '撤销早会' }));
+    await click(await screen.findByRole('button', { name: '操作记录' }));
+    await click(await screen.findByRole('button', { name: '撤销' }));
     await screen.findByText(/相关数据已有后续修改/);
     expect(screen.queryByText('已执行 1 项本地变更')).not.toBeInTheDocument();
     expect(refresh).not.toHaveBeenCalled();

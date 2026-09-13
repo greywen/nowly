@@ -1305,7 +1305,10 @@ pub fn create_task(
     draft: TaskDraft,
 ) -> Result<Task, CommandError> {
     let mut connection = db.0.lock().map_err(CommandError::database)?;
-    create(&mut connection, &origin_view, draft)
+    let task = create(&mut connection, &origin_view, draft)?;
+    drop(connection);
+    crate::status_island::invalidate_registered()?;
+    Ok(task)
 }
 
 #[tauri::command]
@@ -1315,13 +1318,18 @@ pub fn update_task(
     draft: TaskDraft,
 ) -> Result<Task, CommandError> {
     let mut connection = db.0.lock().map_err(CommandError::database)?;
-    update(&mut connection, &id, draft)
+    let task = update(&mut connection, &id, draft)?;
+    drop(connection);
+    crate::status_island::invalidate_registered()?;
+    Ok(task)
 }
 
 #[tauri::command]
 pub fn delete_task(db: State<'_, AppDb>, id: String) -> Result<(), CommandError> {
     let mut connection = db.0.lock().map_err(CommandError::database)?;
-    delete(&mut connection, &id)
+    delete(&mut connection, &id)?;
+    drop(connection);
+    crate::status_island::invalidate_registered()
 }
 
 #[tauri::command]
@@ -1331,7 +1339,10 @@ pub fn set_task_completed(
     completed: bool,
 ) -> Result<Task, CommandError> {
     let mut connection = db.0.lock().map_err(CommandError::database)?;
-    set_completed_value(&mut connection, &id, completed)
+    let task = set_completed_value(&mut connection, &id, completed)?;
+    drop(connection);
+    crate::status_island::invalidate_registered()?;
+    Ok(task)
 }
 
 #[tauri::command]
@@ -1342,7 +1353,10 @@ pub fn move_task_to_lane(
     target_index: usize,
 ) -> Result<Task, CommandError> {
     let mut connection = db.0.lock().map_err(CommandError::database)?;
-    move_to_lane(&mut connection, &id, &lane_id, target_index)
+    let task = move_to_lane(&mut connection, &id, &lane_id, target_index)?;
+    drop(connection);
+    crate::status_island::invalidate_registered()?;
+    Ok(task)
 }
 
 #[tauri::command]
@@ -1352,7 +1366,10 @@ pub fn move_task_to_priority(
     priority: Option<String>,
 ) -> Result<Task, CommandError> {
     let mut connection = db.0.lock().map_err(CommandError::database)?;
-    update_priority(&mut connection, &id, priority)
+    let task = update_priority(&mut connection, &id, priority)?;
+    drop(connection);
+    crate::status_island::invalidate_registered()?;
+    Ok(task)
 }
 
 #[tauri::command]
@@ -1362,7 +1379,10 @@ pub fn move_task_to_date(
     due_date: Option<String>,
 ) -> Result<Task, CommandError> {
     let mut connection = db.0.lock().map_err(CommandError::database)?;
-    update_date(&mut connection, &id, due_date)
+    let task = update_date(&mut connection, &id, due_date)?;
+    drop(connection);
+    crate::status_island::invalidate_registered()?;
+    Ok(task)
 }
 
 #[tauri::command]
@@ -1410,7 +1430,10 @@ pub fn delete_task_lane(
     replacement_lane_id: Option<String>,
 ) -> Result<TaskWorkspaceSnapshot, CommandError> {
     let mut connection = db.0.lock().map_err(CommandError::database)?;
-    delete_lane_value(&mut connection, &id, replacement_lane_id)
+    let snapshot = delete_lane_value(&mut connection, &id, replacement_lane_id)?;
+    drop(connection);
+    crate::status_island::invalidate_registered()?;
+    Ok(snapshot)
 }
 
 #[tauri::command]
@@ -1437,7 +1460,10 @@ pub fn set_completion_task_lane(
     id: String,
 ) -> Result<TaskWorkspaceSnapshot, CommandError> {
     let mut connection = db.0.lock().map_err(CommandError::database)?;
-    set_lane_setting(&mut connection, COMPLETION_LANE_KEY, &id)
+    let snapshot = set_lane_setting(&mut connection, COMPLETION_LANE_KEY, &id)?;
+    drop(connection);
+    crate::status_island::invalidate_registered()?;
+    Ok(snapshot)
 }
 
 #[tauri::command]

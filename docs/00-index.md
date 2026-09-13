@@ -47,6 +47,7 @@ cargo test --manifest-path src-tauri/Cargo.toml    # Rust 测试
 - [Good 离线 Select 设计规格](./superpowers/specs/2026-07-29-good-offline-select-design.md)
 - [Nowly 日程重复规则设计规格](./superpowers/specs/2026-08-20-nowly-recurring-events-design.md)
 - [Nowly 模块系统 v2 与模块技能包设计规格](./superpowers/specs/2026-08-25-nowly-module-system-v2-design.md)
+- [Nowly 导航状态岛规格](./superpowers/specs/2026-09-12-status-island/00-master-plan.md)
 
 ## Custom Modules
 
@@ -95,3 +96,4 @@ cargo test --manifest-path src-tauri/Cargo.toml    # Rust 测试
 - [Good 离线 Select 实施计划](./superpowers/plans/2026-07-29-good-offline-select.md)
 - [Nowly 日程重复规则实施计划](./superpowers/plans/2026-08-20-nowly-recurring-events.md)
 - [Nowly 模块技能包与样式底座实施计划](./superpowers/plans/2026-08-25-nowly-module-skill-package.md)
+- [Nowly 导航状态岛实施计划](./superpowers/plans/2026-09-12-status-island.md)

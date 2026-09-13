@@ -230,7 +230,9 @@ fn run_write(
     if !(200..300).contains(&status) {
         return Err(api_error(status));
     }
-    let _ = crate::subscription_sync::sync_one_db(db, &source);
+    if crate::subscription_sync::sync_one_db(db, &source).is_ok() {
+        crate::status_island::invalidate_registered()?;
+    }
     Ok(())
 }
 

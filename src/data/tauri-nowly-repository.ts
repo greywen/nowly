@@ -1,16 +1,24 @@
 import { invoke } from '@tauri-apps/api/core';
+import { emit } from '@tauri-apps/api/event';
 import type { NowlyRepository } from './nowly-repository';
+
+function invalidating<T>(operation: Promise<T>): Promise<T> {
+  return operation.then(result => {
+    void emit('status-island-invalidated').catch(() => undefined);
+    return result;
+  });
+}
 
 export const tauriNowlyRepository: NowlyRepository = {
   listEventsInRange: (range) => invoke('list_events_in_range', { range }),
-  createEvent: (draft) => invoke('create_event', { draft }),
-  updateEvent: (target, draft, scope) => invoke('update_event', { target, draft, scope }),
-  deleteEvent: (target, scope) => invoke('delete_event', { target, scope }),
+  createEvent: (draft) => invalidating(invoke('create_event', { draft })),
+  updateEvent: (target, draft, scope) => invalidating(invoke('update_event', { target, draft, scope })),
+  deleteEvent: (target, scope) => invalidating(invoke('delete_event', { target, scope })),
   listCalendarSubscriptions: () => invoke('list_calendar_subscriptions'),
-  createCalendarSubscription: (draft) => invoke('create_calendar_subscription', { draft }),
-  updateCalendarSubscription: (id, draft) => invoke('update_calendar_subscription', { id, draft }),
-  deleteCalendarSubscription: (id) => invoke('delete_calendar_subscription', { id }),
-  refreshCalendarSubscription: (id) => invoke('refresh_calendar_subscription', { id }),
+  createCalendarSubscription: (draft) => invalidating(invoke('create_calendar_subscription', { draft })),
+  updateCalendarSubscription: (id, draft) => invalidating(invoke('update_calendar_subscription', { id, draft })),
+  deleteCalendarSubscription: (id) => invalidating(invoke('delete_calendar_subscription', { id })),
+  refreshCalendarSubscription: (id) => invalidating(invoke('refresh_calendar_subscription', { id })),
   startOAuthLogin: (provider) => invoke('start_oauth_login', { provider }),
   listOAuthAccounts: () => invoke('list_oauth_accounts'),
   disconnectOAuthAccount: (id) => invoke('disconnect_oauth_account', { id }),
@@ -26,25 +34,25 @@ export const tauriNowlyRepository: NowlyRepository = {
   updateSubscriptionDisplay: (id, name, color, refreshIntervalMinutes) =>
     invoke('update_subscription_display', { id, name, color, refreshIntervalMinutes }),
   listExternalEventsInRange: (range) => invoke('list_external_events_in_range', { range }),
-  createRemoteEvent: (subscriptionId, draft) => invoke('create_remote_event', { subscriptionId, draft }),
+  createRemoteEvent: (subscriptionId, draft) => invalidating(invoke('create_remote_event', { subscriptionId, draft })),
   updateRemoteEvent: (subscriptionId, remoteEventId, draft, descriptionChanged) =>
-    invoke('update_remote_event', { subscriptionId, remoteEventId, draft, descriptionChanged }),
+    invalidating(invoke('update_remote_event', { subscriptionId, remoteEventId, draft, descriptionChanged })),
   deleteRemoteEvent: (subscriptionId, remoteEventId) =>
-    invoke('delete_remote_event', { subscriptionId, remoteEventId }),
+    invalidating(invoke('delete_remote_event', { subscriptionId, remoteEventId })),
   listTasks: () => invoke('list_tasks'),
-  createTask: (draft) => invoke('create_task', { draft }),
-  updateTask: (id, draft) => invoke('update_task', { id, draft }),
-  deleteTask: (id) => invoke('delete_task', { id }),
-  setTaskCompleted: (id, completed) => invoke('set_task_completed', { id, completed }),
+  createTask: (draft) => invalidating(invoke('create_task', { draft })),
+  updateTask: (id, draft) => invalidating(invoke('update_task', { id, draft })),
+  deleteTask: (id) => invalidating(invoke('delete_task', { id })),
+  setTaskCompleted: (id, completed) => invalidating(invoke('set_task_completed', { id, completed })),
   getTaskWorkspaceSnapshot: () => invoke('get_task_workspace_snapshot'),
-  createWorkspaceTask: (originView, draft) => invoke('create_task', { originView, draft }),
-  updateWorkspaceTask: (id, draft) => invoke('update_task', { id, draft }),
-  deleteWorkspaceTask: (id) => invoke('delete_task', { id }),
-  setWorkspaceTaskCompleted: (id, completed) => invoke('set_task_completed', { id, completed }),
-  moveTaskToLane: (id, laneId, targetIndex) => invoke('move_task_to_lane', { id, laneId, targetIndex }),
-  moveTaskToPriority: (id, priority) => invoke('move_task_to_priority', { id, priority }),
-  moveTaskToDate: (id, dueDate) => invoke('move_task_to_date', { id, dueDate }),
-  setTaskViewMemberships: (id, views) => invoke('set_task_view_memberships', { id, views }),
+  createWorkspaceTask: (originView, draft) => invalidating(invoke('create_task', { originView, draft })),
+  updateWorkspaceTask: (id, draft) => invalidating(invoke('update_task', { id, draft })),
+  deleteWorkspaceTask: (id) => invalidating(invoke('delete_task', { id })),
+  setWorkspaceTaskCompleted: (id, completed) => invalidating(invoke('set_task_completed', { id, completed })),
+  moveTaskToLane: (id, laneId, targetIndex) => invalidating(invoke('move_task_to_lane', { id, laneId, targetIndex })),
+  moveTaskToPriority: (id, priority) => invalidating(invoke('move_task_to_priority', { id, priority })),
+  moveTaskToDate: (id, dueDate) => invalidating(invoke('move_task_to_date', { id, dueDate })),
+  setTaskViewMemberships: (id, views) => invalidating(invoke('set_task_view_memberships', { id, views })),
   setTaskViewLinking: (enabled) => invoke('set_task_view_linking', { enabled }),
   createTaskLane: (draft) => invoke('create_task_lane', { draft }),
   updateTaskLane: (id, draft) => invoke('update_task_lane', { id, draft }),

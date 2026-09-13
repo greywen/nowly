@@ -32,6 +32,7 @@ mod rrule_bridge;
 mod rrule_engine;
 mod settings;
 mod shell;
+mod status_island;
 mod subscription_sync;
 mod subscriptions;
 mod task_workspace;
@@ -286,6 +287,7 @@ fn main() {
                 eprintln!("attachment garbage collection failed: {}", error.message);
             }
             app.manage(AppDb(Mutex::new(connection)));
+            status_island::initialize(app.handle().clone());
             let quick_settings = settings::read_app_settings(&app.state::<AppDb>().0.lock().unwrap()).unwrap_or_else(|_| crate::models::AppSettings {
                 wallpaper_enabled: false, launch_at_login: false, target_monitor_id: None, density: "balanced".into(),
                 week_start: "monday".into(), date_format: "localized".into(), show_weekends: true, icon_style: "duotone".into(),
@@ -293,6 +295,7 @@ fn main() {
             });
             let quick_panel_controller = quick_panel::PanelController::default();
             quick_panel_controller.set_enabled(quick_settings.quick_panel_enabled);
+            quick_panel_controller.set_target_monitor_id(quick_settings.target_monitor_id.clone());
             app.manage(quick_panel_controller);
             quick_panel::start_monitor_watch(app.handle().clone());
             if quick_settings.quick_panel_enabled {
@@ -383,6 +386,7 @@ fn main() {
                     subscription_sync::sync_all_db(subscription_handle.state::<AppDb>().inner());
                 // 无论是否有源，都发一次使前端加载现有订阅与实例。
                 let _ = subscription_handle.emit("calendar-subscriptions-updated", ());
+                let _ = status_island::invalidate_registered();
                 loop {
                     std::thread::sleep(std::time::Duration::from_secs(60));
                     // 只有实际尝试了至少一个到期源才通知前端，
@@ -393,6 +397,7 @@ fn main() {
                     .unwrap_or(false);
                     if changed {
                         let _ = subscription_handle.emit("calendar-subscriptions-updated", ());
+                        let _ = status_island::invalidate_registered();
                     }
                 }
             });
@@ -523,6 +528,21 @@ fn main() {
                 if let tauri::WindowEvent::Focused(false) = event {
                     if let Err(error) = quick_panel::close(window.app_handle()) {
                         eprintln!("failed to close quick panel after focus loss: {error}");
+                    }
+                }
+                return;
+            }
+            if window.label() == "status-island-details" {
+                if matches!(event, tauri::WindowEvent::ScaleFactorChanged { .. } | tauri::WindowEvent::Resized(_)) {
+                    quick_panel::request_position_reconcile(window.app_handle().clone());
+                } else if matches!(event, tauri::WindowEvent::Focused(false)) {
+                    if let Err(error) = quick_panel::close_details_for_navigation(window.app_handle()) {
+                        eprintln!("failed to close status island details after focus loss: {error}");
+                    }
+                } else if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    if let Err(error) = quick_panel::close_details_for_navigation(window.app_handle()) {
+                        eprintln!("failed to close status island details: {error}");
                     }
                 }
                 return;
@@ -676,6 +696,15 @@ fn main() {
             wallpaper::enter_foreground_mode,
             quick_panel::open_quick_panel,
             quick_panel::close_quick_panel,
+            quick_panel::set_top_surface_expanded,
+            quick_panel::toggle_status_island_details,
+            quick_panel::close_status_island_details,
+            status_island::get_status_island_snapshot,
+            status_island::open_status_island_event,
+            status_island::open_status_island_task,
+            status_island::start_status_island_focus,
+            status_island::pause_status_island_focus,
+            status_island::resume_status_island_focus,
             window_lifecycle::get_window_mode
         ])
         .run(tauri::generate_context!())

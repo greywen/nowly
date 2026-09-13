@@ -1,13 +1,27 @@
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, Runtime};
+use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, Runtime};
+
+#[derive(Debug, Clone, Copy)]
+struct WorkArea {
+    x: i32,
+    y: i32,
+    width: u32,
+}
 
 const PANEL_ANIMATION_DURATION: Duration = Duration::from_millis(220);
 const HANDLE_ANIMATION_DURATION: Duration = Duration::from_millis(120);
 const OPEN_PANEL_DELAY: Duration = Duration::from_millis(60);
 const CLOSE_HANDLE_DELAY: Duration = Duration::from_millis(100);
 const FRAME_DURATION: Duration = Duration::from_millis(16);
-const PANEL_TOP_MARGIN: f64 = 16.0;
+const STATUS_ISLAND_TOP_MARGIN: f64 = 8.0;
+const DETAILS_GAP: f64 = 8.0;
+const INDICATOR_WIDTH: f64 = 72.0;
+const INDICATOR_HEIGHT: f64 = 20.0;
+const STATUS_ISLAND_WIDTH: f64 = 288.0;
+const STATUS_ISLAND_HEIGHT: f64 = 48.0;
+const DETAILS_WIDTH: f64 = 330.0;
+const DETAILS_HEIGHT: f64 = 240.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PanelPhase {
@@ -39,18 +53,37 @@ pub fn panel_positions(
     monitor_x: i32,
     panel_width: u32,
     panel_height: u32,
-    scale_factor: f64,
 ) -> PanelPositions {
     PanelPositions {
         x: monitor_x + (monitor_width.saturating_sub(panel_width) / 2) as i32,
-        expanded_y: (PANEL_TOP_MARGIN * scale_factor).round() as i32,
+        expanded_y: 8,
         collapsed_y: -(panel_height as i32),
     }
 }
 
-pub fn handle_positions(monitor_y: i32, handle_height: u32) -> HandlePositions {
+pub fn screen_top(monitor_y: i32, _work_area_y: i32) -> i32 {
+    monitor_y
+}
+
+pub fn top_surface_size(expanded: bool, scale_factor: f64) -> (u32, u32) {
+    let (width, height) = if expanded {
+        (STATUS_ISLAND_WIDTH, STATUS_ISLAND_HEIGHT)
+    } else {
+        (INDICATOR_WIDTH, INDICATOR_HEIGHT)
+    };
+    (
+        (width * scale_factor).round() as u32,
+        (height * scale_factor).round() as u32,
+    )
+}
+
+pub fn handle_positions(
+    monitor_y: i32,
+    handle_height: u32,
+    visible_offset: i32,
+) -> HandlePositions {
     HandlePositions {
-        visible_y: monitor_y,
+        visible_y: monitor_y + visible_offset,
         hidden_y: monitor_y - handle_height as i32,
     }
 }
@@ -115,7 +148,10 @@ pub struct PanelController {
 struct PanelState {
     generation: u64,
     enabled: bool,
+    target_monitor_id: Option<String>,
     open: bool,
+    details_open: bool,
+    top_surface_expanded: bool,
 }
 
 impl Default for PanelController {
@@ -124,7 +160,10 @@ impl Default for PanelController {
             state: Mutex::new(PanelState {
                 generation: 0,
                 enabled: true,
+                target_monitor_id: None,
                 open: false,
+                details_open: false,
+                top_surface_expanded: false,
             }),
             animation: Mutex::new(()),
         }
@@ -140,6 +179,14 @@ impl PanelController {
         self.state.lock().unwrap().enabled
     }
 
+    pub fn target_monitor_id(&self) -> Option<String> {
+        self.state.lock().unwrap().target_monitor_id.clone()
+    }
+
+    pub fn set_target_monitor_id(&self, target_monitor_id: Option<String>) {
+        self.state.lock().unwrap().target_monitor_id = target_monitor_id;
+    }
+
     pub fn request_open(&self) -> Option<PanelTransition> {
         let mut state = self.state.lock().unwrap();
         if !state.enabled {
@@ -147,24 +194,83 @@ impl PanelController {
         }
         state.generation += 1;
         state.open = true;
+        state.details_open = false;
         Some(PanelTransition {
             generation: state.generation,
             phase: PanelPhase::Opening,
         })
     }
 
-    pub fn request_close(&self) -> PanelTransition {
+    fn reserve_open(&self) -> Option<u64> {
         let mut state = self.state.lock().unwrap();
+        if !state.enabled || state.open {
+            return None;
+        }
+        state.generation += 1;
+        state.open = true;
+        state.details_open = false;
+        Some(state.generation)
+    }
+
+    fn complete_open(&self, generation: u64) -> Option<PanelTransition> {
+        let state = self.state.lock().unwrap();
+        (state.enabled && state.open && state.generation == generation).then_some(PanelTransition {
+            generation,
+            phase: PanelPhase::Opening,
+        })
+    }
+
+    fn cancel_open(&self, generation: u64) {
+        let mut state = self.state.lock().unwrap();
+        if state.generation == generation {
+            state.generation += 1;
+            state.open = false;
+        }
+    }
+
+    pub fn request_close(&self) -> Option<PanelTransition> {
+        let mut state = self.state.lock().unwrap();
+        if !state.enabled || !state.open {
+            return None;
+        }
         state.generation += 1;
         state.open = false;
-        PanelTransition {
+        Some(PanelTransition {
             generation: state.generation,
             phase: PanelPhase::Closing,
-        }
+        })
     }
 
     pub fn is_current(&self, generation: u64) -> bool {
         self.state.lock().unwrap().generation == generation
+    }
+
+    pub fn top_surface_expanded(&self) -> bool {
+        self.state.lock().unwrap().top_surface_expanded
+    }
+
+    pub fn set_top_surface_expanded(&self, expanded: bool) {
+        let mut state = self.state.lock().unwrap();
+        state.top_surface_expanded = expanded;
+        if !expanded {
+            state.details_open = false;
+        }
+    }
+
+    pub fn are_details_open(&self) -> bool {
+        self.state.lock().unwrap().details_open
+    }
+
+    pub fn toggle_details(&self) -> bool {
+        let mut state = self.state.lock().unwrap();
+        state.details_open =
+            state.enabled && !state.open && state.top_surface_expanded && !state.details_open;
+        state.details_open
+    }
+
+    fn close_details(&self) {
+        let mut state = self.state.lock().unwrap();
+        state.details_open = false;
     }
 
     fn may_restore_handle(&self, generation: u64) -> bool {
@@ -178,6 +284,7 @@ impl PanelController {
         state.enabled = enabled;
         if !enabled {
             state.open = false;
+            state.details_open = false;
         }
         state.generation
     }
@@ -187,6 +294,7 @@ impl PanelController {
         state.generation += 1;
         state.enabled = enabled;
         state.open = open;
+        state.details_open = false;
     }
 
     fn reconcile(&self, generation: u64, open: bool) {
@@ -206,29 +314,32 @@ fn window_positions<R: Runtime>(
     let handle = app
         .get_webview_window("quick-panel-handle")
         .ok_or_else(|| "quick-panel-handle window not found".to_owned())?;
-    let monitor = panel
-        .primary_monitor()
-        .map_err(|error| error.to_string())?
-        .ok_or_else(|| "primary monitor not found".to_owned())?;
-    let monitor_position = monitor.position();
-    let monitor_size = monitor.size();
+    let monitor = target_monitor(&handle)?;
+    let work_area = monitor_work_area(&monitor)?;
+    let top = screen_top(monitor.position().y, work_area.y);
     let panel_size = panel.outer_size().map_err(|error| error.to_string())?;
     let mut positions = panel_positions(
-        monitor_size.width,
-        monitor_position.x,
+        work_area.width,
+        work_area.x,
         panel_size.width,
         panel_size.height,
-        monitor.scale_factor(),
     );
     let handle_size = handle.outer_size().map_err(|error| error.to_string())?;
-    positions.expanded_y += monitor_position.y;
-    positions.collapsed_y += monitor_position.y;
-    let handle_x =
-        monitor_position.x + (monitor_size.width.saturating_sub(handle_size.width) / 2) as i32;
+    positions.expanded_y += top;
+    positions.collapsed_y += top;
+    let handle_x = work_area.x + (work_area.width.saturating_sub(handle_size.width) / 2) as i32;
     Ok((
         positions,
         handle_x,
-        handle_positions(monitor_position.y, handle_size.height),
+        handle_positions(
+            top,
+            handle_size.height,
+            if app.state::<PanelController>().top_surface_expanded() {
+                (STATUS_ISLAND_TOP_MARGIN * monitor.scale_factor()).round() as i32
+            } else {
+                0
+            },
+        ),
     ))
 }
 
@@ -240,20 +351,7 @@ fn restore_handle<R: Runtime>(
     if !controller.may_restore_handle(generation) {
         return;
     }
-    let position_result = (|| {
-        let monitor = handle
-            .primary_monitor()
-            .map_err(|error| error.to_string())?
-            .ok_or_else(|| "primary monitor not found".to_owned())?;
-        let monitor_position = monitor.position();
-        let monitor_size = monitor.size();
-        let handle_size = handle.outer_size().map_err(|error| error.to_string())?;
-        let x =
-            monitor_position.x + (monitor_size.width.saturating_sub(handle_size.width) / 2) as i32;
-        handle
-            .set_position(PhysicalPosition::new(x, monitor_position.y))
-            .map_err(|error| error.to_string())
-    })();
+    let position_result = reposition_handle(handle.app_handle());
     if let Err(error) = position_result {
         eprintln!("failed to reposition quick panel handle while restoring: {error}");
     }
@@ -287,15 +385,105 @@ pub fn initialize<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
     handle.show().map_err(|error| error.to_string())
 }
 
+fn target_monitor<R: Runtime>(window: &tauri::WebviewWindow<R>) -> Result<tauri::Monitor, String> {
+    let monitors = window
+        .available_monitors()
+        .map_err(|error| error.to_string())?;
+    let primary = window
+        .primary_monitor()
+        .map_err(|error| error.to_string())?;
+    let saved = window
+        .app_handle()
+        .state::<PanelController>()
+        .target_monitor_id();
+    saved
+        .as_deref()
+        .and_then(|id| {
+            monitors.iter().find(|monitor| {
+                let position = monitor.position();
+                crate::monitors::monitor_id(
+                    monitor.name().map(String::as_str),
+                    position.x,
+                    position.y,
+                ) == id
+            })
+        })
+        .or(primary.as_ref())
+        .or_else(|| monitors.first())
+        .cloned()
+        .ok_or_else(|| "no monitor available".to_owned())
+}
+
+#[cfg(target_os = "windows")]
+fn monitor_work_area(monitor: &tauri::Monitor) -> Result<WorkArea, String> {
+    use windows::Win32::Foundation::POINT;
+    use windows::Win32::Graphics::Gdi::{
+        GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+    };
+
+    let position = monitor.position();
+    let size = monitor.size();
+    let point = POINT {
+        x: position.x + (size.width / 2) as i32,
+        y: position.y + (size.height / 2) as i32,
+    };
+    unsafe {
+        let handle = MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST);
+        if handle.is_invalid() {
+            return Err("failed to resolve target monitor work area".to_owned());
+        }
+        let mut info = MONITORINFO {
+            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
+        if !GetMonitorInfoW(handle, &mut info).as_bool() {
+            return Err("failed to read target monitor work area".to_owned());
+        }
+        Ok(WorkArea {
+            x: info.rcWork.left,
+            y: info.rcWork.top,
+            width: (info.rcWork.right - info.rcWork.left).max(0) as u32,
+        })
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn monitor_work_area(monitor: &tauri::Monitor) -> Result<WorkArea, String> {
+    let position = monitor.position();
+    let size = monitor.size();
+    Ok(WorkArea {
+        x: position.x,
+        y: position.y,
+        width: size.width,
+    })
+}
+
 pub fn reposition_handle<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
     if !app.state::<PanelController>().is_enabled() {
         return Ok(());
     }
-    let (_, handle_x, handle_positions) = window_positions(app)?;
-    let handle_position = PhysicalPosition::new(handle_x, handle_positions.visible_y);
     let handle = app
         .get_webview_window("quick-panel-handle")
         .ok_or_else(|| "quick-panel-handle window not found".to_owned())?;
+    let monitor = target_monitor(&handle)?;
+    let work_area = monitor_work_area(&monitor)?;
+    let top = screen_top(monitor.position().y, work_area.y);
+    let expanded = app.state::<PanelController>().top_surface_expanded();
+    let desired_size = top_surface_size(expanded, monitor.scale_factor());
+    let physical_size = PhysicalSize::new(desired_size.0, desired_size.1);
+    if handle.outer_size().map_err(|error| error.to_string())? != physical_size {
+        handle
+            .set_size(physical_size)
+            .map_err(|error| error.to_string())?;
+    }
+    let handle_x = work_area.x + (work_area.width.saturating_sub(desired_size.0) / 2) as i32;
+    let visible_offset = if expanded {
+        (STATUS_ISLAND_TOP_MARGIN * monitor.scale_factor()).round() as i32
+    } else {
+        0
+    };
+    let positions = handle_positions(top, desired_size.1, visible_offset);
+    let handle_position = PhysicalPosition::new(handle_x, positions.visible_y);
     let current_position = handle.outer_position().map_err(|error| error.to_string())?;
     if current_position != handle_position {
         handle
@@ -305,10 +493,42 @@ pub fn reposition_handle<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
     Ok(())
 }
 
+fn reposition_details<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+    let handle = app
+        .get_webview_window("quick-panel-handle")
+        .ok_or_else(|| "quick-panel-handle window not found".to_owned())?;
+    let details = app
+        .get_webview_window("status-island-details")
+        .ok_or_else(|| "status-island-details window not found".to_owned())?;
+    let monitor = target_monitor(&handle)?;
+    let work_area = monitor_work_area(&monitor)?;
+    let details_size = PhysicalSize::new(
+        (DETAILS_WIDTH * monitor.scale_factor()).round() as u32,
+        (DETAILS_HEIGHT * monitor.scale_factor()).round() as u32,
+    );
+    if details.outer_size().map_err(|error| error.to_string())? != details_size {
+        details
+            .set_size(details_size)
+            .map_err(|error| error.to_string())?;
+    }
+    let handle_position = handle.outer_position().map_err(|error| error.to_string())?;
+    let handle_size = handle.outer_size().map_err(|error| error.to_string())?;
+    let x = work_area.x + (work_area.width.saturating_sub(details_size.width) / 2) as i32;
+    let y = handle_position.y
+        + handle_size.height as i32
+        + (DETAILS_GAP * monitor.scale_factor()).round() as i32;
+    details
+        .set_position(PhysicalPosition::new(x, y))
+        .map_err(|error| error.to_string())
+}
+
 pub fn reconcile_positions<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
     let controller = app.state::<PanelController>();
     let _animation = controller.animation.lock().unwrap();
     reposition_handle(app)?;
+    if controller.are_details_open() {
+        reposition_details(app)?;
+    }
     if controller.is_open() {
         let (positions, _, _) = window_positions(app)?;
         let panel = app
@@ -361,12 +581,16 @@ pub fn set_enabled<R: Runtime>(app: &AppHandle<R>, enabled: bool) -> Result<(), 
     }
     let panel = app.get_webview_window("quick-panel");
     let handle = app.get_webview_window("quick-panel-handle");
+    let details = app.get_webview_window("status-island-details");
     let result = (|| {
         if let Some(panel) = &panel {
             panel.hide().map_err(|error| error.to_string())?;
         }
         if let Some(handle) = &handle {
             handle.hide().map_err(|error| error.to_string())?;
+        }
+        if let Some(details) = &details {
+            details.hide().map_err(|error| error.to_string())?;
         }
         Ok(())
     })();
@@ -570,12 +794,23 @@ fn animate<R: Runtime>(app: AppHandle<R>, transition: PanelTransition) {
     });
 }
 
+fn begin_open(
+    controller: &PanelController,
+    preflight: impl FnOnce() -> Result<(), String>,
+) -> Result<Option<PanelTransition>, String> {
+    let Some(generation) = controller.reserve_open() else {
+        return Ok(None);
+    };
+    if let Err(error) = preflight() {
+        controller.cancel_open(generation);
+        return Err(error);
+    }
+    Ok(controller.complete_open(generation))
+}
+
 pub fn open<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
     let controller = app.state::<PanelController>();
-    if controller.is_open() {
-        return Ok(());
-    }
-    if let Some(transition) = controller.request_open() {
+    if let Some(transition) = begin_open(&controller, || close_details_for_navigation(app))? {
         animate(app.clone(), transition);
     }
     Ok(())
@@ -583,11 +818,18 @@ pub fn open<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
 
 pub fn close<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
     let controller = app.state::<PanelController>();
-    if !controller.is_open() {
-        return Ok(());
+    if let Some(transition) = controller.request_close() {
+        animate(app.clone(), transition);
     }
-    let transition = controller.request_close();
-    animate(app.clone(), transition);
+    Ok(())
+}
+
+pub fn close_details_for_navigation<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+    app.state::<PanelController>().close_details();
+    if let Some(details) = app.get_webview_window("status-island-details") {
+        let _ = details.emit("status-island-details-close", ());
+        details.hide().map_err(|error| error.to_string())?;
+    }
     Ok(())
 }
 
@@ -609,13 +851,53 @@ pub fn close_quick_panel(app: AppHandle) -> Result<(), crate::error::CommandErro
     close(&app).map_err(crate::error::CommandError::system)
 }
 
+#[tauri::command]
+pub fn set_top_surface_expanded(
+    app: AppHandle,
+    expanded: bool,
+) -> Result<(), crate::error::CommandError> {
+    app.state::<PanelController>()
+        .set_top_surface_expanded(expanded);
+    if !expanded {
+        close_details_for_navigation(&app).map_err(crate::error::CommandError::system)?;
+    }
+    reposition_handle(&app).map_err(crate::error::CommandError::system)
+}
+
+#[tauri::command]
+pub fn toggle_status_island_details(app: AppHandle) -> Result<(), crate::error::CommandError> {
+    let open = app.state::<PanelController>().toggle_details();
+    let details = app
+        .get_webview_window("status-island-details")
+        .ok_or_else(|| {
+            crate::error::CommandError::system("status-island-details window not found")
+        })?;
+    if open {
+        reposition_details(&app).map_err(crate::error::CommandError::system)?;
+        details.show().map_err(crate::error::CommandError::system)?;
+        details
+            .emit("status-island-details-open", ())
+            .map_err(crate::error::CommandError::system)?;
+        details
+            .set_focus()
+            .map_err(crate::error::CommandError::system)
+    } else {
+        details.hide().map_err(crate::error::CommandError::system)
+    }
+}
+
+#[tauri::command]
+pub fn close_status_island_details(app: AppHandle) -> Result<(), crate::error::CommandError> {
+    close_details_for_navigation(&app).map_err(crate::error::CommandError::system)
+}
+
 #[cfg(test)]
 mod tests {
     use std::time::Duration;
 
     use super::{
-        closing_progress, ease_out, handle_positions, handle_visible, opening_progress,
-        panel_positions, PanelController, PanelPhase,
+        begin_open, closing_progress, ease_out, handle_positions, handle_visible, opening_progress,
+        panel_positions, screen_top, top_surface_size, PanelController, PanelPhase,
     };
 
     #[test]
@@ -635,90 +917,83 @@ mod tests {
     }
 
     #[test]
-    fn panel_disables_native_shadow_that_adds_a_windows_border() {
-        let config: serde_json::Value =
-            serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
-        let panel = config["app"]["windows"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .find(|window| window["label"] == "quick-panel")
-            .unwrap();
-        assert_eq!(panel["decorations"], false);
-        assert_eq!(panel["shadow"], false);
-    }
-
-    #[test]
-    fn panel_window_is_transparent_behind_the_rounded_surface() {
-        let config: serde_json::Value =
-            serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
-        let panel = config["app"]["windows"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .find(|window| window["label"] == "quick-panel")
-            .unwrap();
-        assert_eq!(panel["transparent"], true);
-        assert_eq!(panel["backgroundColor"], "#00000000");
-    }
-
-    #[test]
     fn panel_is_centered_and_collapses_above_the_monitor() {
-        let positions = panel_positions(1920, 0, 520, 640, 1.0);
+        let positions = panel_positions(1920, 0, 520, 640);
 
         assert_eq!(positions.x, 700);
-        assert_eq!(positions.expanded_y, 16);
+        assert_eq!(positions.expanded_y, 8);
         assert_eq!(positions.collapsed_y, -640);
     }
 
     #[test]
     fn negative_monitor_origins_are_preserved() {
-        let positions = panel_positions(1280, -1080, 520, 640, 1.0);
+        let positions = panel_positions(1280, -1080, 520, 640);
 
         assert_eq!(positions.x, -700);
-        assert_eq!(positions.expanded_y, 16);
+        assert_eq!(positions.expanded_y, 8);
         assert_eq!(positions.collapsed_y, -640);
     }
 
     #[test]
     fn monitor_origin_is_added_without_a_handle_gap() {
-        let mut positions = panel_positions(1920, 0, 520, 640, 1.0);
+        let mut positions = panel_positions(1920, 0, 520, 640);
         positions.expanded_y += -900;
         positions.collapsed_y += -900;
 
-        assert_eq!(positions.expanded_y, -884);
+        assert_eq!(positions.expanded_y, -892);
         assert_eq!(positions.collapsed_y, -1540);
     }
 
     #[test]
     fn indicator_slides_above_the_monitor_when_the_panel_opens() {
-        let positions = handle_positions(0, 20);
+        let positions = handle_positions(0, 20, 0);
 
         assert_eq!(positions.visible_y, 0);
         assert_eq!(positions.hidden_y, -20);
     }
 
     #[test]
-    fn panel_margin_scales_without_rescaling_physical_window_dimensions() {
-        for (scale, margin) in [(1.0, 16), (1.25, 20), (1.5, 24), (2.0, 32)] {
-            let positions = panel_positions(2560, -2560, 780, 960, scale);
-            assert_eq!(positions.expanded_y, margin);
-            assert_eq!(positions.x, -1670);
-            assert_eq!(positions.collapsed_y, -960);
-        }
+    fn top_surfaces_ignore_a_top_taskbar_work_area_inset() {
+        assert_eq!(screen_top(0, 48), 0);
+        assert_eq!(screen_top(-900, -852), -900);
     }
 
     #[test]
-    fn window_dimensions_match_the_approved_layout() {
+    fn top_surface_switches_between_indicator_and_scaled_island_geometry() {
+        assert_eq!(top_surface_size(false, 1.5), (108, 30));
+        assert_eq!(top_surface_size(true, 1.5), (432, 72));
+        assert_eq!(handle_positions(-900, 72, 12).visible_y, -888);
+    }
+
+    #[test]
+    fn details_only_open_for_the_expanded_status_island() {
+        let controller = PanelController::default();
+
+        assert!(!controller.toggle_details());
+        controller.set_top_surface_expanded(true);
+        assert!(controller.toggle_details());
+        controller.set_top_surface_expanded(false);
+        assert!(!controller.are_details_open());
+    }
+
+    #[test]
+    fn top_surface_and_details_windows_match_the_two_state_layout() {
         let config: serde_json::Value =
             serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
         let windows = config["app"]["windows"].as_array().unwrap();
-        let panel = windows.iter().find(|window| window["label"] == "quick-panel").unwrap();
-        let handle = windows.iter().find(|window| window["label"] == "quick-panel-handle").unwrap();
-        assert_eq!(panel["width"], 520);
-        assert_eq!(panel["height"], 640);
-        assert_eq!(handle["width"], 64);
+        let handle = windows
+            .iter()
+            .find(|window| window["label"] == "quick-panel-handle")
+            .unwrap();
+        let details = windows
+            .iter()
+            .find(|window| window["label"] == "status-island-details")
+            .unwrap();
+
+        assert_eq!(handle["width"], 72);
         assert_eq!(handle["height"], 20);
+        assert_eq!(details["width"], 330);
+        assert_eq!(details["height"], 240);
     }
 
     #[test]
@@ -733,7 +1008,7 @@ mod tests {
     fn stale_close_cannot_restore_the_handle_after_reopening() {
         let controller = PanelController::default();
         controller.request_open().unwrap();
-        let closing = controller.request_close();
+        let closing = controller.request_close().unwrap();
 
         assert!(controller.may_restore_handle(closing.generation));
 
@@ -749,9 +1024,35 @@ mod tests {
         assert_eq!(opening.phase, PanelPhase::Opening);
         assert!(controller.is_open());
 
-        let closing = controller.request_close();
+        let closing = controller.request_close().unwrap();
         assert_eq!(closing.phase, PanelPhase::Closing);
         assert!(closing.generation > opening.generation);
+        assert!(!controller.is_open());
+    }
+
+    #[test]
+    fn failed_open_preflight_does_not_block_the_next_hover_attempt() {
+        let controller = PanelController::default();
+
+        assert!(begin_open(&controller, || Err("details hide failed".to_owned())).is_err());
+        assert!(!controller.is_open());
+
+        let transition = begin_open(&controller, || Ok(())).unwrap().unwrap();
+        assert_eq!(transition.phase, PanelPhase::Opening);
+        assert!(controller.is_open());
+    }
+
+    #[test]
+    fn close_during_open_preflight_cancels_the_pending_open() {
+        let controller = PanelController::default();
+
+        let transition = begin_open(&controller, || {
+            controller.request_close();
+            Ok(())
+        })
+        .unwrap();
+
+        assert!(transition.is_none());
         assert!(!controller.is_open());
     }
 
@@ -762,6 +1063,17 @@ mod tests {
         controller.set_enabled(false);
 
         assert!(controller.request_open().is_none());
+        assert!(!controller.is_open());
+    }
+
+    #[test]
+    fn disabled_controller_rejects_delayed_close_requests() {
+        let controller = PanelController::default();
+        controller.request_open().unwrap();
+
+        controller.set_enabled(false);
+
+        assert!(controller.request_close().is_none());
         assert!(!controller.is_open());
     }
 

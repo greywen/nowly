@@ -2,7 +2,7 @@ use crate::error::CommandError;
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -12,6 +12,14 @@ pub struct NativeFocusSnapshot {
     pub started_at: String,
     pub notification_title: String,
     pub notification_body: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FocusStatusSnapshot {
+    pub status: String,
+    pub remaining_seconds: u64,
+    pub session_id: Option<String>,
 }
 
 #[derive(Debug)]
@@ -28,6 +36,37 @@ pub struct FocusTimerCoordinator {
 }
 
 impl FocusTimerCoordinator {
+    pub fn status_snapshot(&self, now: Instant) -> FocusStatusSnapshot {
+        let Some(active) = self.active.as_ref() else {
+            if let Some(pending) = self.pending.as_ref() {
+                return FocusStatusSnapshot {
+                    status: "completed".into(),
+                    remaining_seconds: 0,
+                    session_id: Some(pending.id.clone()),
+                };
+            }
+            return FocusStatusSnapshot {
+                status: "idle".into(),
+                remaining_seconds: 0,
+                session_id: None,
+            };
+        };
+        let remaining = active.started_at.map_or(active.remaining, |started_at| {
+            active
+                .remaining
+                .saturating_sub(now.saturating_duration_since(started_at))
+        });
+        FocusStatusSnapshot {
+            status: if active.started_at.is_some() {
+                "running".into()
+            } else {
+                "paused".into()
+            },
+            remaining_seconds: remaining.as_secs(),
+            session_id: Some(active.snapshot.id.clone()),
+        }
+    }
+
     pub fn start(&mut self, snapshot: NativeFocusSnapshot, duration: Duration, now: Instant) {
         self.pending = None;
         self.active = Some(ActiveTimer {
@@ -99,6 +138,7 @@ fn locked(
 
 #[tauri::command]
 pub fn start_focus_timer(
+    app: AppHandle,
     timer: State<'_, ManagedFocusTimer>,
     snapshot: NativeFocusSnapshot,
     remaining_seconds: u64,
@@ -108,24 +148,41 @@ pub fn start_focus_timer(
         Duration::from_secs(remaining_seconds),
         Instant::now(),
     );
+    app.emit("status-island-invalidated", ())
+        .map_err(CommandError::system)?;
     Ok(())
 }
 
 #[tauri::command]
-pub fn pause_focus_timer(timer: State<'_, ManagedFocusTimer>) -> Result<(), CommandError> {
+pub fn pause_focus_timer(
+    app: AppHandle,
+    timer: State<'_, ManagedFocusTimer>,
+) -> Result<(), CommandError> {
     locked(timer.inner())?.pause(Instant::now());
+    app.emit("status-island-invalidated", ())
+        .map_err(CommandError::system)?;
     Ok(())
 }
 
 #[tauri::command]
-pub fn resume_focus_timer(timer: State<'_, ManagedFocusTimer>) -> Result<(), CommandError> {
+pub fn resume_focus_timer(
+    app: AppHandle,
+    timer: State<'_, ManagedFocusTimer>,
+) -> Result<(), CommandError> {
     locked(timer.inner())?.resume(Instant::now());
+    app.emit("status-island-invalidated", ())
+        .map_err(CommandError::system)?;
     Ok(())
 }
 
 #[tauri::command]
-pub fn cancel_focus_timer(timer: State<'_, ManagedFocusTimer>) -> Result<(), CommandError> {
+pub fn cancel_focus_timer(
+    app: AppHandle,
+    timer: State<'_, ManagedFocusTimer>,
+) -> Result<(), CommandError> {
     locked(timer.inner())?.cancel();
+    app.emit("status-island-invalidated", ())
+        .map_err(CommandError::system)?;
     Ok(())
 }
 
@@ -161,6 +218,33 @@ mod tests {
     }
 
     #[test]
+    fn reports_running_and_paused_snapshots_without_mutating_the_timer() {
+        let origin = Instant::now();
+        let mut timer = FocusTimerCoordinator::default();
+        timer.start(snapshot(), Duration::from_secs(1500), origin);
+
+        let running = timer.status_snapshot(origin + Duration::from_secs(42));
+        assert_eq!(running.status, "running");
+        assert_eq!(running.remaining_seconds, 1458);
+        assert_eq!(running.session_id.as_deref(), Some("session-1"));
+
+        timer.pause(origin + Duration::from_secs(42));
+        let paused = timer.status_snapshot(origin + Duration::from_secs(90));
+        assert_eq!(paused.status, "paused");
+        assert_eq!(paused.remaining_seconds, 1458);
+    }
+
+    #[test]
+    fn reports_idle_when_no_native_timer_is_active() {
+        let timer = FocusTimerCoordinator::default();
+        let status = timer.status_snapshot(Instant::now());
+
+        assert_eq!(status.status, "idle");
+        assert_eq!(status.remaining_seconds, 0);
+        assert_eq!(status.session_id, None);
+    }
+
+    #[test]
     fn running_timer_completes_exactly_once() {
         let now = Instant::now();
         let mut timer = FocusTimerCoordinator::default();
@@ -172,6 +256,9 @@ mod tests {
         );
         assert!(timer.poll(now + Duration::from_secs(3)).is_none());
         assert_eq!(timer.pending().unwrap().id, "session-1");
+        let completed = timer.status_snapshot(now + Duration::from_secs(3));
+        assert_eq!(completed.status, "completed");
+        assert_eq!(completed.remaining_seconds, 0);
         timer.acknowledge("session-1");
         assert!(timer.pending().is_none());
     }

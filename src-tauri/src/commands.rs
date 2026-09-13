@@ -4,7 +4,7 @@ use crate::models::AppSettings;
 use crate::settings::{read_app_settings, write_app_settings};
 use rusqlite::Connection;
 use std::str::FromStr;
-use tauri::State;
+use tauri::{Manager, State};
 use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 use tauri_plugin_global_shortcut::Shortcut;
@@ -55,6 +55,10 @@ pub fn update_app_settings(
     let quick_panel_enabled_changed =
         settings.quick_panel_enabled != previous_settings.quick_panel_enabled;
     if quick_panel_enabled_changed {
+        if settings.quick_panel_enabled {
+            app.state::<crate::quick_panel::PanelController>()
+                .set_target_monitor_id(settings.target_monitor_id.clone());
+        }
         if let Err(error) = crate::quick_panel::set_enabled(&app, settings.quick_panel_enabled) {
             if shortcut_changed {
                 if let Some(shortcut) = requested_shortcut {
@@ -134,6 +138,11 @@ pub fn update_app_settings(
                 return Err(CommandError::system(error));
             }
         }
+    }
+    if saved.quick_panel_enabled && saved.target_monitor_id != previous_settings.target_monitor_id {
+        app.state::<crate::quick_panel::PanelController>()
+            .set_target_monitor_id(saved.target_monitor_id.clone());
+        crate::quick_panel::request_position_reconcile(app.clone());
     }
     Ok(saved)
 }

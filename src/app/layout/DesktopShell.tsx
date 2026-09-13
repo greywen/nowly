@@ -39,7 +39,6 @@ type DesktopShellProps = {
   // wallpaper reads as a clean dashboard; the bar returns in the foreground.
   hideTopbarInWallpaper?: boolean;
   overlay?: ReactNode;
-  assistant?: (active: boolean) => ReactNode;
   // The launch-time update check result. When it reports a newer release the
   // logo button shows a red dot, and the About dialog surfaces the changelog.
   update?: UpdateInfo | null;
@@ -69,7 +68,6 @@ export function DesktopShell({
   onOpenSettings,
   hideTopbarInWallpaper = true,
   overlay,
-  assistant,
   update
 }: DesktopShellProps) {
   const foreground = mode === 'foreground';
@@ -85,7 +83,6 @@ export function DesktopShell({
   const [aboutOpen, setAboutOpen] = useState(false);
   const updateAvailable = update?.updateAvailable ?? false;
   const [previewingBlur, setPreviewingBlur] = useState(false);
-  const assistantActive = foreground && !isEditing && !pickerOpen && !marketOpen && !aboutOpen;
 
   // Blur persists as a wallpaper-only look. As the wallpaper it softens the
   // whole app content, topbar included, so the modules read as a frosted layer
@@ -121,7 +118,6 @@ export function DesktopShell({
           <strong>{dateText}</strong>
           <p>{summary}</p>
         </div>
-        {assistant?.(assistantActive)}
         <div className="top-actions">
           {foreground ? (
             <button

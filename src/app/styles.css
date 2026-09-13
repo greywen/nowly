@@ -115,15 +115,90 @@ button:disabled { cursor: default; opacity: .65; }
 /* Wallpaper layer sits behind the app content. Hidden until a wallpaper is
    configured; it only anchors the stacking order for now. */
 .wallpaper-layer { position: absolute; inset: 0; z-index: 0; background-size: cover; background-position: center; pointer-events: none; }
-.topbar { position: relative; z-index: 2; min-width: 0; padding: 0 24px; display: grid; grid-template-columns: minmax(232px, 1fr) minmax(420px, 720px) minmax(232px, 1fr); align-items: center; gap: 24px; background: var(--bg-subtle); border-bottom: 1px solid var(--border-default); }
+.topbar { position: relative; z-index: 2; min-width: 0; padding: 0 24px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 24px; background: var(--bg-subtle); border-bottom: 1px solid var(--border-default); }
 .date-copy { grid-column: 1; min-width: 0; justify-self: start; }
 .date-copy strong { display: block; color: var(--text-primary); font-size: 1.075rem; font-weight: 600; }
 .date-copy p { margin: 0; color: var(--text-muted); font-size: 0.85rem; font-weight: 500; }
 .top-actions, .toolbar-actions { flex: none; display: flex; align-items: center; gap: 8px; }
-.topbar > .assistant-dock { grid-column: 2; }
-.top-actions { grid-column: 3; justify-self: end; }
+.top-actions { grid-column: 2; justify-self: end; }
 .topbar-time { color: var(--text-strong); font-size: 1.075rem; font-weight: 600; }
 .workspace { position: relative; z-index: 1; min-width: 0; min-height: 0; padding: 24px 36px 36px; display: flex; }
+
+.status-island { position: relative; width: 330px; height: 48px; justify-self: center; color: var(--text-secondary); }
+.status-island__trigger-shell { position: relative; width: 100%; height: 100%; }
+.status-island__trigger { box-sizing: border-box; width: 100%; height: 48px; padding: 4px 8px 4px 12px; border: 1px solid var(--border-default); border-radius: var(--radius-default); display: flex; align-items: center; overflow: hidden; color: inherit; background: rgba(255, 255, 255, .86); box-shadow: var(--shadow-xs); text-align: left; }
+.status-island__trigger-shell.has-dismiss .status-island__trigger { padding-right: 40px; }
+.status-island__trigger:hover { border-color: var(--border-emphasis); background: var(--bg-surface); }
+.status-island__trigger:focus-visible { box-shadow: inset 0 0 0 2px var(--color-primary); }
+.status-island__dismiss { position: absolute; z-index: 1; top: 8px; right: 8px; width: 32px; height: 32px; padding: 0; border: 0; border-radius: var(--radius-sm); display: grid; place-items: center; color: var(--text-muted); background: var(--bg-subtle); opacity: 0; pointer-events: none; transform: scale(.92); transition: opacity 140ms ease-out, transform 140ms cubic-bezier(.23, 1, .32, 1) !important; }
+.status-island__trigger-shell:hover .status-island__dismiss, .status-island__trigger-shell:focus-within .status-island__dismiss { opacity: 1; pointer-events: auto; transform: scale(1); }
+.status-island__dismiss:hover { color: var(--text-primary); background: var(--bg-muted); }
+.status-island__dismiss:focus-visible { box-shadow: var(--shadow-focus); }
+.status-island__dismiss:active { transform: scale(.94); transition-duration: 100ms !important; }
+.status-island__dismiss svg { width: 16px; height: 16px; }
+.status-island__content { min-width: 0; width: 100%; display: flex; align-items: center; gap: 8px; animation: status-island-content-in 160ms cubic-bezier(.23, 1, .32, 1) both !important; }
+.status-island__icon { width: 28px; height: 28px; flex: none; display: grid; place-items: center; border-radius: var(--radius-md); color: var(--color-primary-active); background: var(--color-primary-light); }
+.status-island[data-primary="task"] .status-island__icon { color: var(--color-danger-active); background: var(--color-danger-light); }
+.status-island__icon svg { width: 18px; height: 18px; }
+.status-island__copy { min-width: 0; flex: 1; display: grid; line-height: 1.2; }
+.status-island__copy strong, .status-island__copy > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.status-island__copy strong { color: var(--text-primary); font-size: 0.95rem; font-weight: 600; }
+.status-island__copy > span { color: var(--text-muted); font-size: 0.85rem; font-weight: 500; }
+.status-island__signals { flex: none; display: flex; align-items: center; gap: 4px; }
+.status-island__signal { padding: 4px 8px; border-radius: var(--radius-pill); color: var(--color-primary-active); background: var(--color-primary-light); font-size: 0.85rem; font-weight: 600; white-space: nowrap; }
+.status-island__signal.is-alert { color: var(--color-danger-active); background: var(--color-danger-light); }
+.status-island__details { position: absolute; z-index: 70; top: calc(100% + 8px); left: 0; box-sizing: border-box; width: 330px; padding: 8px; border: 1px solid var(--border-default); border-radius: var(--radius-default); display: grid; gap: 2px; background: rgba(255, 255, 255, .94); box-shadow: var(--shadow-dropdown); opacity: 0; pointer-events: none; transform: translateY(-2px) scale(.98); transform-origin: top center; transition: opacity 300ms cubic-bezier(.22, 1, .36, 1), transform 300ms cubic-bezier(.22, 1,.36,1) !important; }
+.status-island[data-open="true"] .status-island__details { opacity: 1; pointer-events: auto; transform: translateY(0) scale(1); }
+.status-island__row { box-sizing: border-box; width: 100%; min-height: 46px; padding: 6px 8px; border: 0; border-radius: var(--radius-sm); display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: 8px; color: var(--text-secondary); background: transparent; text-align: left; }
+button.status-island__row:hover { color: var(--color-primary-active); background: var(--bg-subtle); }
+.status-island__row:focus-visible, .status-island__focus-row > button:focus-visible, .status-island__footer .btn:focus-visible { box-shadow: var(--shadow-focus); }
+.status-island__row > svg { width: 18px; height: 18px; justify-self: center; }
+.status-island__row > span { min-width: 0; display: grid; }
+.status-island__row small { color: var(--text-muted); font-size: 0.85rem; font-weight: 500; }
+.status-island__row strong { overflow: hidden; color: var(--text-primary); font-size: 0.95rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.status-island__row > time, .status-island__row > span:last-child { color: var(--text-muted); font-size: 0.85rem; font-weight: 500; white-space: nowrap; }
+.status-island__focus-row > button { min-height: 36px; padding: 6px 8px; border: 0; border-radius: var(--radius-sm); display: inline-flex; align-items: center; gap: 4px; color: var(--color-primary-active); background: var(--color-primary-light); font-size: 0.85rem; font-weight: 600; }
+.status-island__focus-row > button svg { width: 16px; height: 16px; }
+.status-island__empty { margin: 0; padding: 8px 12px; color: var(--text-muted); font-size: 0.85rem; }
+.status-island__footer { padding: 6px 8px 2px; border-top: 1px solid var(--border-default); }
+.status-island__footer.has-retry { display: grid; grid-template-columns: minmax(0, 1fr) 36px; gap: 8px; }
+.status-island__footer .btn { width: 100%; }
+.status-island__retry { width: 36px; min-height: 36px; padding: 0; border: 1px solid var(--color-danger-active); border-radius: var(--radius-sm); display: grid; place-items: center; color: var(--color-danger-active); background: var(--bg-surface); }
+.status-island__retry:hover { background: var(--color-danger-light); }
+.status-island__retry:focus-visible { box-shadow: inset 0 0 0 2px var(--color-danger-active); }
+.status-island__retry svg { width: 16px; height: 16px; }
+
+:root:has(.screen-status-island-root),
+:root:has(.screen-status-island-details-root),
+body:has(.screen-status-island-root),
+body:has(.screen-status-island-details-root),
+#root:has(.screen-status-island-root),
+#root:has(.screen-status-island-details-root) { width: 100%; height: 100%; overflow: hidden; background: transparent !important; }
+.screen-status-island-root, .screen-status-island-details-root { width: 100vw; height: 100vh; }
+.screen-status-island-root .status-island { width: 100%; height: 100%; }
+.screen-status-island-root .status-island__trigger { height: 100%; }
+.screen-status-island-details-root .status-island--details { width: 100%; height: 100%; }
+.screen-status-island-details-root .status-island__details { position: relative; inset: auto; width: 100%; height: 100%; overflow: auto; }
+
+@keyframes status-island-content-in {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-island__content { animation-name: status-island-content-fade !important; }
+  .status-island__dismiss { transform: none; transition-property: opacity !important; }
+  .status-island__details { transform: none; transition-duration: 160ms !important; transition-property: opacity !important; }
+}
+
+@keyframes status-island-content-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .status-island__trigger, .status-island__details { background: var(--bg-surface); }
+}
 
 /* Blur control: an icon button in the topbar that opens a slider popover.
    The slider drives a CSS blur filter over the app content so, once set as the
@@ -463,13 +538,14 @@ button:disabled { cursor: default; opacity: .65; }
   .quadrant-grid { gap: 8px; }
   .quadrant { padding: 12px; }
   .btn { padding-inline: 16px; font-size: 0.95rem; }
+  .status-island__signal:nth-child(n + 2) { display: none; }
 }
 
 @media (max-width: 980px) {
   .topbar { grid-template-columns: minmax(0, 1fr) auto; gap: 12px; }
   .topbar .date-copy { display: none; }
-  .topbar > .assistant-dock { grid-column: 1; }
   .top-actions { grid-column: 2; }
+  .status-island__signal:not(.is-alert) { display: none; }
 }
 
 /* Interface density: "balanced" (适中) keeps the standard spacing above and is
