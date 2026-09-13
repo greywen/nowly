@@ -77,7 +77,7 @@ for (const scale of [1, 1.5, 2]) {
 }
 
 test.describe('screen home indicator', () => {
-  test.use({ viewport: { width: 72, height: 20 } });
+  test.use({ viewport: { width: 96, height: 13 } });
 
   test('replaces the island when no prompt exists', async ({ page }) => {
     await installStatusWindow(page, 'quick-panel-handle');
@@ -85,7 +85,12 @@ test.describe('screen home indicator', () => {
 
     const indicator = page.getByRole('button', { name: '打开 AI 快捷面板' });
     await expect(indicator).toBeVisible();
-    expect(await indicator.boundingBox()).toEqual({ x: 0, y: 0, width: 72, height: 20 });
+    expect(await indicator.boundingBox()).toEqual({ x: 0, y: 0, width: 96, height: 12 });
+    expect(await indicator.locator('span').boundingBox()).toEqual({ x: 0, y: 7, width: 96, height: 5 });
+    await page.mouse.move(48, 12.5);
+    expect(await page.evaluate(() => window.__statusCommands)).not.toContain('open_quick_panel');
+    await page.mouse.move(48, 10);
+    expect(await page.evaluate(() => window.__statusCommands)).toContain('open_quick_panel');
     await expect(page.getByLabel('Nowly 状态岛')).toHaveCount(0);
   });
 });

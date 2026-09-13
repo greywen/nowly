@@ -16,8 +16,8 @@ const CLOSE_HANDLE_DELAY: Duration = Duration::from_millis(100);
 const FRAME_DURATION: Duration = Duration::from_millis(16);
 const STATUS_ISLAND_TOP_MARGIN: f64 = 8.0;
 const DETAILS_GAP: f64 = 8.0;
-const INDICATOR_WIDTH: f64 = 72.0;
-const INDICATOR_HEIGHT: f64 = 20.0;
+const INDICATOR_WIDTH: f64 = 96.0;
+const INDICATOR_HEIGHT: f64 = 13.0;
 const STATUS_ISLAND_WIDTH: f64 = 288.0;
 const STATUS_ISLAND_HEIGHT: f64 = 48.0;
 const DETAILS_WIDTH: f64 = 330.0;
@@ -946,10 +946,10 @@ mod tests {
 
     #[test]
     fn indicator_slides_above_the_monitor_when_the_panel_opens() {
-        let positions = handle_positions(0, 20, 0);
+        let positions = handle_positions(0, 13, 0);
 
         assert_eq!(positions.visible_y, 0);
-        assert_eq!(positions.hidden_y, -20);
+        assert_eq!(positions.hidden_y, -13);
     }
 
     #[test]
@@ -960,7 +960,7 @@ mod tests {
 
     #[test]
     fn top_surface_switches_between_indicator_and_scaled_island_geometry() {
-        assert_eq!(top_surface_size(false, 1.5), (108, 30));
+        assert_eq!(top_surface_size(false, 1.5), (144, 20));
         assert_eq!(top_surface_size(true, 1.5), (432, 72));
         assert_eq!(handle_positions(-900, 72, 12).visible_y, -888);
     }
@@ -990,8 +990,8 @@ mod tests {
             .find(|window| window["label"] == "status-island-details")
             .unwrap();
 
-        assert_eq!(handle["width"], 72);
-        assert_eq!(handle["height"], 20);
+        assert_eq!(handle["width"], 96);
+        assert_eq!(handle["height"], 13);
         assert_eq!(details["width"], 330);
         assert_eq!(details["height"], 240);
     }

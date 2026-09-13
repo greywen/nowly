@@ -36,8 +36,8 @@
       {
         "label": "quick-panel-handle",
         "title": "Nowly 快捷面板把手",
-        "width": 72,
-        "height": 20,
+        "width": 96,
+        "height": 13,
         "resizable": false,
         "decorations": false,
         "shadow": false,
