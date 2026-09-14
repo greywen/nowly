@@ -46,6 +46,11 @@ pub fn read_app_settings(connection: &Connection) -> Result<AppSettings, rusqlit
             crate::models::default_icon_style(),
         )?,
         hide_topbar_in_wallpaper: read_value_or(connection, "hide_topbar_in_wallpaper", true)?,
+        notification_display: read_value_or(
+            connection,
+            "notification_display",
+            crate::models::default_notification_display(),
+        )?,
         quick_panel_enabled: read_value_or(connection, "quick_panel_enabled", true)?,
         quick_panel_shortcut: read_value_or(
             connection,
@@ -73,6 +78,13 @@ pub(crate) fn validate(settings: &AppSettings) -> Result<(), rusqlite::Error> {
     }
     if !matches!(settings.date_format.as_str(), "localized" | "iso") {
         return Err(rusqlite::Error::InvalidParameterName("dateFormat".into()));
+    }
+    // The island only knows these two contents. An unknown value would leave the
+    // surface with no mode to render.
+    if !matches!(settings.notification_display.as_str(), "detail" | "summary") {
+        return Err(rusqlite::Error::InvalidParameterName(
+            "notificationDisplay".into(),
+        ));
     }
     if !matches!(
         settings.icon_style.as_str(),
@@ -113,6 +125,10 @@ pub fn write_app_settings(
         (
             "hide_topbar_in_wallpaper",
             serde_json::to_string(&settings.hide_topbar_in_wallpaper),
+        ),
+        (
+            "notification_display",
+            serde_json::to_string(&settings.notification_display),
         ),
         (
             "quick_panel_enabled",
@@ -166,6 +182,8 @@ mod tests {
         assert!(settings.show_weekends);
         assert_eq!(settings.icon_style, "duotone");
         assert!(settings.hide_topbar_in_wallpaper);
+        // A new notification is worth reading once in full.
+        assert_eq!(settings.notification_display, "detail");
     }
 
     #[test]
@@ -182,6 +200,7 @@ mod tests {
             show_weekends: false,
             icon_style: "outline".into(),
             hide_topbar_in_wallpaper: false,
+            notification_display: "summary".into(),
             // Non-default values, like every field above: the assertion below is a
             // round trip, so a field left at its default would pass even if it were
             // never written.

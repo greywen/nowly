@@ -82,7 +82,9 @@ fn cancel_request(requests: &mut RequestRegistry, id: String) {
     requests.cancelled.insert(id, Instant::now());
 }
 fn main_only(window: &WebviewWindow) -> Result<(), CommandError> {
-    if !matches!(window.label(), "main" | "quick-panel") {
+    // The AI quick panel window is removed in this version, so only the main
+    // window may reach the assistant. The status island windows must not.
+    if window.label() != "main" {
         return Err(CommandError::validation(
             "assistant",
             "此操作只允许在 Nowly 窗口中执行。",

@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Permissions for Nowly application windows",
-  "windows": ["main", "quick-panel", "quick-panel-handle", "status-island-details"],
+  "windows": ["main", "quick-panel-handle"],
   "permissions": [
     "core:default",
     "core:event:default",

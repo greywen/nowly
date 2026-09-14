@@ -5,14 +5,34 @@ import type { CalendarEvent } from '../calendar/calendar-model';
 import { externalToCalendarEvent, type ExternalEvent } from '../calendar/subscription-model';
 import type { FocusStatus } from '../focus/focus-model';
 import type { Task } from '../tasks/task-model';
-import { deriveStatusIslandModel, type StatusIslandModel } from '../app/status-island-model';
+import {
+  deriveStatusIslandModel,
+  type StatusIslandDisplayMode,
+  type StatusIslandModel,
+  type StatusIslandReminderState
+} from '../app/status-island-model';
 
 export type NativeStatusIslandSnapshot = {
   sampledAt: string;
+  localDate?: string;
   events: CalendarEvent[];
   externalEvents: ExternalEvent[];
   tasks: Task[];
-  focus: { status: FocusStatus; remainingSeconds: number; sessionId: string | null };
+  focus: {
+    status: FocusStatus;
+    remainingSeconds: number;
+    plannedSeconds?: number;
+    sessionId: string | null;
+    stageSequence?: number;
+    stageChangedAt?: string | null;
+  };
+  // Reminder lifecycle comes from the native coordinator, which owns the store
+  // file and is the single source of truth across the two windows.
+  reminders?: StatusIslandReminderState[];
+  // The user's notification setting, forwarded so the island window does not have
+  // to read the database itself. Absent on an older backend, which the model
+  // treats as `detail`.
+  notificationDisplay?: StatusIslandDisplayMode;
 };
 
 type SnapshotResource =
@@ -38,7 +58,7 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : typeof error === 'string' ? error : '状态读取失败';
 }
 
-export function useStatusIslandSnapshot(dismissedPrimaryKeys: readonly string[] = []): {
+export function useStatusIslandSnapshot(): {
   model: StatusIslandModel;
   status: SnapshotResource['status'];
   error: string;
@@ -67,18 +87,26 @@ export function useStatusIslandSnapshot(dismissedPrimaryKeys: readonly string[] 
     const refreshTimer = window.setInterval(() => void refresh(), 15_000);
     const clockTimer = window.setInterval(() => setNow(new Date()), 1_000);
     let disposed = false;
-    let unlisten: () => void = () => undefined;
-    void listen('status-island-invalidated', () => void refresh()).then(remove => {
-      if (disposed) remove();
-      else unlisten = remove;
-    });
+    const removers: Array<() => void> = [];
+    const keep = (remove: () => void) => disposed ? remove() : removers.push(remove);
+    void listen('status-island-invalidated', () => void refresh()).then(keep);
+    // Sleep/wake, tray restore and timezone changes all reappear as a resumed
+    // document. Everything is recomputed from the current local wall clock.
+    const refreshOnResume = () => {
+      setNow(new Date());
+      void refresh();
+    };
+    window.addEventListener('pageshow', refreshOnResume);
+    document.addEventListener('visibilitychange', refreshOnResume);
     return () => {
       disposed = true;
       mountedRef.current = false;
       requestIdRef.current += 1;
-      unlisten();
+      removers.forEach(remove => remove());
       window.clearInterval(refreshTimer);
       window.clearInterval(clockTimer);
+      window.removeEventListener('pageshow', refreshOnResume);
+      document.removeEventListener('visibilitychange', refreshOnResume);
     };
   }, [refresh]);
 
@@ -100,9 +128,10 @@ export function useStatusIslandSnapshot(dismissedPrimaryKeys: readonly string[] 
           : resource.data.focus.status,
         remainingSeconds
       },
-      dismissedPrimaryKeys
+      reminderStates: resource.data.reminders ?? [],
+      displayMode: resource.data.notificationDisplay ?? 'detail'
     });
-  }, [dismissedPrimaryKeys, now, resource.data]);
+  }, [now, resource.data, resource.status]);
 
   return { model, status: resource.status, error: resource.error, refresh };
 }

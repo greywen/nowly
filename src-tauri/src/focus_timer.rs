@@ -19,7 +19,15 @@ pub struct NativeFocusSnapshot {
 pub struct FocusStatusSnapshot {
     pub status: String,
     pub remaining_seconds: u64,
+    pub planned_seconds: u64,
     pub session_id: Option<String>,
+    /// Distinguishes repeated stages of one session. A status-only snapshot
+    /// cannot tell a resumed "running" apart from the original start, so the
+    /// status island would either replay or swallow the reminder.
+    pub stage_sequence: u64,
+    /// Wall-clock local time of the last stage change. The status island derives
+    /// the 15s hold from it, so it must not be a monotonic instant.
+    pub stage_changed_at: Option<String>,
 }
 
 #[derive(Debug)]
@@ -33,22 +41,35 @@ struct ActiveTimer {
 pub struct FocusTimerCoordinator {
     active: Option<ActiveTimer>,
     pending: Option<NativeFocusSnapshot>,
+    stage_sequence: u64,
+    stage_changed_at: Option<String>,
 }
 
 impl FocusTimerCoordinator {
+    fn mark_stage(&mut self) {
+        self.stage_sequence += 1;
+        self.stage_changed_at = Some(chrono::Local::now().to_rfc3339());
+    }
+
     pub fn status_snapshot(&self, now: Instant) -> FocusStatusSnapshot {
         let Some(active) = self.active.as_ref() else {
             if let Some(pending) = self.pending.as_ref() {
                 return FocusStatusSnapshot {
                     status: "completed".into(),
                     remaining_seconds: 0,
+                    planned_seconds: pending.planned_seconds,
                     session_id: Some(pending.id.clone()),
+                    stage_sequence: self.stage_sequence,
+                    stage_changed_at: self.stage_changed_at.clone(),
                 };
             }
             return FocusStatusSnapshot {
                 status: "idle".into(),
                 remaining_seconds: 0,
+                planned_seconds: 0,
                 session_id: None,
+                stage_sequence: self.stage_sequence,
+                stage_changed_at: self.stage_changed_at.clone(),
             };
         };
         let remaining = active.started_at.map_or(active.remaining, |started_at| {
@@ -63,7 +84,10 @@ impl FocusTimerCoordinator {
                 "paused".into()
             },
             remaining_seconds: remaining.as_secs(),
+            planned_seconds: active.snapshot.planned_seconds,
             session_id: Some(active.snapshot.id.clone()),
+            stage_sequence: self.stage_sequence,
+            stage_changed_at: self.stage_changed_at.clone(),
         }
     }
 
@@ -74,6 +98,7 @@ impl FocusTimerCoordinator {
             remaining: duration,
             started_at: Some(now),
         });
+        self.mark_stage();
     }
 
     pub fn pause(&mut self, now: Instant) {
@@ -86,6 +111,7 @@ impl FocusTimerCoordinator {
         active.remaining = active
             .remaining
             .saturating_sub(now.saturating_duration_since(started_at));
+        self.mark_stage();
     }
 
     pub fn resume(&mut self, now: Instant) {
@@ -94,12 +120,15 @@ impl FocusTimerCoordinator {
         };
         if active.started_at.is_none() {
             active.started_at = Some(now);
+            self.mark_stage();
         }
     }
 
     pub fn cancel(&mut self) {
         self.active = None;
         self.pending = None;
+        self.stage_sequence = 0;
+        self.stage_changed_at = None;
     }
 
     pub fn poll(&mut self, now: Instant) -> Option<NativeFocusSnapshot> {
@@ -110,6 +139,7 @@ impl FocusTimerCoordinator {
         }
         let completed = self.active.take()?.snapshot;
         self.pending = Some(completed.clone());
+        self.mark_stage();
         Some(completed)
     }
 
@@ -283,5 +313,41 @@ mod tests {
         timer.cancel();
         assert!(timer.poll(now + Duration::from_secs(2)).is_none());
         assert!(timer.pending().is_none());
+    }
+
+    #[test]
+    fn every_stage_change_gets_its_own_sequence_and_wall_clock_stamp() {
+        let now = Instant::now();
+        let mut timer = FocusTimerCoordinator::default();
+
+        timer.start(snapshot(), Duration::from_secs(2), now);
+        let started = timer.status_snapshot(now);
+        assert_eq!(started.stage_sequence, 1);
+        assert_eq!(started.planned_seconds, 2);
+        let stamp = started.stage_changed_at.clone().unwrap();
+        assert!(chrono::DateTime::parse_from_rfc3339(&stamp).is_ok());
+
+        timer.pause(now);
+        assert_eq!(timer.status_snapshot(now).stage_sequence, 2);
+        timer.resume(now);
+        let resumed = timer.status_snapshot(now);
+        assert_eq!(resumed.status, "running");
+        assert_eq!(resumed.stage_sequence, 3);
+
+        // A resumed session must not reuse the original start identity, or the
+        // island would treat the resume as already seen.
+        assert_ne!(started.stage_sequence, resumed.stage_sequence);
+
+        timer.poll(now + Duration::from_secs(5));
+        let completed = timer.status_snapshot(now + Duration::from_secs(5));
+        assert_eq!(completed.status, "completed");
+        assert_eq!(completed.stage_sequence, 4);
+        assert_eq!(completed.planned_seconds, 2);
+
+        timer.cancel();
+        let idle = timer.status_snapshot(now + Duration::from_secs(6));
+        assert_eq!(idle.status, "idle");
+        assert_eq!(idle.stage_sequence, 0);
+        assert_eq!(idle.stage_changed_at, None);
     }
 }

@@ -9,14 +9,14 @@ import type { AppSettings, MonitorInfo } from '../data/nowly-repository';
 import { t, useTranslation, type Language } from '../i18n';
 
 type Props={settings:AppSettings;monitors?:MonitorInfo[];onClose():void;onSave(settings:AppSettings):Promise<AppSettings>};
-type SettingsTab='interface'|'desktop'|'model'|'quick-panel';
+type SettingsTab='interface'|'desktop'|'notifications'|'model'|'quick-panel';
 function errorMessage(error:unknown){return typeof error==='object'&&error!==null&&'message'in error&&typeof error.message==='string'?error.message:t('settings.saveError')}
 
 export function SettingsDialog({settings,monitors=[],onClose,onSave}:Props){
  // Language switches in real time via the i18n store, independent of the save
  // button, so the whole UI updates the moment the user picks a language.
  const {language,setLanguage}=useTranslation();
- const [draft,setDraft]=useState(()=>({...settings, quickPanelEnabled: settings.quickPanelEnabled ?? true, quickPanelShortcut: settings.quickPanelShortcut ?? 'Ctrl+Space'})); const [saving,setSaving]=useState(false); const [error,setError]=useState<string|null>(null);
+ const [draft,setDraft]=useState(()=>({...settings, notificationDisplay: settings.notificationDisplay ?? 'detail', quickPanelEnabled: settings.quickPanelEnabled ?? true, quickPanelShortcut: settings.quickPanelShortcut ?? 'Ctrl+Space'})); const [saving,setSaving]=useState(false); const [error,setError]=useState<string|null>(null);
  const [tab,setTab]=useState<SettingsTab>('interface');
  const [shortcutError,setShortcutError]=useState<string|null>(null);
  // Resolve the monitor that should appear selected: the saved id when it still
@@ -29,7 +29,7 @@ export function SettingsDialog({settings,monitors=[],onClose,onSave}:Props){
  useEffect(()=>{if(resolvedMonitorId&&resolvedMonitorId!==draft.targetMonitorId)setDraft(current=>({...current,targetMonitorId:resolvedMonitorId}));},[resolvedMonitorId,draft.targetMonitorId]);
  const toggle=(key:keyof AppSettings)=>(event:React.ChangeEvent<HTMLInputElement>)=>setDraft(current=>({...current,[key]:event.target.checked}));
  async function save(){setSaving(true);setError(null);try{await onSave(draft);onClose();}catch(reason){setError(errorMessage(reason));}finally{setSaving(false)}}
- const tabs:TabItem<SettingsTab>[]=[{id:'interface',label:t('settings.interface')},{id:'desktop',label:t('settings.desktopStartup')},{id:'quick-panel',label:t('settings.quickPanel')},{id:'model',label:t('settings.model')}];
+ const tabs:TabItem<SettingsTab>[]=[{id:'interface',label:t('settings.interface')},{id:'desktop',label:t('settings.desktopStartup')},{id:'notifications',label:t('settings.notifications')},{id:'quick-panel',label:t('settings.quickPanel')},{id:'model',label:t('settings.model')}];
  function captureShortcut(event:React.KeyboardEvent<HTMLInputElement>) {
   if (!event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey) {
     if (/^[a-z0-9]$/i.test(event.key)) { event.preventDefault(); setShortcutError(t('settings.quickPanelShortcutModifier')); }
@@ -55,6 +55,12 @@ export function SettingsDialog({settings,monitors=[],onClose,onSave}:Props){
      <Check label={t('settings.quickPanelEnabled')} checked={draft.quickPanelEnabled ?? true} onChange={toggle('quickPanelEnabled')}/>
      <label className="settings-field"><span>{t('settings.quickPanelShortcut')}</span><input value={draft.quickPanelShortcut ?? 'Ctrl+Space'} onChange={e=>setDraft({...draft,quickPanelShortcut:e.target.value})} placeholder="Ctrl+Space" /></label>
     </div>
+   </TabPanel>
+   <TabPanel idPrefix="settings" tabId="notifications" active={tab==='notifications'}>
+    <div className="settings-grid">
+     <Select id="settings-notification-display" label={t('settings.notificationDisplay')} value={draft.notificationDisplay ?? 'detail'} options={[{value:'detail',label:t('settings.notificationDisplayDetail')},{value:'summary',label:t('settings.notificationDisplaySummary')}]} onChange={value=>setDraft({...draft,notificationDisplay:value as NonNullable<AppSettings['notificationDisplay']>})}/>
+    </div>
+    <p className="settings-hint">{t('settings.notificationDisplayHint')}</p>
    </TabPanel>
    <TabPanel idPrefix="settings" tabId="quick-panel" active={tab==='quick-panel'}>
     <div className="settings-checks"><Check label={t('settings.quickPanelEnabled')} checked={draft.quickPanelEnabled ?? true} onChange={toggle('quickPanelEnabled')}/></div>

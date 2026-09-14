@@ -48,22 +48,11 @@ use std::sync::Mutex;
 use tauri::menu::MenuBuilder;
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
-use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutEvent, ShortcutState};
 
-pub fn register_quick_shortcut<R: Runtime>(
-    app: &AppHandle<R>,
-    shortcut: &str,
-) -> Result<(), tauri_plugin_global_shortcut::Error> {
-    app.global_shortcut()
-        .on_shortcut(shortcut, move |_app, _shortcut, event: ShortcutEvent| {
-            if event.state() != ShortcutState::Pressed {
-                return;
-            }
-            if let Err(error) = quick_panel::toggle(_app) {
-                eprintln!("failed to toggle quick panel: {error}");
-            }
-        })
-}
+// The AI quick panel, its `Ctrl+Space` global shortcut and the AI mutual
+// exclusion logic are intentionally not registered in this version. Only the
+// screen-level Home Indicator, status island and category details panel ship.
+// `quick-panel-handle` is kept purely as a compatibility window label.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TrayClickKind {
@@ -291,23 +280,35 @@ fn main() {
             let quick_settings = settings::read_app_settings(&app.state::<AppDb>().0.lock().unwrap()).unwrap_or_else(|_| crate::models::AppSettings {
                 wallpaper_enabled: false, launch_at_login: false, target_monitor_id: None, density: "balanced".into(),
                 week_start: "monday".into(), date_format: "localized".into(), show_weekends: true, icon_style: "duotone".into(),
-                hide_topbar_in_wallpaper: true, quick_panel_enabled: true, quick_panel_shortcut: "Ctrl+Space".into(), recent_colors: vec![]
+                hide_topbar_in_wallpaper: true, notification_display: crate::models::default_notification_display(), quick_panel_enabled: true, quick_panel_shortcut: "Ctrl+Space".into(), recent_colors: vec![]
             });
             let quick_panel_controller = quick_panel::PanelController::default();
             quick_panel_controller.set_enabled(quick_settings.quick_panel_enabled);
             quick_panel_controller.set_target_monitor_id(quick_settings.target_monitor_id.clone());
+            // Where the user last dragged the top surface along the top edge.
+            // Restored before the window is first placed, so it never appears
+            // centred and then jumps.
+            quick_panel_controller.set_offset_x(quick_panel::load_offset_x(
+                &app.state::<AppDb>().0.lock().unwrap(),
+            ));
             app.manage(quick_panel_controller);
             quick_panel::start_monitor_watch(app.handle().clone());
             if quick_settings.quick_panel_enabled {
-                quick_panel::initialize(&app.handle())
-                    .map_err(std::io::Error::other)?;
-                if let Err(error) = register_quick_shortcut(
-                    &app.handle(),
-                    &quick_settings.quick_panel_shortcut,
-                ) {
-                    eprintln!("failed to register quick panel shortcut: {error}");
+                // A top-surface creation or positioning failure must not stop the
+                // main app from starting; it is logged and the app continues.
+                if let Err(error) = quick_panel::initialize(&app.handle()) {
+                    eprintln!("failed to initialize the status island top surface: {error}");
                 }
             }
+            // Reminder acknowledgement is wall-clock local time, so a restart,
+            // tray restore or sleep/wake recomputes from the current local day.
+            // Corrupt storage degrades to an empty store instead of blocking the
+            // top surface.
+            let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+            app.manage(Mutex::new(status_island::load_reminders(
+                &status_island::reminder_store_path(&app_dir),
+                &today,
+            )));
             app.manage(Mutex::new(window_lifecycle::WindowLifecycle::default()));
             app.manage(Mutex::new(focus_timer::FocusTimerCoordinator::default()));
             let timer_handle = app.handle().clone();
@@ -521,28 +522,18 @@ fn main() {
                         | tauri::WindowEvent::Resized(_)
                 ) {
                     quick_panel::request_position_reconcile(window.app_handle().clone());
-                }
-                return;
-            }
-            if window.label() == "quick-panel" {
-                if let tauri::WindowEvent::Focused(false) = event {
-                    if let Err(error) = quick_panel::close(window.app_handle()) {
-                        eprintln!("failed to close quick panel after focus loss: {error}");
-                    }
-                }
-                return;
-            }
-            if window.label() == "status-island-details" {
-                if matches!(event, tauri::WindowEvent::ScaleFactorChanged { .. } | tauri::WindowEvent::Resized(_)) {
-                    quick_panel::request_position_reconcile(window.app_handle().clone());
                 } else if matches!(event, tauri::WindowEvent::Focused(false)) {
-                    if let Err(error) = quick_panel::close_details_for_navigation(window.app_handle()) {
-                        eprintln!("failed to close status island details after focus loss: {error}");
-                    }
-                } else if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                    api.prevent_close();
-                    if let Err(error) = quick_panel::close_details_for_navigation(window.app_handle()) {
-                        eprintln!("failed to close status island details: {error}");
+                    // The rail only holds focus while its sheet is open, so a
+                    // focus loss means the user went elsewhere and the sheet
+                    // has to collapse. Collapsed, there is nothing to close.
+                    let app = window.app_handle();
+                    if app
+                        .state::<quick_panel::PanelController>()
+                        .are_details_open()
+                    {
+                        if let Err(error) = quick_panel::close_details_for_navigation(app) {
+                            eprintln!("failed to close status island details after focus loss: {error}");
+                        }
                     }
                 }
                 return;
@@ -694,12 +685,19 @@ fn main() {
             remote_events::delete_remote_event,
             wallpaper::enter_wallpaper_mode,
             wallpaper::enter_foreground_mode,
-            quick_panel::open_quick_panel,
-            quick_panel::close_quick_panel,
-            quick_panel::set_top_surface_expanded,
             quick_panel::toggle_status_island_details,
+            quick_panel::toggle_nowly_panel,
+            quick_panel::hover_status_island_details,
             quick_panel::close_status_island_details,
+            quick_panel::begin_status_island_drag,
+            quick_panel::drag_status_island,
+            quick_panel::end_status_island_drag,
             status_island::get_status_island_snapshot,
+            status_island::acknowledge_status_island_reminder,
+            status_island::dismiss_status_island_reminder,
+            status_island::consume_status_island_reminder,
+            status_island::set_status_island_presence,
+            status_island::set_status_island_primary,
             status_island::open_status_island_event,
             status_island::open_status_island_task,
             status_island::start_status_island_focus,

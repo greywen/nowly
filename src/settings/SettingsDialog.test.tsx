@@ -57,6 +57,22 @@ describe('SettingsDialog',()=>{
     expect(screen.getByRole('dialog',{name:'设置'})).toBeInTheDocument();
   });
 
+  it('defaults the notification display to detail and can switch it to the summary',async()=>{
+    const user=userEvent.setup(); const save=vi.fn().mockImplementation(async value=>value);
+    render(<SettingsDialog settings={settings} onClose={vi.fn()} onSave={save}/>);
+    await user.click(screen.getByRole('tab',{name:'通知'}));
+
+    // A new notification is worth reading once in full, so detail is the default
+    // even when the stored settings predate this option.
+    const select=screen.getByRole('combobox',{name:'通知栏显示'});
+    expect(select).toHaveTextContent('通知详情');
+    await user.click(select);
+    await user.click(screen.getByRole('option',{name:'通知概要'}));
+    await user.click(screen.getByRole('button',{name:'保存设置'}));
+
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({notificationDisplay:'summary'}));
+  });
+
   it('switches the icon style between the three drawing modes',async()=>{
     const user=userEvent.setup(); const save=vi.fn().mockImplementation(async value=>value);
     render(<SettingsDialog settings={settings} onClose={vi.fn()} onSave={save}/>);

@@ -6,9 +6,7 @@ import { tauriNowlyRepository } from './data/tauri-nowly-repository';
 import { installBrowserTauriBackend } from './data/browser-tauri-shim';
 import { FocusTimerProvider } from './focus/FocusTimerContext';
 import './app/styles.css';
-import { QuickPanelApp } from './quick-panel/QuickPanelApp';
 import { StatusIslandApp } from './quick-panel/StatusIslandApp';
-import { StatusIslandDetailsApp } from './quick-panel/StatusIslandDetailsApp';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
 // Outside the Tauri desktop shell (e.g. the plain Vite page in a browser) there
@@ -28,8 +26,8 @@ if (!('__TAURI_INTERNALS__' in window)) {
 //
 // This runs at module top level, so an unguarded throw here happens before
 // `render` and leaves a blank page rather than a degraded feature. Falling back
-// to the main app is the right answer either way: the quick panel is the special
-// case, so anything we cannot identify should be the app.
+// to the main app is the right answer either way: the status surfaces are the
+// special case, so anything we cannot identify should be the app.
 function currentWindowLabel(): string {
   if (!('__TAURI_INTERNALS__' in window)) return 'main';
   try {
@@ -39,10 +37,13 @@ function currentWindowLabel(): string {
   }
 }
 
+// `quick-panel-handle` is a compatibility label: it now hosts the whole top
+// rail — status capsule, Nowly entry and the sheet they open into — not the
+// removed AI quick panel.
 const windowLabel = currentWindowLabel();
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
-    {windowLabel === 'quick-panel' ? <QuickPanelApp /> : windowLabel === 'quick-panel-handle' ? <StatusIslandApp /> : windowLabel === 'status-island-details' ? <StatusIslandDetailsApp /> : <RepositoryProvider repository={tauriNowlyRepository}>
+    {windowLabel === 'quick-panel-handle' ? <StatusIslandApp /> : <RepositoryProvider repository={tauriNowlyRepository}>
       <FocusTimerProvider><App /></FocusTimerProvider>
     </RepositoryProvider>}
   </React.StrictMode>
