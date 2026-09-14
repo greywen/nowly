@@ -90,7 +90,9 @@ describe('AssistantDock execution boundary', () => {
     render(<AssistantDock client={client} onRefresh={() => {}} />);
     await send();
     await click(await screen.findByRole('button', { name: '确认执行 1 项' }));
-    const details = screen.getByRole('button', { name: '查看详情' });
+    // The button reads "查看详情" but carries a per-operation aria-label so
+    // repeated cards stay distinguishable to screen readers.
+    const details = screen.getByRole('button', { name: /^查看.+详情$/ });
     expect(details).toHaveAttribute('aria-controls');
     await click(details);
     expect(document.getElementById(details.getAttribute('aria-controls')!)).toBeInTheDocument();
