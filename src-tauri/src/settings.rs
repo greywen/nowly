@@ -51,6 +51,11 @@ pub fn read_app_settings(connection: &Connection) -> Result<AppSettings, rusqlit
             "notification_display",
             crate::models::default_notification_display(),
         )?,
+        notification_mode: read_value_or(
+            connection,
+            "notification_mode",
+            crate::models::default_notification_mode(),
+        )?,
         quick_panel_enabled: read_value_or(connection, "quick_panel_enabled", true)?,
         quick_panel_shortcut: read_value_or(
             connection,
@@ -85,6 +90,9 @@ pub(crate) fn validate(settings: &AppSettings) -> Result<(), rusqlite::Error> {
         return Err(rusqlite::Error::InvalidParameterName(
             "notificationDisplay".into(),
         ));
+    }
+    if !matches!(settings.notification_mode.as_str(), "persistent" | "notification") {
+        return Err(rusqlite::Error::InvalidParameterName("notificationMode".into()));
     }
     if !matches!(
         settings.icon_style.as_str(),
@@ -129,6 +137,10 @@ pub fn write_app_settings(
         (
             "notification_display",
             serde_json::to_string(&settings.notification_display),
+        ),
+        (
+            "notification_mode",
+            serde_json::to_string(&settings.notification_mode),
         ),
         (
             "quick_panel_enabled",
@@ -184,6 +196,7 @@ mod tests {
         assert!(settings.hide_topbar_in_wallpaper);
         // A new notification is worth reading once in full.
         assert_eq!(settings.notification_display, "detail");
+        assert_eq!(settings.notification_mode, "persistent");
     }
 
     #[test]
@@ -201,6 +214,7 @@ mod tests {
             icon_style: "outline".into(),
             hide_topbar_in_wallpaper: false,
             notification_display: "summary".into(),
+            notification_mode: "notification".into(),
             // Non-default values, like every field above: the assertion below is a
             // round trip, so a field left at its default would pass even if it were
             // never written.

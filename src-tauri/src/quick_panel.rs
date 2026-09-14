@@ -80,6 +80,7 @@ struct DetailsOpen {
     /// Which reminder the island sheet is pinned to. `None` for the Nowly sheet,
     /// which is not about any one reminder.
     identity: Option<String>,
+    hovered: bool,
 }
 
 pub fn screen_top(monitor_y: i32, _work_area_y: i32) -> i32 {
@@ -153,6 +154,7 @@ struct PanelState {
     target_monitor_id: Option<String>,
     /// Which half of the rail the open sheet belongs to. `None` is collapsed.
     details_source: Option<PanelSource>,
+    hover_source: Option<PanelSource>,
     details_generation: u64,
     /// Logical pixels from the work area's horizontal centre.
     offset_x: f64,
@@ -184,6 +186,7 @@ impl Default for PanelController {
                 enabled: true,
                 target_monitor_id: None,
                 details_source: None,
+                hover_source: None,
                 details_generation: 0,
                 offset_x: 0.0,
                 drag: None,
@@ -231,6 +234,7 @@ impl PanelController {
         // The sheet is the rail grown, so moving the rail tears it down.
         state.details_generation += 1;
         state.details_source = None;
+        state.hover_source = None;
         true
     }
 
@@ -279,6 +283,7 @@ impl PanelController {
     pub fn toggle_details(&self, source: PanelSource) -> DetailsTransition {
         let mut state = self.state.lock().unwrap();
         state.details_generation += 1;
+        state.hover_source = None;
         state.details_source = if state.allows_details() && state.details_source != Some(source) {
             Some(source)
         } else {
@@ -291,14 +296,14 @@ impl PanelController {
     }
 
     /// Reserves a hover-open without opening yet, so the 300ms wait can be
-    /// abandoned if anything else happens first. Hovering only ever opens the
-    /// island sheet; the Nowly entry needs a deliberate click.
-    pub fn reserve_hover_open(&self) -> Option<u64> {
+    /// abandoned if anything else happens first.
+    pub fn reserve_hover_open(&self, source: PanelSource) -> Option<u64> {
         let mut state = self.state.lock().unwrap();
         if !state.allows_details() || state.details_source.is_some() {
             return None;
         }
         state.details_generation += 1;
+        state.hover_source = Some(source);
         Some(state.details_generation)
     }
 
@@ -310,7 +315,7 @@ impl PanelController {
         {
             return false;
         }
-        state.details_source = Some(PanelSource::Island);
+        state.details_source = state.hover_source.take();
         true
     }
 
@@ -318,6 +323,7 @@ impl PanelController {
         let mut state = self.state.lock().unwrap();
         state.details_generation += 1;
         state.details_source = None;
+        state.hover_source = None;
         DetailsTransition {
             generation: state.details_generation,
             source: None,
@@ -332,6 +338,7 @@ impl PanelController {
         let mut state = self.state.lock().unwrap();
         state.enabled = enabled;
         state.details_generation += 1;
+        state.hover_source = None;
         if !enabled {
             state.details_source = None;
         }
@@ -523,6 +530,7 @@ fn show_details<R: Runtime>(
     app: &AppHandle<R>,
     generation: u64,
     source: PanelSource,
+    focus: bool,
 ) -> Result<(), String> {
     let controller = app.state::<PanelController>();
     let handle = app
@@ -543,15 +551,26 @@ fn show_details<R: Runtime>(
         PanelSource::Nowly => None,
     };
     handle
-        .emit("status-island-details-open", DetailsOpen { source, identity })
+        .emit(
+            "status-island-details-open",
+            DetailsOpen {
+                source,
+                identity,
+                hovered: !focus,
+            },
+        )
         .map_err(|error| error.to_string())?;
     if source == PanelSource::Island {
         // The sheet is now genuinely on screen and readable by assistive tech,
         // so this is the moment the current reminder counts as seen.
         crate::status_island::acknowledge_primary(app);
     }
-    // Without focus the sheet cannot receive Escape.
-    handle.set_focus().map_err(|error| error.to_string())
+    if focus {
+        // Active click/keyboard opens receive Escape; passive hover must not
+        // steal focus from whichever application the user is working in.
+        handle.set_focus().map_err(|error| error.to_string())?;
+    }
+    Ok(())
 }
 
 /// Collapses the sheet back into the rail. The window may only shrink once the
@@ -595,17 +614,14 @@ pub fn toggle_nowly_panel(app: AppHandle) -> Result<(), crate::error::CommandErr
 fn toggle_panel(app: AppHandle, source: PanelSource) -> Result<(), crate::error::CommandError> {
     let transition = app.state::<PanelController>().toggle_details(source);
     match transition.source {
-        Some(source) => show_details(&app, transition.generation, source)
+        Some(source) => show_details(&app, transition.generation, source, true)
             .map_err(crate::error::CommandError::system),
         None => hide_details(&app, transition.generation).map_err(crate::error::CommandError::system),
     }
 }
 
-/// Called when the pointer enters the island. Opening is deferred so a quick
-/// pass neither opens the sheet nor acknowledges the reminder.
-#[tauri::command]
-pub fn hover_status_island_details(app: AppHandle) -> Result<(), crate::error::CommandError> {
-    let Some(generation) = app.state::<PanelController>().reserve_hover_open() else {
+fn hover_panel(app: AppHandle, source: PanelSource) -> Result<(), crate::error::CommandError> {
+    let Some(generation) = app.state::<PanelController>().reserve_hover_open(source) else {
         return Ok(());
     };
     std::thread::spawn(move || {
@@ -622,13 +638,24 @@ pub fn hover_status_island_details(app: AppHandle) -> Result<(), crate::error::C
         if !controller.complete_hover_open(generation) {
             return;
         }
-        if let Err(error) = show_details(&app, generation, PanelSource::Island) {
+        if let Err(error) = show_details(&app, generation, source, false) {
             eprintln!("failed to open status island details on hover: {error}");
             let transition = controller.close_details();
             let _ = hide_details(&app, transition.generation);
         }
     });
     Ok(())
+}
+
+/// Opening is deferred so a quick pass opens neither half of the rail.
+#[tauri::command]
+pub fn hover_status_island_details(app: AppHandle) -> Result<(), crate::error::CommandError> {
+    hover_panel(app, PanelSource::Island)
+}
+
+#[tauri::command]
+pub fn hover_nowly_panel(app: AppHandle) -> Result<(), crate::error::CommandError> {
+    hover_panel(app, PanelSource::Nowly)
 }
 
 #[tauri::command]
@@ -886,7 +913,7 @@ mod tests {
             controller.toggle_details(PanelSource::Island).source,
             Some(PanelSource::Island)
         );
-        assert!(controller.reserve_hover_open().is_none());
+        assert!(controller.reserve_hover_open(PanelSource::Island).is_none());
     }
 
     #[test]
@@ -975,12 +1002,12 @@ mod tests {
         // of resizing the window under the pointer.
         assert!(!controller.are_details_open());
         assert!(!controller.is_details_current(opened.generation));
-        assert!(controller.reserve_hover_open().is_none());
+        assert!(controller.reserve_hover_open(PanelSource::Island).is_none());
         assert_eq!(controller.toggle_details(PanelSource::Island).source, None);
         assert_eq!(controller.toggle_details(PanelSource::Nowly).source, None);
 
         controller.end_drag();
-        assert!(controller.reserve_hover_open().is_some());
+        assert!(controller.reserve_hover_open(PanelSource::Island).is_some());
     }
 
     #[test]
@@ -1039,18 +1066,16 @@ mod tests {
     fn a_hover_open_is_abandoned_when_anything_else_happens_first() {
         let controller = PanelController::default();
 
-        let reserved = controller.reserve_hover_open().unwrap();
+        let reserved = controller.reserve_hover_open(PanelSource::Island).unwrap();
         controller.close_details();
         assert!(!controller.complete_hover_open(reserved));
         assert!(!controller.are_details_open());
 
-        let second = controller.reserve_hover_open().unwrap();
+        let second = controller.reserve_hover_open(PanelSource::Nowly).unwrap();
         assert!(controller.complete_hover_open(second));
-        // Hovering only ever opens the island half; the Nowly entry needs a
-        // deliberate click.
-        assert_eq!(controller.details_source(), Some(PanelSource::Island));
+        assert_eq!(controller.details_source(), Some(PanelSource::Nowly));
         // An already open sheet does not reserve another hover open.
-        assert!(controller.reserve_hover_open().is_none());
+        assert!(controller.reserve_hover_open(PanelSource::Island).is_none());
     }
 
     #[test]
@@ -1060,7 +1085,7 @@ mod tests {
 
         assert_eq!(controller.toggle_details(PanelSource::Island).source, None);
         assert_eq!(controller.toggle_details(PanelSource::Nowly).source, None);
-        assert!(controller.reserve_hover_open().is_none());
+        assert!(controller.reserve_hover_open(PanelSource::Island).is_none());
         assert!(!controller.are_details_open());
     }
 

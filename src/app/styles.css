@@ -121,6 +121,9 @@ button:disabled { cursor: default; opacity: .65; }
 .date-copy p { margin: 0; color: var(--text-muted); font-size: 0.85rem; font-weight: 500; }
 .top-actions, .toolbar-actions { flex: none; display: flex; align-items: center; gap: 8px; }
 .top-actions { grid-column: 2; justify-self: end; }
+.tip { position: relative; display: inline-flex; }
+.tip__bubble { position: absolute; z-index: 80; top: calc(100% + 10px); left: 50%; padding: 4px 12px; border: 1px solid var(--border-default); border-radius: var(--radius-sm); color: var(--text-strong); background: var(--bg-surface); box-shadow: var(--shadow-tooltip); font-size: 0.95rem; font-weight: 500; line-height: 1.5; white-space: nowrap; pointer-events: none; transform: translateX(-50%); }
+.tip--end .tip__bubble { right: 0; left: auto; transform: none; }
 .topbar-time { color: var(--text-strong); font-size: 1.075rem; font-weight: 600; }
 .workspace { position: relative; z-index: 1; min-width: 0; min-height: 0; padding: 24px 36px 36px; display: flex; }
 
@@ -162,7 +165,7 @@ button:disabled { cursor: default; opacity: .65; }
 .status-rail[data-anim="shrink"] .status-rail__sheet { transition: width var(--rail-shrink) var(--rail-ease), height var(--rail-shrink) var(--rail-ease) !important; }
 /* design.md §7 reserves the dashed border for the top surface family, which the
    user can pick up and move. */
-.status-rail:not([data-open="true"]) .status-rail__sheet:hover { border-style: dashed; border-color: var(--border-emphasis); background: var(--bg-subtle); }
+.status-rail:not([data-open="true"]) .status-rail__sheet:hover { background: var(--bg-subtle); }
 /* Laid out at the open size, so nothing inside reflows or moves as the sheet
    grows: the icon and title land on the same pixel in both sizes. */
 .status-rail__content { position: absolute; top: 0; left: 0; width: calc(var(--rail-w) - var(--rail-edge) * 2); height: calc(var(--sheet-h) - var(--rail-edge) * 2); display: grid; grid-template-rows: calc(var(--rail-h) - var(--rail-edge) * 2) minmax(0, 1fr); }
@@ -181,6 +184,9 @@ button:disabled { cursor: default; opacity: .65; }
 .status-rail__nowly-head .status-island__icon img { width: 16px; height: 16px; display: block; }
 
 .status-island { color: var(--text-secondary); }
+.status-island__drag-hint { position: absolute; z-index: 4; top: calc(var(--rail-h) + 8px); left: 50%; transform: translateX(-50%); width: 280px; padding: 12px; border: 1px solid var(--border-default); border-radius: var(--radius-default); display: grid; gap: 4px; color: var(--text-secondary); background: var(--bg-surface); box-shadow: var(--shadow-sm); font-size: 0.85rem; }
+.status-island__drag-hint strong { color: var(--text-primary); font-weight: 600; }
+.status-island__drag-hint button { justify-self: end; min-height: 32px; padding: 4px 12px; border: 0; border-radius: var(--radius-sm); color: var(--color-primary-active); background: var(--color-primary-light); font-weight: 600; }
 .status-island__content { min-width: 0; flex: 1; display: flex; align-items: center; gap: 8px; }
 .status-island__icon { width: 24px; height: 24px; flex: none; display: grid; place-items: center; border-radius: var(--radius-sm); color: var(--color-primary-active); background: var(--color-primary-light); }
 .status-island[data-primary="task"] .status-island__icon { color: var(--color-danger-active); background: var(--color-danger-light); }
@@ -219,7 +225,7 @@ button:disabled { cursor: default; opacity: .65; }
 /* The hit area is an overlay, not a button wrapped around the text: the sheet
    owns the border and background, and the dismiss buttons sit above the same
    pixels. It keeps the capsule's width so the Nowly dot stays clickable. */
-.status-island__trigger { position: absolute; z-index: 1; top: 0; left: 0; width: calc(var(--island-w, 240px) - var(--rail-edge, 1px) * 2); height: calc(var(--rail-h, 40px) - var(--rail-edge, 1px) * 2); padding: 0; border: 0; border-radius: var(--radius-default); background: transparent; cursor: grab; }
+.status-island__trigger { position: absolute; z-index: 1; top: 0; left: 0; width: calc(var(--island-w, 240px) - var(--rail-edge, 1px) * 2); height: calc(var(--rail-h, 40px) - var(--rail-edge, 1px) * 2); padding: 0; border: 0; border-radius: var(--radius-default); background: transparent; cursor: default; }
 .status-island__trigger:focus-visible { box-shadow: inset 0 0 0 2px var(--color-primary); }
 .status-rail[data-dragging="true"] .status-island__trigger,
 .status-rail[data-dragging="true"] .status-rail__nowly { cursor: grabbing; }
@@ -239,9 +245,9 @@ button:disabled { cursor: default; opacity: .65; }
 
 /* The other half of the rail. Outside the sheet, because it has to stay visible
    beside the collapsed sheet; it fades once the sheet has grown over it. */
-.status-rail__nowly { box-sizing: border-box; position: absolute; z-index: 3; top: 0; right: 0; width: var(--nowly-d); height: var(--nowly-d); padding: 0; border: 1px solid var(--border-default); border-radius: 50%; display: grid; place-items: center; background: var(--bg-surface); box-shadow: none; overflow: hidden; cursor: grab; }
+.status-rail__nowly { box-sizing: border-box; position: absolute; z-index: 3; top: 0; right: 0; width: var(--nowly-d); height: var(--nowly-d); padding: 0; border: 1px solid var(--border-default); border-radius: 50%; display: grid; place-items: center; background: var(--bg-surface); box-shadow: none; overflow: hidden; cursor: default; }
 .status-rail__nowly img { width: 22px; height: 22px; display: block; }
-.status-rail__nowly:hover { border-style: dashed; border-color: var(--border-emphasis); background: var(--bg-subtle); }
+.status-rail__nowly:hover { background: var(--bg-subtle); }
 .status-rail__nowly:focus-visible { box-shadow: inset 0 0 0 2px var(--color-primary); }
 .status-rail[data-open="true"] .status-rail__nowly { opacity: 0; pointer-events: none; transition: opacity var(--rail-dot-out) ease-out var(--rail-in-delay) !important; }
 .status-rail:not([data-open="true"]) .status-rail__nowly { transition: opacity var(--rail-out) ease-out var(--rail-dot-in-delay) !important; }

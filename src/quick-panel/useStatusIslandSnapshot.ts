@@ -33,6 +33,7 @@ export type NativeStatusIslandSnapshot = {
   // to read the database itself. Absent on an older backend, which the model
   // treats as `detail`.
   notificationDisplay?: StatusIslandDisplayMode;
+  notificationMode?: 'persistent' | 'notification';
 };
 
 type SnapshotResource =
@@ -63,6 +64,7 @@ export function useStatusIslandSnapshot(): {
   status: SnapshotResource['status'];
   error: string;
   refresh: () => Promise<void>;
+  notificationMode: 'persistent' | 'notification';
 } {
   const [resource, setResource] = useState<SnapshotResource>({ status: 'loading', data: null, error: '' });
   const [now, setNow] = useState(() => new Date());
@@ -133,5 +135,5 @@ export function useStatusIslandSnapshot(): {
     });
   }, [now, resource.data, resource.status]);
 
-  return { model, status: resource.status, error: resource.error, refresh };
+  return { model, status: resource.status, error: resource.error, refresh, notificationMode: resource.data?.notificationMode ?? 'persistent' };
 }

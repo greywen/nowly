@@ -1,4 +1,5 @@
 import { Droplets } from '../components/icons';
+import { Tip } from '../components/Tip';
 import { useEffect, useRef, useState } from 'react';
 import { MAX_BLUR, MIN_BLUR } from './useBlur';
 import { t } from '../i18n';
@@ -9,6 +10,7 @@ type Props = {
   // Fires when the popover opens or closes so the shell can show a live
   // preview of the blur while the slider is open, even in foreground mode.
   onOpenChange?: (open: boolean) => void;
+  tipContent?: string;
 };
 
 // The slider stores blur in CSS pixels, but a raw pixel count is a poor way to
@@ -18,7 +20,7 @@ function toPercent(blur: number): number {
   return Math.round((blur / MAX_BLUR) * 100);
 }
 
-export function BlurControl({ blur, onChange, onOpenChange }: Props) {
+export function BlurControl({ blur, onChange, onOpenChange, tipContent }: Props) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const percent = toPercent(blur);
@@ -45,16 +47,31 @@ export function BlurControl({ blur, onChange, onOpenChange }: Props) {
 
   return (
     <div ref={rootRef} className="blur-control">
-      <button
-        type="button"
-        className={`btn btn-icon${open ? ' is-active' : ''}`}
-        aria-label={t('blur.adjust')}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
-      >
-        <Droplets aria-hidden="true" />
-      </button>
+      {tipContent ? (
+        <Tip content={tipContent}>
+          <button
+            type="button"
+            className={`btn btn-icon${open ? ' is-active' : ''}`}
+            aria-label={t('blur.adjust')}
+            aria-haspopup="dialog"
+            aria-expanded={open}
+            onClick={() => setOpen((current) => !current)}
+          >
+            <Droplets aria-hidden="true" />
+          </button>
+        </Tip>
+      ) : (
+        <button
+          type="button"
+          className={`btn btn-icon${open ? ' is-active' : ''}`}
+          aria-label={t('blur.adjust')}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          onClick={() => setOpen((current) => !current)}
+        >
+          <Droplets aria-hidden="true" />
+        </button>
+      )}
       {open ? (
         <div className="blur-popup" role="dialog" aria-label={t('blur.title')}>
           <div className="blur-popup__head">

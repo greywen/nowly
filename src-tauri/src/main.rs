@@ -280,7 +280,7 @@ fn main() {
             let quick_settings = settings::read_app_settings(&app.state::<AppDb>().0.lock().unwrap()).unwrap_or_else(|_| crate::models::AppSettings {
                 wallpaper_enabled: false, launch_at_login: false, target_monitor_id: None, density: "balanced".into(),
                 week_start: "monday".into(), date_format: "localized".into(), show_weekends: true, icon_style: "duotone".into(),
-                hide_topbar_in_wallpaper: true, notification_display: crate::models::default_notification_display(), quick_panel_enabled: true, quick_panel_shortcut: "Ctrl+Space".into(), recent_colors: vec![]
+                hide_topbar_in_wallpaper: true, notification_display: crate::models::default_notification_display(), notification_mode: crate::models::default_notification_mode(), quick_panel_enabled: true, quick_panel_shortcut: "Ctrl+Space".into(), recent_colors: vec![]
             });
             let quick_panel_controller = quick_panel::PanelController::default();
             quick_panel_controller.set_enabled(quick_settings.quick_panel_enabled);
@@ -534,6 +534,16 @@ fn main() {
                         if let Err(error) = quick_panel::close_details_for_navigation(app) {
                             eprintln!("failed to close status island details after focus loss: {error}");
                         }
+                        let notification_only = app
+                            .state::<AppDb>()
+                            .0
+                            .lock()
+                            .ok()
+                            .and_then(|connection| settings::read_app_settings(&connection).ok())
+                            .is_some_and(|settings| settings.notification_mode == "notification");
+                        if notification_only {
+                            let _ = window.hide();
+                        }
                     }
                 }
                 return;
@@ -688,12 +698,16 @@ fn main() {
             quick_panel::toggle_status_island_details,
             quick_panel::toggle_nowly_panel,
             quick_panel::hover_status_island_details,
+            quick_panel::hover_nowly_panel,
             quick_panel::close_status_island_details,
             quick_panel::begin_status_island_drag,
             quick_panel::drag_status_island,
             quick_panel::end_status_island_drag,
             status_island::get_status_island_snapshot,
             status_island::acknowledge_status_island_reminder,
+            status_island::acknowledge_status_island_notification,
+            status_island::dismiss_status_island_notification,
+            status_island::set_status_island_visibility,
             status_island::dismiss_status_island_reminder,
             status_island::consume_status_island_reminder,
             status_island::set_status_island_presence,

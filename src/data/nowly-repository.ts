@@ -57,6 +57,7 @@ export type AppSettings = {
   // gets one chance to be read in full; closing it downgrades that one
   // notification to the summary for the rest of the day.
   notificationDisplay?: 'detail' | 'summary';
+  notificationMode?: 'persistent' | 'notification';
   quickPanelEnabled?: boolean;
   quickPanelShortcut?: string;
   recentColors?: HexColor[];

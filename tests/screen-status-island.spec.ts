@@ -74,8 +74,8 @@ type OpenPayload = { source: 'island' | 'nowly'; identity: string | null };
  * `open` replays the event native emits after it has already resized the window,
  * which is why the expanded tests also use the expanded viewport.
  */
-async function installRail(page: Page, data: unknown = snapshot, open: OpenPayload | null = null) {
-  await page.addInitScript(({ snapshot, open }) => {
+async function installRail(page: Page, data: unknown = snapshot, open: OpenPayload | null = null, draggable = false) {
+  await page.addInitScript(({ snapshot, open, draggable }) => {
     window.__statusCommands = [];
     window.__statusArgs = [];
     let callbackId = 0;
@@ -92,6 +92,7 @@ async function installRail(page: Page, data: unknown = snapshot, open: OpenPaylo
         },
         invoke: async (command: string, args?: { event?: string; handler?: number }) => {
           if (command === 'get_status_island_snapshot') return snapshot;
+          if (command === 'begin_status_island_drag') return draggable;
           if (open && command === 'plugin:event|listen'
             && args?.event === 'status-island-details-open' && args.handler) {
             window.setTimeout(() => {
@@ -107,7 +108,7 @@ async function installRail(page: Page, data: unknown = snapshot, open: OpenPaylo
         }
       }
     });
-  }, { snapshot: data, open });
+  }, { snapshot: data, open, draggable });
 }
 
 function commands(page: Page) {
@@ -223,6 +224,27 @@ test.describe('summary content', () => {
     expect(await commands(page)).toContain('hover_status_island_details');
     // Native owns the 300ms delay, so hovering never acknowledges on its own.
     expect(await commands(page)).not.toContain('acknowledge_status_island_reminder');
+  });
+
+  test('shows the grab cursor only after a long press starts dragging', async ({ page }) => {
+    await page.clock.setFixedTime(new Date(FIXED_TIME));
+    await installRail(page, passiveSnapshot, null, true);
+    await page.goto('/');
+
+    const island = page.locator('.status-island__trigger');
+    const nowly = page.locator('.status-rail__nowly');
+    await expect(island).toHaveCSS('cursor', 'default');
+    await expect(nowly).toHaveCSS('cursor', 'default');
+
+    const box = await island.boundingBox();
+    if (!box) throw new Error('status island trigger is not visible');
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.waitForTimeout(400);
+
+    await expect(island).toHaveCSS('cursor', 'grabbing');
+    await expect(nowly).toHaveCSS('cursor', 'grabbing');
+    await page.mouse.up();
   });
 
   test('offers no dismissal: an aggregate is not one notification to close', async ({ page }) => {

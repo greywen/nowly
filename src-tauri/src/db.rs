@@ -232,6 +232,7 @@ fn migration_4_default_settings(transaction: &Transaction<'_>) -> Result<()> {
         ("show_weekends", "true"),
         ("icon_style", "\"duotone\""),
         ("hide_topbar_in_wallpaper", "true"),
+        ("notification_mode", "\"persistent\""),
         ("calendar_enabled", "true"),
         ("matrix_enabled", "true"),
         ("notes_enabled", "true"),

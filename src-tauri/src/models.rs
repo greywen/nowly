@@ -269,6 +269,9 @@ fn default_quick_panel_enabled() -> bool {
 pub(crate) fn default_notification_display() -> String {
     "detail".to_owned()
 }
+pub(crate) fn default_notification_mode() -> String {
+    "persistent".to_owned()
+}
 fn default_quick_panel_shortcut() -> String {
     "Ctrl+Space".to_owned()
 }
@@ -295,6 +298,8 @@ pub struct AppSettings {
     /// What the status island carries by default: `detail` or `summary`.
     #[serde(default = "default_notification_display")]
     pub notification_display: String,
+    #[serde(default = "default_notification_mode")]
+    pub notification_mode: String,
     #[serde(default = "default_quick_panel_enabled")]
     pub quick_panel_enabled: bool,
     #[serde(default = "default_quick_panel_shortcut")]

@@ -40,7 +40,7 @@ async function withActionHold(run: () => Promise<unknown>): Promise<void> {
 
 export function StatusIslandApp() {
   useTransparentSurfaces();
-  const { model, status, refresh } = useStatusIslandSnapshot();
+  const { model, status, refresh, notificationMode } = useStatusIslandSnapshot();
   const drag = useStatusIslandDrag();
   const surfaceState = model.surface;
   const [open, setOpen] = useState(false);
@@ -48,6 +48,7 @@ export function StatusIslandApp() {
   // Null until the first transition, so the rail does not animate itself into
   // existence on mount.
   const [anim, setAnim] = useState<'grow' | 'shrink' | null>(null);
+  const [dragHintSeen, setDragHintSeen] = useState(() => localStorage.getItem('status-island-drag-hint-seen') === 'true');
   // The sheet is opened *for* one reminder and stays pinned to it by identity.
   // It must not follow the live queue head: once the shown reminder is hidden the
   // head becomes the next reminder, and an unpinned sheet would silently swap its
@@ -58,35 +59,79 @@ export function StatusIslandApp() {
   // to acknowledge.
   const primaryIdentity = surfaceState.mode === 'detail' ? surfaceState.reminder.identity : null;
   const lastPresence = useRef(false);
+  const rootPresent = useRef(false);
+  const hoverOpened = useRef(false);
+  const hoverCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const previousReadyNotificationMode = useRef<'persistent' | 'notification' | null>(null);
+  // Read from a timer that outlives the render that scheduled it.
+  const notificationModeRef = useRef(notificationMode);
+  const openRef = useRef(false);
+  const collapse = useCallback(() => void invoke('close_status_island_details'), []);
+  const scheduleLeave = useCallback(() => {
+    if (hoverCloseTimer.current !== null) clearTimeout(hoverCloseTimer.current);
+    hoverCloseTimer.current = setTimeout(() => {
+      hoverCloseTimer.current = null;
+      if (rootPresent.current) return;
+      // A sheet the user opened by clicking is theirs to close; only a sheet the
+      // pointer opened follows the pointer back out.
+      const clickOpenedSheet = openRef.current && !hoverOpened.current;
+      if (hoverOpened.current) collapse();
+      // Notification-only makes the rail a notification: once the pointer has
+      // left, it has been seen, so the window goes away rather than the sheet.
+      if (notificationModeRef.current === 'notification' && !clickOpenedSheet) {
+        void invoke('set_status_island_visibility', { visible: false });
+      }
+    }, 300);
+  }, [collapse]);
+
+  useEffect(() => { notificationModeRef.current = notificationMode; }, [notificationMode]);
+  useEffect(() => { openRef.current = open; }, [open]);
 
   useEffect(() => {
     void invoke('set_status_island_primary', { identity: primaryIdentity });
   }, [primaryIdentity]);
 
+  const unseenNotificationKey = model.reminders
+    .filter(reminder => reminder.lifecycle === 'unseen')
+    .map(reminder => reminder.identity)
+    .sort()
+    .join('\0');
+
+  useEffect(() => {
+    if (status !== 'ready') return;
+    const previousMode = previousReadyNotificationMode.current;
+    previousReadyNotificationMode.current = notificationMode;
+    if (notificationMode === 'notification' && unseenNotificationKey && previousMode !== 'persistent') {
+      void invoke('set_status_island_visibility', { visible: true });
+    }
+  }, [notificationMode, status, unseenNotificationKey]);
+
   useEffect(() => {
     const removers: Array<() => void> = [];
     let disposed = false;
     const keep = (remove: () => void) => disposed ? remove() : removers.push(remove);
-    void listen<{ source: PanelSource; identity: string | null } | null>('status-island-details-open', event => {
+    void listen<{ source: PanelSource; identity: string | null; hovered?: boolean } | null>('status-island-details-open', event => {
       setSource(event.payload?.source ?? 'island');
       setPinnedIdentity(event.payload?.identity ?? null);
+      hoverOpened.current = event.payload?.hovered === true;
+      if (hoverOpened.current && !rootPresent.current) scheduleLeave();
       setAnim('grow');
       setOpen(true);
     }).then(keep);
     void listen('status-island-details-close', () => {
+      hoverOpened.current = false;
       setPinnedIdentity(null);
       setAnim('shrink');
       setOpen(false);
     }).then(keep);
     return () => { disposed = true; removers.forEach(remove => remove()); };
-  }, []);
+  }, [scheduleLeave]);
 
   useEffect(() => () => {
+    if (hoverCloseTimer.current !== null) clearTimeout(hoverCloseTimer.current);
     if (lastPresence.current) reportPresence('island', false);
     reportPresence('details', false);
   }, []);
-
-  const collapse = useCallback(() => void invoke('close_status_island_details'), []);
 
   useEffect(() => {
     if (!open) return;
@@ -108,10 +153,23 @@ export function StatusIslandApp() {
     void invoke('hover_status_island_details');
   }, [drag.dragging]);
 
+  const nowlyHoverStart = useCallback(() => {
+    if (drag.dragging) return;
+    lastPresence.current = true;
+    reportPresence('island', true);
+    void invoke('hover_nowly_panel');
+  }, [drag.dragging]);
+
   const hoverEnd = useCallback(() => {
     lastPresence.current = false;
     reportPresence('island', false);
   }, []);
+
+  const grabStart = useCallback((event: React.PointerEvent) => {
+    lastPresence.current = false;
+    reportPresence('island', false);
+    drag.onGrab(event);
+  }, [drag]);
 
   const activate = useCallback(() => {
     // Releasing a drag over the rail still fires a click. That click is the end
@@ -128,13 +186,28 @@ export function StatusIslandApp() {
   const focusEnter = useCallback(() => reportPresence('keyboard', true), []);
   const focusLeave = useCallback(() => reportPresence('keyboard', false), []);
 
+  const rootEnter = useCallback(() => {
+    rootPresent.current = true;
+    if (hoverCloseTimer.current !== null) {
+      clearTimeout(hoverCloseTimer.current);
+      hoverCloseTimer.current = null;
+    }
+    reportPresence('details', true);
+  }, []);
+
+  const rootLeave = useCallback(() => {
+    rootPresent.current = false;
+    reportPresence('details', false);
+    scheduleLeave();
+  }, [scheduleLeave]);
+
   const surface = {
     onActivate: activate,
     onHoverStart: hoverStart,
     onHoverEnd: hoverEnd,
     onFocusEnter: focusEnter,
     onFocusLeave: focusLeave,
-    onGrab: drag.onGrab,
+    onGrab: grabStart,
     onNudge: drag.nudge,
     dragging: drag.dragging,
     expanded: open && source === 'island'
@@ -157,8 +230,8 @@ export function StatusIslandApp() {
       // Real pointer presence only. "Sheet is open" is a separate hold, tracked
       // natively, so that a hover-opened sheet can still close when the pointer
       // leaves without openness masquerading as a pointer.
-      onMouseEnter={() => reportPresence('details', true)}
-      onMouseLeave={() => reportPresence('details', false)}
+      onMouseEnter={rootEnter}
+      onMouseLeave={rootLeave}
     >
       <TopRail
         open={open}
@@ -168,7 +241,9 @@ export function StatusIslandApp() {
         onCollapse={collapse}
         nowly={{
           onActivate: activateNowly,
-          onGrab: drag.onGrab,
+          onHoverStart: nowlyHoverStart,
+          onHoverEnd: hoverEnd,
+          onGrab: grabStart,
           onNudge: drag.nudge,
           dragging: drag.dragging,
           expanded: open && source === 'nowly'
@@ -208,7 +283,7 @@ export function StatusIslandApp() {
         ) : surfaceState.mode === 'summary' ? (
           <StatusIslandSummaryView summary={surfaceState.summary} {...retry} {...surface} />
         ) : (
-          <StatusIslandIdleView {...retry} {...surface} />
+          <StatusIslandIdleView {...retry} {...surface} dragHintVisible={!dragHintSeen && notificationMode === 'persistent'} onAcknowledgeDragHint={() => { localStorage.setItem('status-island-drag-hint-seen', 'true'); setDragHintSeen(true); }} />
         )}
       </TopRail>
     </main>

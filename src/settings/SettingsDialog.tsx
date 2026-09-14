@@ -16,7 +16,7 @@ export function SettingsDialog({settings,monitors=[],onClose,onSave}:Props){
  // Language switches in real time via the i18n store, independent of the save
  // button, so the whole UI updates the moment the user picks a language.
  const {language,setLanguage}=useTranslation();
- const [draft,setDraft]=useState(()=>({...settings, notificationDisplay: settings.notificationDisplay ?? 'detail', quickPanelEnabled: settings.quickPanelEnabled ?? true, quickPanelShortcut: settings.quickPanelShortcut ?? 'Ctrl+Space'})); const [saving,setSaving]=useState(false); const [error,setError]=useState<string|null>(null);
+ const [draft,setDraft]=useState(()=>({...settings, notificationDisplay: settings.notificationDisplay ?? 'detail', notificationMode: settings.notificationMode ?? 'persistent', quickPanelEnabled: settings.quickPanelEnabled ?? true, quickPanelShortcut: settings.quickPanelShortcut ?? 'Ctrl+Space'})); const [saving,setSaving]=useState(false); const [error,setError]=useState<string|null>(null);
  const [tab,setTab]=useState<SettingsTab>('interface');
  const [shortcutError,setShortcutError]=useState<string|null>(null);
  // Resolve the monitor that should appear selected: the saved id when it still
@@ -59,6 +59,7 @@ export function SettingsDialog({settings,monitors=[],onClose,onSave}:Props){
    <TabPanel idPrefix="settings" tabId="notifications" active={tab==='notifications'}>
     <div className="settings-grid">
      <Select id="settings-notification-display" label={t('settings.notificationDisplay')} value={draft.notificationDisplay ?? 'detail'} options={[{value:'detail',label:t('settings.notificationDisplayDetail')},{value:'summary',label:t('settings.notificationDisplaySummary')}]} onChange={value=>setDraft({...draft,notificationDisplay:value as NonNullable<AppSettings['notificationDisplay']>})}/>
+     <Select id="settings-notification-mode" label={t('settings.notificationMode')} value={draft.notificationMode ?? 'persistent'} options={[{value:'persistent',label:t('settings.notificationModePersistent')},{value:'notification',label:t('settings.notificationModeNotification')}]} onChange={value=>setDraft({...draft,notificationMode:value as NonNullable<AppSettings['notificationMode']>})}/>
     </div>
     <p className="settings-hint">{t('settings.notificationDisplayHint')}</p>
    </TabPanel>

@@ -99,7 +99,13 @@ describe('screen status island windows', () => {
     render(<StatusIslandApp />);
     await act(async () => { await Promise.resolve(); });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Nowly' }));
+    const nowly = screen.getByRole('button', { name: 'Nowly' });
+    fireEvent.mouseEnter(nowly);
+
+    expect(invokeMock).toHaveBeenCalledWith('set_status_island_presence', { surface: 'island', present: true });
+    expect(invocations('hover_nowly_panel')).toHaveLength(1);
+
+    fireEvent.click(nowly);
 
     // The other half of the same rail: it opens the same sheet, so native has to
     // be told which content to put in it.
@@ -156,6 +162,150 @@ describe('screen status island windows', () => {
     expect(invokeMock).toHaveBeenCalledWith('set_status_island_presence', { surface: 'island', present: false });
     // The frontend never acknowledges; native does it when the panel appears.
     expect(invocations('acknowledge_status_island_reminder')).toHaveLength(0);
+  });
+
+  it('cancels the pending hover open as soon as a long press begins', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-12T14:18:00'));
+    respondWithDraggable(snapshotWith({ events: [reminderEvent] }));
+    render(<StatusIslandApp />);
+    await act(async () => { await Promise.resolve(); });
+    const trigger = screen.getByRole('button', { name: /^产品评审 ·/ });
+
+    fireEvent.mouseEnter(trigger);
+    fireEvent.pointerDown(trigger, { button: 0, pointerId: 1, screenX: 900, screenY: 10 });
+
+    const presenceCalls = invocations('set_status_island_presence');
+    expect(presenceCalls[presenceCalls.length - 1]?.[1]).toEqual({ surface: 'island', present: false });
+    fireEvent.pointerUp(window, { pointerId: 1, screenX: 900, screenY: 10 });
+  });
+
+  it('closes a hover-opened panel after leaving but keeps an actively opened panel', async () => {
+    vi.useFakeTimers();
+    let openPanel: ((event: { payload: { source: 'island' | 'nowly'; identity: string | null; hovered: boolean } }) => void) | undefined;
+    listenMock.mockImplementation((name: string, callback: typeof openPanel) => {
+      if (name === 'status-island-details-open') openPanel = callback;
+      return Promise.resolve(() => undefined);
+    });
+    render(<StatusIslandApp />);
+    await act(async () => { await Promise.resolve(); });
+    const root = screen.getByLabelText('Nowly 状态岛');
+
+    act(() => openPanel?.({ payload: { source: 'nowly', identity: null, hovered: true } }));
+    fireEvent.mouseLeave(root);
+    await act(async () => { vi.advanceTimersByTime(299); });
+    expect(invocations('close_status_island_details')).toHaveLength(0);
+    await act(async () => { vi.advanceTimersByTime(1); });
+    expect(invocations('close_status_island_details')).toHaveLength(1);
+
+    invokeMock.mockClear();
+    act(() => openPanel?.({ payload: { source: 'nowly', identity: null, hovered: false } }));
+    fireEvent.mouseLeave(root);
+    await act(async () => { vi.advanceTimersByTime(300); });
+    expect(invocations('close_status_island_details')).toHaveLength(0);
+  });
+
+  it('closes a hover panel whose open event arrives after the pointer left', async () => {
+    vi.useFakeTimers();
+    let openPanel: ((event: { payload: { source: 'island' | 'nowly'; identity: string | null; hovered: boolean } }) => void) | undefined;
+    listenMock.mockImplementation((name: string, callback: typeof openPanel) => {
+      if (name === 'status-island-details-open') openPanel = callback;
+      return Promise.resolve(() => undefined);
+    });
+    render(<StatusIslandApp />);
+    await act(async () => { await Promise.resolve(); });
+    const root = screen.getByLabelText('Nowly 状态岛');
+
+    fireEvent.mouseEnter(root);
+    fireEvent.mouseLeave(root);
+    act(() => openPanel?.({ payload: { source: 'nowly', identity: null, hovered: true } }));
+    await act(async () => { vi.advanceTimersByTime(300); });
+
+    expect(invocations('close_status_island_details')).toHaveLength(1);
+  });
+
+  it('keeps notification-only island visible through hover expansion and acknowledgement', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-12T14:18:00'));
+    const data = snapshotWith({ events: [reminderEvent], notificationMode: 'notification' });
+    respondWith(data);
+    render(<StatusIslandApp />);
+    await act(async () => { await Promise.resolve(); });
+    const trigger = screen.getByRole('button', { name: /^产品评审 ·/ });
+    expect(invocations('set_status_island_visibility')[invocations('set_status_island_visibility').length - 1]?.[1]).toEqual({ visible: true });
+
+    fireEvent.mouseEnter(trigger);
+    fireEvent.mouseLeave(trigger);
+    expect(invocations('dismiss_status_island_notification')).toHaveLength(0);
+    const acknowledged = snapshotWith({ ...data, reminders: [{ identity: 'event:event-1:2026-09-12T14:30:reminder:15', acknowledgedAt: '2026-09-12T14:18:00+08:00', dismissed: false, consumed: false }] });
+    respondWith(acknowledged);
+    await act(async () => { await Promise.resolve(); });
+    expect(invocations('set_status_island_visibility')[invocations('set_status_island_visibility').length - 1]?.[1]).not.toEqual({ visible: false });
+  });
+
+  it('hides the notification-only island once the pointer has left it', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-12T14:18:00'));
+    respondWith(snapshotWith({ events: [reminderEvent], notificationMode: 'notification' }));
+    render(<StatusIslandApp />);
+    await act(async () => { await Promise.resolve(); });
+    const root = document.querySelector('.screen-status-island-root') as HTMLElement;
+
+    fireEvent.mouseEnter(root);
+    fireEvent.mouseLeave(root);
+    await act(async () => { vi.advanceTimersByTime(300); });
+
+    expect(invokeMock).toHaveBeenCalledWith('set_status_island_visibility', { visible: false });
+  });
+
+  it('keeps the island visible when the pointer comes back, and always in persistent mode', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-12T14:18:00'));
+    respondWith(snapshotWith({ events: [reminderEvent], notificationMode: 'notification' }));
+    const { unmount } = render(<StatusIslandApp />);
+    await act(async () => { await Promise.resolve(); });
+    const root = document.querySelector('.screen-status-island-root') as HTMLElement;
+
+    fireEvent.mouseEnter(root);
+    fireEvent.mouseLeave(root);
+    fireEvent.mouseEnter(root);
+    await act(async () => { vi.advanceTimersByTime(300); });
+    expect(invokeMock).not.toHaveBeenCalledWith('set_status_island_visibility', { visible: false });
+
+    unmount();
+    invokeMock.mockClear();
+    respondWith(snapshotWith({ events: [reminderEvent], notificationMode: 'persistent' }));
+    render(<StatusIslandApp />);
+    await act(async () => { await Promise.resolve(); });
+    const persistentRoot = document.querySelector('.screen-status-island-root') as HTMLElement;
+
+    fireEvent.mouseEnter(persistentRoot);
+    fireEvent.mouseLeave(persistentRoot);
+    await act(async () => { vi.advanceTimersByTime(300); });
+
+    // Persistent means the rail stays on screen; only the sheet may collapse.
+    expect(invokeMock).not.toHaveBeenCalledWith('set_status_island_visibility', { visible: false });
+  });
+
+  it('does not reshow existing reminders when switching from persistent to notification-only', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-12T14:18:00'));
+    let invalidate: () => void = () => undefined;
+    listenMock.mockImplementation((name: string, callback: () => void) => {
+      if (name === 'status-island-invalidated') invalidate = callback;
+      return Promise.resolve(() => undefined);
+    });
+    let data = snapshotWith({ events: [reminderEvent], notificationMode: 'persistent' });
+    invokeMock.mockImplementation((command: string) =>
+      command === 'get_status_island_snapshot' ? Promise.resolve(data) : Promise.resolve(null));
+    render(<StatusIslandApp />);
+    await act(async () => { await Promise.resolve(); });
+    invokeMock.mockClear();
+
+    data = snapshotWith({ events: [reminderEvent], notificationMode: 'notification' });
+    await act(async () => invalidate());
+
+    expect(invocations('set_status_island_visibility')).toHaveLength(0);
   });
 
   it('opens the panel on click and reports keyboard presence on focus', async () => {

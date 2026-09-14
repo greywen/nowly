@@ -16,6 +16,7 @@ import { TemplatePickerDialog } from '../../widgets/TemplatePickerDialog';
 import { ModuleMarketDialog } from '../../widgets/ModuleMarketDialog';
 import { AboutDialog } from '../../settings/AboutDialog';
 import { ModuleGrid, type ModuleGridItem } from './ModuleGrid';
+import { Tip } from '../../components/Tip';
 import { BlurControl } from '../BlurControl';
 import { DEFAULT_BLUR, useBlur } from '../useBlur';
 import { t } from '../../i18n';
@@ -120,59 +121,45 @@ export function DesktopShell({
         </div>
         <div className="top-actions">
           {foreground ? (
-            <button
-              type="button"
-              className="btn btn-icon about-button"
-              aria-label={t('about.open')}
-              onClick={() => setAboutOpen(true)}
-            >
-              <img src="/logo.png" alt="" className="about-button__logo" aria-hidden="true" />
-              {updateAvailable ? <span className="about-button__dot" aria-hidden="true" /> : null}
-            </button>
+            <Tip content={t('about.open')}>
+              <button type="button" className="btn btn-icon about-button" aria-label={t('about.open')} onClick={() => setAboutOpen(true)}>
+                <img src="/logo.png" alt="" className="about-button__logo" aria-hidden="true" />
+                {updateAvailable ? <span className="about-button__dot" aria-hidden="true" /> : null}
+              </button>
+            </Tip>
           ) : null}
           {foreground ? (
-            <BlurControl blur={blur} onChange={setBlur} onOpenChange={setPreviewingBlur} />
+            <BlurControl blur={blur} onChange={setBlur} onOpenChange={setPreviewingBlur} tipContent={t('blur.adjust')} />
           ) : null}
           {foreground && isEditing ? (
-            <button
-              type="button"
-              className="btn"
-              aria-label={t('shell.addModule')}
-              onClick={() => setPickerOpen(true)}
-            >
-              <Plus aria-hidden="true" />
-              {t('shell.addModule')}
-            </button>
+            <Tip content={t('shell.addModule')}>
+              <button type="button" className="btn" aria-label={t('shell.addModule')} onClick={() => setPickerOpen(true)}>
+                <Plus aria-hidden="true" />
+                {t('shell.addModule')}
+              </button>
+            </Tip>
           ) : null}
           {/* 模块市场功能暂时隐藏 */}
           {foreground ? (
-            <button
-              type="button"
-              data-guide="edit-layout"
-              className={`btn btn-icon${isEditing ? ' is-active' : ''}`}
-              aria-label={isEditing ? t('shell.finishEditing') : t('shell.editLayout')}
-              aria-pressed={isEditing}
-              onClick={() => setIsEditing((current) => !current)}
-            >
-              {isEditing ? <Check aria-hidden="true" /> : <LayoutGrid aria-hidden="true" />}
-            </button>
+            <Tip content={isEditing ? t('shell.finishEditing') : t('shell.editLayout')}>
+              <button type="button" data-guide="edit-layout" className={`btn btn-icon${isEditing ? ' is-active' : ''}`} aria-label={isEditing ? t('shell.finishEditing') : t('shell.editLayout')} aria-pressed={isEditing} onClick={() => setIsEditing((current) => !current)}>
+                {isEditing ? <Check aria-hidden="true" /> : <LayoutGrid aria-hidden="true" />}
+              </button>
+            </Tip>
           ) : null}
           {foreground ? (
-            <button type="button" data-guide="settings" className="btn btn-icon" aria-label={t('shell.openSettings')} onClick={onOpenSettings}>
-              <Settings aria-hidden="true" />
-            </button>
+            <Tip content={t('shell.openSettings')}>
+              <button type="button" data-guide="settings" className="btn btn-icon" aria-label={t('shell.openSettings')} onClick={onOpenSettings}>
+                <Settings aria-hidden="true" />
+              </button>
+            </Tip>
           ) : null}
           {foreground ? (
-            <button
-              type="button"
-              data-guide="wallpaper"
-              className="btn btn-icon btn-primary"
-              aria-label={t('shell.setWallpaper')}
-              disabled={isModeSwitching}
-              onClick={onSetWallpaper}
-            >
-              <MonitorDown aria-hidden="true" />
-            </button>
+            <Tip content={t('shell.setWallpaper')} align="end">
+              <button type="button" data-guide="wallpaper" className="btn btn-icon btn-primary" aria-label={t('shell.setWallpaper')} disabled={isModeSwitching} onClick={onSetWallpaper}>
+                <MonitorDown aria-hidden="true" />
+              </button>
+            </Tip>
           ) : null}
         </div>
       </header>

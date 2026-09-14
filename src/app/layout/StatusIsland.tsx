@@ -273,7 +273,7 @@ function IslandShell({
         aria-label={label}
         aria-haspopup="dialog"
         aria-expanded={surface.expanded ?? false}
-        {...(surface.onNudge ? { 'aria-keyshortcuts': 'ArrowLeft ArrowRight', title: t('statusIsland.dragHint') } : {})}
+        {...(surface.onNudge ? { 'aria-keyshortcuts': 'ArrowLeft ArrowRight' } : {})}
         {...surfaceHandlers(surface)}
       />
       {dismiss ? (
@@ -306,11 +306,13 @@ function IslandShell({
  * there is no smaller shape any more — it just goes quiet, and stays the thing
  * the user clicks to open the rail.
  */
-export function StatusIslandIdleView({ onRetryStatus, ...surface }: { onRetryStatus?: () => void } & SurfaceProps) {
+export function StatusIslandIdleView({ onRetryStatus, dragHintVisible = true, onAcknowledgeDragHint, ...surface }: { onRetryStatus?: () => void; dragHintVisible?: boolean; onAcknowledgeDragHint?: () => void } & SurfaceProps) {
   const { t } = useTranslation();
   const title = t('statusIsland.idleTitle');
   const meta = t('statusIsland.idleMeta');
   return (
+    <>
+    {dragHintVisible ? <div className="status-island__drag-hint" role="status"><strong>{t('statusIsland.dragHintTitle')}</strong><span>{t('statusIsland.dragHint')}</span><button type="button" onClick={onAcknowledgeDragHint}>{t('statusIsland.dragHintAcknowledge')}</button></div> : null}
     <IslandShell
       family="event"
       mode="idle"
@@ -322,6 +324,7 @@ export function StatusIslandIdleView({ onRetryStatus, ...surface }: { onRetrySta
       {...(onRetryStatus ? { onRetryStatus } : {})}
       {...surface}
     />
+    </>
   );
 }
 
@@ -555,7 +558,7 @@ export function TopRail({
         aria-label={t('statusIsland.nowly')}
         aria-haspopup="dialog"
         aria-expanded={nowly.expanded ?? false}
-        {...(nowly.onNudge ? { 'aria-keyshortcuts': 'ArrowLeft ArrowRight', title: t('statusIsland.dragHint') } : {})}
+        {...(nowly.onNudge ? { 'aria-keyshortcuts': 'ArrowLeft ArrowRight' } : {})}
         {...surfaceHandlers(nowly)}
       >
         <img src="/logo.png" alt="" />

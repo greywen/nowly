@@ -287,6 +287,7 @@ pub struct StatusIslandSnapshot {
     /// have to open the database itself. Decides whether a new reminder starts as
     /// a full detail or goes straight into today's summary.
     pub notification_display: String,
+    pub notification_mode: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -354,9 +355,10 @@ pub fn get_status_island_snapshot(
     // Read on the same connection that is already open: the island window has no
     // database of its own, and a second command round-trip would let the surface
     // render one frame with the wrong mode.
-    let notification_display = crate::settings::read_app_settings(&connection)
-        .map_err(CommandError::database)?
-        .notification_display;
+    let settings = crate::settings::read_app_settings(&connection)
+        .map_err(CommandError::database)?;
+    let notification_display = settings.notification_display;
+    let notification_mode = settings.notification_mode;
     drop(connection);
     let focus = timer
         .lock()
@@ -385,7 +387,52 @@ pub fn get_status_island_snapshot(
         focus,
         reminders: states,
         notification_display,
+        notification_mode,
     })
+}
+
+#[tauri::command]
+pub fn acknowledge_status_island_notification(
+    app: AppHandle,
+    reminders: State<'_, ManagedReminders>,
+    identities: Vec<String>,
+) -> Result<(), CommandError> {
+    let mut changed = false;
+    {
+        let mut lifecycle = reminders.lock().map_err(CommandError::system)?;
+        lifecycle.roll_local_date(&today_local());
+        for identity in identities {
+            changed |= lifecycle.acknowledge(&identity, Local::now());
+        }
+        if changed { persist(&app, &lifecycle); }
+    }
+    if changed { invalidate(&app)?; }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn dismiss_status_island_notification(
+    app: AppHandle,
+    reminders: State<'_, ManagedReminders>,
+    identities: Vec<String>,
+) -> Result<(), CommandError> {
+    {
+        let mut lifecycle = reminders.lock().map_err(CommandError::system)?;
+        lifecycle.roll_local_date(&today_local());
+        for identity in identities { lifecycle.acknowledge(&identity, Local::now()); }
+        persist(&app, &lifecycle);
+    }
+    let Some(window) = app.get_webview_window("quick-panel-handle") else { return Ok(()); };
+    window.hide().map_err(CommandError::system)
+}
+
+#[tauri::command]
+pub fn set_status_island_visibility(
+    app: AppHandle,
+    visible: bool,
+) -> Result<(), CommandError> {
+    let Some(window) = app.get_webview_window("quick-panel-handle") else { return Ok(()); };
+    if visible { window.show() } else { window.hide() }.map_err(CommandError::system)
 }
 
 #[tauri::command]
