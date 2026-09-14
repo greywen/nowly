@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RepositoryProvider } from '../data/RepositoryContext';
@@ -100,6 +100,40 @@ describe('App startup and window behavior', () => {
     expect(screen.getByText('还没有便签')).toBeInTheDocument();
     expect(screen.queryByText('设计评审')).not.toBeInTheDocument();
     expect(screen.queryByText('产品原则')).not.toBeInTheDocument();
+  });
+
+  it('does not render the screen status island inside the main window', async () => {
+    localStorage.setItem('nowly:onboarding-seen', 'true');
+    renderApp();
+    await waitFor(() => expect(screen.getByText('本月暂无日程')).toBeInTheDocument());
+    expect(document.querySelector('.status-island')).not.toBeInTheDocument();
+  });
+
+  it('opens the exact recurring event requested by the screen status island', async () => {
+    const listeners = new Map<string, (event: { payload: unknown }) => void>();
+    listenMock.mockImplementation((name: string, callback: (event: { payload: unknown }) => void) => {
+      listeners.set(name, callback);
+      return Promise.resolve(() => undefined);
+    });
+    const currentEvent = {
+      id: 'series-1', title: '今日状态会议', startAt: '2026-09-12T14:30', endAt: '2026-09-12T15:30', allDay: false,
+      category: 'work' as const, color: '#4FC9DA' as const, note: '', reminders: [], recurrence: null,
+      createdAt: 'x', updatedAt: 'x', startTz: null, endTz: null, rrule: null, seriesId: null,
+      seriesStartAt: '2026-09-05T14:30', occurrenceStartAt: '2026-09-12T14:30', isOverridden: false, subscriptionId: null
+    };
+    invokeMock.mockImplementation((command: string) => command === 'get_status_island_snapshot'
+      ? Promise.resolve({ sampledAt: '2026-09-12T14:20', events: [currentEvent], externalEvents: [], tasks: [], focus: { status: 'idle', remainingSeconds: 0, sessionId: null } })
+      : Promise.resolve('ok'));
+    renderApp();
+    await waitFor(() => expect(listeners.has('status-island-open-event')).toBe(true));
+
+    act(() => listeners.get('status-island-open-event')?.({ payload: {
+      target: { id: 'series-1', occurrenceStartAt: '2026-09-12T14:30' },
+      startAt: '2026-09-12T14:30'
+    } }));
+
+    expect(await screen.findByRole('dialog', { name: '编辑日程' })).toBeInTheDocument();
+    expect(screen.getByLabelText('日程标题')).toHaveValue('今日状态会议');
   });
 
   it('keeps healthy modules visible when one read fails', async () => {

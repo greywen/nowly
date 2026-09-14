@@ -81,14 +81,11 @@ test('edits a chat card, confirms once, refreshes the calendar, then undoes from
   await panel.getByRole('button', { name: '确认执行 1 项' }).click();
   await expect(panel.getByRole('region', { name: '操作状态：已执行' })).toBeVisible();
   expect(await page.evaluate(() => Reflect.get(window, '__ASSISTANT_TEST_CALLS__').filter((c: string) => c === 'assistant_execute').length)).toBe(1);
-  await page.mouse.click(20, 20);
+  await page.getByRole('button', { name: '收起助手' }).click();
   await expect(page.getByRole('button', { name: /团队早会/ }).first()).toBeVisible();
-  // Collapsed the composer is only a short topbar field; focus brings the
-  // history toggle back.
-  await input.focus();
   await page.getByRole('button', { name: '操作记录' }).click();
   await page.screenshot({ path: info.outputPath('assistant-history.png') });
-  await page.getByRole('button', { name: '撤销团队早会' }).click();
+  await page.getByRole('button', { name: '撤销', exact: true }).click();
   await expect(page.getByRole('region', { name: '操作记录' }).getByText('已撤销')).toBeVisible();
   const bounds = await page.locator('.assistant-composer').boundingBox();
   expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(page.viewportSize()!.height);
@@ -138,74 +135,54 @@ test('clarifies, preserves draft, hides during layout editing, and keeps connect
   await expect(input).toHaveValue('上午8点');
 });
 
-test('embeds in the topbar and expands over the workspace without reserving layout space', async ({ page }, info) => {
+test('floats above the full workspace without reserving layout space', async ({ page }, info) => {
   const dock = page.locator('.assistant-dock');
-  const topbar = page.getByRole('banner');
   const workspace = page.locator('.workspace');
   await expect(dock).toBeVisible();
   const bounds = await workspace.boundingBox();
   const composer = await page.locator('.assistant-composer').boundingBox();
-  const topbarBounds = await topbar.boundingBox();
   const viewport = page.viewportSize()!;
   expect(bounds!.y + bounds!.height).toBe(viewport.height);
-  expect(await topbar.evaluate((header, assistant) => header.contains(assistant), await dock.elementHandle())).toBe(true);
-  expect(composer!.y).toBeGreaterThanOrEqual(topbarBounds!.y);
-  expect(composer!.y + composer!.height).toBeLessThanOrEqual(topbarBounds!.y + topbarBounds!.height);
+  expect(composer!.y + composer!.height).toBe(viewport.height - 16);
   expect(composer!.x + composer!.width / 2).toBe(viewport.width / 2);
+  expect(composer!.y).toBeLessThan(bounds!.y + bounds!.height);
 
   // Nothing to report yet, so the panel offers no way in.
   await expect(page.getByRole('region', { name: '当前聊天' })).toBeHidden();
   await expect(page.getByRole('button', { name: '展开', exact: true })).toHaveCount(0);
+
+  // The transparent area beside the dock must still target the workspace.
+  const outside = { x: composer!.x - 12, y: composer!.y + composer!.height / 2 };
+  expect(await page.evaluate(({ x, y }) =>
+    Boolean(document.elementFromPoint(x, y)?.closest('.workspace')), outside)).toBe(true);
+  const opensDateDetails = await page.evaluate(({ x, y }) =>
+    Boolean(document.elementFromPoint(x, y)?.closest('.day')), outside);
+  await page.mouse.click(outside.x, outside.y);
+  // At 1366px this workspace point is a calendar day. The resulting details
+  // dialog is evidence that click-through works, but must be closed before
+  // continuing the independent layout-edit checks.
+  if (opensDateDetails) {
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toBeHidden();
+  }
   const input = page.getByRole('textbox', { name: '告诉 Nowly 你想做什么' });
   await input.fill('周三8点提醒我早会'); await input.press('Enter');
-  const panel = page.getByRole('region', { name: '当前聊天' });
-  await expect(panel).toBeVisible();
-  const panelBounds = await panel.boundingBox();
-  expect(panelBounds!.y).toBeGreaterThanOrEqual(topbarBounds!.y + topbarBounds!.height);
-  expect(panelBounds!.y + panelBounds!.height).toBeLessThanOrEqual(viewport.height);
+  await expect(page.getByRole('region', { name: '当前聊天' })).toBeVisible();
   expect(await workspace.boundingBox()).toEqual(bounds);
-  await page.screenshot({ path: info.outputPath('assistant-topbar.png') });
-  await page.mouse.click(20, 20);
+  await page.screenshot({ path: info.outputPath('assistant-floating.png') });
+  await page.getByRole('button', { name: '收起助手' }).click();
   await expect(page.getByRole('region', { name: '当前聊天' })).toBeHidden();
+  // Only the history button remains beside the composer; collapsing offers no
+  // second control to re-open the panel.
   await expect(page.getByRole('button', { name: '展开', exact: true })).toHaveCount(0);
   expect(await workspace.boundingBox()).toEqual(bounds);
   await page.getByRole('button', { name: '编辑布局', exact: true }).click();
   await expect(dock).toBeHidden();
-  const hiddenActions = await page.locator('.top-actions').boundingBox();
-  const topbarPaddingRight = await topbar.evaluate(node => Number.parseFloat(getComputedStyle(node).paddingRight));
-  expect(hiddenActions!.x + hiddenActions!.width).toBe(viewport.width - topbarPaddingRight);
   expect(await workspace.boundingBox()).toEqual(bounds);
   await page.getByRole('button', { name: '完成编辑', exact: true }).click();
   await expect(dock).toBeVisible();
   expect(await workspace.boundingBox()).toEqual(bounds);
-});
-
-test('keeps the topbar assistant clear of navigation actions at narrow widths', async ({ page }) => {
-  await page.setViewportSize({ width: 960, height: 768 });
-  await expect(page.locator('.date-copy')).toBeHidden();
-  let composer = await page.locator('.assistant-composer').boundingBox();
-  let actions = await page.locator('.top-actions').boundingBox();
-  expect(composer!.x + composer!.width + 12).toBeLessThanOrEqual(actions!.x);
-
-  await page.setViewportSize({ width: 981, height: 768 });
-  await expect(page.locator('.date-copy')).toBeVisible();
-  composer = await page.locator('.assistant-composer').boundingBox();
-  actions = await page.locator('.top-actions').boundingBox();
-  expect(composer!.x + composer!.width + 12).toBeLessThanOrEqual(actions!.x);
-});
-
-test('shows keyboard focus in the topbar assistant', async ({ page }) => {
-  const input = page.getByRole('textbox', { name: '告诉 Nowly 你想做什么' });
-  const composer = page.locator('.assistant-composer');
-  await input.focus();
-  // Focusing the field expands the dock instead of drawing a highlight ring.
-  expect(await composer.evaluate(node => getComputedStyle(node).boxShadow)).toBe('none');
-  await expect(page.getByRole('region', { name: '当前聊天' })).toBeVisible();
-
-  await page.keyboard.press('Tab');
-  const history = page.getByRole('button', { name: '操作记录' });
-  await expect(history).toBeFocused();
-  expect(await history.evaluate(node => getComputedStyle(node).boxShadow)).not.toBe('none');
 });
 
 test('swaps the send button for voice input without animated decoration', async ({ page }) => {
@@ -217,13 +194,16 @@ test('swaps the send button for voice input without animated decoration', async 
   await expect(page.getByRole('button', { name: '语音输入' })).toHaveCount(0);
   const composer = page.locator('.assistant-composer');
   expect(await composer.evaluate(node => getComputedStyle(node, '::before').animationName)).toBe('none');
-  expect(await composer.evaluate(node => node.getBoundingClientRect().height)).toBe(46);
+  expect(await composer.evaluate(node => node.getBoundingClientRect().height)).toBe(58);
+  // Icons in the composer and the panel header share one vertical column.
   await input.press('Enter');
   const panel = page.getByRole('region', { name: '当前聊天' });
   await expect(panel).toBeVisible();
   await expect.poll(() => panel.evaluate(node => getComputedStyle(node).transform)).toBe('none');
-  expect(await page.locator('html').evaluate(node => getComputedStyle(node).getPropertyValue('--radius-md').trim())).toBe('10px');
-  expect(await page.locator('.assistant-state-icon').evaluate(node => getComputedStyle(node).borderRadius)).toBe('10px');
+  const mark = await page.locator('.assistant-composer-mark').boundingBox();
+  const stateIcon = await page.locator('.assistant-state-icon').boundingBox();
+  expect(stateIcon!.x).toBe(mark!.x);
+  expect(stateIcon!.width).toBe(mark!.width);
 });
 
 test('keeps the assistant panel and controls free of motion', async ({ page }) => {

@@ -65,20 +65,6 @@ describe('DesktopShell', () => {
     expect(screen.getByRole('main')).toHaveClass('workspace');
   });
 
-  it('renders the assistant inside the topbar', () => {
-    render(
-      <DesktopShell
-        time="09:41"
-        dateText="2026年7月23日 星期四"
-        summary="summary"
-        modules={modules()}
-        assistant={() => <div data-testid="assistant-slot">assistant</div>}
-      />
-    );
-
-    expect(screen.getByRole('banner')).toContainElement(screen.getByTestId('assistant-slot'));
-  });
-
   it('shows only the wallpaper action in the content header while foreground', () => {
     const onSetWallpaper = vi.fn();
     const { rerender } = render(
@@ -127,6 +113,27 @@ describe('DesktopShell', () => {
 
     fireEvent.doubleClick(screen.getByText('calendar region'));
     expect(onWallpaperDoubleClick).toHaveBeenCalledOnce();
+  });
+
+  it('shows tips only for topbar navigation buttons', () => {
+    render(
+      <DesktopShell
+        mode="foreground"
+        time="09:41"
+        dateText="2026年7月23日 星期四"
+        summary="summary"
+        modules={{ calendar: <button aria-label="模块内按钮">模块内按钮</button> }}
+      />
+    );
+
+    const settings = screen.getByRole('button', { name: '打开设置' });
+    fireEvent.focus(settings);
+    expect(screen.getByRole('tooltip', { name: '打开设置' })).toBeInTheDocument();
+    fireEvent.blur(settings);
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+
+    fireEvent.focus(screen.getByRole('button', { name: '模块内按钮' }));
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
   });
 
   it('opens the about dialog from the topbar while foreground', () => {

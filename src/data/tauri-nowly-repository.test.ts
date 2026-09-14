@@ -3,10 +3,26 @@ import type { EditScope, EventDraft } from '../calendar/calendar-model';
 import { tauriNowlyRepository } from './tauri-nowly-repository';
 
 const invokeMock = vi.hoisted(() => vi.fn());
+const emitMock = vi.hoisted(() => vi.fn());
 vi.mock('@tauri-apps/api/core', () => ({ invoke: invokeMock }));
+vi.mock('@tauri-apps/api/event', () => ({ emit: emitMock }));
 
 describe('tauriNowlyRepository', () => {
-  beforeEach(() => invokeMock.mockReset());
+  beforeEach(() => {
+    invokeMock.mockReset();
+    emitMock.mockReset();
+    emitMock.mockResolvedValue(undefined);
+  });
+
+  it('invalidates the screen status snapshot after event and task writes', async () => {
+    invokeMock.mockResolvedValue(undefined);
+
+    await tauriNowlyRepository.deleteEvent({ id: 'e1', occurrenceStartAt: null }, 'all');
+    await tauriNowlyRepository.setTaskCompleted('t1', true);
+
+    expect(emitMock).toHaveBeenCalledTimes(2);
+    expect(emitMock).toHaveBeenCalledWith('status-island-invalidated');
+  });
 
   it('owns the exact event and startup IPC contracts', async () => {
     invokeMock.mockResolvedValue(undefined);

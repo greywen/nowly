@@ -13,12 +13,28 @@
     "windows": [
       {
         "title": "Nowly",
+        "label": "main",
         "width": 1280,
         "height": 720,
         "resizable": true,
         "fullscreen": false,
         "decorations": true,
         "dragDropEnabled": false
+      },
+      {
+        "label": "quick-panel-handle",
+        "title": "Nowly 顶部轨道",
+        "width": 288,
+        "height": 40,
+        "resizable": false,
+        "decorations": false,
+        "shadow": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "transparent": true,
+        "backgroundColor": "#00000000",
+        "visible": false,
+        "focus": false
       }
     ],
     "security": {

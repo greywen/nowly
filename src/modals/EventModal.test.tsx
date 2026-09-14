@@ -28,7 +28,7 @@ function props(overrides: Record<string, unknown> = {}) {
 }
 
 describe('EventModal', () => {
-  it('renders create defaults and every controlled field', () => {
+  it('renders create defaults and every controlled field', async () => {
     const { container } = render(<EventModal {...props()} />);
     expect(screen.getByRole('dialog', { name:'新建日程' })).toBeInTheDocument();
     expect(screen.getByLabelText('日程标题')).toHaveValue('');
@@ -38,7 +38,10 @@ describe('EventModal', () => {
     expect(screen.getByRole('button', { name:'结束时间' })).toHaveTextContent('10:45');
     expect(screen.getByRole('combobox', { name:'分类' })).toHaveTextContent('工作');
     expect(screen.getAllByRole('radio')).toHaveLength(4);
-    expect(screen.getByLabelText('备注')).toHaveValue('');
+    // The note field is a rich text editor (a contenteditable surface), so it
+    // has no `value`; assert it starts empty instead. It is awaited because the
+    // editor defers construction until KaTeX and highlight.js have loaded.
+    expect((await screen.findByLabelText('备注')).textContent).toBe('');
     expect(screen.queryByRole('button', { name:'删除日程' })).not.toBeInTheDocument();
     expect(container.querySelector('input[type="date"],input[type="time"],select')).toBeNull();
   });

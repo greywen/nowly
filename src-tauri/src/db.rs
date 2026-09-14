@@ -31,7 +31,12 @@ const MIGRATIONS: &[(i64, Migration)] = &[
     (22, migration_22_remove_reminder_dispatch_foreign_key),
     (23, migration_23_assistant),
     (24, migration_24_assistant_watch_scope),
+    (25, migration_25_attachments),
 ];
+
+fn migration_25_attachments(transaction: &Transaction<'_>) -> Result<()> {
+    crate::attachments::migrate(transaction)
+}
 
 fn migration_23_assistant(transaction: &Transaction<'_>) -> Result<()> {
     crate::assistant::store::migrate(transaction)
@@ -227,6 +232,7 @@ fn migration_4_default_settings(transaction: &Transaction<'_>) -> Result<()> {
         ("show_weekends", "true"),
         ("icon_style", "\"duotone\""),
         ("hide_topbar_in_wallpaper", "true"),
+        ("notification_mode", "\"persistent\""),
         ("calendar_enabled", "true"),
         ("matrix_enabled", "true"),
         ("notes_enabled", "true"),

@@ -608,7 +608,9 @@ pub fn disconnect_oauth_account(db: State<'_, AppDb>, id: String) -> Result<(), 
 mod tests {
     use super::*;
 
-    fn callback_exchange(request: String) -> (Option<Vec<(String, String)>>, std::io::Result<String>) {
+    fn callback_exchange(
+        request: String,
+    ) -> (Option<Vec<(String, String)>>, std::io::Result<String>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
         let server = std::thread::spawn(move || {
@@ -620,7 +622,9 @@ mod tests {
             query
         });
         let mut client = TcpStream::connect(address).unwrap();
-        client.set_read_timeout(Some(StdDuration::from_secs(5))).unwrap();
+        client
+            .set_read_timeout(Some(StdDuration::from_secs(5)))
+            .unwrap();
         client.write_all(request.as_bytes()).unwrap();
         client.shutdown(std::net::Shutdown::Write).unwrap();
         let mut response = String::new();
@@ -648,16 +652,19 @@ mod tests {
         let (query, _) = callback_exchange(format!(
             "GET /?code={code}&state=expected HTTP/1.1\r\nHost: localhost\r\n\r\n"
         ));
-        assert_eq!(query.unwrap(), vec![
-            ("code".to_owned(), code),
-            ("state".to_owned(), "expected".to_owned())
-        ]);
+        assert_eq!(
+            query.unwrap(),
+            vec![
+                ("code".to_owned(), code),
+                ("state".to_owned(), "expected".to_owned())
+            ]
+        );
     }
 
     #[test]
     fn callback_http_rejects_incomplete_headers() {
         let (query, _) = callback_exchange(
-            "GET /?code=test&state=expected HTTP/1.1\r\nHost: localhost\r\n".to_owned()
+            "GET /?code=test&state=expected HTTP/1.1\r\nHost: localhost\r\n".to_owned(),
         );
         assert!(query.is_none());
     }
@@ -665,13 +672,13 @@ mod tests {
     #[test]
     fn callback_http_rejects_oversized_headers_and_request_bodies() {
         let (query, _) = callback_exchange(format!(
-            "GET /?code=test HTTP/1.1\r\nX-Test: {}\r\n\r\n", "x".repeat(33000)
+            "GET /?code=test HTTP/1.1\r\nX-Test: {}\r\n\r\n",
+            "x".repeat(33000)
         ));
         assert!(query.is_none());
         for framing in ["Content-Length: 1", "Transfer-Encoding: chunked"] {
-            let (query, _) = callback_exchange(format!(
-                "GET /?code=test HTTP/1.1\r\n{framing}\r\n\r\n"
-            ));
+            let (query, _) =
+                callback_exchange(format!("GET /?code=test HTTP/1.1\r\n{framing}\r\n\r\n"));
             assert!(query.is_none());
         }
     }

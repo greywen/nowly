@@ -1,64 +1,56 @@
-// Determines the version to release and bumps it when needed.
+// Determines the version to release and writes it into every manifest.
+//
+// Git tags are the source of truth for what has already shipped. The repo's
+// package.json version is only a floor: bump it by hand to move to a new
+// minor/major, and the patch number follows the tags automatically.
 //
 // Rules:
-// - The source of truth is the "version" field in package.json.
-// - If no git tag exists for that version yet, we release it as-is
-//   (this is how the very first release, 0.1.0, ships).
-// - If a tag already exists for the current version, we auto-bump the
-//   patch number so every merge to main produces a fresh release.
-// - When we bump, we rewrite the version across all project manifests
-//   so the built artifact and the tag stay in sync.
+// - Take the highest released `vX.Y.Z` tag and the package.json version,
+//   whichever is greater, as the candidate.
+// - If that candidate is already tagged, bump its patch so every run on main
+//   produces a fresh release.
+// - Write the result into all manifests so the built artifact matches the tag.
+//   These writes stay in the runner's working tree; nothing is committed or
+//   pushed back to a branch, which is what keeps release and feature branches
+//   from drifting apart.
 //
 // Outputs (written to $GITHUB_OUTPUT):
-//   version  -> the version to release, e.g. 0.1.0
-//   tag      -> the tag to create, e.g. v0.1.0
-//   bumped   -> "true" when manifests were rewritten, else "false"
+//   version  -> the version to release, e.g. 0.1.6
+//   tag      -> the tag to create, e.g. v0.1.6
 
 import { execSync } from 'node:child_process';
-import { readFileSync, writeFileSync, appendFileSync } from 'node:fs';
+import { appendFileSync } from 'node:fs';
+import { readBaselineVersion, writeVersions } from '../../scripts/version-sync.mjs';
 
-const PKG = 'package.json';
-const LOCK = 'package-lock.json';
-const CARGO = 'src-tauri/Cargo.toml';
-const TAURI_CONF = 'src-tauri/tauri.conf.json';
+function parse(version) {
+  const [major, minor, patch] = version.split('.').map((part) => parseInt(part, 10) || 0);
+  return [major, minor, patch];
+}
 
-function tagExists(tag) {
+function isNewer(candidate, current) {
+  const left = parse(candidate);
+  const right = parse(current);
+  for (let index = 0; index < 3; index += 1) {
+    if (left[index] !== right[index]) return left[index] > right[index];
+  }
+  return false;
+}
+
+function releasedVersions() {
   try {
-    const out = execSync(`git tag -l "${tag}"`, { encoding: 'utf8' }).trim();
-    return out === tag;
+    return execSync('git tag -l "v*"', { encoding: 'utf8' })
+      .split('\n')
+      .map((tag) => tag.trim())
+      .filter((tag) => /^v\d+\.\d+\.\d+$/.test(tag))
+      .map((tag) => tag.slice(1));
   } catch {
-    return false;
+    return [];
   }
 }
 
 function bumpPatch(version) {
-  const [major, minor, patch] = version.split('.').map((n) => parseInt(n, 10));
+  const [major, minor, patch] = parse(version);
   return `${major}.${minor}.${patch + 1}`;
-}
-
-function writeManifests(newVersion) {
-  // package.json
-  const pkg = JSON.parse(readFileSync(PKG, 'utf8'));
-  pkg.version = newVersion;
-  writeFileSync(PKG, JSON.stringify(pkg, null, 2) + '\n');
-
-  // package-lock.json (root + root package entry)
-  const lock = JSON.parse(readFileSync(LOCK, 'utf8'));
-  lock.version = newVersion;
-  if (lock.packages && lock.packages['']) {
-    lock.packages[''].version = newVersion;
-  }
-  writeFileSync(LOCK, JSON.stringify(lock, null, 2) + '\n');
-
-  // Cargo.toml (only the [package] version, i.e. the first "version = ...")
-  const cargo = readFileSync(CARGO, 'utf8');
-  const cargoUpdated = cargo.replace(/^version\s*=\s*".*"/m, `version = "${newVersion}"`);
-  writeFileSync(CARGO, cargoUpdated);
-
-  // tauri.conf.json
-  const conf = JSON.parse(readFileSync(TAURI_CONF, 'utf8'));
-  conf.version = newVersion;
-  writeFileSync(TAURI_CONF, JSON.stringify(conf, null, 2) + '\n');
 }
 
 function setOutput(key, value) {
@@ -69,19 +61,13 @@ function setOutput(key, value) {
   console.log(`${key}=${value}`);
 }
 
-const currentVersion = JSON.parse(readFileSync(PKG, 'utf8')).version;
-let releaseVersion = currentVersion;
-let bumped = false;
+const released = releasedVersions();
+const baseline = readBaselineVersion();
+const highest = released.reduce((max, version) => (isNewer(version, max) ? version : max), baseline);
+const releaseVersion = released.includes(highest) ? bumpPatch(highest) : highest;
 
-if (tagExists(`v${currentVersion}`)) {
-  releaseVersion = bumpPatch(currentVersion);
-  writeManifests(releaseVersion);
-  bumped = true;
-  console.log(`Tag v${currentVersion} already exists -> bumped to ${releaseVersion}`);
-} else {
-  console.log(`Releasing current version ${currentVersion} (no existing tag)`);
-}
+console.log(`baseline=${baseline} released=${released.length} -> releasing ${releaseVersion}`);
+writeVersions(releaseVersion);
 
 setOutput('version', releaseVersion);
 setOutput('tag', `v${releaseVersion}`);
-setOutput('bumped', String(bumped));

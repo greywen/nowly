@@ -347,7 +347,3 @@ export function useTaskWorkspace() {
   if (!value) throw new Error('useTaskWorkspace must be used inside TaskWorkspaceProvider');
   return value;
 }
-
-export function useOptionalTaskWorkspace() {
-  return useContext(TaskWorkspaceContext);
-}

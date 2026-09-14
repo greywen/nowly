@@ -20,6 +20,7 @@ import type {
   KanbanTagDraft
 } from '../kanban/kanban-model';
 import type { MatrixTask, TaskDraft } from '../matrix/matrix-model';
+import type { Attachment } from '../lib/attachment';
 import type { Note, NoteDraft } from '../notes/notes-model';
 import type {
   Task as WorkspaceTask,
@@ -51,6 +52,14 @@ export type AppSettings = {
   // wallpaper reads as a clean dashboard; the topbar returns the moment the app
   // is brought back to the foreground.
   hideTopbarInWallpaper: boolean;
+  // What the status island carries by default: the full detail of one
+  // notification, or today's summary. Defaults to detail, so a new notification
+  // gets one chance to be read in full; closing it downgrades that one
+  // notification to the summary for the rest of the day.
+  notificationDisplay?: 'detail' | 'summary';
+  notificationMode?: 'persistent' | 'notification';
+  quickPanelEnabled?: boolean;
+  quickPanelShortcut?: string;
   recentColors?: HexColor[];
 };
 
@@ -232,6 +241,25 @@ export type NowlyRepository = {
   createNote(draft: NoteDraft): Promise<Note>;
   updateNote(id: string, draft: NoteDraft): Promise<Note>;
   deleteNote(id: string): Promise<void>;
+  // Rich text attachments. Optional so lightweight test doubles need not
+  // implement them; the editor degrades to text-only when they are absent.
+  //
+  // Files are written to `<app-data>/attachments/` and referenced from stored
+  // Markdown as `attachment:<id>`. There is no delete method on purpose:
+  // removing an image from the text is just a text edit, and the backend
+  // reclaims unreferenced files at startup, so cancelling a dialog can never
+  // orphan a file that the content still points at.
+  saveAttachment?(fileName: string, bytes: Uint8Array): Promise<Attachment>;
+  readAttachment?(id: string): Promise<Uint8Array>;
+  listAttachments?(ids: string[]): Promise<Attachment[]>;
+  /**
+   * Hand one attachment to the OS to open in its default application.
+   *
+   * The desktop backend opens the stored file in place, so an edit saved from
+   * that application stays with the note. Rejects for a file type the OS would
+   * execute rather than open.
+   */
+  openAttachment?(id: string): Promise<void>;
   getSettings(): Promise<AppSettings>;
   // Check GitHub for a newer release. Optional so lightweight test doubles and
   // the browser dev shim need not implement it.

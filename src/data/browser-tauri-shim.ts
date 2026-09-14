@@ -17,6 +17,11 @@
 // The shim is only installed when no real (or test-injected) Tauri IPC is
 // present, so it never interferes with the desktop build or e2e runs.
 
+// The upload allowlist is shared with the editor rather than copied again, so a
+// file the desktop build would refuse is refused here too. ("Self-contained"
+// above means it needs no Tauri runtime, not that it avoids imports.)
+import { isAllowedAttachmentName } from '../lib/attachment';
+
 type Dict = Record<string, unknown>;
 
 const STORAGE_KEY = 'nowly:browser-backend';
@@ -52,6 +57,8 @@ const defaultSettings: Dict = {
   showWeekends: true,
   iconStyle: 'duotone',
   hideTopbarInWallpaper: true,
+  quickPanelEnabled: true,
+  quickPanelShortcut: 'Ctrl+Space',
   recentColors: []
 };
 
@@ -154,6 +161,10 @@ function inRange(startAt: unknown, range: { startAt: string; endAtExclusive: str
 export function installBrowserTauriBackend() {
   const store = loadStore();
   ensureTaskWorkspace(store);
+
+  // Attachment bytes and metadata, kept in memory only (see save_attachment).
+  const attachmentBytes = new Map<string, Uint8Array>();
+  const attachmentRecords = new Map<string, Dict>();
 
   const taskWorkspaceSnapshot = () => ({
     tasks: store.tasks,
@@ -613,6 +624,73 @@ export function installBrowserTauriBackend() {
       store.notes = store.notes.filter((n) => n.id !== a.id);
       persist();
     },
+
+    // Rich text attachments. Bytes stay in memory rather than in localStorage:
+    // binary does not survive a JSON round trip cleanly and a 1MB quota would
+    // fill instantly. Attachments therefore vanish on reload, which is an
+    // accepted dev-only limitation in the same spirit as the recurrence one.
+    save_attachment: (a) => {
+      const bytes = Uint8Array.from((a.bytes as number[]) ?? []);
+      if (!bytes.length) throw { code: 'validation_error', field: 'file', message: '文件内容为空。' };
+      if (bytes.length > 1024 * 1024) {
+        throw { code: 'validation_error', field: 'file', message: '文件超过 1 MB 上限，请压缩后重试。' };
+      }
+      const fileName = String(a.fileName ?? 'file');
+      // Same allowlist the desktop backend enforces, so a file that would be
+      // refused there is refused here rather than appearing to work in dev.
+      if (!isAllowedAttachmentName(fileName)) {
+        throw {
+          code: 'validation_error',
+          field: 'file',
+          message: '不支持该文件类型，只能上传办公文档与图片。'
+        };
+      }
+      const match = /\.([A-Za-z0-9]{1,16})$/.exec(fileName);
+      const extension = match ? match[1].toLowerCase() : null;
+      const stem = Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+      const attachmentId = extension ? `${stem}.${extension}` : stem;
+      const mime = extension && ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'].includes(extension)
+        ? `image/${extension === 'jpg' ? 'jpeg' : extension}`
+        : 'application/octet-stream';
+      const record = {
+        id: attachmentId,
+        fileName: fileName.split(/[\\/]/).pop() || 'file',
+        relPath: `attachments/${attachmentId}`,
+        byteSize: bytes.length,
+        mime,
+        createdAt: nowIso()
+      };
+      attachmentBytes.set(attachmentId, bytes);
+      attachmentRecords.set(attachmentId, record);
+      return record;
+    },
+    read_attachment: (a) => {
+      const bytes = attachmentBytes.get(String(a.id));
+      if (!bytes) throw { code: 'not_found', message: '未找到该附件。' };
+      return Array.from(bytes);
+    },
+    list_attachments: (a) =>
+      ((a.ids as string[]) ?? []).map((id) => attachmentRecords.get(id)).filter(Boolean),
+    // No OS handler in a browser. A download under the real file name is the
+    // closest equivalent, and here it is also the only way to get that name: the
+    // stored file is named by its id.
+    open_attachment: (a) => {
+      const id = String(a.id);
+      const bytes = attachmentBytes.get(id);
+      const record = attachmentRecords.get(id);
+      if (!bytes || !record) throw { code: 'not_found', message: '未找到该附件。' };
+      if (typeof document === 'undefined') return;
+      // Copy into a fresh array so the blob part is backed by a plain
+      // ArrayBuffer, as the resolver does when it builds thumbnail URLs.
+      const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: String(record.mime) }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = String(record.fileName);
+      link.click();
+      // The download has started; the URL only needs to outlive the click.
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    },
+    collect_attachment_garbage: () => 0,
 
     // Software update check. The browser dev shim has no Cargo version and
     // should not hit the GitHub API on every page load, so it reports the

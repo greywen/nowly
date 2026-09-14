@@ -1,5 +1,6 @@
+import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   buildDefinitions,
   getWidgetDefinition,
@@ -8,13 +9,12 @@ import {
 import { CalendarWidget } from '../calendar/CalendarWidget';
 import { useEvents } from '../calendar/useEvents';
 import type { ModalState } from '../lib/modal-store';
-import type { CalendarSubscription } from '../calendar/subscription-model';
-import { isEventWritable } from '../calendar/calendar-model';
+import { externalToCalendarEvent, type CalendarSubscription } from '../calendar/subscription-model';
+import { isEventWritable, type EventTarget } from '../calendar/calendar-model';
 import { enterForegroundMode, enterWallpaperMode } from '../lib/window-mode';
 import { MatrixWidget } from '../matrix/MatrixWidget';
 import { KanbanWidget } from '../kanban/KanbanWidget';
-import { TaskWorkspaceProvider, useTaskWorkspace } from '../tasks/TaskWorkspaceContext';
-import { AssistantDock } from '../assistant/AssistantDock';
+import { TaskWorkspaceProvider } from '../tasks/TaskWorkspaceContext';
 import { IconStyleProvider } from '../components/icons';
 import { useWorkspaceTasks } from '../tasks/useWorkspaceTasks';
 import { ModalRoot } from '../modals/ModalRoot';
@@ -40,6 +40,7 @@ import { FocusStatisticsDialog } from '../focus/FocusStatisticsDialog';
 import { FocusWallpaperOverlay } from '../focus/FocusWallpaperOverlay';
 import { OnboardingGuide, type GuideStep } from './onboarding/OnboardingGuide';
 import { useOnboarding } from './onboarding/useOnboarding';
+import type { NativeStatusIslandSnapshot } from '../quick-panel/useStatusIslandSnapshot';
 
 type WindowMode = 'wallpaper' | 'foreground';
 
@@ -60,7 +61,6 @@ function AppContent() {
   const settingsFeature = useSettings();
   const eventsFeature = useEvents({ weekStart: settingsFeature.settings.data.weekStart });
   const tasksFeature = useWorkspaceTasks();
-  const taskWorkspace = useTaskWorkspace();
   const notesFeature = useNotes();
   const notesView = useNotesView();
   const extensionsFeature = useExtensions();
@@ -166,7 +166,6 @@ function AppContent() {
     (task) => !task.completed && task.quadrant.startsWith('important')
   ).length;
   const summary = t('app.summary', { events: todayEventCount, tasks: importantTaskCount, notes: notes.length });
-
   const modules: Partial<Record<WidgetId, ReactNode>> = {};
   {
     modules.calendar = (
@@ -280,6 +279,25 @@ function AppContent() {
     void listen('open-settings', () => setModal({type:'settings',trigger:null})).then(remove => removers.push(remove));
     void listen('request-overlay-cleanup', () => setModal(null)).then(remove => removers.push(remove));
     void listen('calendar-subscriptions-updated', () => { loadSubscriptions(); void refreshEvents(); }).then(remove => removers.push(remove));
+    void listen<{ target: EventTarget; startAt: string }>('status-island-open-event', event => {
+      void invoke<NativeStatusIslandSnapshot>('get_status_island_snapshot').then(snapshot => {
+        const candidates = [...snapshot.events, ...snapshot.externalEvents.map(externalToCalendarEvent)];
+        const selected = candidates.find(item => item.id === event.payload.target.id
+          && (event.payload.target.occurrenceStartAt !== null
+            ? item.occurrenceStartAt === event.payload.target.occurrenceStartAt
+            : item.startAt === event.payload.startAt));
+        if (!selected) return;
+        openModalInForeground(selected.subscriptionId && !isEventWritable(selected)
+          ? { type: 'external-detail', event: selected, trigger: null }
+          : { type: 'event-edit', event: selected, trigger: null });
+      }).catch(() => undefined);
+    }).then(remove => removers.push(remove));
+    void listen<string>('status-island-open-task', event => {
+      void invoke<NativeStatusIslandSnapshot>('get_status_island_snapshot').then(snapshot => {
+        const task = snapshot.tasks.find(item => item.id === event.payload);
+        if (task) openModalInForeground({ type: 'workspace-task-edit', task, trigger: null });
+      }).catch(() => undefined);
+    }).then(remove => removers.push(remove));
     return () => removers.forEach(remove => remove());
   }, [loadSubscriptions, refreshEvents]);
 
@@ -346,21 +364,6 @@ function AppContent() {
         hideTopbarInWallpaper={settingsFeature.settings.data.hideTopbarInWallpaper}
         overlay={windowMode === 'wallpaper' ? <FocusWallpaperOverlay /> : null}
         update={update}
-        assistant={active => <AssistantDock active={active && !modal && !focusStatisticsOpen && !onboarding.shouldShow}
-          onRefresh={() => Promise.all([eventsFeature.retryEvents(), tasksFeature.retryTasks()])}
-          onOpenSettings={() => setModal({type:'settings',trigger:null})}
-          onOpenRecord={(record, trigger) => {
-            if (record.domain === 'calendar') {
-              const date = String(record.data.startAt ?? '').slice(0, 10);
-              if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('该日程日期不可用，请重新查询。');
-              eventsFeature.goToMonthContaining(date);
-              setModal({ type: 'date', isoDate: date, trigger });
-            } else {
-              const task = taskWorkspace.workspace.data.tasks.find(t => t.id === record.data.id);
-              if (!task) throw new Error('该任务已变化，请重新查询。');
-              setModal({ type: 'workspace-task-edit', task, trigger });
-            }
-          }} />}
       />
       {focusStatisticsOpen ? <FocusStatisticsDialog onClose={() => setFocusStatisticsOpen(false)} /> : null}
       <OnboardingGuide
@@ -371,7 +374,6 @@ function AppContent() {
       <ModalRoot
         modal={modal}
         events={events}
-        tasks={tasks}
         onClose={() => setModal(null)}
         onChangeModal={setModal}
         createEvent={eventsFeature.createEvent}
@@ -379,11 +381,6 @@ function AppContent() {
         deleteEvent={eventsFeature.deleteEvent}
         onSaved={() => undefined}
         onDeleted={() => undefined}
-        createTask={tasksFeature.createTask}
-        updateTask={tasksFeature.updateTask}
-        deleteTask={tasksFeature.deleteTask}
-        onTaskSaved={() => undefined}
-        onTaskDeleted={() => undefined}
         notes={notes}
         createNote={notesFeature.createNote}
         updateNote={notesFeature.updateNote}

@@ -115,15 +115,206 @@ button:disabled { cursor: default; opacity: .65; }
 /* Wallpaper layer sits behind the app content. Hidden until a wallpaper is
    configured; it only anchors the stacking order for now. */
 .wallpaper-layer { position: absolute; inset: 0; z-index: 0; background-size: cover; background-position: center; pointer-events: none; }
-.topbar { position: relative; z-index: 2; min-width: 0; padding: 0 24px; display: grid; grid-template-columns: minmax(232px, 1fr) minmax(420px, 720px) minmax(232px, 1fr); align-items: center; gap: 24px; background: var(--bg-subtle); border-bottom: 1px solid var(--border-default); }
+.topbar { position: relative; z-index: 2; min-width: 0; padding: 0 24px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 24px; background: var(--bg-subtle); border-bottom: 1px solid var(--border-default); }
 .date-copy { grid-column: 1; min-width: 0; justify-self: start; }
 .date-copy strong { display: block; color: var(--text-primary); font-size: 1.075rem; font-weight: 600; }
 .date-copy p { margin: 0; color: var(--text-muted); font-size: 0.85rem; font-weight: 500; }
 .top-actions, .toolbar-actions { flex: none; display: flex; align-items: center; gap: 8px; }
-.topbar > .assistant-dock { grid-column: 2; }
-.top-actions { grid-column: 3; justify-self: end; }
+.top-actions { grid-column: 2; justify-self: end; }
+.tip { position: relative; display: inline-flex; }
+.tip__bubble { position: absolute; z-index: 80; top: calc(100% + 10px); left: 50%; padding: 4px 12px; border: 1px solid var(--border-default); border-radius: var(--radius-sm); color: var(--text-strong); background: var(--bg-surface); box-shadow: var(--shadow-tooltip); font-size: 0.95rem; font-weight: 500; line-height: 1.5; white-space: nowrap; pointer-events: none; transform: translateX(-50%); }
+.tip--end .tip__bubble { right: 0; left: auto; transform: none; }
 .topbar-time { color: var(--text-strong); font-size: 1.075rem; font-weight: 600; }
 .workspace { position: relative; z-index: 1; min-width: 0; min-height: 0; padding: 24px 36px 36px; display: flex; }
+
+/* ── The top rail ────────────────────────────────────────────────────────────
+   One object in two sizes. Collapsed it splits into the 240x40 status capsule
+   and the 40px Nowly dot, 8px apart; open it merges into one 288x288 sheet.
+   The sheet is the capsule grown, never a second popup, which is why its content
+   is laid out at the open size and simply gets uncovered as the sheet grows.
+   The growth is design.md §10's third named motion exception, so every
+   transition here has to out-shout the global `transition: none !important`. */
+.status-rail {
+  --rail-w: 288px;
+  --rail-h: 40px;
+  --island-w: 240px;
+  --nowly-d: 40px;
+  --sheet-h: 288px;
+  /* The sheet's 1px border eats into every size below it, so the content grid
+     subtracts it rather than overflowing the capsule by 2px and leaving the head
+     a pixel off centre. */
+  --rail-edge: 1px;
+  --rail-grow: 220ms;
+  --rail-shrink: 160ms;
+  /* Fades are carried as variables so `prefers-reduced-motion` can zero them in
+     one place, rather than a second block trying to out-specify every rule. */
+  --rail-in: 140ms;
+  --rail-in-delay: 90ms;
+  --rail-out: 110ms;
+  --rail-dot-out: 130ms;
+  --rail-dot-in-delay: 50ms;
+  --rail-ease: cubic-bezier(.22, 1, .36, 1);
+  position: absolute; top: 0; left: 0; width: var(--rail-w); height: var(--sheet-h); color: var(--text-secondary);
+}
+/* The one surface. design.md §6: it fills its own transparent native window edge
+   to edge, so an outer shadow has nowhere to fall and the 1px border carries the
+   layer instead. */
+.status-rail__sheet { box-sizing: border-box; position: absolute; top: 0; left: 0; width: var(--island-w); height: var(--rail-h); border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-surface); box-shadow: none; overflow: hidden; }
+.status-rail[data-open="true"] .status-rail__sheet { width: var(--rail-w); height: var(--sheet-h); }
+.status-rail[data-anim="grow"] .status-rail__sheet { transition: width var(--rail-grow) var(--rail-ease), height var(--rail-grow) var(--rail-ease) !important; }
+.status-rail[data-anim="shrink"] .status-rail__sheet { transition: width var(--rail-shrink) var(--rail-ease), height var(--rail-shrink) var(--rail-ease) !important; }
+/* design.md §7 reserves the dashed border for the top surface family, which the
+   user can pick up and move. */
+.status-rail:not([data-open="true"]) .status-rail__sheet:hover { background: var(--bg-subtle); }
+/* Laid out at the open size, so nothing inside reflows or moves as the sheet
+   grows: the icon and title land on the same pixel in both sizes. */
+.status-rail__content { position: absolute; top: 0; left: 0; width: calc(var(--rail-w) - var(--rail-edge) * 2); height: calc(var(--sheet-h) - var(--rail-edge) * 2); display: grid; grid-template-rows: calc(var(--rail-h) - var(--rail-edge) * 2) minmax(0, 1fr); }
+.status-rail__header { position: relative; min-width: 0; }
+.status-rail__panel { min-height: 0; border-top: 1px solid var(--border-default); opacity: 0; transition: opacity var(--rail-out) ease-out !important; }
+.status-rail[data-open="true"] .status-rail__panel { opacity: 1; transition: opacity var(--rail-in) ease-out var(--rail-in-delay) !important; }
+
+/* Both heads occupy the same slot and cross-fade; neither ever moves. The 54px
+   right padding is the signals/dismiss lane, reserved in every mode so the copy
+   cannot gain width when a badge disappears. */
+.status-rail__header > .status-island,
+.status-rail__nowly-head { position: absolute; inset: 0; padding: 6px 54px 6px 8px; display: flex; align-items: center; gap: 8px; transition: opacity var(--rail-out) ease-out !important; }
+.status-rail__nowly-head { opacity: 0; pointer-events: none; }
+.status-rail[data-open="true"][data-source="nowly"] .status-rail__header > .status-island { opacity: 0; pointer-events: none; }
+.status-rail[data-open="true"][data-source="nowly"] .status-rail__nowly-head { opacity: 1; transition: opacity var(--rail-in) ease-out var(--rail-in-delay) !important; }
+.status-rail__nowly-head .status-island__icon img { width: 16px; height: 16px; display: block; }
+
+.status-island { color: var(--text-secondary); }
+.status-island__drag-hint { position: absolute; z-index: 4; top: calc(var(--rail-h) + 8px); left: 50%; transform: translateX(-50%); width: 280px; padding: 12px; border: 1px solid var(--border-default); border-radius: var(--radius-default); display: grid; gap: 4px; color: var(--text-secondary); background: var(--bg-surface); box-shadow: var(--shadow-sm); font-size: 0.85rem; }
+.status-island__drag-hint strong { color: var(--text-primary); font-weight: 600; }
+.status-island__drag-hint button { justify-self: end; min-height: 32px; padding: 4px 12px; border: 0; border-radius: var(--radius-sm); color: var(--color-primary-active); background: var(--color-primary-light); font-weight: 600; }
+.status-island__content { min-width: 0; flex: 1; display: flex; align-items: center; gap: 8px; }
+.status-island__icon { width: 24px; height: 24px; flex: none; display: grid; place-items: center; border-radius: var(--radius-sm); color: var(--color-primary-active); background: var(--color-primary-light); }
+.status-island[data-primary="task"] .status-island__icon { color: var(--color-danger-active); background: var(--color-danger-light); }
+.status-island[data-primary="conflict"] .status-island__icon { color: var(--color-danger-active); background: var(--color-danger-light); }
+/* Summary mode tints by the leading marker's tone. Colour is never the only
+   carrier: the title states the same thing in words. */
+.status-island[data-mode="summary"][data-tone="red"] .status-island__icon { color: var(--color-danger-active); background: var(--color-danger-light); }
+.status-island[data-mode="summary"][data-tone="yellow"] .status-island__icon { color: var(--color-warning-active, #8a5a00); background: var(--color-warning-light, #fdf3d7); }
+.status-island[data-mode="summary"][data-tone="info"] .status-island__icon { color: var(--color-info-active, #2d5bb8); background: var(--color-info-light, #e3ecfd); }
+.status-island[data-mode="summary"][data-tone="teal"] .status-island__icon { color: var(--color-primary-active); background: var(--color-primary-light); }
+.status-island[data-mode="summary"][data-tone="green"] .status-island__icon { color: var(--color-success-active, #1f7a45); background: var(--color-success-light, #e2f5e9); }
+/* Idle: nothing at all to report. The capsule stays and goes quiet rather than
+   collapsing to a smaller shape. */
+.status-island[data-mode="idle"] .status-island__icon { color: var(--text-muted); background: var(--bg-secondary); }
+.status-island[data-mode="idle"] .status-island__copy strong { color: var(--text-strong); font-weight: 500; }
+.status-island__icon svg { width: 16px; height: 16px; }
+.status-island__copy { min-width: 0; flex: 1; display: grid; line-height: 1.2; }
+.status-island__copy strong, .status-island__copy > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.status-island__copy strong { color: var(--text-primary); font-size: 0.95rem; font-weight: 600; }
+.status-island__copy > span { color: var(--text-muted); font-size: 0.85rem; font-weight: 500; }
+/* Badges live in the lane the dismiss button also uses. Open, the same counts
+   are spelled out in the list below, so they fade rather than repeat. */
+.status-island__signals { position: absolute; top: 6px; right: 54px; height: 28px; display: flex; align-items: center; gap: 4px; transition: opacity var(--rail-out) ease-out !important; }
+.status-island__signal { padding: 3px 8px; border-radius: var(--radius-pill); color: var(--color-primary-active); background: var(--color-primary-light); font-size: 0.85rem; font-weight: 600; white-space: nowrap; }
+/* Marker tones are a glance aid. The trigger's accessible name and the sheet
+   restate every marker as text, so colour is never the only carrier. */
+.status-island__signal.is-red { color: var(--color-danger-active); background: var(--color-danger-light); }
+.status-island__signal.is-yellow { color: var(--color-warning-active, #8a5a00); background: var(--color-warning-light, #fdf3d7); }
+.status-island__signal.is-info { color: var(--color-info-active, #2d5bb8); background: var(--color-info-light, #e3ecfd); }
+.status-island__signal.is-teal { color: var(--color-primary-active); background: var(--color-primary-light); }
+.status-island__signal.is-green { color: var(--color-success-active, #1f7a45); background: var(--color-success-light, #e2f5e9); }
+.status-rail[data-open="true"] .status-island__signals,
+.status-rail[data-mode="idle"] .status-island__signals,
+.status-rail:not([data-open="true"]):hover .status-island__signals { opacity: 0; pointer-events: none; }
+
+/* The hit area is an overlay, not a button wrapped around the text: the sheet
+   owns the border and background, and the dismiss buttons sit above the same
+   pixels. It keeps the capsule's width so the Nowly dot stays clickable. */
+.status-island__trigger { position: absolute; z-index: 1; top: 0; left: 0; width: calc(var(--island-w, 240px) - var(--rail-edge, 1px) * 2); height: calc(var(--rail-h, 40px) - var(--rail-edge, 1px) * 2); padding: 0; border: 0; border-radius: var(--radius-default); background: transparent; cursor: default; }
+.status-island__trigger:focus-visible { box-shadow: inset 0 0 0 2px var(--color-primary); }
+.status-rail[data-dragging="true"] .status-island__trigger,
+.status-rail[data-dragging="true"] .status-rail__nowly { cursor: grabbing; }
+
+/* Two dismiss buttons at two positions, cross-fading. Moving one element would
+   be a position tween, which design.md §10 does not allow here. */
+.status-island__dismiss { position: absolute; z-index: 2; width: 28px; height: 28px; padding: 0; border: 0; border-radius: var(--radius-sm); display: grid; place-items: center; color: var(--text-muted); background: transparent; opacity: 0; pointer-events: none; transition: opacity var(--rail-out) ease-out !important; }
+.status-island__dismiss svg { width: 15px; height: 15px; }
+.status-island__dismiss:hover { color: var(--text-primary); background: var(--bg-secondary); }
+.status-island__dismiss:focus-visible { box-shadow: inset 0 0 0 2px var(--color-primary); }
+.status-island__dismiss[data-at="collapsed"] { top: 6px; right: 54px; }
+.status-rail:not([data-open="true"]):not([data-mode="idle"]):hover .status-island__dismiss[data-at="collapsed"],
+.status-rail:not([data-open="true"]):not([data-mode="idle"]):focus-within .status-island__dismiss[data-at="collapsed"] { opacity: 1; pointer-events: auto; }
+/* Open, it takes the room the Nowly dot vacated and stays visible. */
+.status-island__dismiss[data-at="expanded"] { top: 6px; right: 8px; }
+.status-rail[data-open="true"] .status-island__dismiss[data-at="expanded"] { opacity: 1; pointer-events: auto; transition: opacity var(--rail-in) ease-out var(--rail-in-delay) !important; }
+
+/* The other half of the rail. Outside the sheet, because it has to stay visible
+   beside the collapsed sheet; it fades once the sheet has grown over it. */
+.status-rail__nowly { box-sizing: border-box; position: absolute; z-index: 3; top: 0; right: 0; width: var(--nowly-d); height: var(--nowly-d); padding: 0; border: 1px solid var(--border-default); border-radius: 50%; display: grid; place-items: center; background: var(--bg-surface); box-shadow: none; overflow: hidden; cursor: default; }
+.status-rail__nowly img { width: 22px; height: 22px; display: block; }
+.status-rail__nowly:hover { background: var(--bg-subtle); }
+.status-rail__nowly:focus-visible { box-shadow: inset 0 0 0 2px var(--color-primary); }
+.status-rail[data-open="true"] .status-rail__nowly { opacity: 0; pointer-events: none; transition: opacity var(--rail-dot-out) ease-out var(--rail-in-delay) !important; }
+.status-rail:not([data-open="true"]) .status-rail__nowly { transition: opacity var(--rail-out) ease-out var(--rail-dot-in-delay) !important; }
+
+/* The sheet's lower half. Standalone it is still a panel with its own frame; in
+   the rail it is the sheet's own body, so it drops the frame and the title the
+   head one row above already carries. */
+.status-island__details { box-sizing: border-box; width: 330px; padding: 8px; border: 1px dashed var(--border-default); border-radius: var(--radius-default); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 2px; background: var(--bg-surface); box-shadow: var(--shadow-dropdown); }
+.status-island__details[data-compact="true"] { width: 100%; height: 100%; padding: 6px 8px 8px; border: 0; border-radius: 0; grid-template-rows: minmax(0, 1fr) auto; background: transparent; box-shadow: none; }
+.status-island__panel-title { padding: 2px 8px 6px; border-bottom: 1px solid var(--border-default); display: grid; gap: 2px; }
+.status-island__panel-title strong { color: var(--text-primary); font-size: 0.95rem; font-weight: 600; }
+.status-island__panel-title > span { overflow: hidden; color: var(--text-muted); font-size: 0.85rem; font-weight: 500; text-overflow: ellipsis; }
+.status-island__panel-body { min-height: 0; overflow-y: auto; display: grid; align-content: start; gap: 2px; }
+/* Opened from the summary: one section per marker, every item listed. The body
+   already scrolls, so a long day grows downward instead of truncating. */
+.status-island__group { display: grid; align-content: start; gap: 2px; }
+.status-island__group + .status-island__group { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border-default); }
+.status-island__group-title { margin: 0; padding: 0 8px; display: flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: 0.8rem; font-weight: 600; }
+.status-island__actions { padding: 4px 8px; display: flex; flex-wrap: wrap; gap: 8px; }
+.status-island__actions > button { min-height: 36px; padding: 6px 10px; border: 0; border-radius: var(--radius-sm); display: inline-flex; align-items: center; gap: 4px; color: var(--color-primary-active); background: var(--color-primary-light); font-size: 0.85rem; font-weight: 600; }
+.status-island__actions > button:focus-visible { box-shadow: var(--shadow-focus); }
+.status-island__actions > button svg { width: 16px; height: 16px; }
+.status-island__row { box-sizing: border-box; width: 100%; min-height: 40px; padding: 4px 8px; border: 0; border-radius: var(--radius-sm); display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; align-items: center; gap: 8px; color: var(--text-secondary); background: transparent; text-align: left; }
+button.status-island__row:hover { color: var(--color-primary-active); background: var(--bg-subtle); }
+.status-island__row:focus-visible, .status-island__focus-row > button:focus-visible, .status-island__footer .btn:focus-visible { box-shadow: var(--shadow-focus); }
+.status-island__row > svg { width: 16px; height: 16px; justify-self: center; }
+.status-island__row > span { min-width: 0; display: grid; line-height: 1.2; }
+.status-island__row small { color: var(--text-muted); font-size: 0.85rem; font-weight: 500; }
+.status-island__row strong { overflow: hidden; color: var(--text-primary); font-size: 0.95rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.status-island__row > time, .status-island__row > span:last-child { color: var(--text-muted); font-size: 0.85rem; font-weight: 500; white-space: nowrap; }
+.status-island__focus-row > button { min-height: 36px; padding: 6px 8px; border: 0; border-radius: var(--radius-sm); display: inline-flex; align-items: center; gap: 4px; color: var(--color-primary-active); background: var(--color-primary-light); font-size: 0.85rem; font-weight: 600; }
+.status-island__focus-row > button svg { width: 16px; height: 16px; }
+.status-island__empty { margin: 0; padding: 8px 12px; color: var(--text-muted); font-size: 0.85rem; }
+.status-island__footer { padding: 6px 8px 2px; border-top: 1px solid var(--border-default); }
+.status-island__footer:empty { padding: 0; border-top: 0; }
+.status-island__footer.has-retry { display: grid; grid-template-columns: minmax(0, 1fr) 36px; gap: 8px; }
+.status-island__footer .btn { width: 100%; }
+.status-island__retry { width: 36px; min-height: 36px; padding: 0; border: 1px solid var(--color-danger-active); border-radius: var(--radius-sm); display: grid; place-items: center; color: var(--color-danger-active); background: var(--bg-surface); }
+.status-island__retry:hover { background: var(--color-danger-light); }
+.status-island__retry:focus-visible { box-shadow: inset 0 0 0 2px var(--color-danger-active); }
+.status-island__retry svg { width: 16px; height: 16px; }
+
+:root:has(.screen-status-island-root),
+body:has(.screen-status-island-root),
+#root:has(.screen-status-island-root) { width: 100%; height: 100%; overflow: hidden; background: transparent !important; }
+/* The rail is laid out at its open size whatever the window currently is, so the
+   collapsed window clips it rather than the content reflowing. */
+.screen-status-island-root { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
+.screen-status-island-error { position: absolute; z-index: 2; top: 6px; right: 88px; width: 24px; height: 24px; padding: 0; border: 1px solid var(--color-danger-active); border-radius: var(--radius-sm); display: grid; place-items: center; color: var(--color-danger-active); background: var(--bg-surface); }
+.screen-status-island-error svg { width: 14px; height: 14px; }
+
+@media (prefers-reduced-motion: reduce) {
+  /* The §10 exception is opt-out. Zeroing the durations at the source beats a
+     second rule trying to out-specify every transition above. */
+  .status-rail {
+    --rail-grow: 0s; --rail-shrink: 0s; --rail-in: 0s; --rail-in-delay: 0s;
+    --rail-out: 0s; --rail-dot-out: 0s; --rail-dot-in-delay: 0s;
+  }}
+
+@media (prefers-reduced-transparency: reduce) {
+  .status-rail__sheet, .status-rail__nowly, .status-island__details { background: var(--bg-surface); }
+}
+
+@media (prefers-contrast: more) {
+  .status-rail__sheet, .status-rail__nowly, .status-island__details { border-color: CanvasText; }
+  .status-island__signal { outline: 1px solid CanvasText; }
+}
 
 /* Blur control: an icon button in the topbar that opens a slider popover.
    The slider drives a CSS blur filter over the app content so, once set as the
@@ -381,6 +572,13 @@ button:disabled { cursor: default; opacity: .65; }
 .note-title { display: flex; align-items: center; gap: 8px; color: var(--text-primary); font-size: 0.95rem; font-weight: 600; }
 .note-icon { font-size: 1rem; line-height: 1; }
 .note-content { margin: 4px 0; color: var(--text-secondary); font-size: 0.85rem; }
+/* List rows put the thumbnail beside the text rather than above it, so a row
+   stays one glance tall. 48px is 2x the 24px rhythm used elsewhere. */
+.note-row { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+.note-row .note-content { flex: 1; min-width: 0; }
+.note-thumb { width: 48px; height: 48px; flex: none; object-fit: cover; border-radius: var(--radius-sm); }
+.note-clip { display: inline-flex; align-items: center; gap: 4px; color: var(--text-muted); font-size: 0.85rem; }
+.note-clip svg { width: 16px; height: 16px; flex: none; color: var(--text-tertiary); }
 /* Sticky-board view: static tilt and edge pins create depth without motion. */
 .notes-board { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 32px 28px; padding: 20px 18px 24px; }
 .sticky-note { --note-tilt: 0deg; position: relative; min-height: 136px; padding: 20px 16px 26px; display: flex; flex-direction: column; gap: 2px; border: 1px solid rgba(64, 61, 56, .08); border-radius: var(--radius-sm); background-color: #fdfaf1; background-image: repeating-linear-gradient(180deg, transparent 0 23px, rgba(33, 31, 28, .06) 23px 24px); box-shadow: 0 2px 3px rgba(33, 31, 28, .14), 0 12px 24px rgba(33, 31, 28, .13); font-family: "Ink Free", "Segoe Script", "Bradley Hand", KaiTi, var(--font-sans); text-align: left; overflow: visible; transform: rotate(var(--note-tilt)); }
@@ -397,6 +595,12 @@ button:disabled { cursor: default; opacity: .65; }
 .sticky-note__icon--left-center { top: 50%; left: -14px; transform: translateY(-50%); }
 .sticky-note__title { position: relative; z-index: 1; color: var(--selected-color-fg); font-size: 1.075rem; font-weight: 600; line-height: 24px; overflow-wrap: anywhere; }
 .sticky-note__content { position: relative; z-index: 1; order: 3; display: -webkit-box; overflow: hidden; color: var(--text-secondary); font-size: 0.95rem; line-height: 24px; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow-wrap: anywhere; }
+/* Thumbnail height is 3x the sheet's 24px rule spacing, so the ruled background
+   stays in step with the text above it. Radius matches the sheet's own corner
+   per design.md §5 (embedded images match the card's inner radius). */
+.sticky-note__thumb { position: relative; z-index: 1; order: 4; width: 100%; height: 72px; object-fit: cover; border-radius: var(--radius-sm); }
+.sticky-note__clip { position: relative; z-index: 1; order: 5; display: inline-flex; align-items: center; gap: 4px; color: var(--text-muted); font-size: 0.85rem; line-height: 24px; }
+.sticky-note__clip svg { width: 16px; height: 16px; flex: none; color: var(--text-tertiary); }
 /* Tape sticks across a paper corner and slightly overhangs the sheet. */
 .sticky-note__tape { position: absolute; top: 10px; left: -12px; width: 54px; height: 16px; background: var(--selected-color); opacity: .32; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .5); transform: rotate(-45deg); }
 .sticky-note--style-0 { background-color: #fdfaf1; background-image: repeating-linear-gradient(180deg, transparent 0 23px, rgba(33, 31, 28, .06) 23px 24px); }
@@ -450,13 +654,14 @@ button:disabled { cursor: default; opacity: .65; }
   .quadrant-grid { gap: 8px; }
   .quadrant { padding: 12px; }
   .btn { padding-inline: 16px; font-size: 0.95rem; }
+  .status-island__signal:nth-child(n + 2) { display: none; }
 }
 
 @media (max-width: 980px) {
   .topbar { grid-template-columns: minmax(0, 1fr) auto; gap: 12px; }
   .topbar .date-copy { display: none; }
-  .topbar > .assistant-dock { grid-column: 1; }
   .top-actions { grid-column: 2; }
+  .status-island__signal:not(.is-alert) { display: none; }
 }
 
 /* Interface density: "balanced" (适中) keeps the standard spacing above and is
@@ -974,6 +1179,7 @@ button:disabled { cursor: default; opacity: .65; }
 .settings-dialog { width: min(760px, calc(100vw - 32px)); }
 .settings-form { display: grid; gap: 24px; }
 .settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.settings-hint { margin: 12px 0 0; color: var(--text-muted); font-size: 0.8rem; line-height: 1.5; }
 .settings-checks { padding: 20px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; border-radius: var(--radius-default); background: var(--bg-subtle); }
 
 @media (max-width: 640px) {
@@ -1196,6 +1402,11 @@ button:disabled { cursor: default; opacity: .65; }
 .kanban-card__top-right { display: inline-flex; align-items: center; gap: 4px; flex: none; }
 .kanban-card__title { min-width: 0; padding: 0; overflow: hidden; border: 0; color: var(--text-primary); background: transparent; font-size: 1rem; font-weight: 600; line-height: 1.4; text-align: left; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .kanban-card__title:hover { color: var(--color-primary-active); }
+/* Description and attachment count reuse .kanban-card__date's Caption size,
+   muted colour and 16px icon, so the card's meta text stays one scale. */
+.kanban-card__desc { margin: 0; min-width: 0; display: -webkit-box; overflow: hidden; color: var(--text-muted); font-size: 0.85rem; line-height: 1.5; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; white-space: pre-line; }
+.kanban-card__clip { display: inline-flex; align-items: center; gap: 4px; flex: none; color: var(--text-muted); font-size: 0.85rem; font-weight: 500; }
+.kanban-card__clip svg { width: 16px; height: 16px; flex: none; color: var(--text-tertiary); }
 .kanban-card__top-right .kanban-menu .good-icon-button { width: 28px; height: 28px; min-height: 28px; }
 .kanban-card__footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .kanban-card__people { display: inline-flex; align-items: center; min-width: 0; }

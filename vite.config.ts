@@ -26,7 +26,13 @@ export default defineConfig(({ mode }) => ({
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
     environment: 'jsdom',
     setupFiles: ['./src/test-setup.ts'],
-    globals: true
+    globals: true,
+    // The rich text editor builds a toolbar of 20+ controls and 48 colour
+    // swatches, so every test that opens a dialog constructs a few hundred extra
+    // DOM nodes. Those tests run in ~1.1s alone but cross 5s under the full
+    // suite's parallel load, which made three of them fail intermittently.
+    // Raised rather than worked around: the tests are genuinely heavier now.
+    testTimeout: 20000
   },
   server: {
     port: 1420,

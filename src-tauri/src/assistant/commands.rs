@@ -82,10 +82,12 @@ fn cancel_request(requests: &mut RequestRegistry, id: String) {
     requests.cancelled.insert(id, Instant::now());
 }
 fn main_only(window: &WebviewWindow) -> Result<(), CommandError> {
+    // The AI quick panel window is removed in this version, so only the main
+    // window may reach the assistant. The status island windows must not.
     if window.label() != "main" {
         return Err(CommandError::validation(
             "assistant",
-            "此操作只允许在主窗口中执行。",
+            "此操作只允许在 Nowly 窗口中执行。",
         ));
     }
     Ok(())
@@ -236,7 +238,10 @@ pub fn assistant_execute(
 ) -> Result<Plan, CommandError> {
     main_only(&window)?;
     let db = db.0.lock().map_err(CommandError::database)?;
-    store::execute(&db, &plan_id, &provider::get_config(&db)?.permissions)
+    let plan = store::execute(&db, &plan_id, &provider::get_config(&db)?.permissions)?;
+    drop(db);
+    crate::status_island::invalidate_registered()?;
+    Ok(plan)
 }
 #[tauri::command]
 pub fn assistant_undo(
@@ -246,7 +251,10 @@ pub fn assistant_undo(
 ) -> Result<Plan, CommandError> {
     main_only(&window)?;
     let db = db.0.lock().map_err(CommandError::database)?;
-    store::undo(&db, &plan_id, &provider::get_config(&db)?.permissions)
+    let plan = store::undo(&db, &plan_id, &provider::get_config(&db)?.permissions)?;
+    drop(db);
+    crate::status_island::invalidate_registered()?;
+    Ok(plan)
 }
 #[tauri::command]
 pub fn assistant_history(

@@ -1,10 +1,49 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import { RepositoryProvider } from '../data/RepositoryContext';
+import type { NowlyRepository } from '../data/nowly-repository';
 import { NotesWidget } from './NotesWidget';
 import { sampleNotes } from '../lib/sample-data';
 
 const props = { onRetry:vi.fn(), onCreateNote:vi.fn(), onOpenNote:vi.fn(), onViewAll:vi.fn() };
+
+const IMAGE_ID = '0123456789abcdef0123456789abcdef.png';
+const FILE_ID = 'fedcba9876543210fedcba9876543210.pdf';
+
+/** Stored content the way serializeContent writes it. */
+function content(ops: unknown[]): string {
+  return JSON.stringify({ v: 1, ops });
+}
+
+function attachmentRepository(): NowlyRepository {
+  return {
+    saveAttachment: vi.fn(),
+    listAttachments: vi.fn().mockImplementation((ids: string[]) =>
+      Promise.resolve(
+        ids.map((id) => ({
+          id,
+          fileName: id.endsWith('.png') ? '图.png' : '报告.pdf',
+          relPath: `attachments/${id}`,
+          byteSize: 3,
+          mime: id.endsWith('.png') ? 'image/png' : 'application/pdf',
+          createdAt: 'x'
+        }))
+      )
+    ),
+    readAttachment: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3]))
+  } as unknown as NowlyRepository;
+}
+
+function renderWithAttachments(notes: typeof sampleNotes, view: 'board' | 'list', repo = attachmentRepository()) {
+  const result = render(
+    <RepositoryProvider repository={repo}>
+      <NotesWidget notes={notes} status="ready" view={view} {...props} />
+    </RepositoryProvider>
+  );
+  return { ...result, repo };
+}
+
 describe('NotesWidget', () => {
   it('renders summaries in an internal scroll container with all-notes action', () => {
     render(<NotesWidget notes={sampleNotes} status="ready" {...props} />);
@@ -86,5 +125,60 @@ describe('NotesWidget', () => {
   it('shows the note count in the header', () => {
     render(<NotesWidget notes={sampleNotes} status="ready" {...props} />);
     expect(screen.getByText(`${sampleNotes.length} 条便签`)).toBeInTheDocument();
+  });
+
+  it('shows an image thumbnail and counts only the attached file on a board note', async () => {
+    const note = {
+      ...sampleNotes[0],
+      content: content([
+        { insert: '见下图：' },
+        { insert: { image: `attachment:${IMAGE_ID}` }, attributes: { alt: '图.png' } },
+        { insert: '报告', attributes: { link: `attachment:${FILE_ID}` } },
+        { insert: '\n' }
+      ])
+    };
+    const { repo } = renderWithAttachments([note], 'board');
+
+    // The image is shown, not counted: it is content, and the thumbnail already
+    // reports it. Only the file is an attachment.
+    expect(await screen.findByLabelText('1 个附件')).toHaveTextContent('1');
+    await waitFor(() => expect(document.querySelector('.sticky-note__thumb')).toBeInTheDocument());
+    expect(document.querySelector<HTMLImageElement>('.sticky-note__thumb')!.src).toMatch(/^blob:/);
+    // Its file name stays out of the body, where the thumbnail speaks for it.
+    expect(document.querySelector('.sticky-note__content')!.textContent).toBe('见下图：报告');
+    // Only the image is fetched: reading a file's bytes would build an object URL
+    // nothing ever renders.
+    expect(repo.listAttachments).toHaveBeenCalledWith([IMAGE_ID]);
+    expect(repo.readAttachment).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the thumbnail beside the text in list view, with no paperclip', async () => {
+    const note = {
+      ...sampleNotes[0],
+      content: content([{ insert: { image: `attachment:${IMAGE_ID}` } }, { insert: '说明\n' }])
+    };
+    renderWithAttachments([note], 'list');
+    await waitFor(() => expect(document.querySelector('.note-thumb')).toBeInTheDocument());
+    // An image alone is not an attachment, so the note carries no badge.
+    expect(document.querySelector('.note-clip')).toBeNull();
+  });
+
+  it('counts a file-only note but renders no thumbnail', async () => {
+    const note = {
+      ...sampleNotes[0],
+      content: content([{ insert: '报告', attributes: { link: `attachment:${FILE_ID}` } }, { insert: '\n' }])
+    };
+    const { repo } = renderWithAttachments([note], 'board');
+    expect(await screen.findByLabelText('1 个附件')).toBeInTheDocument();
+    expect(document.querySelector('.sticky-note__thumb')).toBeNull();
+    // Nothing to show, so nothing is read from disk.
+    expect(repo.listAttachments).not.toHaveBeenCalled();
+  });
+
+  it('adds no paperclip and reads nothing for a plain note', () => {
+    const { repo } = renderWithAttachments([{ ...sampleNotes[0], content: '只有文字' }], 'board');
+    expect(document.querySelector('.sticky-note__clip')).toBeNull();
+    expect(document.querySelector('.sticky-note__thumb')).toBeNull();
+    expect(repo.listAttachments).not.toHaveBeenCalled();
   });
 });

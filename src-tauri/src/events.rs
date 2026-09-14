@@ -1166,7 +1166,10 @@ pub fn list_events_in_range(
 #[tauri::command]
 pub fn create_event(db: State<'_, AppDb>, draft: EventDraft) -> Result<Event, CommandError> {
     let mut connection = db.0.lock().map_err(CommandError::database)?;
-    create(&mut connection, draft)
+    let event = create(&mut connection, draft)?;
+    drop(connection);
+    crate::status_island::invalidate_registered()?;
+    Ok(event)
 }
 
 #[tauri::command]
@@ -1177,7 +1180,9 @@ pub fn update_event(
     scope: EditScope,
 ) -> Result<(), CommandError> {
     let mut connection = db.0.lock().map_err(CommandError::database)?;
-    update(&mut connection, &target, draft, scope)
+    update(&mut connection, &target, draft, scope)?;
+    drop(connection);
+    crate::status_island::invalidate_registered()
 }
 
 #[tauri::command]
@@ -1187,7 +1192,9 @@ pub fn delete_event(
     scope: EditScope,
 ) -> Result<(), CommandError> {
     let mut connection = db.0.lock().map_err(CommandError::database)?;
-    delete(&mut connection, &target, scope)
+    delete(&mut connection, &target, scope)?;
+    drop(connection);
+    crate::status_island::invalidate_registered()
 }
 
 #[cfg(test)]

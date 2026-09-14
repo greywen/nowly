@@ -30,9 +30,16 @@ npm test          # Vitest 单元/组件测试
 npm run build     # tsc + vite build
 npm run dev       # Vite 开发服务器（127.0.0.1:1420）
 npm run icons     # 从 @iconify-json/solar 重新生成 src/components/icon-data.ts
+npm run version:check                              # 校验五个 manifest 的版本一致
 npx playwright test                                # 端到端（四组视口）
 cargo test --manifest-path src-tauri/Cargo.toml    # Rust 测试
 ```
+
+## 版本与发布
+
+已发布版本的唯一真相源是 git tag。`package.json` 的 `version` 只是**下限基线**：升 minor/major 时人工改它（并同步 `package-lock.json`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock`、`src-tauri/tauri.conf.json`，可直接跑 `npm run version:check` 复核）；patch 号由 CI 按现有 tag 自动推导。
+
+`.github/scripts/prepare-version.mjs` 只在 CI 工作区里写入推导出的版本供构建使用，**不提交、不推送回任何分支**，因此发布不会再让 main 与功能分支的版本漂移。本地开发构建显示的版本等于基线版本，不等于最新发布版。
 
 ## Product Specs
 
@@ -47,6 +54,7 @@ cargo test --manifest-path src-tauri/Cargo.toml    # Rust 测试
 - [Good 离线 Select 设计规格](./superpowers/specs/2026-07-29-good-offline-select-design.md)
 - [Nowly 日程重复规则设计规格](./superpowers/specs/2026-08-20-nowly-recurring-events-design.md)
 - [Nowly 模块系统 v2 与模块技能包设计规格](./superpowers/specs/2026-08-25-nowly-module-system-v2-design.md)
+- [Nowly 导航状态岛规格](./superpowers/specs/2026-09-12-status-island/00-master-plan.md)
 
 ## Custom Modules
 
@@ -95,3 +103,4 @@ cargo test --manifest-path src-tauri/Cargo.toml    # Rust 测试
 - [Good 离线 Select 实施计划](./superpowers/plans/2026-07-29-good-offline-select.md)
 - [Nowly 日程重复规则实施计划](./superpowers/plans/2026-08-20-nowly-recurring-events.md)
 - [Nowly 模块技能包与样式底座实施计划](./superpowers/plans/2026-08-25-nowly-module-skill-package.md)
+- [Nowly 导航状态岛实施计划](./superpowers/plans/2026-09-12-status-island.md)

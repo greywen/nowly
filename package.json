@@ -34,12 +34,17 @@
     "icons": "node scripts/generate-icons.mjs",
     "module:css": "node scripts/generate-module-css.mjs",
     "module:preview": "vite --open /preview.html",
-    "test:tooling": "node --test scripts/generate-module-css.test.mjs registry/lint.test.mjs",
+    "version:check": "node scripts/check-version-sync.mjs",
+    "test:tooling": "node scripts/check-version-sync.mjs && node --test scripts/generate-module-css.test.mjs registry/lint.test.mjs",
     "registry:lint": "node --test registry/lint.test.mjs",
     "registry:validate": "node registry/validate.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "latest",
+    "highlight.js": "11.12.0",
+    "katex": "0.18.7",
+    "lucide-react": "^1.45.0",
+    "quill": "2.0.3",
     "react": "latest",
     "react-dom": "latest"
   },
