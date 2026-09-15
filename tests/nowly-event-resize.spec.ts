@@ -64,6 +64,20 @@ test.beforeEach(async ({ page }) => {
         note: '',
         createdAt: now,
         updatedAt: now
+      },
+      {
+        id: 'ev-cross-week',
+        title: 'test',
+        startAt: '2026-09-13T23:00',
+        endAt: '2026-09-14T00:00',
+        allDay: false,
+        category: 'work',
+        color: 'blue',
+        linkedTaskId: null,
+        subscriptionId: null,
+        note: '',
+        createdAt: now,
+        updatedAt: now
       }
     ];
     const settings = {
@@ -162,6 +176,29 @@ test('shrinks a two-day all-day event to one day with a quick drag', async ({ pa
       page.evaluate(() => (window as any).__RESIZE_CALLS__?.map((c: any) => c.draft.endAt as string))
     )
     .toContain('2026-07-20T23:59');
+});
+
+test('shrinks a Sunday-to-Monday cross-midnight event back to Sunday', async ({ page }) => {
+  await page.getByRole('button', { name: '下一个月' }).click();
+  await page.getByRole('button', { name: '下一个月' }).click();
+  await expect(page.getByRole('heading', { name: '2026年9月' })).toBeVisible();
+
+  const tailBar = page.getByRole('button', { name: /23:00 test/ }).last();
+  await expect(tailBar).toBeVisible();
+  const box = (await tailBar.boundingBox())!;
+  const target = page.locator('[data-iso-date="2026-09-13"]');
+  const targetBox = (await target.boundingBox())!;
+
+  await page.mouse.move(box.x + box.width - 5, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + 10);
+  await page.mouse.up();
+
+  await expect
+    .poll(async () =>
+      page.evaluate(() => (window as any).__RESIZE_CALLS__?.map((c: any) => c.draft.endAt as string))
+    )
+    .toContain('2026-09-13T23:59');
 });
 
 test('moves a multi-day event to a later day by dragging its body', async ({ page }) => {

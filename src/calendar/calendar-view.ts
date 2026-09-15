@@ -442,7 +442,10 @@ export function resizeEventEndToDate(event: CalendarEvent, isoDate: string): Eve
   const startDate = event.startAt.slice(0, 10);
   const endDate = isoDate < startDate ? startDate : isoDate;
   const startTime = event.allDay ? '00:00' : event.startAt.slice(11, 16);
-  const endTime = event.allDay ? '23:59' : event.endAt.slice(11, 16);
+  let endTime = event.allDay ? '23:59' : event.endAt.slice(11, 16);
+  if (!event.allDay && endDate === startDate && endTime < startTime) {
+    endTime = '23:59';
+  }
   return {
     title: event.title,
     startAt: `${startDate}T${startTime}`,
