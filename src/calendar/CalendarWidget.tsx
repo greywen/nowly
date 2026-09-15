@@ -254,18 +254,29 @@ export function CalendarWidget({
 
   const DRAG_THRESHOLD_PX = 4;
 
-  const dayIsoFromPoint = useCallback((clientX: number, clientY: number) => {
+  const hitElementsFromPoint = useCallback((clientX: number, clientY: number) => {
+    if (typeof document.elementsFromPoint === 'function') {
+      return document.elementsFromPoint(clientX, clientY);
+    }
     const element = document.elementFromPoint(clientX, clientY);
-    const cell = element?.closest('[data-iso-date]') as HTMLElement | null;
-    return cell?.dataset.isoDate ?? null;
+    return element ? [element] : [];
   }, []);
 
+  const dayIsoFromPoint = useCallback((clientX: number, clientY: number) => {
+    for (const element of hitElementsFromPoint(clientX, clientY)) {
+      const cell = element.closest('[data-iso-date]') as HTMLElement | null;
+      if (cell?.dataset.isoDate) return cell.dataset.isoDate;
+    }
+    return null;
+  }, [hitElementsFromPoint]);
+
   const hourFromPoint = useCallback((clientX: number, clientY: number) => {
-    const element = document.elementFromPoint(clientX, clientY);
-    const slot = element?.closest('[data-hour]') as HTMLElement | null;
-    if (!slot?.dataset.hour) return null;
-    return Number(slot.dataset.hour);
-  }, []);
+    for (const element of hitElementsFromPoint(clientX, clientY)) {
+      const slot = element.closest('[data-hour]') as HTMLElement | null;
+      if (slot?.dataset.hour) return Number(slot.dataset.hour);
+    }
+    return null;
+  }, [hitElementsFromPoint]);
 
   const handleGesturePointerMove = useCallback(
     (moveEvent: PointerEvent) => {
