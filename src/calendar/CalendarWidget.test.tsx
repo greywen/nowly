@@ -33,6 +33,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   // jsdom has no elementFromPoint, so the drag test installs one by hand.
   Reflect.deleteProperty(document, 'elementFromPoint');
+  Reflect.deleteProperty(document, 'elementsFromPoint');
 });
 
 const weeklyRule: Recurrence = { freq: 'weekly', interval: 1, byDay: ['TH'], end: { kind: 'never' } };
@@ -449,6 +450,41 @@ describe('CalendarWidget', () => {
     fireEvent(window, new MouseEvent('pointerup', {}));
     expect(onMoveEvent).toHaveBeenCalledTimes(1);
     expect(onMoveEvent).toHaveBeenCalledWith(instances[0], '2026-07-25');
+  });
+
+  it('shrinks a two-day all-day event when the first drag move still hits the event bar', () => {
+    const onResizeEvent = vi.fn();
+    const allDayEvent: CalendarEvent = {
+      ...sampleEvents[0],
+      id: 'two-day-event',
+      title: '两天日程',
+      startAt: '2026-07-23T00:00',
+      endAt: '2026-07-24T23:59',
+      allDay: true
+    };
+    const { container } = render(
+      <CalendarWidget {...baseProps} events={[allDayEvent]} onResizeEvent={onResizeEvent} />
+    );
+    const handle = container.querySelector('.event-bar__resize-handle') as HTMLElement;
+    const targetDay = container.querySelector('[data-iso-date="2026-07-23"]') as HTMLElement;
+
+    Reflect.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: () => handle
+    });
+    Reflect.defineProperty(document, 'elementsFromPoint', {
+      configurable: true,
+      value: () => [handle, targetDay]
+    });
+
+    fireEvent(
+      handle,
+      new MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 200, clientY: 10 })
+    );
+    fireEvent(window, new MouseEvent('pointermove', { clientX: 100, clientY: 10 }));
+    fireEvent(window, new MouseEvent('pointerup'));
+
+    expect(onResizeEvent).toHaveBeenCalledWith(allDayEvent, '2026-07-23');
   });
 
 });
