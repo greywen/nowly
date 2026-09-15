@@ -29,8 +29,7 @@ const snapshot = {
     stageSequence: 0,
     stageChangedAt: null
   },
-  reminders: [] as unknown[],
-  notificationDisplay: 'detail'
+  reminders: [] as unknown[]
 };
 
 function event(overrides: Record<string, unknown> = {}) {
@@ -67,7 +66,7 @@ const focusSnapshot = {
   }
 };
 
-type OpenPayload = { source: 'island' | 'nowly'; identity: string | null };
+type OpenPayload = { source: 'island'; identity: string | null };
 
 /**
  * Native decides when the sheet is open, so the mock has to say so explicitly.
@@ -80,6 +79,9 @@ async function installRail(page: Page, data: unknown = snapshot, open: OpenPaylo
     window.__statusArgs = [];
     let callbackId = 0;
     Object.assign(window, {
+      __TAURI_EVENT_PLUGIN_INTERNALS__: {
+        unregisterListener: () => undefined
+      },
       __TAURI_INTERNALS__: {
         metadata: {
           currentWindow: { label: 'quick-panel-handle' },
@@ -147,7 +149,7 @@ for (const scale of [1, 1.5, 2]) {
       // growth, so it may not move between the two sizes.
       expect(await page.locator('.status-island__icon').first().boundingBox())
         .toEqual({ x: 9, y: 8, width: 24, height: 24 });
-      expect(await page.getByRole('button', { name: 'Nowly' }).boundingBox())
+      expect(await page.getByRole('img', { name: 'Nowly 品牌标识' }).boundingBox())
         .toEqual({ x: 248, y: 0, width: 40, height: 40 });
       // The sheet is laid out at its open size the whole time, so the collapsed
       // window has to clip it rather than gain a scrollbar.
@@ -160,13 +162,11 @@ for (const scale of [1, 1.5, 2]) {
       expect(await commands(page)).toContain('toggle_status_island_details');
     });
 
-    test('opens the other half from the Nowly dot', async ({ page }) => {
-      await page.getByRole('button', { name: 'Nowly' }).click();
-
-      // The same sheet, different content. Native picks which, so the webview
-      // only has to say which half was pressed.
-      expect(await commands(page)).toContain('toggle_nowly_panel');
-      expect(await commands(page)).not.toContain('toggle_status_island_details');
+    test('keeps the Nowly dot as branding only', async ({ page }) => {
+      await expect(page.getByRole('img', { name: 'Nowly 品牌标识' })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Nowly' })).toHaveCount(0);
+      expect(await commands(page)).not.toContain('toggle_nowly_panel');
+      expect(await commands(page)).not.toContain('hover_nowly_panel');
     });
 
     test('reports the unacknowledged reminder to native as primary', async ({ page }) => {
@@ -243,7 +243,7 @@ test.describe('summary content', () => {
     await page.waitForTimeout(400);
 
     await expect(island).toHaveCSS('cursor', 'grabbing');
-    await expect(nowly).toHaveCSS('cursor', 'grabbing');
+    await expect(nowly).toHaveCSS('cursor', 'default');
     await page.mouse.up();
   });
 
@@ -324,7 +324,7 @@ test.describe('the open sheet', () => {
     expect(await page.locator('.status-island__icon').first().boundingBox())
       .toEqual({ x: 9, y: 8, width: 24, height: 24 });
     // The dot is absorbed and the always-on dismiss takes the space it left.
-    await expect(page.getByRole('button', { name: 'Nowly' })).toHaveCSS('opacity', '0');
+    await expect(page.getByRole('img', { name: 'Nowly 品牌标识' })).toHaveCSS('opacity', '0');
     const dismiss = page.locator('.status-island__dismiss[data-at="expanded"]');
     await expect(dismiss).toHaveCSS('opacity', '1');
     expect(await dismiss.boundingBox()).toEqual({ x: 252, y: 6, width: 28, height: 28 });
@@ -354,20 +354,6 @@ test.describe('the open sheet', () => {
     await expect(sheet).toHaveCSS('transition-timing-function',
       'cubic-bezier(0.22, 1, 0.36, 1), cubic-bezier(0.22, 1, 0.36, 1)');
     await expect(sheet).toHaveCSS('transform', /^(none|matrix\(1, 0, 0, 1, 0, 0\))$/);
-  });
-
-  test('swaps to the Nowly half without stacking a second surface', async ({ page }) => {
-    await page.clock.setFixedTime(new Date(FIXED_TIME));
-    await installRail(page, passiveSnapshot, { source: 'nowly', identity: null });
-    await page.goto('/');
-
-    await expect(page.locator('.status-rail')).toHaveAttribute('data-source', 'nowly');
-    // One sheet, one head: the status copy hands the slot over rather than both
-    // being on screen at once.
-    await expect(page.locator('.status-rail__nowly-head')).toHaveCSS('opacity', '1');
-    await expect(page.locator('.status-rail__header > .status-island')).toHaveCSS('opacity', '0');
-    await expect(page.getByText('内容待定')).toBeVisible();
-    await expect(page.getByRole('button', { name: '打开日程：晚间复盘' })).toHaveCount(0);
   });
 
   test('routes sheet actions and Escape through native commands', async ({ page }) => {

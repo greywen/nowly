@@ -32,7 +32,25 @@ const MIGRATIONS: &[(i64, Migration)] = &[
     (23, migration_23_assistant),
     (24, migration_24_assistant_watch_scope),
     (25, migration_25_attachments),
+    (26, migration_26_status_island_reminders),
 ];
+
+fn migration_26_status_island_reminders(transaction: &Transaction<'_>) -> Result<()> {
+    transaction.execute_batch(
+        "CREATE TABLE status_island_reminders (
+            local_date TEXT NOT NULL,
+            identity TEXT NOT NULL,
+            acknowledged_at TEXT,
+            hidden INTEGER NOT NULL DEFAULT 0 CHECK (hidden IN (0, 1)),
+            dismissed INTEGER NOT NULL DEFAULT 0 CHECK (dismissed IN (0, 1)),
+            consumed INTEGER NOT NULL DEFAULT 0 CHECK (consumed IN (0, 1)),
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (local_date, identity)
+         );
+         CREATE INDEX idx_status_island_reminders_date
+            ON status_island_reminders(local_date);",
+    )
+}
 
 fn migration_25_attachments(transaction: &Transaction<'_>) -> Result<()> {
     crate::attachments::migrate(transaction)
@@ -1320,6 +1338,24 @@ mod tests {
 
     fn all_migration_versions() -> Vec<i64> {
         MIGRATIONS.iter().map(|(version, _)| *version).collect()
+    }
+
+    #[test]
+    fn migration_26_creates_status_island_reminder_storage() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        migrate(&mut connection).unwrap();
+
+        let exists: bool = connection
+            .query_row(
+                "SELECT EXISTS(
+                    SELECT 1 FROM sqlite_master
+                    WHERE type='table' AND name='status_island_reminders'
+                 )",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(exists);
     }
 
     fn migrate_through(connection: &mut Connection, max_version: i64) -> Result<()> {

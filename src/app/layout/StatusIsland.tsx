@@ -33,10 +33,9 @@ import type {
 //   detail  — one reminder, in full;
 //   summary — today's aggregate.
 //
-// Which of detail and summary is shown is the user's choice: the notification
-// setting picks the starting mode, and closing a detail downgrades that one
-// reminder to the summary for the rest of the local day. Nothing switches on a
-// timer.
+// An unseen reminder always starts in detail. Closing that detail downgrades
+// only that reminder to the summary for the rest of the local day. Nothing
+// switches on a timer.
 //
 // The only motion in here is the rail growing and collapsing, which design.md
 // §10 admits as a named exception. Everything else updates immediately;
@@ -185,9 +184,10 @@ function ReminderIcon({ reminder }: { reminder: StatusIslandReminder }) {
 }
 
 /**
- * The island. It exists only while a reminder is unseen, or inside the 15s hold
- * after the user acknowledged it. `onDismiss` closes this surface only: it is
- * not acknowledgement and not business consumption.
+ * The island head. Unseen reminders use detail; acknowledged or dismissed
+ * reminders leave the attention queue and the model falls back to summary.
+ * `onDismiss` closes this reminder stage only: it is not acknowledgement and
+ * not business consumption.
  */
 // Marker kinds are finer-grained than the island's icon styling, which only
 // distinguishes four families. Normalising here lets both modes share one set of
@@ -468,7 +468,10 @@ export function StatusIslandSummaryView({
     : t('statusIsland.todayClear');
   // Every marker is named in the accessible name, not just the three that fit in
   // the signals row, so colour and count badges are never the only carrier.
-  const label = [content.title, meta, ...summary.markers.map(marker => markerText(marker, t))].join(' · ');
+  const spokenTitle = typeof content.titleAria?.['aria-valuetext'] === 'string'
+    ? content.titleAria['aria-valuetext']
+    : content.title;
+  const label = [spokenTitle, meta, ...summary.markers.map(marker => markerText(marker, t))].join(' · ');
   return (
     <IslandShell
       family={content.family}
@@ -501,20 +504,16 @@ export function StatusIslandSummaryView({
  */
 export function TopRail({
   open,
-  source,
   anim,
   mode,
   panel,
-  nowly,
   onCollapse,
   children
 }: {
   open: boolean;
-  source: 'island' | 'nowly';
   anim: 'grow' | 'shrink' | null;
   mode: 'idle' | 'detail' | 'summary';
   panel: React.ReactNode;
-  nowly: SurfaceProps;
   onCollapse: () => void;
   children: React.ReactNode;
 }) {
@@ -523,22 +522,14 @@ export function TopRail({
     <div
       className="status-rail"
       data-open={open}
-      data-source={source}
+      data-source="island"
       data-mode={mode}
-      data-dragging={nowly.dragging ?? false}
       {...(anim ? { 'data-anim': anim } : {})}
     >
       <div className="status-rail__sheet">
         <div className="status-rail__content">
           <div className="status-rail__header">
             {children}
-            <div className="status-rail__nowly-head" data-for="nowly" aria-hidden={!(open && source === 'nowly')}>
-              <span className="status-island__icon"><img src="/logo.png" alt="" /></span>
-              <span className="status-island__copy">
-                <strong>{t('statusIsland.nowly')}</strong>
-                <span>{t('statusIsland.nowlyMeta')}</span>
-              </span>
-            </div>
           </div>
           <div className="status-rail__panel">{panel}</div>
         </div>
@@ -552,30 +543,14 @@ export function TopRail({
       >
         <X aria-hidden="true" />
       </button>
-      <button
-        type="button"
+      <span
         className="status-rail__nowly"
-        aria-label={t('statusIsland.nowly')}
-        aria-haspopup="dialog"
-        aria-expanded={nowly.expanded ?? false}
-        {...(nowly.onNudge ? { 'aria-keyshortcuts': 'ArrowLeft ArrowRight' } : {})}
-        {...surfaceHandlers(nowly)}
+        role="img"
+        aria-label={t('statusIsland.nowlyBrand')}
       >
         <img src="/logo.png" alt="" />
-      </button>
+      </span>
     </div>
-  );
-}
-
-/** The Nowly sheet's body. Deliberately a placeholder until its content is decided. */
-export function NowlyPanel() {
-  const { t } = useTranslation();
-  return (
-    <section className="status-island__details" data-panel="nowly" data-compact="true" aria-label={t('statusIsland.nowly')}>
-      <div className="status-island__panel-body">
-        <p className="status-island__empty">{t('statusIsland.nowlyPlaceholder')}</p>
-      </div>
-    </section>
   );
 }
 

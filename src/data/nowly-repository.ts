@@ -52,11 +52,6 @@ export type AppSettings = {
   // wallpaper reads as a clean dashboard; the topbar returns the moment the app
   // is brought back to the foreground.
   hideTopbarInWallpaper: boolean;
-  // What the status island carries by default: the full detail of one
-  // notification, or today's summary. Defaults to detail, so a new notification
-  // gets one chance to be read in full; closing it downgrades that one
-  // notification to the summary for the rest of the day.
-  notificationDisplay?: 'detail' | 'summary';
   notificationMode?: 'persistent' | 'notification';
   quickPanelEnabled?: boolean;
   quickPanelShortcut?: string;

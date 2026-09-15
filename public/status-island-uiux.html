@@ -1,0 +1,1128 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Nowly 通知栏 UI/UX 确认稿</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Inter, "Microsoft YaHei", "PingFang SC", Helvetica, Arial, sans-serif;
+      font-size: 13px;
+      --primary: #4fc9da;
+      --primary-active: #30a6b6;
+      --primary-light: #ddf8fc;
+      --danger: #f06445;
+      --danger-active: #db5437;
+      --danger-light: #fff0ed;
+      --warning: #e8c444;
+      --warning-active: #92700c;
+      --warning-light: #fdf4d6;
+      --success: #b8d935;
+      --success-active: #64800d;
+      --success-light: #f4fbdb;
+      --info: #4f55da;
+      --info-active: #383ebc;
+      --info-light: #eff0ff;
+      --surface: #fff;
+      --subtle: #f8f6f2;
+      --secondary: #f6f1e9;
+      --page: #fff;
+      --text: #211f1c;
+      --strong: #403d38;
+      --body: #716d66;
+      --muted: #968e7e;
+      --border: #eaeaea;
+      --border-emphasis: #dad3c3;
+      --radius: 15.2px;
+      --radius-sm: 7.6px;
+      --pill: 999px;
+      --focus: 0 0 0 4px rgba(79, 201, 218, .25);
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+      animation: none !important;
+      transition: none !important;
+    }
+
+    [hidden] {
+      display: none !important;
+    }
+
+    body {
+      min-width: 1100px;
+      min-height: 100vh;
+      margin: 0;
+      color: var(--body);
+      background:
+        radial-gradient(circle at 72% 18%, rgba(79, 201, 218, .12), transparent 26%),
+        linear-gradient(135deg, #eeeae2, #f8f6f2 44%, #e9f4f5);
+    }
+
+    button, input {
+      font: inherit;
+    }
+
+    button {
+      color: inherit;
+    }
+
+    button:focus-visible, input:focus-visible {
+      outline: 0;
+      box-shadow: var(--focus);
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: 330px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    .controls {
+      min-height: 100vh;
+      padding: 28px 24px;
+      border-right: 1px solid var(--border);
+      background: rgba(255, 255, 255, .94);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+
+    .brand img {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      object-fit: cover;
+    }
+
+    .brand strong {
+      display: block;
+      color: var(--text);
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+
+    .brand span {
+      color: var(--muted);
+      font-size: .85rem;
+    }
+
+    .control-group {
+      margin: 0 0 24px;
+      padding: 0;
+      border: 0;
+    }
+
+    .control-group legend {
+      margin-bottom: 10px;
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .option {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      min-height: 52px;
+      margin-bottom: 8px;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      cursor: pointer;
+    }
+
+    .option:has(input:checked) {
+      border-color: var(--primary);
+      background: var(--primary-light);
+    }
+
+    .option input {
+      width: 22px;
+      height: 22px;
+      flex: none;
+      margin: 2px 0 0;
+      accent-color: var(--primary);
+    }
+
+    .option strong {
+      display: block;
+      color: var(--strong);
+      font-weight: 600;
+    }
+
+    .option small {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    .scenario-select {
+      width: 100%;
+      height: 46px;
+      padding: 0 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--strong);
+      background: var(--subtle);
+    }
+
+    .reset {
+      width: 100%;
+      height: 40px;
+      margin-top: 8px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--strong);
+      background: var(--surface);
+      cursor: pointer;
+    }
+
+    .legend {
+      margin-top: 24px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+      font-size: .85rem;
+      line-height: 1.7;
+    }
+
+    .legend p {
+      margin: 0 0 6px;
+    }
+
+    .legend b {
+      color: var(--strong);
+    }
+
+    .stage {
+      position: relative;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+
+    .desktop-top {
+      height: 38px;
+      background: rgba(255, 255, 255, .36);
+      backdrop-filter: blur(18px);
+    }
+
+    .preview-title {
+      position: absolute;
+      left: 36px;
+      top: 58px;
+      color: rgba(64, 61, 56, .72);
+    }
+
+    .preview-title strong {
+      display: block;
+      color: var(--strong);
+      font-size: 1.35rem;
+      font-weight: 600;
+    }
+
+    .preview-title span {
+      font-size: .95rem;
+    }
+
+    .rail-wrap {
+      position: absolute;
+      top: 8px;
+      left: 50%;
+      width: 304px;
+      min-height: 40px;
+      transform: translateX(-50%);
+    }
+
+    .rail-wrap[data-hidden="true"] {
+      display: none;
+    }
+
+    .rail {
+      position: relative;
+      width: 288px;
+      min-height: 40px;
+    }
+
+    .capsule {
+      position: relative;
+      width: 240px;
+      min-height: 40px;
+      padding: 6px 46px 6px 8px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--body);
+      background: var(--surface);
+      cursor: pointer;
+    }
+
+    .capsule:hover {
+      border-style: dashed;
+      border-color: var(--border-emphasis);
+      background: var(--subtle);
+    }
+
+    .brand-dot {
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 40px;
+      height: 40px;
+      padding: 0;
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: var(--surface);
+    }
+
+    .brand-dot img {
+      width: 26px;
+      height: 26px;
+      border-radius: 7px;
+      object-fit: cover;
+    }
+
+    .status-icon {
+      width: 26px;
+      height: 26px;
+      flex: none;
+      border-radius: var(--radius-sm);
+      display: grid;
+      place-items: center;
+      color: var(--primary-active);
+      background: var(--primary-light);
+      font-weight: 700;
+    }
+
+    .status-icon.is-danger {
+      color: var(--danger-active);
+      background: var(--danger-light);
+    }
+
+    .status-icon.is-warning {
+      color: var(--warning-active);
+      background: var(--warning-light);
+    }
+
+    .status-icon.is-success {
+      color: var(--success-active);
+      background: var(--success-light);
+    }
+
+    .copy {
+      min-width: 0;
+      flex: 1;
+      line-height: 1.18;
+    }
+
+    .copy strong, .copy span {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .copy strong {
+      color: var(--text);
+      font-size: .95rem;
+      font-weight: 600;
+    }
+
+    .copy span {
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: .85rem;
+      font-weight: 500;
+    }
+
+    .count {
+      min-width: 25px;
+      height: 24px;
+      padding: 0 8px;
+      border-radius: var(--pill);
+      display: grid;
+      place-items: center;
+      color: var(--danger-active);
+      background: var(--danger-light);
+      font-size: .85rem;
+      font-weight: 600;
+    }
+
+    .dismiss {
+      position: absolute;
+      top: 6px;
+      right: 48px;
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      border: 0;
+      border-radius: var(--radius-sm);
+      color: var(--muted);
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .dismiss:hover {
+      color: var(--text);
+      background: var(--secondary);
+    }
+
+    .panel {
+      width: 288px;
+      margin-top: 8px;
+      padding: 8px;
+      border: 1px dashed var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+    }
+
+    .panel[hidden] {
+      display: none;
+    }
+
+    .panel-head {
+      padding: 6px 8px 10px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .panel-head strong {
+      display: block;
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .panel-head span {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: .85rem;
+    }
+
+    .close-panel {
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      border: 0;
+      border-radius: var(--radius-sm);
+      color: var(--muted);
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .rows {
+      max-height: 220px;
+      overflow: auto;
+      padding: 6px 0;
+    }
+
+    .group-label {
+      margin: 7px 8px 4px;
+      color: var(--muted);
+      font-size: .8rem;
+      font-weight: 600;
+    }
+
+    .reminder-group + .reminder-group {
+      margin-top: 6px;
+      padding-top: 6px;
+      border-top: 1px solid var(--border);
+    }
+
+    .group-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .group-count {
+      min-width: 22px;
+      padding: 2px 7px;
+      border-radius: var(--pill);
+      display: inline-grid;
+      place-items: center;
+      color: var(--primary-active);
+      background: var(--primary-light);
+    }
+
+    .row {
+      width: 100%;
+      min-height: 48px;
+      padding: 6px 8px;
+      border: 0;
+      border-radius: var(--radius-sm);
+      display: grid;
+      grid-template-columns: 24px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      color: var(--body);
+      background: transparent;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .row:hover {
+      color: var(--primary-active);
+      background: var(--subtle);
+    }
+
+    .row-icon {
+      width: 22px;
+      height: 22px;
+      border-radius: 6px;
+      display: grid;
+      place-items: center;
+      color: var(--primary-active);
+      background: var(--primary-light);
+      font-size: .8rem;
+      font-weight: 700;
+    }
+
+    .row-copy {
+      min-width: 0;
+    }
+
+    .row-copy strong, .row-copy small {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .row-copy strong {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .row-copy small, .row-time {
+      color: var(--muted);
+      font-size: .85rem;
+    }
+
+    .warning {
+      color: var(--danger-active) !important;
+    }
+
+    .detail-note {
+      margin: 4px 8px 0 40px;
+      padding: 8px 0;
+      color: var(--muted);
+      font-size: .85rem;
+      line-height: 1.5;
+    }
+
+    .panel-actions {
+      padding: 8px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .action {
+      height: 36px;
+      padding: 0 12px;
+      border: 0;
+      border-radius: var(--radius-sm);
+      color: var(--primary-active);
+      background: var(--primary-light);
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .toast {
+      position: absolute;
+      right: 30px;
+      bottom: 30px;
+      max-width: 330px;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--strong);
+      background: var(--surface);
+      box-shadow: 0 1.6px 16px 4px rgba(0, 0, 0, .05);
+    }
+
+    .toast[hidden] {
+      display: none;
+    }
+
+    .queue {
+      position: absolute;
+      left: 36px;
+      bottom: 34px;
+      width: min(600px, calc(100% - 72px));
+      padding: 18px;
+      border: 1px solid rgba(255,255,255,.65);
+      border-radius: var(--radius);
+      background: rgba(255,255,255,.56);
+      backdrop-filter: blur(16px);
+    }
+
+    .queue h2 {
+      margin: 0 0 6px;
+      color: var(--text);
+      font-size: 1.15rem;
+      font-weight: 600;
+    }
+
+    .queue p {
+      margin: 0 0 12px;
+      font-size: .9rem;
+    }
+
+    .queue-items {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .queue-item {
+      padding: 6px 10px;
+      border: 1px solid var(--border);
+      border-radius: var(--pill);
+      color: var(--strong);
+      background: var(--surface);
+      font-size: .85rem;
+    }
+
+    .queue-item.is-seen {
+      color: var(--muted);
+      text-decoration: line-through;
+      background: var(--subtle);
+    }
+
+    .mode-note {
+      position: absolute;
+      top: 58px;
+      right: 36px;
+      padding: 8px 12px;
+      border: 1px solid rgba(255,255,255,.7);
+      border-radius: var(--pill);
+      color: var(--strong);
+      background: rgba(255,255,255,.7);
+      font-size: .85rem;
+      font-weight: 600;
+    }
+
+    /* Latest status rail:
+       one 288×288 object. Collapsed, the native window clips the left sheet to
+       240×40 and leaves the 40×40 Nowly mark beside it. Open, that same sheet
+       grows over the complete 288×288 area. There is no second popup below it. */
+    .rail-wrap {
+      width: 288px;
+      height: 288px;
+    }
+
+    .rail {
+      position: relative;
+      width: 288px;
+      height: 288px;
+    }
+
+    .sheet {
+      position: absolute;
+      z-index: 1;
+      inset: 0 auto auto 0;
+      width: 240px;
+      height: 40px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--surface);
+    }
+
+    .rail[data-open="true"] .sheet {
+      width: 288px;
+      height: 288px;
+    }
+
+    .sheet-content {
+      position: absolute;
+      inset: 0;
+      width: 286px;
+      height: 286px;
+      display: grid;
+      grid-template-rows: 38px minmax(0, 1fr);
+    }
+
+    .sheet-head {
+      position: relative;
+      min-width: 0;
+    }
+
+    .capsule {
+      position: absolute;
+      inset: 0;
+      width: 286px;
+      min-height: 38px;
+      padding: 5px 54px 5px 7px;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+    }
+
+    .capsule:hover {
+      border: 0;
+      background: var(--subtle);
+    }
+
+    .rail[data-open="true"] .capsule:hover {
+      background: transparent;
+    }
+
+    .brand-dot {
+      z-index: 3;
+      pointer-events: none;
+    }
+
+    .rail[data-open="true"] .brand-dot {
+      display: none;
+    }
+
+    .dismiss {
+      z-index: 4;
+      top: 5px;
+      right: 53px;
+    }
+
+    .rail[data-open="true"] .dismiss {
+      display: none;
+    }
+
+    .expanded-close {
+      position: absolute;
+      z-index: 4;
+      top: 6px;
+      right: 8px;
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      border: 0;
+      border-radius: var(--radius-sm);
+      display: none;
+      color: var(--muted);
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .rail[data-open="true"] .expanded-close {
+      display: grid;
+      place-items: center;
+    }
+
+    .expanded-close:hover {
+      color: var(--text);
+      background: var(--secondary);
+    }
+
+    .panel {
+      width: 286px;
+      height: 248px;
+      margin: 0;
+      padding: 6px 8px 8px;
+      border: 0;
+      border-top: 1px solid var(--border);
+      border-radius: 0;
+      overflow: hidden;
+      display: grid;
+      grid-template-rows: minmax(0, 1fr) auto;
+      background: transparent;
+    }
+
+    .panel-head {
+      display: none;
+    }
+
+    .rows {
+      max-height: none;
+      min-height: 0;
+    }
+
+    .panel-actions {
+      min-height: 0;
+    }
+
+    .panel-actions:empty {
+      display: none;
+      padding: 0;
+      border-top: 0;
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <aside class="controls" aria-label="原型控制">
+      <div class="brand">
+        <img src="/logo.png" alt="Nowly Logo">
+        <div>
+          <strong>Nowly 通知栏</strong>
+          <span>可交互 UI/UX 确认稿</span>
+        </div>
+      </div>
+
+      <fieldset class="control-group">
+        <legend>通知方式</legend>
+        <label class="option">
+          <input type="radio" name="mode" value="persistent" checked>
+          <span><strong>常驻</strong><small>始终显示 Home Indicator；无提醒时展示持续状态。</small></span>
+        </label>
+        <label class="option">
+          <input type="radio" name="mode" value="notification">
+          <span><strong>仅通知</strong><small>只在存在未处理提醒时显示整个通知栏。</small></span>
+        </label>
+      </fieldset>
+
+      <fieldset class="control-group">
+        <legend>演示场景</legend>
+        <select id="scenario" class="scenario-select" aria-label="演示场景">
+          <option value="mixed">三项提醒：定时、全天、任务</option>
+          <option value="timed">临近定时日程</option>
+          <option value="allDay">全天日程提醒</option>
+          <option value="focus">专注完成</option>
+          <option value="task">今天到期任务</option>
+          <option value="stateOnly">无新提醒，但有持续状态</option>
+          <option value="empty">完全空闲</option>
+        </select>
+        <button id="reset" class="reset" type="button">重置当前场景</button>
+      </fieldset>
+
+      <div class="legend">
+        <p><b>悬停：</b>只预览，不确认、不写数据库。</p>
+        <p><b>点击提醒：</b>打开详情并确认当前提醒。</p>
+        <p><b>点击 ×：</b>关闭当前提醒阶段，不删除事项。</p>
+        <p><b>Logo：</b>仅为品牌标识，不打开 AI 面板。</p>
+      </div>
+    </aside>
+
+    <section class="stage" aria-label="通知栏预览">
+      <div class="desktop-top"></div>
+      <div class="preview-title">
+        <strong>桌面顶部实际尺寸预览</strong>
+        <span>切换左侧选项并操作通知栏，检查四种组合。</span>
+      </div>
+      <div id="modeNote" class="mode-note">常驻 · 详情</div>
+
+      <div id="railWrap" class="rail-wrap">
+        <div id="rail" class="rail" data-open="false">
+          <div class="sheet">
+            <div class="sheet-content">
+              <div class="sheet-head">
+                <button id="capsule" class="capsule" type="button" aria-haspopup="dialog" aria-expanded="false">
+                  <span id="statusIcon" class="status-icon">日</span>
+                  <span class="copy">
+                    <strong id="title">09:30 产品评审</strong>
+                    <span id="meta">还有 10 分钟 · 与日程冲突</span>
+                  </span>
+                  <span id="count" class="count" hidden>3</span>
+                </button>
+                <button id="dismiss" class="dismiss" type="button" aria-label="关闭当前提醒">×</button>
+              </div>
+
+              <section id="panel" class="panel" aria-label="通知详情" hidden>
+                <header class="panel-head" aria-hidden="true">
+                  <div>
+                    <strong id="panelTitle">产品评审</strong>
+                    <span id="panelMeta">今天 09:30–10:30</span>
+                  </div>
+                </header>
+                <div id="panelRows" class="rows"></div>
+                <footer id="panelActions" class="panel-actions"></footer>
+              </section>
+            </div>
+          </div>
+
+          <button id="closePanel" class="expanded-close" type="button" aria-label="收起通知面板">×</button>
+          <span class="brand-dot" title="Nowly 品牌标识">
+            <img src="/logo.png" alt="">
+          </span>
+        </div>
+      </div>
+
+      <section class="queue" aria-label="提醒队列说明">
+        <h2>当前提醒队列</h2>
+        <p>已查看或关闭的提醒会退出队列，但日程和任务仍保留在业务列表。</p>
+        <div id="queueItems" class="queue-items"></div>
+      </section>
+
+      <div id="toast" class="toast" role="status" hidden></div>
+    </section>
+  </main>
+
+  <script>
+    const templates = {
+      timed: [
+        { id: "event-0930", kind: "event", icon: "日", title: "09:30 产品评审", meta: "还有 10 分钟 · 与日程冲突", panelMeta: "今天 09:30–10:30", detail: "会议室 A · 与“客户沟通”时间重叠", action: "打开日程" }
+      ],
+      allDay: [
+        { id: "all-day-visa", kind: "allDay", icon: "全", title: "全天 · 签证材料提交", meta: "已到设置的全天提醒时间", panelMeta: "今天 · 全天", detail: "材料清单已附在日程备注中", action: "打开日程" }
+      ],
+      focus: [
+        { id: "focus-complete", kind: "focus", icon: "✓", title: "专注已完成", meta: "完成 25 分钟专注", panelMeta: "今天 09:05 完成", detail: "本次专注已计入今日统计", action: "查看专注记录" }
+      ],
+      task: [
+        { id: "task-report", kind: "task", icon: "!", title: "年度报告今天截止", meta: "重要且紧急", panelMeta: "截止日期：今天", detail: "工作区：年度规划 · 泳道：进行中", action: "打开任务" }
+      ]
+    };
+    templates.mixed = [templates.timed[0], templates.allDay[0], templates.task[0]];
+    templates.stateOnly = [];
+    templates.empty = [];
+
+    const state = {
+      mode: "persistent",
+      scenario: "mixed",
+      queue: structuredClone(templates.mixed),
+      open: false,
+      pinned: null,
+      openedBy: null,
+      hoverOpenTimer: null,
+      hoverCloseTimer: null
+    };
+
+    const el = id => document.getElementById(id);
+    const railWrap = el("railWrap");
+    const rail = el("rail");
+    const capsule = el("capsule");
+    const dismiss = el("dismiss");
+    const panel = el("panel");
+    const title = el("title");
+    const meta = el("meta");
+    const count = el("count");
+    const statusIcon = el("statusIcon");
+    const panelTitle = el("panelTitle");
+    const panelMeta = el("panelMeta");
+    const panelRows = el("panelRows");
+    const panelActions = el("panelActions");
+    const queueItems = el("queueItems");
+    const toast = el("toast");
+
+    function resetQueue() {
+      state.queue = structuredClone(templates[state.scenario] || []);
+      state.open = false;
+      state.pinned = null;
+      state.openedBy = null;
+      render();
+    }
+
+    function businessState() {
+      if (state.scenario === "empty") {
+        return { icon: "✓", title: "今天暂无提醒", meta: "点击查看今日状态", tone: "" };
+      }
+      return { icon: "专", title: "专注 18:42", meta: "今天还有 3 项安排", tone: "" };
+    }
+
+    function activeReminder() {
+      return state.queue[0] || null;
+    }
+
+    function shouldHide() {
+      return state.mode === "notification" && state.queue.length === 0;
+    }
+
+    function showToast(message) {
+      toast.textContent = message;
+      toast.hidden = false;
+      clearTimeout(showToast.timer);
+      showToast.timer = setTimeout(() => { toast.hidden = true; }, 2400);
+    }
+
+    function toneFor(item) {
+      if (!item) return "";
+      if (item.kind === "task") return "is-danger";
+      if (item.kind === "allDay") return "is-warning";
+      if (item.kind === "focus") return "is-success";
+      return "";
+    }
+
+    function groupLabel(item) {
+      if (item.kind === "allDay") return "全天日程";
+      if (item.kind === "task") return "重要任务";
+      if (item.kind === "focus") return "专注状态";
+      return "定时日程";
+    }
+
+    function detailHtml(item) {
+      return `
+        <button class="row" type="button" data-action="${item.id}">
+          <span class="row-icon">${item.icon}</span>
+          <span class="row-copy">
+            <small>${groupLabel(item)}</small>
+            <strong>${item.title}</strong>
+          </span>
+          <span class="row-time">${item.kind === "event" ? "09:30" : item.kind === "allDay" ? "全天" : "查看"}</span>
+        </button>
+        <p class="detail-note">${item.detail}</p>`;
+    }
+
+    function openItem(item, acknowledge) {
+      state.open = true;
+      state.pinned = structuredClone(item);
+      state.openedBy = acknowledge ? "click" : "hover";
+      if (acknowledge) {
+        state.queue = state.queue.filter(candidate => candidate.id !== item.id);
+        showToast(`已查看“${item.title}”；事项仍保留在业务列表`);
+      }
+      render();
+    }
+
+    function renderPanel() {
+      rail.dataset.open = String(state.open);
+      if (!state.open) {
+        panel.hidden = true;
+        capsule.setAttribute("aria-expanded", "false");
+        return;
+      }
+      panel.hidden = false;
+      capsule.setAttribute("aria-expanded", "true");
+
+      const item = state.pinned || activeReminder();
+      if (!item) {
+        panelTitle.textContent = "今日状态";
+        panelMeta.textContent = "没有未处理提醒";
+        panelRows.innerHTML = `<p style="padding:10px;color:var(--muted)">日程和任务仍可在主应用中查看。</p>`;
+        panelActions.innerHTML = "";
+      } else {
+        panelTitle.textContent = item.title;
+        panelMeta.textContent = item.panelMeta;
+        panelRows.innerHTML = detailHtml(item);
+        panelActions.innerHTML = "";
+      }
+
+      panelRows.querySelectorAll("[data-id]").forEach(row => {
+        row.addEventListener("click", () => {
+          const item = state.queue.find(candidate => candidate.id === row.dataset.id);
+          if (item) openItem(item, true);
+        });
+      });
+      panel.querySelectorAll("[data-action]").forEach(button => {
+        button.addEventListener("click", () => {
+          showToast("业务动作只影响对应事项，不会批量处理其他提醒");
+        });
+      });
+    }
+
+    function render() {
+      el("modeNote").textContent = `${state.mode === "persistent" ? "常驻" : "仅通知"} · 通知详情`;
+      railWrap.dataset.hidden = String(shouldHide());
+
+      const reminder = activeReminder();
+      const current = state.pinned || reminder || businessState();
+
+      statusIcon.textContent = current.icon;
+      statusIcon.className = `status-icon ${toneFor(current)}`.trim();
+      title.textContent = current.title;
+      meta.textContent = current.meta;
+      count.hidden = true;
+      dismiss.hidden = !reminder;
+      dismiss.setAttribute("aria-label", reminder ? `关闭提醒：${reminder.title}` : "关闭当前提醒");
+
+      queueItems.innerHTML = templates[state.scenario]?.length
+        ? templates[state.scenario].map(item => {
+            const waiting = state.queue.some(candidate => candidate.id === item.id);
+            return `<span class="queue-item ${waiting ? "" : "is-seen"}">${waiting ? "待处理" : "已退出队列"} · ${item.title}</span>`;
+          }).join("")
+        : `<span class="queue-item">没有强提醒</span>`;
+
+      renderPanel();
+    }
+
+    capsule.addEventListener("mouseenter", () => {
+      clearTimeout(state.hoverCloseTimer);
+      if (state.open || !activeReminder()) return;
+      state.hoverOpenTimer = setTimeout(() => {
+        const item = activeReminder();
+        if (item && !state.open) openItem(item, false);
+      }, 300);
+    });
+
+    capsule.addEventListener("mouseleave", () => {
+      clearTimeout(state.hoverOpenTimer);
+    });
+
+    railWrap.addEventListener("mouseenter", () => {
+      clearTimeout(state.hoverCloseTimer);
+    });
+
+    railWrap.addEventListener("mouseleave", () => {
+      clearTimeout(state.hoverOpenTimer);
+      if (state.openedBy !== "hover") return;
+      state.hoverCloseTimer = setTimeout(() => {
+        state.open = false;
+        state.pinned = null;
+        state.openedBy = null;
+        render();
+      }, 300);
+    });
+
+    capsule.addEventListener("click", () => {
+      const item = activeReminder();
+      if (item) openItem(item, true);
+      else {
+        state.open = true;
+        state.pinned = null;
+        state.openedBy = "click";
+        render();
+      }
+    });
+
+    dismiss.addEventListener("click", event => {
+      event.stopPropagation();
+      const item = activeReminder();
+      if (!item) return;
+      state.queue = state.queue.filter(candidate => candidate.id !== item.id);
+      state.open = false;
+      state.pinned = null;
+      state.openedBy = null;
+      showToast(`已关闭“${item.title}”当前阶段；业务事项仍保留`);
+      render();
+    });
+
+    el("closePanel").addEventListener("click", () => {
+      state.open = false;
+      state.pinned = null;
+      state.openedBy = null;
+      render();
+    });
+
+    document.querySelectorAll('input[name="mode"]').forEach(input => {
+      input.addEventListener("change", () => {
+        state.mode = input.value;
+        state.open = false;
+        state.pinned = null;
+        state.openedBy = null;
+        render();
+      });
+    });
+
+    el("scenario").addEventListener("change", event => {
+      state.scenario = event.target.value;
+      resetQueue();
+    });
+
+    el("reset").addEventListener("click", resetQueue);
+
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape" && state.open) {
+        state.open = false;
+        state.pinned = null;
+        render();
+        capsule.focus();
+      }
+    });
+
+    render();
+  </script>
+</body>
+</html>

@@ -1,6 +1,6 @@
+use rusqlite::OptionalExtension;
 use std::sync::Mutex;
 use std::time::Duration;
-use rusqlite::OptionalExtension;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, Runtime};
 
 // This module owns the screen-level top surfaces only. The AI quick panel, its
@@ -55,15 +55,12 @@ pub struct HandlePositions {
     pub hidden_y: i32,
 }
 
-/// Which half of the rail the sheet was opened from. The sheet is the same
-/// surface either way; only what it carries differs.
+/// The rail has one interactive source. The Logo dot is branding only.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PanelSource {
     /// The status island capsule: today's reminders and summary.
     Island,
-    /// The Nowly entry dot.
-    Nowly,
 }
 
 /// Every details show/hide carries the generation it was requested with, so a
@@ -77,10 +74,16 @@ pub struct DetailsTransition {
 #[derive(Clone, serde::Serialize)]
 struct DetailsOpen {
     source: PanelSource,
-    /// Which reminder the island sheet is pinned to. `None` for the Nowly sheet,
-    /// which is not about any one reminder.
+    /// Which reminder the island sheet is pinned to. `None` for a summary.
     identity: Option<String>,
     hovered: bool,
+}
+
+#[derive(Clone, Copy, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DetailsClose {
+    hide_after_collapse: bool,
+    collapse_to_summary: bool,
 }
 
 pub fn screen_top(monitor_y: i32, _work_area_y: i32) -> i32 {
@@ -91,7 +94,11 @@ pub fn screen_top(monitor_y: i32, _work_area_y: i32) -> i32 {
 /// expanded it shows the same 288 as one sheet. Only the height moves, so the
 /// saved horizontal offset keeps meaning the same place in both states.
 pub fn top_surface_size(expanded: bool, scale_factor: f64) -> (u32, u32) {
-    let height = if expanded { EXPANDED_HEIGHT } else { RAIL_HEIGHT };
+    let height = if expanded {
+        EXPANDED_HEIGHT
+    } else {
+        RAIL_HEIGHT
+    };
     (
         (RAIL_WIDTH * scale_factor).round() as u32,
         (height * scale_factor).round() as u32,
@@ -133,29 +140,68 @@ pub fn handle_positions(
 /// rewrite the user's choice, and re-plugging must not migrate back on its own.
 pub fn resolve_target_monitor(
     saved: Option<&str>,
+    active: Option<&str>,
     ids: &[String],
     primary: Option<usize>,
 ) -> Option<usize> {
-    saved
+    active
         .and_then(|id| ids.iter().position(|candidate| candidate == id))
+        .or_else(|| saved.and_then(|id| ids.iter().position(|candidate| candidate == id)))
         .or(primary)
         .or(if ids.is_empty() { None } else { Some(0) })
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SurfaceBounds {
+    pub left: i32,
+    pub top: i32,
+    pub right: i32,
+    pub bottom: i32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OutsideClickAction {
+    Collapse,
+    CollapseThenHide,
+}
+
+/// Once a detail has been viewed, collapsing it must leave the aggregate
+/// summary visible. Otherwise the live queue head can replace the item the
+/// user just inspected (for example, an urgent quadrant task replacing an
+/// all-day calendar event).
+pub fn collapse_to_summary_after_view() -> bool {
+    true
+}
+
+pub fn point_is_inside_surface(x: i32, y: i32, bounds: SurfaceBounds) -> bool {
+    x >= bounds.left && x < bounds.right && y >= bounds.top && y < bounds.bottom
+}
+
+pub fn outside_click_action(notification_mode: &str) -> OutsideClickAction {
+    if notification_mode == "notification" {
+        OutsideClickAction::CollapseThenHide
+    } else {
+        OutsideClickAction::Collapse
+    }
 }
 
 #[derive(Debug)]
 pub struct PanelController {
     state: Mutex<PanelState>,
     positioning: Mutex<()>,
+    visibility: Mutex<()>,
 }
 
 #[derive(Debug)]
 struct PanelState {
     enabled: bool,
     target_monitor_id: Option<String>,
+    active_monitor_id: Option<String>,
     /// Which half of the rail the open sheet belongs to. `None` is collapsed.
     details_source: Option<PanelSource>,
     hover_source: Option<PanelSource>,
     details_generation: u64,
+    visibility_generation: u64,
     /// Logical pixels from the work area's horizontal centre.
     offset_x: f64,
     /// `Some` *is* "a drag is in progress".
@@ -185,13 +231,16 @@ impl Default for PanelController {
             state: Mutex::new(PanelState {
                 enabled: true,
                 target_monitor_id: None,
+                active_monitor_id: None,
                 details_source: None,
                 hover_source: None,
                 details_generation: 0,
+                visibility_generation: 0,
                 offset_x: 0.0,
                 drag: None,
             }),
             positioning: Mutex::new(()),
+            visibility: Mutex::new(()),
         }
     }
 }
@@ -206,7 +255,17 @@ impl PanelController {
     }
 
     pub fn set_target_monitor_id(&self, target_monitor_id: Option<String>) {
-        self.state.lock().unwrap().target_monitor_id = target_monitor_id;
+        let mut state = self.state.lock().unwrap();
+        state.target_monitor_id = target_monitor_id.clone();
+        state.active_monitor_id = target_monitor_id;
+    }
+
+    pub fn active_monitor_id(&self) -> Option<String> {
+        self.state.lock().unwrap().active_monitor_id.clone()
+    }
+
+    pub fn set_active_monitor_id(&self, active_monitor_id: Option<String>) {
+        self.state.lock().unwrap().active_monitor_id = active_monitor_id;
     }
 
     pub fn offset_x(&self) -> f64 {
@@ -334,6 +393,41 @@ impl PanelController {
         self.state.lock().unwrap().details_generation == generation
     }
 
+    pub fn visibility_generation(&self) -> u64 {
+        self.state.lock().unwrap().visibility_generation
+    }
+
+    pub fn mark_visible(&self) {
+        self.state.lock().unwrap().visibility_generation += 1;
+    }
+
+    pub fn show_serialized<T>(&self, show: impl FnOnce() -> T) -> T {
+        let _visibility = self.visibility.lock().unwrap();
+        self.mark_visible();
+        show()
+    }
+
+    pub fn hide_serialized<T>(&self, hide: impl FnOnce() -> T) -> T {
+        let _visibility = self.visibility.lock().unwrap();
+        hide()
+    }
+
+    pub fn hide_if_visibility_current<T>(
+        &self,
+        generation: u64,
+        hide: impl FnOnce() -> T,
+    ) -> Option<T> {
+        let _visibility = self.visibility.lock().unwrap();
+        if !self.is_visibility_current(generation) {
+            return None;
+        }
+        Some(hide())
+    }
+
+    pub fn is_visibility_current(&self, generation: u64) -> bool {
+        self.state.lock().unwrap().visibility_generation == generation
+    }
+
     pub fn set_enabled(&self, enabled: bool) {
         let mut state = self.state.lock().unwrap();
         state.enabled = enabled;
@@ -345,23 +439,38 @@ impl PanelController {
     }
 }
 
-pub fn initialize<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+pub fn initialize<R: Runtime>(app: &AppHandle<R>, notification_mode: &str) -> Result<(), String> {
     reposition_handle(app)?;
     let handle = app
         .get_webview_window("quick-panel-handle")
         .ok_or_else(|| "quick-panel-handle window not found".to_owned())?;
-    handle.show().map_err(|error| error.to_string())
+    if starts_visible(notification_mode) {
+        handle.show()
+    } else {
+        handle.hide()
+    }
+    .map_err(|error| error.to_string())
+}
+
+fn starts_visible(notification_mode: &str) -> bool {
+    notification_mode == "persistent"
 }
 
 fn target_monitor<R: Runtime>(window: &tauri::WebviewWindow<R>) -> Result<tauri::Monitor, String> {
     let monitors = window
         .available_monitors()
         .map_err(|error| error.to_string())?;
-    let primary = window.primary_monitor().map_err(|error| error.to_string())?;
+    let primary = window
+        .primary_monitor()
+        .map_err(|error| error.to_string())?;
     let saved = window
         .app_handle()
         .state::<PanelController>()
         .target_monitor_id();
+    let active = window
+        .app_handle()
+        .state::<PanelController>()
+        .active_monitor_id();
     let ids: Vec<String> = monitors
         .iter()
         .map(|monitor| {
@@ -371,14 +480,18 @@ fn target_monitor<R: Runtime>(window: &tauri::WebviewWindow<R>) -> Result<tauri:
         .collect();
     let primary_index = primary.as_ref().and_then(|primary| {
         let position = primary.position();
-        let id = crate::monitors::monitor_id(
-            primary.name().map(String::as_str),
-            position.x,
-            position.y,
-        );
+        let id =
+            crate::monitors::monitor_id(primary.name().map(String::as_str), position.x, position.y);
         ids.iter().position(|candidate| *candidate == id)
     });
-    resolve_target_monitor(saved.as_deref(), &ids, primary_index)
+    let resolved = resolve_target_monitor(saved.as_deref(), active.as_deref(), &ids, primary_index);
+    if let Some(index) = resolved {
+        window
+            .app_handle()
+            .state::<PanelController>()
+            .set_active_monitor_id(ids.get(index).cloned());
+    }
+    resolved
         .and_then(|index| monitors.get(index).cloned())
         .or_else(|| primary.clone())
         .ok_or_else(|| "no monitor available".to_owned())
@@ -492,7 +605,11 @@ pub fn start_monitor_watch<R: Runtime>(app: AppHandle<R>) {
     });
 }
 
-pub fn set_enabled<R: Runtime>(app: &AppHandle<R>, enabled: bool) -> Result<(), String> {
+pub fn set_enabled<R: Runtime>(
+    app: &AppHandle<R>,
+    enabled: bool,
+    notification_mode: &str,
+) -> Result<(), String> {
     let controller = app.state::<PanelController>();
     if controller.is_enabled() == enabled {
         return Ok(());
@@ -500,7 +617,7 @@ pub fn set_enabled<R: Runtime>(app: &AppHandle<R>, enabled: bool) -> Result<(), 
     controller.set_enabled(enabled);
     let _positioning = controller.positioning.lock().unwrap();
     if enabled {
-        if let Err(error) = initialize(app) {
+        if let Err(error) = initialize(app, notification_mode) {
             controller.set_enabled(false);
             return Err(error);
         }
@@ -526,11 +643,24 @@ pub fn set_enabled<R: Runtime>(app: &AppHandle<R>, enabled: bool) -> Result<(), 
 /// Grows the rail into the sheet. The window has to be the full expanded size
 /// *before* the WebView starts animating, or the sheet would be clipped by the
 /// window edge on every frame (design.md §10).
+fn acknowledgement_identity(
+    source: PanelSource,
+    explicit: bool,
+    identity: Option<String>,
+) -> Option<String> {
+    if source == PanelSource::Island && explicit {
+        identity
+    } else {
+        None
+    }
+}
+
 fn show_details<R: Runtime>(
     app: &AppHandle<R>,
     generation: u64,
     source: PanelSource,
     focus: bool,
+    identity: Option<String>,
 ) -> Result<(), String> {
     let controller = app.state::<PanelController>();
     let handle = app
@@ -545,25 +675,20 @@ fn show_details<R: Runtime>(
     // The island sheet is opened *for* one reminder. Sending that identity lets
     // the view pin itself to it, so a later queue head change cannot swap the
     // sheet's content — and its action buttons' target — under the user. The
-    // Nowly sheet is about no reminder at all, so it pins to nothing.
-    let identity = match source {
-        PanelSource::Island => crate::status_island::primary_identity(app),
-        PanelSource::Nowly => None,
-    };
     handle
         .emit(
             "status-island-details-open",
             DetailsOpen {
                 source,
-                identity,
+                identity: identity.clone(),
                 hovered: !focus,
             },
         )
         .map_err(|error| error.to_string())?;
-    if source == PanelSource::Island {
-        // The sheet is now genuinely on screen and readable by assistive tech,
-        // so this is the moment the current reminder counts as seen.
-        crate::status_island::acknowledge_primary(app);
+    if let Some(identity) = acknowledgement_identity(source, focus, identity.clone()) {
+        // Only an explicit click/keyboard open of one concrete reminder counts
+        // as seen. Hover is a preview, and an aggregate has no single reminder.
+        crate::status_island::acknowledge_identity(app, &identity);
     }
     if focus {
         // Active click/keyboard opens receive Escape; passive hover must not
@@ -577,22 +702,56 @@ fn show_details<R: Runtime>(
 /// WebView has finished collapsing, so the shrink is deferred; the generation
 /// check makes a reopen in the meantime cancel it rather than snap the window
 /// back under an open sheet.
-fn hide_details<R: Runtime>(app: &AppHandle<R>, generation: u64) -> Result<(), String> {
+fn hide_details_with_action<R: Runtime>(
+    app: &AppHandle<R>,
+    generation: u64,
+    action: OutsideClickAction,
+    collapse_to_summary: bool,
+) -> Result<(), String> {
     let Some(handle) = app.get_webview_window("quick-panel-handle") else {
         return Ok(());
     };
-    let _ = handle.emit("status-island-details-close", ());
+    let visibility_generation = app.state::<PanelController>().visibility_generation();
+    let _ = handle.emit(
+        "status-island-details-close",
+        DetailsClose {
+            hide_after_collapse: action == OutsideClickAction::CollapseThenHide,
+            collapse_to_summary,
+        },
+    );
     let app = app.clone();
     std::thread::spawn(move || {
         std::thread::sleep(COLLAPSE_ANIMATION);
-        if !app.state::<PanelController>().is_details_current(generation) {
+        if !app
+            .state::<PanelController>()
+            .is_details_current(generation)
+        {
             return;
         }
         if let Err(error) = reconcile_positions(&app) {
             eprintln!("failed to shrink the status island rail: {error}");
         }
+        if action == OutsideClickAction::CollapseThenHide {
+            if let Some(handle) = app.get_webview_window("quick-panel-handle") {
+                let hidden = app
+                    .state::<PanelController>()
+                    .hide_if_visibility_current(visibility_generation, || handle.hide());
+                if let Some(Err(error)) = hidden {
+                    eprintln!("failed to hide notification-only status island: {error}");
+                }
+            }
+        }
     });
     Ok(())
+}
+
+fn hide_details<R: Runtime>(app: &AppHandle<R>, generation: u64) -> Result<(), String> {
+    hide_details_with_action(
+        app,
+        generation,
+        OutsideClickAction::Collapse,
+        collapse_to_summary_after_view(),
+    )
 }
 
 pub fn close_details_for_navigation<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
@@ -600,23 +759,47 @@ pub fn close_details_for_navigation<R: Runtime>(app: &AppHandle<R>) -> Result<()
     hide_details(app, transition.generation)
 }
 
-#[tauri::command]
-pub fn toggle_status_island_details(app: AppHandle) -> Result<(), crate::error::CommandError> {
-    toggle_panel(app, PanelSource::Island)
+fn current_notification_mode<R: Runtime>(app: &AppHandle<R>) -> String {
+    let Some(db) = app.try_state::<crate::db::AppDb>() else {
+        return "persistent".to_owned();
+    };
+    let Ok(connection) = db.0.lock() else {
+        return "persistent".to_owned();
+    };
+    crate::settings::read_app_settings(&connection)
+        .map(|settings| settings.notification_mode)
+        .unwrap_or_else(|_| "persistent".to_owned())
 }
 
-/// The Nowly entry dot at the right end of the rail.
-#[tauri::command]
-pub fn toggle_nowly_panel(app: AppHandle) -> Result<(), crate::error::CommandError> {
-    toggle_panel(app, PanelSource::Nowly)
+pub fn close_details_after_outside_click<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+    if !app.state::<PanelController>().are_details_open() {
+        return Ok(());
+    }
+    let action = outside_click_action(&current_notification_mode(app));
+    let transition = app.state::<PanelController>().close_details();
+    hide_details_with_action(app, transition.generation, action, true)
 }
 
-fn toggle_panel(app: AppHandle, source: PanelSource) -> Result<(), crate::error::CommandError> {
+#[tauri::command]
+pub fn toggle_status_island_details(
+    app: AppHandle,
+    identity: Option<String>,
+) -> Result<(), crate::error::CommandError> {
+    toggle_panel(app, PanelSource::Island, identity)
+}
+
+fn toggle_panel(
+    app: AppHandle,
+    source: PanelSource,
+    identity: Option<String>,
+) -> Result<(), crate::error::CommandError> {
     let transition = app.state::<PanelController>().toggle_details(source);
     match transition.source {
-        Some(source) => show_details(&app, transition.generation, source, true)
+        Some(source) => show_details(&app, transition.generation, source, true, identity)
             .map_err(crate::error::CommandError::system),
-        None => hide_details(&app, transition.generation).map_err(crate::error::CommandError::system),
+        None => {
+            hide_details(&app, transition.generation).map_err(crate::error::CommandError::system)
+        }
     }
 }
 
@@ -630,7 +813,12 @@ fn hover_panel(app: AppHandle, source: PanelSource) -> Result<(), crate::error::
         // Still the newest hover, and the pointer never left in between.
         let still_present = app
             .try_state::<crate::status_island::ManagedReminders>()
-            .and_then(|reminders| reminders.lock().ok().map(|lifecycle| lifecycle.island_present()))
+            .and_then(|reminders| {
+                reminders
+                    .lock()
+                    .ok()
+                    .map(|lifecycle| lifecycle.island_present())
+            })
             .unwrap_or(false);
         if !still_present || !controller.is_details_current(generation) {
             return;
@@ -638,7 +826,8 @@ fn hover_panel(app: AppHandle, source: PanelSource) -> Result<(), crate::error::
         if !controller.complete_hover_open(generation) {
             return;
         }
-        if let Err(error) = show_details(&app, generation, source, false) {
+        let identity = crate::status_island::primary_identity(&app);
+        if let Err(error) = show_details(&app, generation, source, false, identity) {
             eprintln!("failed to open status island details on hover: {error}");
             let transition = controller.close_details();
             let _ = hide_details(&app, transition.generation);
@@ -654,14 +843,117 @@ pub fn hover_status_island_details(app: AppHandle) -> Result<(), crate::error::C
 }
 
 #[tauri::command]
-pub fn hover_nowly_panel(app: AppHandle) -> Result<(), crate::error::CommandError> {
-    hover_panel(app, PanelSource::Nowly)
-}
-
-#[tauri::command]
 pub fn close_status_island_details(app: AppHandle) -> Result<(), crate::error::CommandError> {
     close_details_for_navigation(&app).map_err(crate::error::CommandError::system)
 }
+
+#[cfg(target_os = "windows")]
+mod outside_click_watch {
+    use super::{
+        close_details_after_outside_click, point_is_inside_surface, PanelController, SurfaceBounds,
+    };
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::OnceLock;
+    use tauri::{AppHandle, Manager};
+    use windows::Win32::Foundation::{LPARAM, LRESULT, RECT, WPARAM};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        CallNextHookEx, DispatchMessageW, GetMessageW, GetWindowRect, SetWindowsHookExW,
+        TranslateMessage, MSG, MSLLHOOKSTRUCT, WH_MOUSE_LL, WM_LBUTTONDOWN, WM_MBUTTONDOWN,
+        WM_RBUTTONDOWN,
+    };
+
+    static APP: OnceLock<AppHandle> = OnceLock::new();
+    static HANDLING_OUTSIDE_CLICK: AtomicBool = AtomicBool::new(false);
+
+    unsafe extern "system" fn mouse_hook_proc(
+        code: i32,
+        wparam: WPARAM,
+        lparam: LPARAM,
+    ) -> LRESULT {
+        if code >= 0
+            && matches!(
+                wparam.0 as u32,
+                WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN
+            )
+        {
+            let _ = std::panic::catch_unwind(|| {
+                let Some(app) = APP.get() else {
+                    return;
+                };
+                if !app.state::<PanelController>().are_details_open() {
+                    return;
+                }
+                let Some(window) = app.get_webview_window("quick-panel-handle") else {
+                    return;
+                };
+                let Ok(hwnd) = window.hwnd() else {
+                    return;
+                };
+                let mut rect = RECT::default();
+                if unsafe { GetWindowRect(hwnd, &mut rect) }.is_err() {
+                    return;
+                }
+                let data = unsafe { &*(lparam.0 as *const MSLLHOOKSTRUCT) };
+                let bounds = SurfaceBounds {
+                    left: rect.left,
+                    top: rect.top,
+                    right: rect.right,
+                    bottom: rect.bottom,
+                };
+                if point_is_inside_surface(data.pt.x, data.pt.y, bounds)
+                    || HANDLING_OUTSIDE_CLICK.swap(true, Ordering::SeqCst)
+                {
+                    return;
+                }
+                let app = app.clone();
+                let spawn = std::thread::Builder::new()
+                    .name("status-island-outside-click".into())
+                    .spawn(move || {
+                        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                            close_details_after_outside_click(&app)
+                        }));
+                        if let Ok(Err(error)) = result {
+                            eprintln!("failed to close status island after outside click: {error}");
+                        }
+                        HANDLING_OUTSIDE_CLICK.store(false, Ordering::SeqCst);
+                    });
+                if spawn.is_err() {
+                    HANDLING_OUTSIDE_CLICK.store(false, Ordering::SeqCst);
+                }
+            });
+        }
+        unsafe { CallNextHookEx(None, code, wparam, lparam) }
+    }
+
+    pub fn start(app: AppHandle) {
+        if APP.set(app).is_err() {
+            return;
+        }
+        std::thread::spawn(move || unsafe {
+            let hook = match SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_hook_proc), None, 0) {
+                Ok(hook) => hook,
+                Err(error) => {
+                    eprintln!("failed to install status island outside-click hook: {error}");
+                    return;
+                }
+            };
+            let mut message = MSG::default();
+            while GetMessageW(&mut message, None, 0, 0).as_bool() {
+                let _ = TranslateMessage(&message);
+                DispatchMessageW(&message);
+            }
+            let _ = windows::Win32::UI::WindowsAndMessaging::UnhookWindowsHookEx(hook);
+        });
+    }
+}
+
+#[cfg(target_os = "windows")]
+pub fn start_outside_click_watch(app: AppHandle) {
+    outside_click_watch::start(app);
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn start_outside_click_watch(_app: AppHandle) {}
 
 /// Where the user parked the surface, in logical pixels from the work area's
 /// horizontal centre. A missing or unreadable row means it was never dragged, so
@@ -796,8 +1088,10 @@ pub fn end_status_island_drag(app: AppHandle) -> Result<(), crate::error::Comman
 #[cfg(test)]
 mod tests {
     use super::{
-        centered_x, handle_positions, load_offset_x, resolve_target_monitor, screen_top, surface_x,
-        top_surface_size, DragAnchor, PanelController, PanelSource, WorkArea,
+        acknowledgement_identity, centered_x, handle_positions, load_offset_x,
+        collapse_to_summary_after_view, outside_click_action, point_is_inside_surface, resolve_target_monitor, screen_top,
+        starts_visible, surface_x, top_surface_size, DragAnchor, OutsideClickAction,
+        PanelController, PanelSource, SurfaceBounds, WorkArea,
     };
     use tauri::PhysicalPosition;
 
@@ -829,6 +1123,24 @@ mod tests {
         assert_eq!(handle["shadow"], false);
         assert_eq!(handle["transparent"], true);
         assert_eq!(handle["backgroundColor"], "#00000000");
+    }
+
+    #[test]
+    fn only_an_explicit_open_of_a_specific_reminder_acknowledges_it() {
+        let identity = Some("event:a:reminder:15".to_owned());
+
+        assert_eq!(
+            acknowledgement_identity(PanelSource::Island, true, identity.clone()),
+            identity
+        );
+        assert_eq!(
+            acknowledgement_identity(PanelSource::Island, false, Some("event:a".into())),
+            None
+        );
+        assert_eq!(
+            acknowledgement_identity(PanelSource::Island, true, None),
+            None
+        );
     }
 
     #[test]
@@ -865,6 +1177,88 @@ mod tests {
     }
 
     #[test]
+    fn notification_only_startup_stays_hidden_until_the_webview_finds_an_unseen_reminder() {
+        assert!(starts_visible("persistent"));
+        assert!(!starts_visible("notification"));
+        assert!(!starts_visible("unexpected"));
+    }
+
+    #[test]
+    fn outside_click_collapses_both_modes_and_only_hides_notification_mode() {
+        assert_eq!(
+            outside_click_action("persistent"),
+            OutsideClickAction::Collapse
+        );
+        assert_eq!(
+            outside_click_action("notification"),
+            OutsideClickAction::CollapseThenHide
+        );
+    }
+
+    #[test]
+    fn a_viewed_detail_collapses_to_the_summary_instead_of_the_next_reminder() {
+        assert!(collapse_to_summary_after_view());
+    }
+
+    #[test]
+    fn showing_the_surface_cancels_a_pending_notification_only_hide() {
+        let controller = PanelController::default();
+        let before = controller.visibility_generation();
+
+        controller.show_serialized(|| ());
+
+        assert!(controller.visibility_generation() > before);
+    }
+
+    #[test]
+    fn visibility_operations_serialize_the_generation_check_with_hide() {
+        use std::sync::{mpsc, Arc};
+
+        let controller = Arc::new(PanelController::default());
+        let generation = controller.visibility_generation();
+        let (hide_started_tx, hide_started_rx) = mpsc::channel();
+        let (release_hide_tx, release_hide_rx) = mpsc::channel();
+        let (show_finished_tx, show_finished_rx) = mpsc::channel();
+
+        let hiding = Arc::clone(&controller);
+        let hide_thread = std::thread::spawn(move || {
+            hiding.hide_if_visibility_current(generation, || {
+                hide_started_tx.send(()).unwrap();
+                release_hide_rx.recv().unwrap();
+            })
+        });
+        hide_started_rx.recv().unwrap();
+
+        let showing = Arc::clone(&controller);
+        let show_thread = std::thread::spawn(move || {
+            showing.show_serialized(|| ());
+            show_finished_tx.send(()).unwrap();
+        });
+
+        assert!(show_finished_rx.try_recv().is_err());
+        release_hide_tx.send(()).unwrap();
+        hide_thread.join().unwrap();
+        show_thread.join().unwrap();
+        show_finished_rx.recv().unwrap();
+        assert!(controller.visibility_generation() > generation);
+    }
+
+    #[test]
+    fn clicks_on_the_status_bar_or_expanded_panel_are_not_outside_clicks() {
+        let bounds = SurfaceBounds {
+            left: 816,
+            top: 8,
+            right: 1104,
+            bottom: 296,
+        };
+
+        assert!(point_is_inside_surface(900, 20, bounds));
+        assert!(point_is_inside_surface(900, 200, bounds));
+        assert!(!point_is_inside_surface(815, 20, bounds));
+        assert!(!point_is_inside_surface(900, 297, bounds));
+    }
+
+    #[test]
     fn top_surfaces_ignore_a_top_taskbar_work_area_inset() {
         assert_eq!(screen_top(0, 48), 0);
         assert_eq!(screen_top(-900, -852), -900);
@@ -883,24 +1277,6 @@ mod tests {
         assert_eq!(top_surface_size(false, 2.0), (576, 80));
         assert_eq!(top_surface_size(true, 2.0), (576, 576));
         assert_eq!(handle_positions(-900, 60, 12).visible_y, -888);
-    }
-
-    #[test]
-    fn opening_the_other_half_swaps_the_sheet_instead_of_closing_it() {
-        let controller = PanelController::default();
-
-        let island = controller.toggle_details(PanelSource::Island);
-        assert_eq!(island.source, Some(PanelSource::Island));
-
-        // One sheet, two sources: the Nowly dot takes it over rather than
-        // opening a second surface next to it.
-        let nowly = controller.toggle_details(PanelSource::Nowly);
-        assert_eq!(nowly.source, Some(PanelSource::Nowly));
-        assert!(controller.are_details_open());
-
-        // The same half again closes it.
-        assert_eq!(controller.toggle_details(PanelSource::Nowly).source, None);
-        assert!(!controller.are_details_open());
     }
 
     #[test]
@@ -951,9 +1327,15 @@ mod tests {
         // increment, so the surface stays glued to the pointer. It also answers
         // with the window position outright: the move path never re-resolves the
         // monitor, because it runs on the main thread once per pointer frame.
-        assert_eq!(controller.drag_to(40.0), Some(PhysicalPosition::new(856, 8)));
+        assert_eq!(
+            controller.drag_to(40.0),
+            Some(PhysicalPosition::new(856, 8))
+        );
         assert_eq!(controller.offset_x(), 40.0);
-        assert_eq!(controller.drag_to(-15.0), Some(PhysicalPosition::new(801, 8)));
+        assert_eq!(
+            controller.drag_to(-15.0),
+            Some(PhysicalPosition::new(801, 8))
+        );
         assert_eq!(controller.offset_x(), -15.0);
 
         assert!(controller.end_drag());
@@ -964,7 +1346,10 @@ mod tests {
 
         // A second drag starts from where the first left it.
         assert!(controller.begin_drag(anchor()));
-        assert_eq!(controller.drag_to(10.0), Some(PhysicalPosition::new(811, 8)));
+        assert_eq!(
+            controller.drag_to(10.0),
+            Some(PhysicalPosition::new(811, 8))
+        );
         assert_eq!(controller.offset_x(), -5.0);
 
         // Garbage never reaches the position.
@@ -1004,7 +1389,6 @@ mod tests {
         assert!(!controller.is_details_current(opened.generation));
         assert!(controller.reserve_hover_open(PanelSource::Island).is_none());
         assert_eq!(controller.toggle_details(PanelSource::Island).source, None);
-        assert_eq!(controller.toggle_details(PanelSource::Nowly).source, None);
 
         controller.end_drag();
         assert!(controller.reserve_hover_open(PanelSource::Island).is_some());
@@ -1071,9 +1455,9 @@ mod tests {
         assert!(!controller.complete_hover_open(reserved));
         assert!(!controller.are_details_open());
 
-        let second = controller.reserve_hover_open(PanelSource::Nowly).unwrap();
+        let second = controller.reserve_hover_open(PanelSource::Island).unwrap();
         assert!(controller.complete_hover_open(second));
-        assert_eq!(controller.details_source(), Some(PanelSource::Nowly));
+        assert_eq!(controller.details_source(), Some(PanelSource::Island));
         // An already open sheet does not reserve another hover open.
         assert!(controller.reserve_hover_open(PanelSource::Island).is_none());
     }
@@ -1084,7 +1468,6 @@ mod tests {
         controller.set_enabled(false);
 
         assert_eq!(controller.toggle_details(PanelSource::Island).source, None);
-        assert_eq!(controller.toggle_details(PanelSource::Nowly).source, None);
         assert!(controller.reserve_hover_open(PanelSource::Island).is_none());
         assert!(!controller.are_details_open());
     }
@@ -1093,30 +1476,41 @@ mod tests {
     fn a_disconnected_target_monitor_falls_back_to_primary_without_overwriting_the_saved_id() {
         let ids = vec!["primary".to_owned(), "side".to_owned()];
 
-        assert_eq!(resolve_target_monitor(Some("side"), &ids, Some(0)), Some(1));
+        assert_eq!(
+            resolve_target_monitor(Some("side"), Some("side"), &ids, Some(0)),
+            Some(1)
+        );
 
         // The side monitor is unplugged: fall back atomically to primary.
         let remaining = vec!["primary".to_owned()];
         assert_eq!(
-            resolve_target_monitor(Some("side"), &remaining, Some(0)),
+            resolve_target_monitor(Some("side"), Some("side"), &remaining, Some(0)),
             Some(0)
         );
 
-        // The saved id is untouched, so re-plugging restores the user's choice
-        // rather than pinning them to primary.
-        assert_eq!(resolve_target_monitor(Some("side"), &ids, Some(0)), Some(1));
+        // The saved preference is untouched, but the effective fallback is now
+        // primary. Re-plugging must not move the surface without a fresh user
+        // selection.
+        assert_eq!(
+            resolve_target_monitor(Some("side"), Some("primary"), &ids, Some(0)),
+            Some(0)
+        );
 
         let controller = PanelController::default();
         controller.set_target_monitor_id(Some("side".to_owned()));
         assert_eq!(controller.target_monitor_id().as_deref(), Some("side"));
+        assert_eq!(controller.active_monitor_id().as_deref(), Some("side"));
     }
 
     #[test]
     fn monitor_resolution_degrades_when_no_primary_is_reported() {
         let ids = vec!["only".to_owned()];
 
-        assert_eq!(resolve_target_monitor(None, &ids, None), Some(0));
-        assert_eq!(resolve_target_monitor(Some("missing"), &ids, None), Some(0));
-        assert_eq!(resolve_target_monitor(None, &[], None), None);
+        assert_eq!(resolve_target_monitor(None, None, &ids, None), Some(0));
+        assert_eq!(
+            resolve_target_monitor(Some("missing"), Some("missing"), &ids, None),
+            Some(0)
+        );
+        assert_eq!(resolve_target_monitor(None, None, &[], None), None);
     }
 }

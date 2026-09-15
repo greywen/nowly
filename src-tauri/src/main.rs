@@ -247,7 +247,6 @@ fn main() {
             show_main_window(app)
         }))
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(
             tauri_plugin_autostart::Builder::new()
                 .args(["--background"])
@@ -259,6 +258,9 @@ fn main() {
                 .app_data_dir()
                 .expect("failed to resolve app data dir");
             std::fs::create_dir_all(&app_dir).expect("failed to create app data dir");
+            if let Err(error) = status_island::remove_legacy_reminder_store(&app_dir) {
+                eprintln!("failed to delete the legacy status island reminder store: {error}");
+            }
             // Ensure the dev-modules draft directory exists so the workbench
             // has a stable, discoverable place to read drafts from.
             std::fs::create_dir_all(app_dir.join("dev-modules"))
@@ -280,10 +282,10 @@ fn main() {
             let quick_settings = settings::read_app_settings(&app.state::<AppDb>().0.lock().unwrap()).unwrap_or_else(|_| crate::models::AppSettings {
                 wallpaper_enabled: false, launch_at_login: false, target_monitor_id: None, density: "balanced".into(),
                 week_start: "monday".into(), date_format: "localized".into(), show_weekends: true, icon_style: "duotone".into(),
-                hide_topbar_in_wallpaper: true, notification_display: crate::models::default_notification_display(), notification_mode: crate::models::default_notification_mode(), quick_panel_enabled: true, quick_panel_shortcut: "Ctrl+Space".into(), recent_colors: vec![]
+                hide_topbar_in_wallpaper: true, notification_mode: crate::models::default_notification_mode(), quick_panel_enabled: true, quick_panel_shortcut: "Ctrl+Space".into(), recent_colors: vec![]
             });
             let quick_panel_controller = quick_panel::PanelController::default();
-            quick_panel_controller.set_enabled(quick_settings.quick_panel_enabled);
+            quick_panel_controller.set_enabled(true);
             quick_panel_controller.set_target_monitor_id(quick_settings.target_monitor_id.clone());
             // Where the user last dragged the top surface along the top edge.
             // Restored before the window is first placed, so it never appears
@@ -292,23 +294,27 @@ fn main() {
                 &app.state::<AppDb>().0.lock().unwrap(),
             ));
             app.manage(quick_panel_controller);
+            quick_panel::start_outside_click_watch(app.handle().clone());
             quick_panel::start_monitor_watch(app.handle().clone());
-            if quick_settings.quick_panel_enabled {
-                // A top-surface creation or positioning failure must not stop the
-                // main app from starting; it is logged and the app continues.
-                if let Err(error) = quick_panel::initialize(&app.handle()) {
-                    eprintln!("failed to initialize the status island top surface: {error}");
-                }
+            // A top-surface creation or positioning failure must not stop the
+            // main app from starting; it is logged and the app continues.
+            if let Err(error) =
+                quick_panel::initialize(&app.handle(), &quick_settings.notification_mode)
+            {
+                eprintln!("failed to initialize the status island top surface: {error}");
             }
             // Reminder acknowledgement is wall-clock local time, so a restart,
             // tray restore or sleep/wake recomputes from the current local day.
-            // Corrupt storage degrades to an empty store instead of blocking the
-            // top surface.
+            // Missing or unreadable database rows degrade to an empty store
+            // instead of blocking the top surface.
             let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-            app.manage(Mutex::new(status_island::load_reminders(
-                &status_island::reminder_store_path(&app_dir),
-                &today,
-            )));
+            let reminder_lifecycle = app
+                .state::<AppDb>()
+                .0
+                .lock()
+                .map(|connection| status_island::load_reminders(&connection, &today))
+                .unwrap_or_else(|_| status_island::ReminderLifecycle::new(today, Vec::new()));
+            app.manage(Mutex::new(reminder_lifecycle));
             app.manage(Mutex::new(window_lifecycle::WindowLifecycle::default()));
             app.manage(Mutex::new(focus_timer::FocusTimerCoordinator::default()));
             let timer_handle = app.handle().clone();
@@ -531,18 +537,8 @@ fn main() {
                         .state::<quick_panel::PanelController>()
                         .are_details_open()
                     {
-                        if let Err(error) = quick_panel::close_details_for_navigation(app) {
+                        if let Err(error) = quick_panel::close_details_after_outside_click(app) {
                             eprintln!("failed to close status island details after focus loss: {error}");
-                        }
-                        let notification_only = app
-                            .state::<AppDb>()
-                            .0
-                            .lock()
-                            .ok()
-                            .and_then(|connection| settings::read_app_settings(&connection).ok())
-                            .is_some_and(|settings| settings.notification_mode == "notification");
-                        if notification_only {
-                            let _ = window.hide();
                         }
                     }
                 }
@@ -696,17 +692,13 @@ fn main() {
             wallpaper::enter_wallpaper_mode,
             wallpaper::enter_foreground_mode,
             quick_panel::toggle_status_island_details,
-            quick_panel::toggle_nowly_panel,
             quick_panel::hover_status_island_details,
-            quick_panel::hover_nowly_panel,
             quick_panel::close_status_island_details,
             quick_panel::begin_status_island_drag,
             quick_panel::drag_status_island,
             quick_panel::end_status_island_drag,
             status_island::get_status_island_snapshot,
             status_island::acknowledge_status_island_reminder,
-            status_island::acknowledge_status_island_notification,
-            status_island::dismiss_status_island_notification,
             status_island::set_status_island_visibility,
             status_island::dismiss_status_island_reminder,
             status_island::consume_status_island_reminder,

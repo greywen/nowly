@@ -227,8 +227,7 @@ button:disabled { cursor: default; opacity: .65; }
    pixels. It keeps the capsule's width so the Nowly dot stays clickable. */
 .status-island__trigger { position: absolute; z-index: 1; top: 0; left: 0; width: calc(var(--island-w, 240px) - var(--rail-edge, 1px) * 2); height: calc(var(--rail-h, 40px) - var(--rail-edge, 1px) * 2); padding: 0; border: 0; border-radius: var(--radius-default); background: transparent; cursor: default; }
 .status-island__trigger:focus-visible { box-shadow: inset 0 0 0 2px var(--color-primary); }
-.status-rail[data-dragging="true"] .status-island__trigger,
-.status-rail[data-dragging="true"] .status-rail__nowly { cursor: grabbing; }
+.status-island[data-dragging="true"] .status-island__trigger { cursor: grabbing; }
 
 /* Two dismiss buttons at two positions, cross-fading. Moving one element would
    be a position tween, which design.md §10 does not allow here. */
@@ -245,10 +244,8 @@ button:disabled { cursor: default; opacity: .65; }
 
 /* The other half of the rail. Outside the sheet, because it has to stay visible
    beside the collapsed sheet; it fades once the sheet has grown over it. */
-.status-rail__nowly { box-sizing: border-box; position: absolute; z-index: 3; top: 0; right: 0; width: var(--nowly-d); height: var(--nowly-d); padding: 0; border: 1px solid var(--border-default); border-radius: 50%; display: grid; place-items: center; background: var(--bg-surface); box-shadow: none; overflow: hidden; cursor: default; }
+.status-rail__nowly { box-sizing: border-box; position: absolute; z-index: 3; top: 0; right: 0; width: var(--nowly-d); height: var(--nowly-d); padding: 0; border: 1px solid var(--border-default); border-radius: 50%; display: grid; place-items: center; background: var(--bg-surface); box-shadow: none; overflow: hidden; pointer-events: none; cursor: default; }
 .status-rail__nowly img { width: 22px; height: 22px; display: block; }
-.status-rail__nowly:hover { background: var(--bg-subtle); }
-.status-rail__nowly:focus-visible { box-shadow: inset 0 0 0 2px var(--color-primary); }
 .status-rail[data-open="true"] .status-rail__nowly { opacity: 0; pointer-events: none; transition: opacity var(--rail-dot-out) ease-out var(--rail-in-delay) !important; }
 .status-rail:not([data-open="true"]) .status-rail__nowly { transition: opacity var(--rail-out) ease-out var(--rail-dot-in-delay) !important; }
 

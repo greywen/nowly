@@ -264,11 +264,6 @@ fn default_quick_panel_enabled() -> bool {
     true
 }
 
-// A new notification is worth reading once in full, so the island starts on the
-// detail. Closing it downgrades that one notification to today's summary.
-pub(crate) fn default_notification_display() -> String {
-    "detail".to_owned()
-}
 pub(crate) fn default_notification_mode() -> String {
     "persistent".to_owned()
 }
@@ -295,9 +290,6 @@ pub struct AppSettings {
     pub icon_style: String,
     #[serde(default = "default_hide_topbar_in_wallpaper")]
     pub hide_topbar_in_wallpaper: bool,
-    /// What the status island carries by default: `detail` or `summary`.
-    #[serde(default = "default_notification_display")]
-    pub notification_display: String,
     #[serde(default = "default_notification_mode")]
     pub notification_mode: String,
     #[serde(default = "default_quick_panel_enabled")]

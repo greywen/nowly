@@ -46,11 +46,6 @@ pub fn read_app_settings(connection: &Connection) -> Result<AppSettings, rusqlit
             crate::models::default_icon_style(),
         )?,
         hide_topbar_in_wallpaper: read_value_or(connection, "hide_topbar_in_wallpaper", true)?,
-        notification_display: read_value_or(
-            connection,
-            "notification_display",
-            crate::models::default_notification_display(),
-        )?,
         notification_mode: read_value_or(
             connection,
             "notification_mode",
@@ -84,15 +79,13 @@ pub(crate) fn validate(settings: &AppSettings) -> Result<(), rusqlite::Error> {
     if !matches!(settings.date_format.as_str(), "localized" | "iso") {
         return Err(rusqlite::Error::InvalidParameterName("dateFormat".into()));
     }
-    // The island only knows these two contents. An unknown value would leave the
-    // surface with no mode to render.
-    if !matches!(settings.notification_display.as_str(), "detail" | "summary") {
+    if !matches!(
+        settings.notification_mode.as_str(),
+        "persistent" | "notification"
+    ) {
         return Err(rusqlite::Error::InvalidParameterName(
-            "notificationDisplay".into(),
+            "notificationMode".into(),
         ));
-    }
-    if !matches!(settings.notification_mode.as_str(), "persistent" | "notification") {
-        return Err(rusqlite::Error::InvalidParameterName("notificationMode".into()));
     }
     if !matches!(
         settings.icon_style.as_str(),
@@ -135,10 +128,6 @@ pub fn write_app_settings(
             serde_json::to_string(&settings.hide_topbar_in_wallpaper),
         ),
         (
-            "notification_display",
-            serde_json::to_string(&settings.notification_display),
-        ),
-        (
             "notification_mode",
             serde_json::to_string(&settings.notification_mode),
         ),
@@ -168,6 +157,10 @@ pub fn write_app_settings(
             (key, value),
         )?;
     }
+    transaction.execute(
+        "DELETE FROM settings WHERE key = 'notification_display'",
+        [],
+    )?;
     transaction.commit()?;
     read_app_settings(connection)
 }
@@ -194,8 +187,6 @@ mod tests {
         assert!(settings.show_weekends);
         assert_eq!(settings.icon_style, "duotone");
         assert!(settings.hide_topbar_in_wallpaper);
-        // A new notification is worth reading once in full.
-        assert_eq!(settings.notification_display, "detail");
         assert_eq!(settings.notification_mode, "persistent");
     }
 
@@ -213,7 +204,6 @@ mod tests {
             show_weekends: false,
             icon_style: "outline".into(),
             hide_topbar_in_wallpaper: false,
-            notification_display: "summary".into(),
             notification_mode: "notification".into(),
             // Non-default values, like every field above: the assertion below is a
             // round trip, so a field left at its default would pass even if it were
@@ -306,5 +296,31 @@ mod tests {
         // And the values persist on a fresh read.
         let reread = read_app_settings(&connection).unwrap();
         assert_eq!(reread, saved);
+    }
+
+    #[test]
+    fn write_removes_the_obsolete_notification_display_setting() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        migrate(&mut connection).unwrap();
+        connection
+            .execute(
+                "INSERT INTO settings(key, value, updated_at)
+                 VALUES ('notification_display', '\"summary\"', '2026-09-15T00:00:00Z')
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                [],
+            )
+            .unwrap();
+        let settings = read_app_settings(&connection).unwrap();
+
+        super::write_app_settings(&mut connection, &settings).unwrap();
+
+        let remaining: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM settings WHERE key = 'notification_display'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(remaining, 0);
     }
 }

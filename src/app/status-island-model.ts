@@ -114,9 +114,6 @@ export type StatusIslandPanelContext =
   | { kind: 'urgentTask'; task: Task }
   | { kind: 'overview'; groups: StatusIslandOverviewGroup[]; markers: StatusIslandMarker[]; totalCount: number };
 
-/** Which content the island carries. Chosen by the user in settings. */
-export type StatusIslandDisplayMode = 'detail' | 'summary';
-
 /**
  * The summary content. Same four slots as the detail content, so the icon, title
  * and meta land on the same pixels in both modes: `lead` fills the icon and the
@@ -142,9 +139,9 @@ export type StatusIslandSurface =
 
 export type StatusIslandModel = {
   primary: StatusIslandPrimary;
-  displayMode: StatusIslandDisplayMode;
   summary: StatusIslandSummary;
   surface: StatusIslandSurface;
+  summaryPanelContext: StatusIslandPanelContext;
   attentionQueue: StatusIslandReminder[];
   /**
    * Every resolved reminder, whatever its lifecycle. A details panel opened for
@@ -248,9 +245,6 @@ type StatusIslandInput = {
   loading?: boolean;
   dismissedPrimaryKeys?: readonly string[];
   reminderStates?: readonly StatusIslandReminderState[];
-  // Which content the island carries when nothing has been dismissed yet. Comes
-  // from the user's notification setting; `detail` is the default.
-  displayMode?: StatusIslandDisplayMode;
 };
 
 function localDate(date: Date): string {
@@ -339,7 +333,7 @@ function eventPrimary(event: CalendarEvent, nowMs: number): Extract<StatusIsland
 }
 
 type ReminderDraft = {
-  reminder: Omit<StatusIslandReminder, 'lifecycle' | 'acknowledgedAt' | 'hideEligibleAt'>;
+  reminder: Omit<StatusIslandReminder, 'lifecycle' | 'acknowledgedAt'>;
   triggerMs: number;
   autoAcknowledgedAt: string | null;
 };
@@ -459,6 +453,19 @@ function resolveLifecycle(
     return { ...draft.reminder, lifecycle: 'unseen', acknowledgedAt: null };
   }
   return { ...draft.reminder, lifecycle: 'acknowledged', acknowledgedAt };
+}
+
+function priorTaskState(
+  states: Map<string, StatusIslandReminderState>,
+  taskId: string,
+  today: string
+): StatusIslandReminderState | undefined {
+  const prefix = `task:${taskId}:`;
+  return [...states.values()].find(state =>
+    state.identity.startsWith(prefix)
+    && state.identity.endsWith(`:${today}`)
+    && (state.dismissed || state.consumed || state.hidden)
+  );
 }
 
 function focusIndicator(focus: StatusIslandFocusInput): StatusIslandFocusIndicator | null {
@@ -591,8 +598,7 @@ export function reminderPanelContext(
 function panelContextFor(
   queue: StatusIslandReminder[],
   focus: StatusIslandFocusInput,
-  buckets: TodayBuckets,
-  displayMode: StatusIslandDisplayMode
+  buckets: TodayBuckets
 ): StatusIslandPanelContext {
   const indicator = focusIndicator(focus);
   const markers = buckets.markers;
@@ -601,7 +607,6 @@ function panelContextFor(
       ? { kind: 'focus', focus: indicator }
       : { kind: 'empty' }
     : { kind: 'overview', groups: overviewGroups(buckets), markers, totalCount: summaryTotal(markers) };
-  if (displayMode === 'summary') return overview;
   const head = reminderPanelContext(queue[0], indicator);
   if (head) return head;
   if (indicator && focus.status !== 'completed') return { kind: 'focus', focus: indicator };
@@ -615,8 +620,7 @@ export function deriveStatusIslandModel({
   focus,
   loading = false,
   dismissedPrimaryKeys = [],
-  reminderStates = [],
-  displayMode = 'detail'
+  reminderStates = []
 }: StatusIslandInput): StatusIslandModel {
   const nowMs = now.getTime();
   const today = localDate(now);
@@ -729,14 +733,20 @@ export function deriveStatusIslandModel({
   // Sorted once, then split: the queue is the visible slice, `reminders` keeps
   // every resolved reminder so a pinned panel can still find its own subject.
   const resolved = drafts
-    .map(draft => ({ draft, reminder: resolveLifecycle(draft, states.get(draft.reminder.identity)) }))
+    .map(draft => {
+      const state = states.get(draft.reminder.identity)
+        ?? (draft.reminder.subject.kind === 'task'
+          ? priorTaskState(states, draft.reminder.subject.task.id, today)
+          : undefined);
+      return { draft, reminder: resolveLifecycle(draft, state) };
+    })
     .sort((left, right) =>
       left.reminder.priority - right.reminder.priority
       || left.draft.triggerMs - right.draft.triggerMs
       || (left.reminder.identity < right.reminder.identity ? -1 : left.reminder.identity > right.reminder.identity ? 1 : 0))
     .map(entry => entry.reminder);
   const attentionQueue = resolved
-    .filter(reminder => reminder.lifecycle === 'unseen' || reminder.lifecycle === 'acknowledged');
+    .filter(reminder => reminder.lifecycle === 'unseen');
   const buckets = todayBuckets(events, tasks, nowMs, today, conflict);
   const indicatorFocus = focusIndicator(focus);
   const hasBusinessState = indicatorFocus !== null || buckets.markers.length > 0;
@@ -751,15 +761,15 @@ export function deriveStatusIslandModel({
   const head = attentionQueue[0];
   const surface: StatusIslandSurface = !hasBusinessState
     ? { mode: 'idle' }
-    : displayMode === 'detail' && head
+    : head
       ? { mode: 'detail', reminder: head }
       : { mode: 'summary', summary };
 
   return {
     primary,
-    displayMode,
     summary,
     surface,
+    summaryPanelContext: panelContextFor([], focus, buckets),
     attentionQueue,
     reminders: resolved,
     indicatorState: {
@@ -769,7 +779,7 @@ export function deriveStatusIslandModel({
       markers: buckets.markers.slice(0, 3),
       hasBusinessState
     },
-    panelContext: panelContextFor(attentionQueue, focus, buckets, displayMode),
+    panelContext: panelContextFor(attentionQueue, focus, buckets),
     candidateKeys,
     signals: signals.slice(0, 2),
     details: { nextEvent: detailEvent, importantTask, focus }
