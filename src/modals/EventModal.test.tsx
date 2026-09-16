@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { CalendarEvent, Recurrence } from '../calendar/calendar-model';
@@ -28,6 +28,31 @@ function props(overrides: Record<string, unknown> = {}) {
 }
 
 describe('EventModal', () => {
+  it('groups real event controls into the approved responsive information hierarchy', async () => {
+    render(<EventModal {...props()} />);
+    const lead = document.querySelector('.event-form__lead');
+    const schedule = document.querySelector('.event-form__schedule-section');
+    const details = document.querySelector('.event-form__details');
+    const note = document.querySelector('.event-form__note');
+    const settings = document.querySelector('.event-form__settings');
+
+    expect(lead).not.toBeNull();
+    expect(schedule).not.toBeNull();
+    expect(details).not.toBeNull();
+    expect(note).not.toBeNull();
+    expect(settings).not.toBeNull();
+    expect(lead?.nextElementSibling).toBe(schedule);
+    expect(schedule?.nextElementSibling).toBe(details);
+    expect(screen.getByRole('heading', { name:'日期与时间' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name:'备注' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name:'日程设置' })).toBeInTheDocument();
+    expect(within(schedule as HTMLElement).getByRole('button', { name:'开始日期' })).toBeInTheDocument();
+    expect(await within(note as HTMLElement).findByLabelText('备注')).toBeInTheDocument();
+    expect(within(settings as HTMLElement).getByRole('combobox', { name:'重复' })).toBeInTheDocument();
+    expect(within(settings as HTMLElement).getByText('提醒')).toBeInTheDocument();
+    expect(within(settings as HTMLElement).getByRole('combobox', { name:'分类' })).toBeInTheDocument();
+  });
+
   it('renders create defaults and every controlled field', async () => {
     const { container } = render(<EventModal {...props()} />);
     expect(screen.getByRole('dialog', { name:'新建日程' })).toBeInTheDocument();

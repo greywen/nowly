@@ -581,6 +581,11 @@ export const translations: Record<Language, Record<string, string>> = {
     'eventModal.targetCalendar': '保存到日历',
     'eventModal.targetLocal': 'Nowly 本地日历',
     'eventModal.remoteCurrentOnly': '远端重复日程仅修改或删除当前实例。',
+    'eventModal.scheduleSection': '日期与时间',
+    'eventModal.scheduleHint': '安排日程的起止日期与时间',
+    'eventModal.noteHint': '记录议程、准备事项或相关信息',
+    'eventModal.settingsSection': '日程设置',
+    'eventModal.settingsHint': '集中管理重复、提醒、分类与颜色',
 
     // 提醒
     'reminder.none': '无提醒',
@@ -1439,6 +1444,11 @@ export const translations: Record<Language, Record<string, string>> = {
     'eventModal.targetCalendar': 'Save to calendar',
     'eventModal.targetLocal': 'Nowly local calendar',
     'eventModal.remoteCurrentOnly': 'For recurring remote events, only this occurrence is changed or deleted.',
+    'eventModal.scheduleSection': 'Date and time',
+    'eventModal.scheduleHint': 'Set the event start and end',
+    'eventModal.noteHint': 'Add an agenda, preparation notes, or related details',
+    'eventModal.settingsSection': 'Event settings',
+    'eventModal.settingsHint': 'Manage recurrence, reminders, category, and color',
 
     // Reminders
     'reminder.none': 'No reminders',
