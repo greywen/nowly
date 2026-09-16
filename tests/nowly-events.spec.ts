@@ -61,7 +61,7 @@ test('navigates exact half-open month ranges',async({page})=>{
 
 test('uses offline keyboard-accessible date and time controls with trapped focus',async({page})=>{
  await page.getByRole('button',{name:'新建日程'}).click();
- await page.getByRole('button',{name:'开始日期'}).click();
+ await page.getByRole('button',{name:'开始',exact:true}).click();
  await page.keyboard.press('ArrowRight'); await page.keyboard.press('Enter');
  await page.getByRole('button',{name:'开始时间'}).click();
  const hour=page.getByRole('spinbutton',{name:'小时'});await hour.press('ArrowUp');await hour.press('Enter');

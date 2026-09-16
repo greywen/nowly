@@ -8,6 +8,7 @@ import {
 } from '../widgets/widget-registry';
 import { CalendarWidget } from '../calendar/CalendarWidget';
 import { useEvents } from '../calendar/useEvents';
+import { useCategories } from '../calendar/useCategories';
 import type { ModalState } from '../lib/modal-store';
 import { externalToCalendarEvent, type CalendarSubscription } from '../calendar/subscription-model';
 import { isEventWritable, type EventTarget } from '../calendar/calendar-model';
@@ -60,6 +61,7 @@ function AppContent() {
   const repository = useNowlyRepository();
   const settingsFeature = useSettings();
   const eventsFeature = useEvents({ weekStart: settingsFeature.settings.data.weekStart });
+  const categoriesFeature = useCategories();
   const tasksFeature = useWorkspaceTasks();
   const notesFeature = useNotes();
   const notesView = useNotesView();
@@ -174,6 +176,7 @@ function AppContent() {
         monthIndex={eventsFeature.monthIndex}
         todayIso={todayIso}
         events={events}
+        categories={categoriesFeature.categories}
         status={eventsFeature.events.status}
         errorMessage={eventsFeature.events.status === 'error' ? eventsFeature.events.message : undefined}
         view={eventsFeature.view}
@@ -394,6 +397,10 @@ function AppContent() {
         updateSubscription={repository.updateCalendarSubscription}
         deleteSubscription={repository.deleteCalendarSubscription}
         refreshSubscription={repository.refreshCalendarSubscription}
+        categories={categoriesFeature.categories}
+        createCategory={categoriesFeature.createCategory}
+        updateCategory={categoriesFeature.updateCategory}
+        deleteCategory={categoriesFeature.deleteCategory}
         recentColors={recentColors}
         onRememberCustomColor={rememberCustomColor}
       />

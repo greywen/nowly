@@ -24,6 +24,14 @@ describe('tauriNowlyRepository', () => {
     expect(emitMock).toHaveBeenCalledWith('status-island-invalidated');
   });
 
+  it('keeps the legacy linking command enabled even when a caller requests false', async () => {
+    invokeMock.mockResolvedValue({ linkingEnabled: true });
+
+    await tauriNowlyRepository.setTaskViewLinking?.(false);
+
+    expect(invokeMock).toHaveBeenCalledWith('set_task_view_linking', { enabled: true });
+  });
+
   it('owns the exact event and startup IPC contracts', async () => {
     invokeMock.mockResolvedValue(undefined);
     const range = {
@@ -87,6 +95,7 @@ describe('tauriNowlyRepository', () => {
       name: '家庭',
       url: 'https://example.com/a.ics',
       color: '#4FC9DA' as const,
+      categoryId: null,
       refreshIntervalMinutes: 15
     };
     await tauriNowlyRepository.listCalendarSubscriptions();

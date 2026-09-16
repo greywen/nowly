@@ -43,7 +43,6 @@ export function KanbanWidget({
   const [dialog, setDialog] = useState<DialogState>(null);
   const [drag, setDrag] = useState<Drag>(null);
   const [dropLaneId, setDropLaneId] = useState<string | null>(null);
-  const [filterPriority, setFilterPriority] = useState('');
   const [filterTag, setFilterTag] = useState('');
   const [filterCollaborator, setFilterCollaborator] = useState('');
   const restoreFocusRef = useRef<HTMLElement | null>(null);
@@ -51,13 +50,6 @@ export function KanbanWidget({
   // Only offer filter values that exist on the current board, and reset a
   // selection to "show all" once it no longer matches anything.
   const showAll = t('filter.showAll');
-  const priorityOptions = useMemo<FilterOption[]>(
-    () => [
-      { value: '', label: showAll },
-      ...data.priorities.map((priority) => ({ value: priority.id, label: priority.name, color: priority.color }))
-    ],
-    [data.priorities, showAll]
-  );
   const tagOptions = useMemo<FilterOption[]>(
     () => [
       { value: '', label: showAll },
@@ -73,12 +65,10 @@ export function KanbanWidget({
     [data.collaborators, showAll]
   );
 
-  const effectivePriority = data.priorities.some((p) => p.id === filterPriority) ? filterPriority : '';
   const effectiveTag = data.tags.some((tag) => tag.id === filterTag) ? filterTag : '';
   const effectiveCollaborator = data.collaborators.some((p) => p.id === filterCollaborator) ? filterCollaborator : '';
 
   function matchesFilter(card: { priorityId: string | null; tagIds: string[]; collaboratorIds: string[] }): boolean {
-    if (effectivePriority && card.priorityId !== effectivePriority) return false;
     if (effectiveTag && !card.tagIds.includes(effectiveTag)) return false;
     if (effectiveCollaborator && !card.collaboratorIds.includes(effectiveCollaborator)) return false;
     return true;
@@ -157,17 +147,8 @@ export function KanbanWidget({
   return (
     <div className="widget-content kanban-widget">
       <div className="card-header">
-        {data.priorities.length > 0 || data.tags.length > 0 || data.collaborators.length > 0 ? (
+        {data.tags.length > 0 || data.collaborators.length > 0 ? (
           <nav className="filter-bar" aria-label={t('kanbanWidget.boardMenu')}>
-            {data.priorities.length > 0 ? (
-              <FilterSelect
-                label={t('kanbanWidget.filterPriority')}
-                ariaLabel={t('kanbanWidget.filterByPriority')}
-                options={priorityOptions}
-                value={effectivePriority}
-                onChange={setFilterPriority}
-              />
-            ) : null}
             {data.tags.length > 0 ? (
               <FilterSelect
                 label={t('kanbanWidget.filterTag')}

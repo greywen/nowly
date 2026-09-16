@@ -28,6 +28,7 @@ const STORAGE_KEY = 'nowly:browser-backend';
 
 type Store = {
   events: Dict[];
+  categories: Dict[];
   subscriptions: Dict[];
   oauthAccounts: Dict[];
   externalEvents: Dict[];
@@ -65,6 +66,7 @@ const defaultSettings: Dict = {
 function emptyStore(): Store {
   return {
     events: [],
+    categories: [],
     subscriptions: [],
     oauthAccounts: [],
     externalEvents: [],
@@ -171,21 +173,17 @@ export function installBrowserTauriBackend() {
     lanes: store.kanban.lanes,
     tags: store.kanban.tags.map((tag) => ({ archivedAt: null, ...tag })),
     collaborators: store.kanban.collaborators.map((person) => ({ archivedAt: null, ...person })),
-    linkingEnabled: store.settings.taskViewLinkingEnabled !== false,
+    linkingEnabled: true,
     defaultLaneId: (store.settings.defaultTaskLaneId as string) ?? 'kanban-lane-todo',
     completionLaneId: (store.settings.completionTaskLaneId as string) ?? 'kanban-lane-done',
     viewPreferences: (store.settings.taskViewPreferences as Dict) ?? {}
   });
 
   const coordinateViews = (task: Dict) => {
-    if (store.settings.taskViewLinkingEnabled === false) {
-      const current = Array.isArray(task.views) ? task.views as string[] : ['kanban'];
-      task.views = current.filter((view) =>
-        view === 'kanban' || (view === 'matrix' && task.priority)
-      );
-      return;
-    }
-    task.views = ['kanban', ...(task.priority ? ['matrix'] : [])];
+    task.views = [
+      'kanban',
+      ...(task.priority ? ['matrix'] : [])
+    ];
   };
 
   const persist = () => {
@@ -195,6 +193,10 @@ export function installBrowserTauriBackend() {
       /* storage disabled; keep running from in-memory state */
     }
   };
+
+  store.settings.taskViewLinkingEnabled = true;
+  store.tasks.forEach(coordinateViews);
+  persist();
 
   const handlers: Record<string, (args: Dict) => unknown> = {
     // Calendar events
@@ -218,6 +220,56 @@ export function installBrowserTauriBackend() {
     delete_event: (a) => {
       const target = a.target as { id: string };
       store.events = store.events.filter((e) => e.id !== target.id);
+      persist();
+    },
+
+    // Calendar categories (user-defined name + color; shared by events & subs)
+    list_categories: () =>
+      [...store.categories].sort(
+        (a, b) => (a.position as number) - (b.position as number)
+      ),
+    create_category: (a) => {
+      const draft = a.draft as Dict;
+      const position = store.categories.reduce(
+        (max, c) => Math.max(max, (c.position as number) + 1),
+        0
+      );
+      const category = {
+        id: id('cat'),
+        position,
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+        ...draft
+      };
+      store.categories.push(category);
+      persist();
+      return category;
+    },
+    update_category: (a) => {
+      const draft = a.draft as Dict;
+      let updated: Dict | undefined;
+      store.categories = store.categories.map((c) =>
+        c.id === a.id ? (updated = { ...c, ...draft, updatedAt: nowIso() }) : c
+      );
+      // Category and color are one concept: refresh the color snapshot on every
+      // event/subscription referencing this category.
+      const color = draft.color as string;
+      store.events = store.events.map((e) => (e.category === a.id ? { ...e, color } : e));
+      store.subscriptions = store.subscriptions.map((s) =>
+        s.categoryId === a.id ? { ...s, color } : s
+      );
+      persist();
+      return updated;
+    },
+    delete_category: (a) => {
+      store.categories = store.categories.filter((c) => c.id !== a.id);
+      // Referencing rows fall back to "no category, no color".
+      store.events = store.events.map((e) =>
+        e.category === a.id ? { ...e, category: '', color: '' } : e
+      );
+      store.subscriptions = store.subscriptions.map((s) =>
+        s.categoryId === a.id ? { ...s, categoryId: null, color: '' } : s
+      );
       persist();
     },
 
@@ -287,6 +339,7 @@ export function installBrowserTauriBackend() {
         name: a.name as string,
         url: '',
         color: a.color as string,
+        categoryId: null,
         refreshIntervalMinutes: a.refreshIntervalMinutes as number,
         provider: (store.oauthAccounts.find((acct) => acct.id === a.accountId)?.provider as string) ?? 'google',
         accountId: a.accountId as string,
@@ -310,6 +363,7 @@ export function installBrowserTauriBackend() {
               ...s,
               name: a.name as string,
               color: a.color as string,
+              categoryId: (a.categoryId as string | null) ?? null,
               refreshIntervalMinutes: a.refreshIntervalMinutes as number,
               updatedAt: nowIso()
             })
@@ -459,15 +513,18 @@ export function installBrowserTauriBackend() {
     },
     set_task_view_memberships: (a) => {
       let updated: Dict | undefined;
-      store.tasks = store.tasks.map((task) =>
-        task.id === a.id ? (updated = { ...task, views: a.views, updatedAt: nowIso() }) : task
-      );
+      store.tasks = store.tasks.map((task) => {
+        if (task.id !== a.id) return task;
+        updated = { ...task, updatedAt: nowIso() };
+        coordinateViews(updated);
+        return updated;
+      });
       persist();
       return updated;
     },
-    set_task_view_linking: (a) => {
-      store.settings.taskViewLinkingEnabled = a.enabled;
-      if (a.enabled) store.tasks.forEach(coordinateViews);
+    set_task_view_linking: () => {
+      store.settings.taskViewLinkingEnabled = true;
+      store.tasks.forEach(coordinateViews);
       persist();
       return taskWorkspaceSnapshot();
     },

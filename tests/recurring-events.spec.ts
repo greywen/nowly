@@ -285,8 +285,6 @@ test('creates a weekly series and renders every occurrence of the month', async 
   await page.locator('[data-iso-date="2026-07-06"] .day-underlay').dblclick();
   await expect(page.getByRole('dialog', { name: '新建日程' })).toBeVisible();
   await page.getByLabel('日程标题').fill('健身');
-  // 新建日程时重复设置默认折叠，先展开「重复及更多设置」。
-  await page.getByRole('button', { name: '重复及更多设置' }).click();
   await page.getByRole('combobox', { name: '重复', exact: true }).click();
   await page.getByRole('option', { name: '每周', exact: true }).click();
   await page.getByRole('button', { name: '保存' }).click();

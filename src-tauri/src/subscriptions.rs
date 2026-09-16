@@ -51,7 +51,7 @@ fn validate_draft(draft: &SubscriptionDraft) -> Result<String, CommandError> {
 
 const SUBSCRIPTION_COLUMNS: &str = "id,name,url,color,refresh_interval_minutes,\
     last_synced_at,last_status,last_error,created_at,updated_at,last_attempted_at,\
-    provider,account_id,remote_calendar_id";
+    provider,account_id,remote_calendar_id,category_id";
 
 fn read_subscription(row: &Row<'_>) -> rusqlite::Result<CalendarSubscription> {
     Ok(CalendarSubscription {
@@ -69,6 +69,7 @@ fn read_subscription(row: &Row<'_>) -> rusqlite::Result<CalendarSubscription> {
         provider: row.get(11)?,
         account_id: row.get(12)?,
         remote_calendar_id: row.get(13)?,
+        category_id: row.get(14)?,
     })
 }
 
@@ -121,13 +122,14 @@ pub fn create(
     connection
         .execute(
             "INSERT INTO calendar_subscriptions
-                (id,name,url,color,refresh_interval_minutes,created_at,updated_at)
-             VALUES (?1,?2,?3,?4,?5,?6,?6)",
+                (id,name,url,color,category_id,refresh_interval_minutes,created_at,updated_at)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?7)",
             params![
                 id,
                 draft.name.trim(),
                 url,
                 draft.color,
+                draft.category_id,
                 draft.refresh_interval_minutes,
                 now
             ],
@@ -220,13 +222,14 @@ pub fn update(
     let affected = connection
         .execute(
             "UPDATE calendar_subscriptions
-                SET name=?2,url=?3,color=?4,refresh_interval_minutes=?5,updated_at=?6
+                SET name=?2,url=?3,color=?4,category_id=?5,refresh_interval_minutes=?6,updated_at=?7
              WHERE id=?1",
             params![
                 id,
                 draft.name.trim(),
                 url,
                 draft.color,
+                draft.category_id,
                 draft.refresh_interval_minutes,
                 now_utc()
             ],
@@ -475,6 +478,7 @@ pub fn update_subscription_display(
     name: String,
     color: String,
     refresh_interval_minutes: i64,
+    category_id: Option<String>,
 ) -> Result<CalendarSubscription, CommandError> {
     let name = name.trim();
     if name.is_empty() {
@@ -490,9 +494,9 @@ pub fn update_subscription_display(
     let affected = connection
         .execute(
             "UPDATE calendar_subscriptions
-                SET name=?2,color=?3,refresh_interval_minutes=?4,updated_at=?5
+                SET name=?2,color=?3,category_id=?4,refresh_interval_minutes=?5,updated_at=?6
              WHERE id=?1",
-            params![id, name, color, refresh_interval_minutes, now_utc()],
+            params![id, name, color, category_id, refresh_interval_minutes, now_utc()],
         )
         .map_err(CommandError::database)?;
     if affected == 0 {
@@ -510,6 +514,7 @@ mod tests {
             name: "家庭".into(),
             url: "https://example.com/a.ics".into(),
             color: "#4FC9DA".into(),
+            category_id: None,
             refresh_interval_minutes: 15,
         }
     }

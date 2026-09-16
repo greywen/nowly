@@ -7,6 +7,7 @@ const QUICK_TIMES = ['09:00', '09:30', '12:00', '14:00', '15:00', '18:00'] as co
 type TimePickerProps = {
   id: string;
   label: string;
+  hideLabel?: boolean;
   value: string;
   errorId?: string;
   disabled?: boolean;
@@ -47,6 +48,7 @@ function wrap(value: number, maximum: number) {
 export function TimePicker({
   id,
   label,
+  hideLabel = false,
   value,
   errorId,
   disabled = false,
@@ -153,7 +155,7 @@ export function TimePicker({
 
   return (
     <div ref={rootRef} className="time-picker">
-      <label className="time-picker__label" id={`${id}-label`} htmlFor={id}>{label}</label>
+      <label className={hideLabel ? 'time-picker__label visually-hidden' : 'time-picker__label'} id={`${id}-label`} htmlFor={id}>{label}</label>
       <button
         ref={triggerRef}
         id={id}

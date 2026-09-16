@@ -40,10 +40,11 @@ pub struct Event {
 }
 
 // Unified task. A task is the single source of truth projected into the
-// kanban, matrix, and calendar views. `priority` is one of the four fixed
-// values or None (unclassified). `views` lists the view memberships the task
-// currently belongs to; the calendar/matrix ones are coordinated from
-// `priority`/`due_date` while linking is enabled, or frozen while it is off.
+// kanban and matrix views. `priority` is one of the four fixed values or None
+// (unclassified). `views` lists the view memberships the task currently belongs
+// to; the matrix one is coordinated from `priority` while linking is enabled,
+// or frozen while it is off. The calendar is fully independent and never
+// derives from tasks.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Task {
@@ -167,6 +168,9 @@ pub struct CalendarSubscription {
     pub name: String,
     pub url: String,
     pub color: String,
+    /// 订阅所选分类的 id；未选分类为 None。颜色随所选分类快照到 `color`。
+    #[serde(default)]
+    pub category_id: Option<String>,
     pub refresh_interval_minutes: i64,
     /// 订阅来源：'ics'（直连密钥地址）/ 'google' / 'microsoft'（OAuth API）。
     /// 迁移前的旧订阅默认 'ics'。
@@ -197,7 +201,31 @@ pub struct SubscriptionDraft {
     pub name: String,
     pub url: String,
     pub color: String,
+    /// 所选分类 id；未选为 None。
+    #[serde(default)]
+    pub category_id: Option<String>,
     pub refresh_interval_minutes: i64,
+}
+
+/// 用户自定义的日历分类：拥有名称与颜色。选择分类即为事件/订阅上色。
+/// 无默认分类，表初始为空，全部由用户创建。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Category {
+    pub id: String,
+    pub name: String,
+    pub color: String,
+    pub position: i64,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// 新建/编辑分类的草稿。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CategoryDraft {
+    pub name: String,
+    pub color: String,
 }
 
 /// 迁移前的旧订阅、以及前端未显式给出 provider 时的默认来源。
@@ -665,6 +693,7 @@ mod tests {
             name: "家庭".into(),
             url: "https://example.com/a.ics".into(),
             color: "#4FC9DA".into(),
+            category_id: None,
             refresh_interval_minutes: 15,
             provider: "ics".into(),
             account_id: None,

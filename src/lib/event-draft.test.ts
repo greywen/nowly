@@ -73,8 +73,8 @@ describe('event draft helpers', () => {
       startTime: '09:45',
       endTime: '10:45',
       allDay: false,
-      category: 'work',
-      color: '#4FC9DA',
+      category: '',
+      color: '',
       note: '',
       reminders: [],
       recurrence: null
@@ -168,7 +168,10 @@ describe('event draft helpers', () => {
     expect(validateEventForm({ ...form, endTime: '' })).toEqual({ endAt: '请选择结束时间。' });
     expect(validateEventForm({ ...form, endTime: '13:55' })).toEqual({ endAt: '结束时间不能早于开始时间。' });
     expect(validateEventForm({ ...form, endDate: '2026-07-24', endTime: '13:55' })).toEqual({});
-    expect(validateEventForm({ ...form, category: 'other' as never })).toEqual({ category: '请选择有效分类。' });
+    // Categories are user-defined ids now, so any non-empty value is accepted;
+    // an empty category clears the color requirement (no category = no color).
+    expect(validateEventForm({ ...form, category: 'other' })).toEqual({});
+    expect(validateEventForm({ ...form, category: '', color: '' })).toEqual({});
     expect(validateEventForm({ ...form, color: '#7c5cfc' })).toEqual({});
     expect(toEventDraft({ ...form, color: '#7c5cfc' })).toMatchObject({ color: '#7C5CFC' });
     expect(validateEventForm({ ...form, color: 'purple' as never })).toEqual({ color: '请选择有效颜色。' });

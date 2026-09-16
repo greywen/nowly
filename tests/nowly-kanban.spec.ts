@@ -52,6 +52,7 @@ test.beforeEach(async ({ page }) => {
 
     Object.defineProperty(window, '__TAURI_INTERNALS__', { value: {
       invoke: async (command: string, args: any = {}) => {
+        if (command.startsWith('plugin:event|')) return 1;
         switch (command) {
           case 'list_events_in_range': return [];
           case 'list_tasks': return [];
@@ -89,7 +90,7 @@ test.beforeEach(async ({ page }) => {
               tagIds: draft.tagIds ?? [], collaboratorIds: draft.collaboratorIds ?? [],
               linkedEventId: draft.linkedEventId ?? null,
               views: linkingEnabled
-                ? ['kanban', ...(draft.priority ? ['matrix'] : []), ...(draft.dueDate ? ['calendar'] : [])]
+                ? ['kanban', ...(draft.priority ? ['matrix'] : [])]
                 : (draft.views ?? [args.originView ?? 'kanban']),
               createdAt: now, updatedAt: now
             };
@@ -103,7 +104,7 @@ test.beforeEach(async ({ page }) => {
             const updated = {
               ...current, ...draft,
               views: linkingEnabled
-                ? ['kanban', ...(draft.priority ? ['matrix'] : []), ...(draft.dueDate ? ['calendar'] : [])]
+                ? ['kanban', ...(draft.priority ? ['matrix'] : [])]
                 : (draft.views ?? current.views),
               updatedAt: now
             };
@@ -144,7 +145,7 @@ test.beforeEach(async ({ page }) => {
             linkingEnabled = args.enabled;
             if (linkingEnabled) workspaceTasks = workspaceTasks.map((task) => ({
               ...task,
-              views: ['kanban', ...(task.priority ? ['matrix'] : []), ...(task.dueDate ? ['calendar'] : [])]
+              views: ['kanban', ...(task.priority ? ['matrix'] : [])]
             }));
             return {
               tasks: workspaceTasks, lanes, tags, collaborators, linkingEnabled,
@@ -353,7 +354,7 @@ test.beforeEach(async ({ page }) => {
       }
     }});
   });
-  await page.goto('/');
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
 });
 
 async function addKanbanModule(page: import('@playwright/test').Page) {
@@ -373,10 +374,20 @@ test('adds the kanban module, showing the three default lanes', async ({ page })
 
 test('creates a task in a lane and shows only the fields that have values', async ({ page }) => {
   await addKanbanModule(page);
+  await expect(page.getByRole('button', { name: '按优先级筛选' })).toHaveCount(0);
   const todo = page.getByRole('region', { name: '泳道：待处理' });
   await todo.getByRole('button', { name: '在待处理新增任务' }).click();
 
   await expect(page.getByRole('dialog', { name: '新建任务' })).toBeVisible();
+  await page.getByRole('combobox', { name: '所属象限' }).click();
+  await expect(page.getByRole('option')).toHaveText([
+    '无优先级',
+    '重要且紧急',
+    '重要不紧急',
+    '不重要但紧急',
+    '不重要不紧急'
+  ]);
+  await page.getByRole('option', { name: '无优先级', exact: true }).click();
   await page.getByLabel('任务标题').fill('撰写发布说明');
   await page.getByRole('button', { name: '保存任务' }).click();
 
@@ -386,13 +397,19 @@ test('creates a task in a lane and shows only the fields that have values', asyn
   await expect(card.locator('.kanban-card__desc')).toHaveCount(0);
   await expect(card.locator('.kanban-badge')).toHaveCount(0);
   await expect(card.locator('.kanban-card__meta')).toHaveCount(0);
+  const workspace = await page.evaluate(async () =>
+    (window as any).__TAURI_INTERNALS__.invoke('get_task_workspace_snapshot')
+  ) as { tasks: Array<{ title: string; views: string[] }> };
+  expect(workspace.tasks.find((task) => task.title === '撰写发布说明')?.views).toEqual(['kanban']);
 });
 
 test('manages global fields from task settings and applies them to a card', async ({ page }) => {
   await addKanbanModule(page);
 
   await page.getByRole('button', { name: '看板设置' }).click();
-  await page.getByRole('tab', { name: '标签(0)' }).click();
+  await expect(page.getByRole('tab', { name: '标签(0)' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('tab', { name: /优先级/ })).toHaveCount(0);
+  await expect(page.getByRole('tab', { name: /视图联动/ })).toHaveCount(0);
   await page.getByLabel('新增标签').fill('性能');
   await page.getByRole('button', { name: '添加标签' }).click();
   await expect(page.getByRole('list', { name: '标签列表' })).toContainText('性能');

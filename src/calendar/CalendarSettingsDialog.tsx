@@ -5,6 +5,7 @@ import { Select } from '../components/Select';
 import { TabPanel, Tabs, type TabItem } from '../components/Tabs';
 import { SubscriptionManagerPanel } from './SubscriptionManagerPanel';
 import type { CalendarSubscription, SubscriptionDraft } from './subscription-model';
+import type { Category, CategoryDraft } from './calendar-model';
 import type { AppSettings } from '../data/nowly-repository';
 import { t } from '../i18n';
 
@@ -23,6 +24,10 @@ type Props = {
   updateSubscription: (id: string, draft: SubscriptionDraft) => Promise<CalendarSubscription>;
   deleteSubscription: (id: string) => Promise<void>;
   refreshSubscription: (id: string) => Promise<void>;
+  categories: Category[];
+  createCategory: (draft: CategoryDraft) => Promise<Category>;
+  updateCategory: (id: string, draft: CategoryDraft) => Promise<Category>;
+  deleteCategory: (id: string) => Promise<void>;
 };
 
 // Calendar-scoped preferences and calendar sources share one dialog, split into
@@ -38,7 +43,11 @@ export function CalendarSettingsDialog({
   createSubscription,
   updateSubscription,
   deleteSubscription,
-  refreshSubscription
+  refreshSubscription,
+  categories,
+  createCategory,
+  updateCategory,
+  deleteCategory
 }: Props) {
   const [tab, setTab] = useState<CalendarSettingsTab>('basic');
   const [overlayOpen, setOverlayOpen] = useState(false);
@@ -107,6 +116,10 @@ export function CalendarSettingsDialog({
             onUpdate={updateSubscription}
             onDelete={deleteSubscription}
             onRefresh={refreshSubscription}
+            categories={categories}
+            onCreateCategory={createCategory}
+            onUpdateCategory={updateCategory}
+            onDeleteCategory={deleteCategory}
             onOverlayOpenChange={setOverlayOpen}
           />
         </TabPanel>

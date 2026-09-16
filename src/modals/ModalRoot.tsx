@@ -1,6 +1,6 @@
 import { DateDetailDialog } from '../calendar/DateDetailDialog';
 import { ExternalEventDialog } from '../calendar/ExternalEventDialog';
-import type { CalendarEvent, EditScope, EventDraft } from '../calendar/calendar-model';
+import type { CalendarEvent, Category, CategoryDraft, EditScope, EventDraft } from '../calendar/calendar-model';
 import type { ModalState } from '../lib/modal-store';
 import { EventModal } from './EventModal';
 import { NoteModal } from './NoteModal';
@@ -38,6 +38,10 @@ type Props = {
   updateSubscription(id: string, draft: SubscriptionDraft): Promise<CalendarSubscription>;
   deleteSubscription(id: string): Promise<void>;
   refreshSubscription(id: string): Promise<void>;
+  categories: Category[];
+  createCategory(draft: CategoryDraft): Promise<Category>;
+  updateCategory(id: string, draft: CategoryDraft): Promise<Category>;
+  deleteCategory(id: string): Promise<void>;
   recentColors?: string[];
   onRememberCustomColor?: (color: string) => Promise<void> | void;
 };
@@ -47,6 +51,7 @@ export function ModalRoot({
   createEvent, updateEvent, deleteEvent, onSaved, onDeleted,
   notes, createNote, updateNote, deleteNote, settings, monitors, saveSettings,
   subscriptions, onSubscriptionsChanged, createSubscription, updateSubscription, deleteSubscription, refreshSubscription,
+  categories, createCategory, updateCategory, deleteCategory,
   recentColors = [], onRememberCustomColor
 }: Props) {
   const workspace = useTaskWorkspace();
@@ -65,6 +70,7 @@ export function ModalRoot({
       <DateDetailDialog
         isoDate={date}
         events={events}
+        categories={categories}
         isTopLayer={modal.type === 'date'}
         restoreFocusRef={modal.type === 'date' ? { current:modal.trigger } : undefined}
         onClose={onClose}
@@ -87,6 +93,10 @@ export function ModalRoot({
         recentColors={recentColors}
         onRememberCustomColor={onRememberCustomColor}
         subscriptions={subscriptions}
+        categories={categories}
+        onCreateCategory={createCategory}
+        onUpdateCategory={updateCategory}
+        onDeleteCategory={deleteCategory}
       />
     ) : null}
     {isTaskChild ? (
@@ -138,6 +148,10 @@ export function ModalRoot({
         updateSubscription={updateSubscription}
         deleteSubscription={deleteSubscription}
         refreshSubscription={refreshSubscription}
+        categories={categories}
+        createCategory={createCategory}
+        updateCategory={updateCategory}
+        deleteCategory={deleteCategory}
       />
     ) : null}
   </>;

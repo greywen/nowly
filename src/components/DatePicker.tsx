@@ -10,6 +10,7 @@ function weekdayHeadingsList() {
 export type DatePickerProps = {
   id: string;
   label: string;
+  hideLabel?: boolean;
   value: string;
   errorId?: string;
   disabled?: boolean;
@@ -34,6 +35,7 @@ function displayDate(value: string) {
 export function DatePicker({
   id,
   label,
+  hideLabel = false,
   value,
   errorId,
   disabled = false,
@@ -134,7 +136,7 @@ export function DatePicker({
 
   return (
     <div ref={rootRef} className="date-picker">
-      <label className="date-picker__label" id={`${id}-label`} htmlFor={id}>{label}</label>
+      <label className={hideLabel ? 'date-picker__label visually-hidden' : 'date-picker__label'} id={`${id}-label`} htmlFor={id}>{label}</label>
       <button
         ref={triggerRef}
         id={id}

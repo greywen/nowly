@@ -1,5 +1,7 @@
 import type {
   CalendarEvent,
+  Category,
+  CategoryDraft,
   EditScope,
   EventDraft,
   EventRange,
@@ -167,6 +169,11 @@ export type NowlyRepository = {
   createEvent(draft: EventDraft): Promise<CalendarEvent>;
   updateEvent(target: EventTarget, draft: EventDraft, scope: EditScope): Promise<void>;
   deleteEvent(target: EventTarget, scope: EditScope): Promise<void>;
+  // 日历分类（用户自定义，名称 + 颜色）。事件与订阅共用同一份分类。
+  listCategories(): Promise<Category[]>;
+  createCategory(draft: CategoryDraft): Promise<Category>;
+  updateCategory(id: string, draft: CategoryDraft): Promise<Category>;
+  deleteCategory(id: string): Promise<void>;
   listCalendarSubscriptions: () => Promise<CalendarSubscription[]>;
   createCalendarSubscription: (draft: SubscriptionDraft) => Promise<CalendarSubscription>;
   updateCalendarSubscription: (id: string, draft: SubscriptionDraft) => Promise<CalendarSubscription>;
@@ -188,7 +195,8 @@ export type NowlyRepository = {
     id: string,
     name: string,
     color: string,
-    refreshIntervalMinutes: number
+    refreshIntervalMinutes: number,
+    categoryId: string | null
   ) => Promise<CalendarSubscription>;
   listExternalEventsInRange: (range: EventRange) => Promise<ExternalEvent[]>;
   createRemoteEvent?(subscriptionId: string, draft: EventDraft): Promise<void>;

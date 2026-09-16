@@ -4,14 +4,17 @@ import { Dialog } from '../components/Dialog';
 import { formatChineseDate } from '../lib/date';
 import { occurrenceKey } from '../lib/recurrence';
 import {
-  eventCategoryLabel,
-  type CalendarEvent
+  categoryNameOf,
+  type CalendarEvent,
+  type Category
 } from './calendar-model';
+import { colorStyle, isHexColor } from '../lib/color';
 import { t } from '../i18n';
 
 type DateDetailDialogProps = {
   isoDate: string;
   events: CalendarEvent[];
+  categories: Category[];
   isTopLayer: boolean;
   restoreFocusRef?: RefObject<HTMLElement | null>;
   onClose: () => void;
@@ -33,14 +36,15 @@ function sortEvents(events: CalendarEvent[]) {
   });
 }
 
-function eventAccessibleName(event: CalendarEvent) {
+function eventAccessibleName(event: CalendarEvent, categories: Category[]) {
   const time = event.allDay ? t('calendar.allDay') : event.startAt.slice(11, 16);
-  return t('calendar.eventLabel', { time, title: event.title, category: eventCategoryLabel(event.category) });
+  return t('calendar.eventLabel', { time, title: event.title, category: categoryNameOf(event.category, categories) });
 }
 
 export function DateDetailDialog({
   isoDate,
   events,
+  categories,
   isTopLayer,
   restoreFocusRef,
   onClose,
@@ -80,7 +84,7 @@ export function DateDetailDialog({
             <li key={occurrenceKey(event)}>
               <button
                 type="button"
-                aria-label={eventAccessibleName(event)}
+                aria-label={eventAccessibleName(event, categories)}
                 className="date-detail-dialog__event"
                 onClick={(clickEvent) => onEditEvent(event, clickEvent.currentTarget)}
               >
@@ -89,9 +93,18 @@ export function DateDetailDialog({
                 <span className="date-detail-dialog__event-copy">
                   <strong>{event.title}</strong>
                 </span>
-                <span className={`date-detail-dialog__category date-detail-dialog__category--${event.category}`}>
-                  {eventCategoryLabel(event.category)}
-                </span>
+                {(() => {
+                  const name = categoryNameOf(event.category, categories);
+                  if (!name) return null;
+                  return (
+                    <span
+                      className="date-detail-dialog__category"
+                      style={isHexColor(event.color) ? colorStyle(event.color) : undefined}
+                    >
+                      {name}
+                    </span>
+                  );
+                })()}
               </button>
             </li>
           ))}

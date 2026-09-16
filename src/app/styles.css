@@ -510,7 +510,7 @@ body:has(.screen-status-island-root),
 .calendar-list-item:hover { border-color: var(--color-primary); background: var(--bg-subtle); }
 .calendar-list-item__time { color: var(--text-muted); font-size: 0.85rem; font-weight: 600; }
 .calendar-list-item__title { min-width: 0; overflow: hidden; color: var(--text-primary); font-size: 0.95rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.calendar-list-item__category { padding: 4px 8px; border-radius: var(--radius-sm); font-size: 0.85rem; font-weight: 600; }
+.calendar-list-item__category { padding: 4px 8px; border-radius: var(--radius-sm); font-size: 0.85rem; font-weight: 600; color: var(--selected-color-fg, var(--text-secondary)); background: var(--selected-color-bg, var(--bg-subtle)); }
 .side-column { min-width: 0; min-height: 0; display: grid; grid-template-rows: minmax(0, 1.15fr) minmax(0, .85fr); gap: 24px; }
 .panel-body { min-height: 0; flex: 1; padding: 20px 24px 24px; overflow: auto; }
 .matrix-body { display: flex; flex-direction: column; }
@@ -839,7 +839,56 @@ body:has(.screen-status-island-root),
 .select-option[aria-selected="true"] { color: var(--color-primary-active); background: var(--color-primary-light); }
 .select-option svg { width: 18px; height: 18px; }
 .select-option:focus-visible { outline: 0; }
+.select-value { display: inline-flex; align-items: center; gap: 10px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.select-dot { flex: 0 0 auto; width: 12px; height: 12px; border-radius: 50%; }
 .select-empty { padding: 16px 12px; color: var(--text-muted); font-size: 0.95rem; text-align: center; }
+
+/* Category select: dropdown that both picks and manages calendar categories.
+   Reuses the base .select-* primitives; these rules cover the per-row tools,
+   the add-category entry and the inline create/edit editor (design.md §8.10,
+   §8.5, §8.1). */
+.category-select__placeholder { color: var(--text-muted); }
+.category-select__popup { display: grid; gap: 8px; padding: 12px; }
+
+.category-select__row { display: flex; align-items: center; gap: 4px; border-radius: 7.6px; }
+.category-select__row .category-select__pick { flex: 1 1 auto; min-width: 0; }
+.category-select__row-tools { flex: 0 0 auto; display: flex; align-items: center; gap: 2px; opacity: 0; }
+.category-select__row:hover .category-select__row-tools,
+.category-select__row:focus-within .category-select__row-tools,
+.category-select__row.is-selected .category-select__row-tools { opacity: 1; }
+.category-select__row-tools .good-icon-button { width: 32px; height: 32px; min-height: 32px; color: var(--text-tertiary); background: transparent; }
+.category-select__row-tools .good-icon-button svg { width: 16px; height: 16px; }
+.category-select__row-tools .good-icon-button:hover { color: var(--color-primary); background: var(--bg-subtle); }
+.category-select__row-tools .good-icon-button:last-child:hover { color: var(--color-danger); background: var(--color-danger-light); }
+
+/* Add-category entry: a menu-item styled as a dashed "addable area" (§7). */
+.category-select__add {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 12px;
+  color: var(--text-secondary);
+  font: 500 15.2px/1.5 Inter, "Microsoft YaHei", sans-serif;
+  text-align: left;
+  border: 1px dashed var(--border-default);
+  border-radius: 7.6px;
+  background: transparent;
+}
+.category-select__add svg { width: 18px; height: 18px; flex: none; }
+.category-select__add:hover { color: var(--color-primary); border-color: var(--color-primary); background: var(--bg-subtle); }
+.category-select__add:focus-visible { outline: 0; box-shadow: var(--shadow-focus); }
+
+/* Inline create/edit editor inside the popup. */
+.category-select__editor { display: grid; gap: 16px; }
+.category-select__editor-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.category-select__editor-head span { color: var(--text-primary); font-size: 1rem; font-weight: 600; line-height: 1.5; }
+.category-select__editor-head .good-icon-button { width: 32px; height: 32px; min-height: 32px; color: var(--text-tertiary); background: transparent; }
+.category-select__editor-head .good-icon-button svg { width: 16px; height: 16px; }
+.category-select__editor-head .good-icon-button:hover { color: var(--color-primary); background: var(--bg-subtle); }
+.category-select__editor .dialog-error { margin-top: 0; }
+.category-select__editor-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 
 .overlay {
   position: fixed;
@@ -881,11 +930,13 @@ body:has(.screen-status-island-root),
 .recurrence-scope { margin: 0; padding: 0; display: grid; gap: 16px; border: 0; }
 .recurrence-scope legend { width: 100%; margin-bottom: 8px; color: var(--text-secondary); font-size: 0.95rem; font-weight: 500; }
 .reminder-field { display: grid; gap: 12px; }
-.reminder-field__label { color: var(--text-secondary); font-size: 0.95rem; font-weight: 500; line-height: 1.5; }
+.reminder-field__label.reminder-field__label { margin: 0; }
 .reminder-field__empty { margin: 0; color: var(--text-tertiary); font-size: 0.85rem; line-height: 1.5; }
-.reminder-row { display: flex; align-items: center; gap: 12px; }
-.reminder-row__value { width: 88px; flex: 0 0 auto; }
-.reminder-row .select-field { flex: 0 0 auto; width: 120px; min-width: 0; }
+.reminder-row { display: flex; align-items: center; gap: 8px; }
+.reminder-row__value { width: 72px; flex: 0 0 auto; min-height: 40px; padding: 7px 12px; }
+.reminder-row .select-field { flex: 0 0 auto; width: 104px; min-width: 0; }
+.reminder-row .select-trigger { height: 40px; padding: 0 12px; }
+.reminder-row__before { flex: 0 0 auto; color: var(--text-secondary); font-size: 0.9rem; }
 .reminder-row__remove { flex: 0 0 auto; margin-left: auto; }
 .reminder-field__add { justify-self: start; }
 
@@ -938,7 +989,7 @@ body:has(.screen-status-island-root),
   left: 0;
   box-sizing: border-box;
   width: 320px;
-  max-width: 100%;
+  max-width: calc(100vw - 32px);
   padding: 16px;
   color: var(--text-secondary);
   border: 0;
@@ -956,15 +1007,17 @@ body:has(.screen-status-island-root),
 .date-picker__header svg { width: 18px; height: 18px; }
 .date-picker__calendar { margin-top: 8px; }
 .date-picker__weekdays,
-.date-picker__days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
-.date-picker__weekdays span { height: 32px; display: grid; place-items: center; color: var(--text-muted); font-size: 0.85rem; font-weight: 600; }
+.date-picker__days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); justify-items: center; }
+.date-picker__weekdays span { width: 40px; height: 36px; display: grid; place-items: center; color: var(--text-muted); font-size: 0.85rem; font-weight: 600; }
 .date-picker__day {
   box-sizing: border-box;
-  min-width: 36px;
-  min-height: 36px;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
   padding: 0;
   border: 0;
-  border-radius: var(--radius-default);
+  border-radius: 50%;
   color: var(--text-secondary);
   background: transparent;
   font-size: 0.85rem;
@@ -1005,7 +1058,7 @@ body:has(.screen-status-island-root),
   left: 0;
   box-sizing: border-box;
   width: 280px;
-  max-width: 100%;
+  max-width: calc(100vw - 32px);
   padding: 16px;
   color: var(--text-secondary);
   border: 0;
@@ -1013,6 +1066,10 @@ body:has(.screen-status-island-root),
   background: var(--bg-surface);
   box-shadow: var(--shadow-dropdown);
 }
+/* Inside the start/end row the time trigger sits at the right of each column,
+   so anchor its popup to the right edge to keep the full 280px within the
+   dialog instead of overflowing past it. */
+.event-form__range .time-picker__popup { left: auto; right: 0; }
 .time-picker__steppers { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; }
 .time-picker__stepper { display: grid; justify-items: center; gap: 8px; }
 .time-picker__unit { color: var(--text-muted); font-size: 0.85rem; font-weight: 600; }
@@ -1097,11 +1154,7 @@ body:has(.screen-status-island-root),
 .date-detail-dialog__event-copy { min-width: 0; display: grid; gap: 4px; }
 .date-detail-dialog__event-copy strong { overflow: hidden; color: var(--text-primary); font-size: 0.95rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .date-detail-dialog__event-copy small { color: var(--text-muted); font-size: 0.85rem; }
-.date-detail-dialog__category { padding: 4px 8px; border-radius: var(--radius-sm); font-size: 0.85rem; font-weight: 600; }
-.date-detail-dialog__category--work { color: var(--color-primary-active); background: var(--color-primary-light); }
-.date-detail-dialog__category--important { color: var(--color-danger-active); background: var(--color-danger-light); }
-.date-detail-dialog__category--personal { color: #6f8617; background: var(--color-success-light); }
-.date-detail-dialog__category--learning { color: var(--color-info-active); background: var(--color-info-light); }
+.date-detail-dialog__category { padding: 4px 8px; border-radius: var(--radius-sm); font-size: 0.85rem; font-weight: 600; color: var(--selected-color-fg, var(--text-secondary)); background: var(--selected-color-bg, var(--bg-subtle)); }
 
 .event-dialog { width: min(720px, calc(100vw - 32px)); }
 .event-form { display: grid; gap: 0; }
@@ -1112,29 +1165,29 @@ body:has(.screen-status-island-root),
 
 /* Continuous borderless sections split only by whitespace and hairline rules. */
 .event-form__time-range,
+.event-form__category,
+.event-form__recurrence,
 .event-form__note,
-.event-form__quick-settings,
-.event-form__advanced { padding: 20px 0; border-top: 1px solid var(--border-default); }
+.event-form__quick-settings { padding: 20px 0; border-top: 1px solid var(--border-default); }
 .event-form__time-range h3,
+.event-form__category h3,
+.event-form__recurrence h3,
+.event-form__quick-settings h3,
 .event-form__note h3 { margin: 0 0 12px; color: var(--text-primary); font-size: 1rem; font-weight: 600; line-height: 1.2; }
 .event-form__row-heading { margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .event-form__row-heading h3 { margin: 0; }
 .event-form__row-heading .form-check { flex: none; }
-.event-form__range { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: end; gap: 12px; }
-.event-form__range-end { display: grid; gap: 12px; }
-.event-form__range-arrow { padding-bottom: 14px; color: var(--text-tertiary); font-size: 1.1rem; line-height: 1; }
+.event-form__range { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 20px; }
+.event-form__range-end { display: flex; align-items: flex-end; gap: 12px; min-width: 0; }
+.event-form__range-end > .date-picker { flex: 1 1 0; min-width: 0; }
+.event-form__range-end > .time-picker { flex: 0 0 auto; width: 116px; }
 .event-form__durations { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
 .event-form__quick-settings { display: grid; gap: 20px; }
 .event-form__setting { min-width: 0; }
-.event-form__category-color { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
-.event-form__category-color > div { min-width: 0; display: grid; gap: 8px; }
 .event-form__note .rich-editor .ql-editor { min-height: 104px; }
 
-/* Repeat & more settings disclosure */
-.event-form__disclosure { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0; border: 0; background: none; cursor: pointer; color: var(--text-primary); font-size: 1rem; font-weight: 600; text-align: left; }
-.event-form__disclosure:focus-visible { outline: 0; box-shadow: var(--shadow-focus); border-radius: var(--radius-sm); }
-.event-form__disclosure-summary { color: var(--text-tertiary); font-size: 0.9rem; font-weight: 400; }
-.event-form__advanced .recurrence-field { margin-top: 16px; }
+/* Recurrence field spacing */
+.event-form__recurrence .recurrence-field { gap: 16px; }
 
 /* Quick chips for durations and reminder presets */
 .good-chip { padding: 6px 14px; border: 1px solid var(--border-default); border-radius: var(--radius-pill); background: var(--bg-surface); color: var(--text-secondary); font-size: 0.9rem; font-weight: 500; line-height: 1.4; cursor: pointer; }
@@ -1144,7 +1197,6 @@ body:has(.screen-status-island-root),
 .good-chip:disabled { pointer-events: none; opacity: .5; }
 .reminder-field__quick { display: flex; flex-wrap: wrap; gap: 8px; }
 .reminder-field__rows { margin-top: 12px; display: grid; gap: 12px; }
-.reminder-row__summary { flex: 0 0 auto; min-width: 84px; color: var(--text-secondary); font-size: 0.9rem; line-height: 1.5; }
 .visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0, 0, 0, 0) !important; white-space: nowrap !important; border: 0 !important; }
 .task-dialog { width: min(680px, calc(100vw - 32px)); }
 .task-form { display: grid; gap: 20px; }
@@ -1232,8 +1284,6 @@ body:has(.screen-status-island-root),
   .good-dialog__footer { padding-inline: 24px; }
   .good-dialog__body { padding: 24px; }
   .event-form__range { grid-template-columns: minmax(0, 1fr); }
-  .event-form__range-arrow { justify-self: start; padding: 0; transform: rotate(90deg); }
-  .event-form__category-color { grid-template-columns: 1fr; }
   .event-form__row-heading .form-check { align-self: flex-start; }
   .event-dialog__actions .good-button { padding-inline: 16px; }
   .event-dialog__actions .good-button--danger-ghost { margin-right: auto; }

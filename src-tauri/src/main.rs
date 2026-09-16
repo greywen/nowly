@@ -4,6 +4,7 @@
 mod assistant;
 mod attachments;
 mod calendar_api;
+mod categories;
 mod color;
 mod commands;
 mod db;
@@ -674,6 +675,10 @@ fn main() {
             events::create_event,
             events::update_event,
             events::delete_event,
+            categories::list_categories,
+            categories::create_category,
+            categories::update_category,
+            categories::delete_category,
             subscriptions::list_calendar_subscriptions,
             subscriptions::create_calendar_subscription,
             subscriptions::update_calendar_subscription,

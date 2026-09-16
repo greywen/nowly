@@ -16,6 +16,10 @@ function props(overrides = {}) {
     updateSubscription: vi.fn(),
     deleteSubscription: vi.fn(),
     refreshSubscription: vi.fn(),
+    categories: [],
+    createCategory: vi.fn(),
+    updateCategory: vi.fn(),
+    deleteCategory: vi.fn(),
     ...overrides
   };
 }

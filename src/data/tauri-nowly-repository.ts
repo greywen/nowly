@@ -14,6 +14,10 @@ export const tauriNowlyRepository: NowlyRepository = {
   createEvent: (draft) => invalidating(invoke('create_event', { draft })),
   updateEvent: (target, draft, scope) => invalidating(invoke('update_event', { target, draft, scope })),
   deleteEvent: (target, scope) => invalidating(invoke('delete_event', { target, scope })),
+  listCategories: () => invoke('list_categories'),
+  createCategory: (draft) => invalidating(invoke('create_category', { draft })),
+  updateCategory: (id, draft) => invalidating(invoke('update_category', { id, draft })),
+  deleteCategory: (id) => invalidating(invoke('delete_category', { id })),
   listCalendarSubscriptions: () => invoke('list_calendar_subscriptions'),
   createCalendarSubscription: (draft) => invalidating(invoke('create_calendar_subscription', { draft })),
   updateCalendarSubscription: (id, draft) => invalidating(invoke('update_calendar_subscription', { id, draft })),
@@ -31,8 +35,8 @@ export const tauriNowlyRepository: NowlyRepository = {
       color,
       refreshIntervalMinutes
     }),
-  updateSubscriptionDisplay: (id, name, color, refreshIntervalMinutes) =>
-    invoke('update_subscription_display', { id, name, color, refreshIntervalMinutes }),
+  updateSubscriptionDisplay: (id, name, color, refreshIntervalMinutes, categoryId) =>
+    invoke('update_subscription_display', { id, name, color, refreshIntervalMinutes, categoryId }),
   listExternalEventsInRange: (range) => invoke('list_external_events_in_range', { range }),
   createRemoteEvent: (subscriptionId, draft) => invalidating(invoke('create_remote_event', { subscriptionId, draft })),
   updateRemoteEvent: (subscriptionId, remoteEventId, draft, descriptionChanged) =>
@@ -53,7 +57,7 @@ export const tauriNowlyRepository: NowlyRepository = {
   moveTaskToPriority: (id, priority) => invalidating(invoke('move_task_to_priority', { id, priority })),
   moveTaskToDate: (id, dueDate) => invalidating(invoke('move_task_to_date', { id, dueDate })),
   setTaskViewMemberships: (id, views) => invalidating(invoke('set_task_view_memberships', { id, views })),
-  setTaskViewLinking: (enabled) => invoke('set_task_view_linking', { enabled }),
+  setTaskViewLinking: () => invoke('set_task_view_linking', { enabled: true }),
   createTaskLane: (draft) => invoke('create_task_lane', { draft }),
   updateTaskLane: (id, draft) => invoke('update_task_lane', { id, draft }),
   deleteTaskLane: (id, replacementLaneId = null) =>

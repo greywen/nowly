@@ -53,7 +53,11 @@ const operations = {
   createSubscription: vi.fn(),
   updateSubscription: vi.fn(),
   deleteSubscription: vi.fn(),
-  refreshSubscription: vi.fn()
+  refreshSubscription: vi.fn(),
+  categories: [],
+  createCategory: vi.fn(),
+  updateCategory: vi.fn(),
+  deleteCategory: vi.fn()
 };
 
 function base(overrides: Record<string, unknown> = {}) {

@@ -10,7 +10,6 @@ use tauri::State;
 use uuid::Uuid;
 
 const LOCAL_MINUTE_FORMAT: &str = "%Y-%m-%dT%H:%M";
-const CATEGORIES: &[&str] = &["work", "important", "personal", "learning"];
 
 // 列顺序决定后续 `row.get(idx)` 的下标，务必与 read_series_row 中的索引一致。
 const EVENT_COLUMNS: &str = "id,title,start_at,end_at,start_tz,end_tz,start_utc,end_utc,\
@@ -483,11 +482,15 @@ pub fn validate_and_normalize(mut draft: EventDraft) -> Result<EventDraft, Comma
             "结束时间不能早于开始时间。",
         ));
     }
-    if !CATEGORIES.contains(&draft.category.as_str()) {
-        return Err(CommandError::validation("category", "请选择有效分类。"));
+    // 分类是用户自定义记录，id 存在 category 列；未选分类为空串（“无分类=无颜色”）。
+    // 未选分类时颜色也为空；已选分类时颜色是该分类的颜色快照，须为有效十六进制。
+    draft.category = draft.category.trim().to_owned();
+    if draft.category.is_empty() {
+        draft.color = String::new();
+    } else {
+        draft.color = crate::color::normalize_hex(&draft.color)
+            .ok_or_else(|| CommandError::validation("color", "请选择有效颜色。"))?;
     }
-    draft.color = crate::color::normalize_hex(&draft.color)
-        .ok_or_else(|| CommandError::validation("color", "请选择有效颜色。"))?;
     draft.reminders = normalize_reminders(&draft.reminders)?;
     if draft.all_day {
         let start_date = start.date().format("%Y-%m-%d");
@@ -1676,13 +1679,6 @@ mod tests {
                     ..base.clone()
                 },
                 "endAt",
-            ),
-            (
-                EventDraft {
-                    category: "other".into(),
-                    ..base.clone()
-                },
-                "category",
             ),
             (
                 EventDraft {

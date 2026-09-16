@@ -53,7 +53,7 @@ function repository(overrides: Partial<NowlyRepository> = {}): NowlyRepository {
     moveKanbanCard: vi.fn().mockResolvedValue(undefined),
     createKanbanPriority: vi.fn(), updateKanbanPriority: vi.fn(), deleteKanbanPriority: vi.fn(), reorderKanbanPriorities: vi.fn(),
     createKanbanTag: vi.fn(), updateKanbanTag: vi.fn(), deleteKanbanTag: vi.fn(),
-    createKanbanCollaborator: vi.fn(), updateKanbanCollaborator: vi.fn(), deleteKanbanCollaborator: vi.fn(), proxyFetch: vi.fn(), fetchRegistry: vi.fn(), downloadModule: vi.fn(), listCalendarSubscriptions: vi.fn().mockResolvedValue([]), createCalendarSubscription: vi.fn(), updateCalendarSubscription: vi.fn(), deleteCalendarSubscription: vi.fn(), refreshCalendarSubscription: vi.fn(), startOAuthLogin: vi.fn(), listOAuthAccounts: vi.fn().mockResolvedValue([]), disconnectOAuthAccount: vi.fn(), listRemoteCalendars: vi.fn().mockResolvedValue([]), subscribeRemoteCalendar: vi.fn(), updateSubscriptionDisplay: vi.fn(), listExternalEventsInRange: vi.fn().mockResolvedValue([]),
+    createKanbanCollaborator: vi.fn(), updateKanbanCollaborator: vi.fn(), deleteKanbanCollaborator: vi.fn(), proxyFetch: vi.fn(), fetchRegistry: vi.fn(), downloadModule: vi.fn(), listCategories: vi.fn().mockResolvedValue([]), createCategory: vi.fn(), updateCategory: vi.fn(), deleteCategory: vi.fn(), listCalendarSubscriptions: vi.fn().mockResolvedValue([]), createCalendarSubscription: vi.fn(), updateCalendarSubscription: vi.fn(), deleteCalendarSubscription: vi.fn(), refreshCalendarSubscription: vi.fn(), startOAuthLogin: vi.fn(), listOAuthAccounts: vi.fn().mockResolvedValue([]), disconnectOAuthAccount: vi.fn(), listRemoteCalendars: vi.fn().mockResolvedValue([]), subscribeRemoteCalendar: vi.fn(), updateSubscriptionDisplay: vi.fn(), listExternalEventsInRange: vi.fn().mockResolvedValue([]),
     // The board reads the unified task workspace. Mocking this rather than the
     // legacy pair keeps the fixture on the same path production takes, and gives
     // exact control over lanes — `workspaceFromLegacy` substitutes three default
@@ -83,11 +83,10 @@ describe('KanbanWidget', () => {
     // The settings gear opens the field dialog directly; there is no intermediate menu.
     await user.click(screen.getByRole('button', { name: '看板设置' }));
     expect(screen.queryByRole('menuitem')).not.toBeInTheDocument();
-    // Board settings are now the unified task settings, which lead with the
-    // view-linking tab. Priorities are the four fixed quadrants, not editable rows.
     expect(screen.getByRole('dialog', { name: '任务设置' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: '视图联动' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('tab', { name: '优先级(4)' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '标签(0)' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.queryByRole('tab', { name: /视图联动/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: /优先级/ })).not.toBeInTheDocument();
   });
 
   it('renders each lane with an accessible add-card button and a single scroll viewport', async () => {
@@ -107,6 +106,20 @@ describe('KanbanWidget', () => {
     // a field, where it stays editable, rather than baking it into the heading.
     expect(screen.getByRole('dialog', { name: '新建任务' })).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: '看板泳道' })).toHaveTextContent('进行中');
+    await user.click(screen.getByRole('combobox', { name: '所属象限' }));
+    expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual([
+      '无优先级',
+      '重要且紧急',
+      '重要不紧急',
+      '不重要但紧急',
+      '不重要不紧急'
+    ]);
+  });
+
+  it('does not offer a priority filter on the board', async () => {
+    renderWidget(repository());
+    await screen.findByRole('region', { name: '泳道：待处理' });
+    expect(screen.queryByRole('combobox', { name: '按优先级筛选' })).not.toBeInTheDocument();
   });
 
   it('opens the lane editor by clicking the lane name', async () => {

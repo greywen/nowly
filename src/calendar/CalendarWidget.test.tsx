@@ -13,6 +13,12 @@ const baseProps = {
   anchorIso: '2026-07-23',
   view: 'month' as const,
   events: sampleEvents,
+  categories: [
+    { id: 'work', name: '工作', color: '#4F55DA', position: 0, createdAt: '', updatedAt: '' },
+    { id: 'important', name: '重要', color: '#F06445', position: 1, createdAt: '', updatedAt: '' },
+    { id: 'personal', name: '个人', color: '#4FC9DA', position: 2, createdAt: '', updatedAt: '' },
+    { id: 'learning', name: '学习', color: '#B8D935', position: 3, createdAt: '', updatedAt: '' }
+  ],
   status: 'ready' as const,
   onRetry: vi.fn(),
   onCreateEvent: vi.fn(),
@@ -82,7 +88,7 @@ describe('CalendarWidget', () => {
 
     const row = screen.getByRole('button', { name: '另有 1 个日程' });
     expect(row).toHaveClass('event-overflow-dots');
-    expect(row.querySelector('.event-overflow-dot')).toHaveStyle({ '--selected-color': '#4FC9DA' });
+    expect(row.querySelector('.event-overflow-dot')).toHaveStyle({ '--selected-color': '#4F55DA' });
   });
 
   it('renders a 42-day month and invokes all header navigation callbacks', async () => {
