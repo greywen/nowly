@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CalendarEvent, Recurrence } from '../calendar/calendar-model';
 import {
+  applyEventDuration,
   createEventDraft,
   eventToForm,
   isEventFormDirty,
@@ -50,6 +51,20 @@ const event: CalendarEvent = {
 };
 
 describe('event draft helpers', () => {
+  it('applies a duration shortcut on the same day', () => {
+    expect(applyEventDuration({ ...form, startTime: '14:10' }, 30)).toMatchObject({
+      endDate: '2026-07-23',
+      endTime: '14:40'
+    });
+  });
+
+  it('applies a duration shortcut across midnight', () => {
+    expect(applyEventDuration({ ...form, startTime: '23:40' }, 60)).toMatchObject({
+      endDate: '2026-07-24',
+      endTime: '00:40'
+    });
+  });
+
   it('creates defaults at the next five-minute mark with a one-hour duration', () => {
     expect(createEventDraft('2026-07-23', new Date(2026, 6, 23, 9, 42))).toEqual({
       title: '',

@@ -883,11 +883,10 @@ body:has(.screen-status-island-root),
 .reminder-field { display: grid; gap: 12px; }
 .reminder-field__label { color: var(--text-secondary); font-size: 0.95rem; font-weight: 500; line-height: 1.5; }
 .reminder-field__empty { margin: 0; color: var(--text-tertiary); font-size: 0.85rem; line-height: 1.5; }
-.reminder-row { display: flex; align-items: flex-end; gap: 12px; }
+.reminder-row { display: flex; align-items: center; gap: 12px; }
 .reminder-row__value { width: 88px; flex: 0 0 auto; }
-.reminder-row .select-field { flex: 1 1 auto; min-width: 0; }
-.reminder-row__suffix { flex: 0 0 auto; padding-bottom: 14px; color: var(--text-secondary); font-size: 0.9rem; line-height: 1.5; }
-.reminder-row__remove { flex: 0 0 auto; margin-bottom: 4px; }
+.reminder-row .select-field { flex: 0 0 auto; width: 120px; min-width: 0; }
+.reminder-row__remove { flex: 0 0 auto; margin-left: auto; }
 .reminder-field__add { justify-self: start; }
 
 .recurrence-field { display: grid; gap: 16px; }
@@ -1104,29 +1103,48 @@ body:has(.screen-status-island-root),
 .date-detail-dialog__category--personal { color: #6f8617; background: var(--color-success-light); }
 .date-detail-dialog__category--learning { color: var(--color-info-active); background: var(--color-info-light); }
 
-.event-dialog { width: min(1040px, calc(100vw - 32px)); }
-.event-form { display: grid; gap: 24px; }
-.event-form__lead { display: grid; grid-template-columns: minmax(0, 1fr) 260px; align-items: start; gap: 16px; }
+.event-dialog { width: min(720px, calc(100vw - 32px)); }
+.event-form { display: grid; gap: 0; }
+.event-form__lead { display: grid; grid-template-columns: minmax(0, 1fr) 260px; align-items: start; gap: 16px; padding-bottom: 20px; }
 .event-form__lead--single { grid-template-columns: minmax(0, 1fr); }
 .event-form__title .good-input { color: var(--text-primary); font-size: 1.075rem; font-weight: 500; }
-.event-form__schedule-section { width: 100%; }
-.event-form__details { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(310px, .85fr); align-items: start; gap: 24px; }
-.event-form__section { min-width: 0; padding: 24px; border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-surface); }
-.event-form__section--soft { background: var(--bg-module); }
-.event-form__section-heading { margin-bottom: 20px; display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
-.event-form__section-heading h3 { margin: 0; color: var(--text-primary); font-size: 1.15rem; font-weight: 600; line-height: 1.2; }
-.event-form__section-heading p { margin: 5px 0 0; color: var(--text-muted); font-size: .85rem; line-height: 1.5; }
-.event-form__section-heading .form-check { flex: none; }
-.event-form__schedule { display: grid; gap: 16px; }
-.event-form__note { align-self: start; }
-.event-form__settings { align-self: start; }
-.event-form__settings-list { display: grid; }
-.event-form__setting { padding: 18px 0; border-bottom: 1px solid var(--border-default); }
-.event-form__setting:first-child { padding-top: 0; }
-.event-form__setting:last-child { padding-bottom: 0; border-bottom: 0; }
-.event-form__category-color { display: grid; gap: 20px; }
+.event-form__note-hint { grid-column: 1 / -1; margin: 0; color: var(--text-tertiary); font-size: 0.85rem; line-height: 1.5; }
+
+/* Continuous borderless sections split only by whitespace and hairline rules. */
+.event-form__time-range,
+.event-form__note,
+.event-form__quick-settings,
+.event-form__advanced { padding: 20px 0; border-top: 1px solid var(--border-default); }
+.event-form__time-range h3,
+.event-form__note h3 { margin: 0 0 12px; color: var(--text-primary); font-size: 1rem; font-weight: 600; line-height: 1.2; }
+.event-form__row-heading { margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.event-form__row-heading h3 { margin: 0; }
+.event-form__row-heading .form-check { flex: none; }
+.event-form__range { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: end; gap: 12px; }
+.event-form__range-end { display: grid; gap: 12px; }
+.event-form__range-arrow { padding-bottom: 14px; color: var(--text-tertiary); font-size: 1.1rem; line-height: 1; }
+.event-form__durations { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
+.event-form__quick-settings { display: grid; gap: 20px; }
+.event-form__setting { min-width: 0; }
+.event-form__category-color { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
 .event-form__category-color > div { min-width: 0; display: grid; gap: 8px; }
-.event-form__section .rich-editor .ql-editor { min-height: 104px; }
+.event-form__note .rich-editor .ql-editor { min-height: 104px; }
+
+/* Repeat & more settings disclosure */
+.event-form__disclosure { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0; border: 0; background: none; cursor: pointer; color: var(--text-primary); font-size: 1rem; font-weight: 600; text-align: left; }
+.event-form__disclosure:focus-visible { outline: 0; box-shadow: var(--shadow-focus); border-radius: var(--radius-sm); }
+.event-form__disclosure-summary { color: var(--text-tertiary); font-size: 0.9rem; font-weight: 400; }
+.event-form__advanced .recurrence-field { margin-top: 16px; }
+
+/* Quick chips for durations and reminder presets */
+.good-chip { padding: 6px 14px; border: 1px solid var(--border-default); border-radius: var(--radius-pill); background: var(--bg-surface); color: var(--text-secondary); font-size: 0.9rem; font-weight: 500; line-height: 1.4; cursor: pointer; }
+.good-chip:hover { border-color: var(--color-primary); color: var(--color-primary); }
+.good-chip:focus-visible { outline: 0; box-shadow: var(--shadow-focus); }
+.good-chip[aria-pressed="true"] { border-color: var(--color-primary); background: var(--color-primary-light); color: var(--color-primary-active); }
+.good-chip:disabled { pointer-events: none; opacity: .5; }
+.reminder-field__quick { display: flex; flex-wrap: wrap; gap: 8px; }
+.reminder-field__rows { margin-top: 12px; display: grid; gap: 12px; }
+.reminder-row__summary { flex: 0 0 auto; min-width: 84px; color: var(--text-secondary); font-size: 0.9rem; line-height: 1.5; }
 .visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0, 0, 0, 0) !important; white-space: nowrap !important; border: 0 !important; }
 .task-dialog { width: min(680px, calc(100vw - 32px)); }
 .task-form { display: grid; gap: 20px; }
@@ -1203,8 +1221,7 @@ body:has(.screen-status-island-root),
 
 @media (max-width: 900px) {
   .event-dialog { width: min(680px, calc(100vw - 32px)); }
-  .event-form__lead,
-  .event-form__details { grid-template-columns: minmax(0, 1fr); }
+  .event-form__lead { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (max-width: 640px) {
@@ -1214,13 +1231,13 @@ body:has(.screen-status-island-root),
   .good-dialog__header,
   .good-dialog__footer { padding-inline: 24px; }
   .good-dialog__body { padding: 24px; }
-  .event-form { gap: 20px; }
-  .event-form__section { padding: 20px; }
-  .event-form__section-heading { gap: 12px; }
-  .event-form__section-heading .form-check { align-self: flex-start; }
+  .event-form__range { grid-template-columns: minmax(0, 1fr); }
+  .event-form__range-arrow { justify-self: start; padding: 0; transform: rotate(90deg); }
+  .event-form__category-color { grid-template-columns: 1fr; }
+  .event-form__row-heading .form-check { align-self: flex-start; }
   .event-dialog__actions .good-button { padding-inline: 16px; }
   .event-dialog__actions .good-button--danger-ghost { margin-right: auto; }
-  .reminder-row { display: grid; grid-template-columns: 72px minmax(0, 1fr) auto 40px; align-items: end; gap: 8px; }
+  .reminder-row { flex-wrap: wrap; }
 }
 
 /* Module frame remove button (edit mode) */

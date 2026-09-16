@@ -44,6 +44,17 @@ function minutesToTime(minutes: number) {
   return `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`;
 }
 
+export function applyEventDuration(form: EventFormDraft, durationMinutes: number): EventFormDraft {
+  const [year, month, day] = form.startDate.split('-').map(Number);
+  const [hour, minute] = form.startTime.split(':').map(Number);
+  const end = new Date(year, month - 1, day, hour, minute + durationMinutes);
+  return {
+    ...form,
+    endDate: `${end.getFullYear()}-${pad(end.getMonth() + 1)}-${pad(end.getDate())}`,
+    endTime: `${pad(end.getHours())}:${pad(end.getMinutes())}`
+  };
+}
+
 export function createEventDraft(dateIso: string, now: Date): EventFormDraft {
   let startMinutes = Math.ceil((now.getHours() * 60 + now.getMinutes()) / 5) * 5;
   let endMinutes = startMinutes + 60;
