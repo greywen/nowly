@@ -307,6 +307,34 @@ test.describe('closing one notification', () => {
 test.describe('the open sheet', () => {
   test.use({ viewport: EXPANDED });
 
+  test('uses dashed dividers throughout the status detail panel', async ({ page }) => {
+    await page.clock.setFixedTime(new Date(FIXED_TIME));
+    await installRail(page, {
+      ...passiveSnapshot,
+      tasks: [{
+        id: 'task-1',
+        title: '发布检查',
+        description: '',
+        priority: 'important_not_urgent',
+        dueDate: '2026-09-12',
+        completed: false,
+        laneId: 'todo',
+        boardPosition: 0,
+        tagIds: [],
+        collaboratorIds: [],
+        views: ['matrix'],
+        createdAt: '2026-09-01T00:00:00Z',
+        updatedAt: '2026-09-01T00:00:00Z'
+      }]
+    }, { source: 'island', identity: null });
+    await page.goto('/');
+
+    await expect(page.locator('.status-rail')).toHaveAttribute('data-open', 'true');
+    await expect(page.locator('.status-rail__panel')).toHaveCSS('border-top-style', 'dashed');
+    await expect(page.locator('.status-island__group + .status-island__group'))
+      .toHaveCSS('border-top-style', 'dashed');
+  });
+
   test('is the capsule grown: the head stays put and the rest is uncovered', async ({ page }) => {
     await page.clock.setFixedTime(new Date(FIXED_TIME));
     await installRail(page, passiveSnapshot, { source: 'island', identity: null });

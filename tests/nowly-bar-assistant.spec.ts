@@ -95,4 +95,22 @@ test('clips the expanded assistant to all four rail corners', async ({ page }) =
   await expect(page.getByText('需要提醒吗？')).toBeVisible();
   await expect(page.locator('.status-rail__assistant')).toHaveCSS('border-radius', '15.2px');
   await expect(page.locator('.status-rail__assistant')).toHaveCSS('overflow', 'hidden');
+  await expect(page.locator('.assistant-dock--embedded .assistant-panel'))
+    .toHaveCSS('border-top-style', 'dashed');
+  await expect(page.locator('.assistant-dock--embedded .assistant-chat-message').first())
+    .toHaveCSS('border-style', 'dashed');
+
+  await page.evaluate(() => {
+    const dock = document.querySelector('.assistant-dock--embedded');
+    if (!dock) throw new Error('embedded assistant not found');
+    const bottomDivider = document.createElement('div');
+    bottomDivider.className = 'assistant-change-header test-bottom-divider';
+    const topDivider = document.createElement('div');
+    topDivider.className = 'assistant-editor test-top-divider';
+    dock.append(bottomDivider, topDivider);
+  });
+  await expect(page.locator('.test-bottom-divider')).toHaveCSS('border-top-width', '0px');
+  await expect(page.locator('.test-bottom-divider')).toHaveCSS('border-bottom-style', 'dashed');
+  await expect(page.locator('.test-top-divider')).toHaveCSS('border-top-style', 'dashed');
+  await expect(page.locator('.test-top-divider')).toHaveCSS('border-bottom-width', '0px');
 });

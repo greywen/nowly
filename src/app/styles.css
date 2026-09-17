@@ -172,7 +172,7 @@ button:disabled { cursor: default; opacity: .65; }
    grows: the icon and title land on the same pixel in both sizes. */
 .status-rail__content { position: absolute; top: 0; left: 0; width: calc(var(--rail-w) - var(--rail-edge) * 2); height: calc(var(--sheet-h) - var(--rail-edge) * 2); display: grid; grid-template-rows: calc(var(--rail-h) - var(--rail-edge) * 2) minmax(0, 1fr); }
 .status-rail__header { position: relative; min-width: 0; }
-.status-rail__panel { min-height: 0; border-top: 1px solid var(--border-default); opacity: 0; transition: opacity var(--rail-out) ease-out !important; }
+.status-rail__panel { min-height: 0; border-top: 1px dashed var(--border-default); opacity: 0; transition: opacity var(--rail-out) ease-out !important; }
 .status-rail[data-open="true"] .status-rail__panel { opacity: 1; transition: opacity var(--rail-in) ease-out var(--rail-in-delay) !important; }
 .status-rail[data-surface="composer"] .status-rail__panel,
 .status-rail[data-surface="assistant"] .status-rail__panel { border-top-color: transparent; opacity: 0; pointer-events: none; }
@@ -272,14 +272,14 @@ button:disabled { cursor: default; opacity: .65; }
    head one row above already carries. */
 .status-island__details { box-sizing: border-box; width: 330px; padding: 8px; border: 1px dashed var(--border-default); border-radius: var(--radius-default); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 2px; background: var(--bg-surface); box-shadow: var(--shadow-dropdown); }
 .status-island__details[data-compact="true"] { width: 100%; height: 100%; padding: 6px 8px 8px; border: 0; border-radius: 0; grid-template-rows: minmax(0, 1fr) auto; background: transparent; box-shadow: none; }
-.status-island__panel-title { padding: 2px 8px 6px; border-bottom: 1px solid var(--border-default); display: grid; gap: 2px; }
+.status-island__panel-title { padding: 2px 8px 6px; border-bottom: 1px dashed var(--border-default); display: grid; gap: 2px; }
 .status-island__panel-title strong { color: var(--text-primary); font-size: 0.95rem; font-weight: 600; }
 .status-island__panel-title > span { overflow: hidden; color: var(--text-muted); font-size: 0.85rem; font-weight: 500; text-overflow: ellipsis; }
 .status-island__panel-body { min-height: 0; overflow-y: auto; display: grid; align-content: start; gap: 2px; }
 /* Opened from the summary: one section per marker, every item listed. The body
    already scrolls, so a long day grows downward instead of truncating. */
 .status-island__group { display: grid; align-content: start; gap: 2px; }
-.status-island__group + .status-island__group { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border-default); }
+.status-island__group + .status-island__group { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--border-default); }
 .status-island__group-title { margin: 0; padding: 0 8px; display: flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: 0.8rem; font-weight: 600; }
 .status-island__actions { padding: 4px 8px; display: flex; flex-wrap: wrap; gap: 8px; }
 .status-island__actions > button { min-height: 36px; padding: 6px 10px; border: 0; border-radius: var(--radius-sm); display: inline-flex; align-items: center; gap: 4px; color: var(--color-primary-active); background: var(--color-primary-light); font-size: 0.85rem; font-weight: 600; }
@@ -296,7 +296,7 @@ button.status-island__row:hover { color: var(--color-primary-active); background
 .status-island__focus-row > button { min-height: 36px; padding: 6px 8px; border: 0; border-radius: var(--radius-sm); display: inline-flex; align-items: center; gap: 4px; color: var(--color-primary-active); background: var(--color-primary-light); font-size: 0.85rem; font-weight: 600; }
 .status-island__focus-row > button svg { width: 16px; height: 16px; }
 .status-island__empty { margin: 0; padding: 8px 12px; color: var(--text-muted); font-size: 0.85rem; }
-.status-island__footer { padding: 6px 8px 2px; border-top: 1px solid var(--border-default); }
+.status-island__footer { padding: 6px 8px 2px; border-top: 1px dashed var(--border-default); }
 .status-island__footer:empty { padding: 0; border-top: 0; }
 .status-island__footer.has-retry { display: grid; grid-template-columns: minmax(0, 1fr) 36px; gap: 8px; }
 .status-island__footer .btn { width: 100%; }

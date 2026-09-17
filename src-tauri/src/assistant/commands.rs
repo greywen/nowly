@@ -81,10 +81,20 @@ fn cancel_request(requests: &mut RequestRegistry, id: String) {
     }
     requests.cancelled.insert(id, Instant::now());
 }
-fn main_only(window: &WebviewWindow) -> Result<(), CommandError> {
-    // The AI quick panel window is removed in this version, so only the main
-    // window may reach the assistant. The status island windows must not.
-    if window.label() != "main" {
+#[derive(Clone, Copy)]
+enum AssistantWindowAccess {
+    Runtime,
+    Settings,
+}
+fn assistant_window_allowed(label: &str, access: AssistantWindowAccess) -> bool {
+    label == "main"
+        || (label == "quick-panel-handle" && matches!(access, AssistantWindowAccess::Runtime))
+}
+fn require_assistant_window(
+    window: &WebviewWindow,
+    access: AssistantWindowAccess,
+) -> Result<(), CommandError> {
+    if !assistant_window_allowed(window.label(), access) {
         return Err(CommandError::validation(
             "assistant",
             "此操作只允许在 Nowly 窗口中执行。",
@@ -97,7 +107,7 @@ pub fn assistant_get_config(
     window: WebviewWindow,
     db: State<'_, AppDb>,
 ) -> Result<Config, CommandError> {
-    main_only(&window)?;
+    require_assistant_window(&window, AssistantWindowAccess::Runtime)?;
     provider::get_config(&*db.0.lock().map_err(CommandError::database)?)
 }
 #[tauri::command]
@@ -108,7 +118,7 @@ pub async fn assistant_save_config(
     api_key: Option<String>,
     clear_key: bool,
 ) -> Result<Config, CommandError> {
-    main_only(&window)?;
+    require_assistant_window(&window, AssistantWindowAccess::Settings)?;
     tauri::async_runtime::spawn_blocking(move || {
         provider::save_detected_with(
             &app.state::<AppDb>().0,
@@ -127,7 +137,7 @@ pub async fn assistant_interpret(
     app: AppHandle,
     request: Request,
 ) -> Result<Reply, CommandError> {
-    main_only(&window)?;
+    require_assistant_window(&window, AssistantWindowAccess::Runtime)?;
     if uuid::Uuid::parse_str(&request.request_id).is_err() {
         return Err(CommandError::validation("requestId", "请求标识无效。"));
     }
@@ -157,7 +167,7 @@ pub fn assistant_cancel_request(
     state: State<'_, Requests>,
     request_id: String,
 ) -> Result<(), CommandError> {
-    main_only(&window)?;
+    require_assistant_window(&window, AssistantWindowAccess::Runtime)?;
     if uuid::Uuid::parse_str(&request_id).is_err() {
         return Err(CommandError::validation("requestId", "请求标识无效。"));
     }
@@ -172,7 +182,7 @@ pub fn assistant_revise(
     plan_id: String,
     actions: Vec<Action>,
 ) -> Result<Plan, CommandError> {
-    main_only(&window)?;
+    require_assistant_window(&window, AssistantWindowAccess::Runtime)?;
     let db = db.0.lock().map_err(CommandError::database)?;
     revise(&db, plan_id, actions)
 }
@@ -227,7 +237,7 @@ pub fn assistant_cancel_plan(
     db: State<'_, AppDb>,
     plan_id: String,
 ) -> Result<(), CommandError> {
-    main_only(&window)?;
+    require_assistant_window(&window, AssistantWindowAccess::Runtime)?;
     store::cancel(&*db.0.lock().map_err(CommandError::database)?, &plan_id)
 }
 #[tauri::command]
@@ -236,7 +246,7 @@ pub fn assistant_execute(
     db: State<'_, AppDb>,
     plan_id: String,
 ) -> Result<Plan, CommandError> {
-    main_only(&window)?;
+    require_assistant_window(&window, AssistantWindowAccess::Runtime)?;
     let db = db.0.lock().map_err(CommandError::database)?;
     let plan = store::execute(&db, &plan_id, &provider::get_config(&db)?.permissions)?;
     drop(db);
@@ -249,7 +259,7 @@ pub fn assistant_undo(
     db: State<'_, AppDb>,
     plan_id: String,
 ) -> Result<Plan, CommandError> {
-    main_only(&window)?;
+    require_assistant_window(&window, AssistantWindowAccess::Runtime)?;
     let db = db.0.lock().map_err(CommandError::database)?;
     let plan = store::undo(&db, &plan_id, &provider::get_config(&db)?.permissions)?;
     drop(db);
@@ -261,7 +271,7 @@ pub fn assistant_history(
     window: WebviewWindow,
     db: State<'_, AppDb>,
 ) -> Result<Vec<Plan>, CommandError> {
-    main_only(&window)?;
+    require_assistant_window(&window, AssistantWindowAccess::Runtime)?;
     store::history(&*db.0.lock().map_err(CommandError::database)?)
 }
 #[tauri::command]
@@ -270,7 +280,7 @@ pub fn assistant_status(
     db: State<'_, AppDb>,
     plan_id: String,
 ) -> Result<Plan, CommandError> {
-    main_only(&window)?;
+    require_assistant_window(&window, AssistantWindowAccess::Runtime)?;
     store::get(&*db.0.lock().map_err(CommandError::database)?, &plan_id)
 }
 
@@ -307,5 +317,28 @@ mod tests {
         // locked until the process restarts.
         release(&mut registry, &first);
         assert!(register(&mut registry, &uuid::Uuid::new_v4().to_string()).is_ok());
+    }
+    #[test]
+    fn assistant_window_policy_allows_nowly_bar_runtime_but_not_settings() {
+        assert!(assistant_window_allowed(
+            "main",
+            AssistantWindowAccess::Runtime
+        ));
+        assert!(assistant_window_allowed(
+            "main",
+            AssistantWindowAccess::Settings
+        ));
+        assert!(assistant_window_allowed(
+            "quick-panel-handle",
+            AssistantWindowAccess::Runtime
+        ));
+        assert!(!assistant_window_allowed(
+            "quick-panel-handle",
+            AssistantWindowAccess::Settings
+        ));
+        assert!(!assistant_window_allowed(
+            "status-island-details",
+            AssistantWindowAccess::Runtime
+        ));
     }
 }
