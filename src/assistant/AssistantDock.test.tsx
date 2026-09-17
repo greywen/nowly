@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { AssistantDock } from './AssistantDock';
+import { ChangeDetails } from './PlanCard';
 import type { AssistantClient, AssistantConfig, InterpretRequest, Plan, Reply } from './types';
 
 const config: AssistantConfig = { endpoint: 'https://example.com/v1', model: 'fixture-model', hasKey: true, permissions: { calendar: true, tasks: true, external: false } };
@@ -85,17 +86,42 @@ describe('AssistantDock execution boundary', () => {
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(screen.getByText(/不代表系统通知已送达/)).toBeInTheDocument();
   });
-  it('associates a completed chat card detail button with its detail region', async () => {
+  it('uses the completed operation row as the accessible detail trigger', async () => {
     const client = clientFixture();
-    render(<AssistantDock client={client} onRefresh={() => {}} />);
+    render(<AssistantDock client={client} presentation="embedded" onRefresh={() => {}} />);
     await send();
     await click(await screen.findByRole('button', { name: '确认执行 1 项' }));
-    // The button reads "查看详情" but carries a per-operation aria-label so
-    // repeated cards stay distinguishable to screen readers.
-    const details = screen.getByRole('button', { name: /^查看.+详情$/ });
+    const details = screen.getByRole('button', { name: /新建日程.*早会.*已执行/ });
     expect(details).toHaveAttribute('aria-controls');
+    expect(details).toHaveAttribute('aria-expanded', 'false');
+    expect(details.querySelector('svg')).toHaveClass('app-icon');
+    expect(screen.queryByText('查看详情')).not.toBeInTheDocument();
+    expect(screen.queryByText(/不代表系统通知已送达/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '撤销早会' })).not.toBeInTheDocument();
     await click(details);
+    expect(details).toHaveAttribute('aria-expanded', 'true');
     expect(document.getElementById(details.getAttribute('aria-controls')!)).toBeInTheDocument();
+    expect(screen.getByText('分类')).toBeInTheDocument();
+    expect(screen.queryByText('颜色')).not.toBeInTheDocument();
+    expect(screen.getByText(/不代表系统通知已送达/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '撤销早会' })).toBeInTheDocument();
+  });
+  it('hides calendar color only when the embedded presentation requests it', () => {
+    const p = plan();
+    const calendarChange = p.changes[0];
+    const { rerender } = render(<ChangeDetails change={calendarChange} plan={p} />);
+
+    expect(screen.getByText('分类')).toBeInTheDocument();
+    expect(screen.getByText('工作')).toBeInTheDocument();
+    expect(screen.getByText('颜色')).toBeInTheDocument();
+
+    rerender(<ChangeDetails change={calendarChange} plan={p} hideCalendarColor />);
+    expect(screen.getByText('分类')).toBeInTheDocument();
+    expect(screen.queryByText('颜色')).not.toBeInTheDocument();
+
+    rerender(<ChangeDetails change={{ ...calendarChange, kind: 'createTask' }} plan={p} hideCalendarColor />);
+    expect(screen.getByText('颜色')).toBeInTheDocument();
+    expect(screen.getByText('#4fc9da')).toBeInTheDocument();
   });
   it('invalidates the old plan immediately on editing and confirms only a revised plan', async () => {
     const client = clientFixture();

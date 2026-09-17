@@ -376,6 +376,7 @@ export function AssistantDock({
           onSelect={(i, checked) => { invalidate(); setSelected(current => current.map((value, index) => index === i ? checked : value)); }}
           onRevise={() => void revise()} onConfirm={() => void execute()} onCancel={() => void cancelPlan()}
           onUndo={target => void execute(true, target)} onRecover={() => { if (uncertain) void (async () => { lock(true); try { await recover(uncertain.id, uncertain.undo, undefined, uncertain.preserveCurrent); } finally { lock(false); } })(); }} onOpenChange={setOpenChange}
+          embedded={presentation === 'embedded'}
           onOpenRecord={async (record, trigger) => {
             try {
               await onOpenRecord?.(record, inputRef.current ?? trigger);

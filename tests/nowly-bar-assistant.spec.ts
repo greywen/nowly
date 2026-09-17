@@ -97,20 +97,38 @@ test('clips the expanded assistant to all four rail corners', async ({ page }) =
   await expect(page.locator('.status-rail__assistant')).toHaveCSS('overflow', 'hidden');
   await expect(page.locator('.assistant-dock--embedded .assistant-panel'))
     .toHaveCSS('border-top-style', 'dashed');
-  await expect(page.locator('.assistant-dock--embedded .assistant-chat-message').first())
-    .toHaveCSS('border-style', 'dashed');
+  const message = page.locator('.assistant-dock--embedded .assistant-chat-message').first();
+  await expect(message).toHaveCSS('border-top-width', '0px');
+  await expect(message).toHaveCSS('display', 'flex');
+  await expect(message).toHaveCSS('align-items', 'center');
+  await expect(message.locator('p')).toHaveCSS('margin-top', '0px');
 
   await page.evaluate(() => {
     const dock = document.querySelector('.assistant-dock--embedded');
     if (!dock) throw new Error('embedded assistant not found');
-    const bottomDivider = document.createElement('div');
-    bottomDivider.className = 'assistant-change-header test-bottom-divider';
-    const topDivider = document.createElement('div');
-    topDivider.className = 'assistant-editor test-top-divider';
-    dock.append(bottomDivider, topDivider);
+    const operation = document.createElement('section');
+    operation.className = 'assistant-operation test-operation';
+    const details = document.createElement('div');
+    details.className = 'assistant-operation-details test-operation-details';
+    const changeHeader = document.createElement('div');
+    changeHeader.className = 'assistant-change-header test-change-header';
+    const editor = document.createElement('div');
+    editor.className = 'assistant-editor test-editor';
+    const actions = document.createElement('div');
+    actions.className = 'assistant-actions test-actions';
+    const button = document.createElement('button');
+    button.className = 'btn';
+    button.textContent = '确认';
+    actions.append(button);
+    dock.append(operation, details, changeHeader, editor, actions);
   });
-  await expect(page.locator('.test-bottom-divider')).toHaveCSS('border-top-width', '0px');
-  await expect(page.locator('.test-bottom-divider')).toHaveCSS('border-bottom-style', 'dashed');
-  await expect(page.locator('.test-top-divider')).toHaveCSS('border-top-style', 'dashed');
-  await expect(page.locator('.test-top-divider')).toHaveCSS('border-bottom-width', '0px');
+  await expect(page.locator('.test-operation')).not.toHaveCSS('border-style', 'dashed');
+  await expect(page.locator('.test-operation-details')).not.toHaveCSS('border-top-style', 'dashed');
+  await expect(page.locator('.test-change-header')).not.toHaveCSS('border-bottom-style', 'dashed');
+  await expect(page.locator('.test-editor')).not.toHaveCSS('border-top-style', 'dashed');
+  await expect(page.locator('.test-actions')).toHaveCSS('justify-self', 'end');
+  await expect(page.locator('.test-actions .btn')).toHaveCSS('height', '40px');
+  const toolbarWidth = await page.locator('.test-actions').evaluate(element => element.getBoundingClientRect().width);
+  const dockWidth = await page.locator('.assistant-dock--embedded').evaluate(element => element.getBoundingClientRect().width);
+  expect(toolbarWidth).toBeLessThan(dockWidth);
 });

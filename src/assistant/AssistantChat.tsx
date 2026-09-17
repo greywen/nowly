@@ -1,4 +1,5 @@
-import { displayField, ChangeDetails, PlanCard } from './PlanCard';
+import { ChevronDown, ChevronUp } from '../components/icons';
+import { displayField, ChangeDetails, kinds, PlanCard } from './PlanCard';
 import type { Action, AssistantRecord, ChatItem, Fields, Plan } from './types';
 
 export type AssistantChatProps = {
@@ -21,12 +22,13 @@ export type AssistantChatProps = {
   onRecover: () => void;
   onOpenChange: (key: string | null) => void;
   onOpenRecord?: (record: AssistantRecord, trigger: HTMLElement) => void;
+  embedded?: boolean;
 };
 
 const statuses: Record<Plan['status'], string> = { pending: '待确认', committed: '已执行', undone: '已撤销', cancelled: '已取消', expired: '已过期' };
 
 export function AssistantChat({ items, currentPlanId, actions, edits, selected, dirty, busy, blocked, uncertainPlanId, openChange,
-  onEdit, onSelect, onRevise, onConfirm, onCancel, onUndo, onRecover, onOpenChange, onOpenRecord }: AssistantChatProps) {
+  onEdit, onSelect, onRevise, onConfirm, onCancel, onUndo, onRecover, onOpenChange, onOpenRecord, embedded = false }: AssistantChatProps) {
   if (!items.length) return <p className="assistant-chat-empty">今天还没有对话。</p>;
 
   return <ol className="assistant-chat" aria-label="当前聊天消息">
@@ -53,25 +55,45 @@ export function AssistantChat({ items, currentPlanId, actions, edits, selected, 
       const uncertain = uncertainPlanId === plan.id;
       if (plan.status === 'pending' && plan.id === currentPlanId) return <li className="assistant-chat-card" key={item.id}>
         <PlanCard plan={plan} actions={actions} edits={edits} selected={selected} dirty={dirty} busy={busy} blocked={blocked}
-          onEdit={onEdit} onSelect={onSelect} onRevise={onRevise} onConfirm={onConfirm} onCancel={onCancel} />
+          compact={embedded} onEdit={onEdit} onSelect={onSelect} onRevise={onRevise} onConfirm={onConfirm} onCancel={onCancel} />
         {uncertain && <div className="assistant-card-status" data-tone="error"><p role="alert">执行状态尚未核实，请勿重复操作。</p>
           <button className="btn" disabled={busy} onClick={onRecover}>核实操作状态</button></div>}
       </li>;
       const changeId = `${plan.id}:details`;
       const operationTitle = plan.changes.map(change => change.title).join('、');
+      const operationKind = [...new Set(plan.actions.map(action => kinds[action.kind]))].join('、');
+      const expanded = openChange === changeId;
       return <li className="assistant-chat-card" key={item.id}>
         <section className="assistant-operation" aria-label={`操作状态：${statuses[plan.status]}`}>
-          <header><div><span className="assistant-eyebrow">本次操作</span>
-            <strong>{operationTitle}</strong></div>
-            <span className="assistant-status-badge" data-status={plan.status}>{statuses[plan.status]}</span>
-          </header>
-          <button className="btn" aria-label={`查看${operationTitle}详情`} aria-expanded={openChange === changeId} aria-controls={`assistant-chat-${changeId}`}
-            onClick={() => onOpenChange(openChange === changeId ? null : changeId)}>查看详情</button>
-          {openChange === changeId && <div className="assistant-operation-details" id={`assistant-chat-${changeId}`}>
-            {plan.changes.map(change => <ChangeDetails change={change} plan={plan} key={change.key} />)}
+          {embedded ? <button className="assistant-operation-trigger"
+            aria-label={`${operationKind} ${operationTitle} ${statuses[plan.status]}`}
+            aria-expanded={expanded} aria-controls={`assistant-chat-${changeId}`}
+            onClick={() => onOpenChange(expanded ? null : changeId)}>
+            <span className="assistant-operation-summary">
+              <span className="assistant-operation-kind">{operationKind}</span>
+              <strong>{operationTitle}</strong>
+            </span>
+            <span className="assistant-operation-meta">
+              <span className="assistant-operation-status">{statuses[plan.status]}</span>
+              {expanded ? <ChevronUp aria-hidden="true" size={17} /> : <ChevronDown aria-hidden="true" size={17} />}
+            </span>
+          </button> : <>
+            <header><div><span className="assistant-eyebrow">本次操作</span>
+              <strong>{operationTitle}</strong></div>
+              <span className="assistant-status-badge" data-status={plan.status}>{statuses[plan.status]}</span>
+            </header>
+            <button className="btn" aria-label={`查看${operationTitle}详情`} aria-expanded={expanded} aria-controls={`assistant-chat-${changeId}`}
+              onClick={() => onOpenChange(expanded ? null : changeId)}>查看详情</button>
+          </>}
+          {expanded && <div className="assistant-operation-details" id={`assistant-chat-${changeId}`}>
+            {plan.changes.map(change => <ChangeDetails change={change} plan={plan} hideCalendarColor={embedded} key={change.key} />)}
             {plan.warnings.map((warning, index) => <p key={index}>{warning}</p>)}
+            {embedded && plan.status === 'committed' && <div className="assistant-operation-actions">
+              <p className="assistant-caption">日程已保存不代表系统通知已送达；提醒仍由现有通知机制处理。</p>
+              <button className="btn" aria-label={`撤销${operationTitle}`} disabled={busy || blocked} onClick={() => onUndo(plan)}>撤销这次操作</button>
+            </div>}
           </div>}
-          {plan.status === 'committed' && <div className="assistant-operation-actions">
+          {!embedded && plan.status === 'committed' && <div className="assistant-operation-actions">
             <p className="assistant-caption">日程已保存不代表系统通知已送达；提醒仍由现有通知机制处理。</p>
             <button className="btn" aria-label={`撤销${operationTitle}`} disabled={busy || blocked} onClick={() => onUndo(plan)}>撤销这次操作</button>
           </div>}
