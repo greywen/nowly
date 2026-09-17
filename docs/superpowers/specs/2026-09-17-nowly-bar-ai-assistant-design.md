@@ -83,6 +83,30 @@ shows the existing configuration guidance. The Nowly Bar cannot open the main
 settings dialog directly because it is a separate native window; the guidance
 must tell the user to configure the model in the main application.
 
+The Nowly Bar is an approved assistant runtime surface. The Rust IPC boundary
+therefore permits `quick-panel-handle` to read the redacted model configuration,
+interpret requests, cancel work, revise/cancel/execute/undo plans, and read
+history/status. Changing the endpoint, Model ID, permissions, or encrypted Key
+remains restricted to the `main` window. Other WebView labels remain denied.
+This fixes the misleading desktop error that previously appeared because the
+runtime still treated the restored Nowly Bar assistant as a forbidden status
+window.
+
+## Border treatment
+
+Within the Nowly Bar, borders that separate or frame content use the same
+`1px dashed` treatment:
+
+- the assistant sheet/composer divider;
+- user and assistant message frames;
+- system, response, operation, record, and change-card frames;
+- dividers inside assistant operation and history details;
+- the status detail panel title, grouped sections, and footer dividers.
+
+The rule is scoped to the embedded Nowly Bar presentation and status detail
+panel. The main-window assistant and unrelated application controls keep their
+existing border treatment.
+
 ## Accessibility and motion
 
 The logo is a button named `Nowly`. While the compact composer or assistant
@@ -112,5 +136,9 @@ user-message/waiting rendering, sheet growth, collapse, and preservation of
 status behavior.
 
 Rust tests cover the restored Nowly panel source, source switching, and native
-size selection. Focused frontend and Rust tests run before full frontend tests,
-Rust tests, the production build, formatting, and diff checks.
+size selection. They also cover the assistant window allowlist: the main window
+retains configuration access, `quick-panel-handle` gains runtime-only access,
+and unknown windows remain denied. Browser checks verify the Nowly Bar assistant
+and status detail dividers compute to dashed borders. Focused frontend and Rust
+tests run before full frontend tests, Rust tests, the production build,
+formatting, and diff checks.
