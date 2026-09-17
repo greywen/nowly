@@ -187,6 +187,10 @@ pub fn outside_click_action(notification_mode: &str) -> OutsideClickAction {
     }
 }
 
+pub fn outside_click_closes_source(source: Option<PanelSource>) -> bool {
+    source == Some(PanelSource::Island)
+}
+
 #[derive(Debug)]
 pub struct PanelController {
     state: Mutex<PanelState>,
@@ -774,11 +778,12 @@ fn current_notification_mode<R: Runtime>(app: &AppHandle<R>) -> String {
 }
 
 pub fn close_details_after_outside_click<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
-    if !app.state::<PanelController>().are_details_open() {
+    let controller = app.state::<PanelController>();
+    if !outside_click_closes_source(controller.details_source()) {
         return Ok(());
     }
     let action = outside_click_action(&current_notification_mode(app));
-    let transition = app.state::<PanelController>().close_details();
+    let transition = controller.close_details();
     hide_details_with_action(app, transition.generation, action, true)
 }
 
@@ -1096,9 +1101,9 @@ pub fn end_status_island_drag(app: AppHandle) -> Result<(), crate::error::Comman
 mod tests {
     use super::{
         acknowledgement_identity, centered_x, collapse_to_summary_after_view, handle_positions,
-        load_offset_x, outside_click_action, point_is_inside_surface, resolve_target_monitor,
-        screen_top, starts_visible, surface_x, top_surface_size, DragAnchor, OutsideClickAction,
-        PanelController, PanelSource, SurfaceBounds, WorkArea,
+        load_offset_x, outside_click_action, outside_click_closes_source, point_is_inside_surface,
+        resolve_target_monitor, screen_top, starts_visible, surface_x, top_surface_size,
+        DragAnchor, OutsideClickAction, PanelController, PanelSource, SurfaceBounds, WorkArea,
     };
     use tauri::PhysicalPosition;
 
@@ -1200,6 +1205,13 @@ mod tests {
             outside_click_action("notification"),
             OutsideClickAction::CollapseThenHide
         );
+    }
+
+    #[test]
+    fn outside_click_only_collapses_status_details_not_the_nowly_conversation() {
+        assert!(outside_click_closes_source(Some(PanelSource::Island)));
+        assert!(!outside_click_closes_source(Some(PanelSource::Nowly)));
+        assert!(!outside_click_closes_source(None));
     }
 
     #[test]

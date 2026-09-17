@@ -535,6 +535,122 @@ describe('AssistantDock execution boundary', () => {
 
     await act(async () => resolve({ kind: 'clarify', message: '需要提醒吗？', records: [], plan: null }));
   });
+  it('keeps the embedded Nowly Bar input minimal and swaps voice for send only when text exists', async () => {
+    render(
+      <AssistantDock
+        client={clientFixture()}
+        presentation="embedded"
+        expandOnFocus={false}
+        onRefresh={() => {}}
+      />
+    );
+    const input = await screen.findByRole('textbox', { name: '告诉 Nowly 你想做什么' });
+    await connected();
+
+    expect(document.querySelector('.assistant-composer-mark')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '操作记录' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '语音输入' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '发送请求' })).not.toBeInTheDocument();
+
+    fireEvent.change(input, { target: { value: '明天下午三点开会' } });
+
+    expect(screen.queryByRole('button', { name: '语音输入' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '发送请求' })).toBeInTheDocument();
+  });
+  it('continues an embedded request while the Nowly Bar conversation is hidden', async () => {
+    const client = clientFixture();
+    let resolve!: (reply: Reply) => void;
+    client.interpret.mockImplementationOnce(() => new Promise(reply => { resolve = reply; }));
+    const view = render(
+      <AssistantDock
+        client={client}
+        presentation="embedded"
+        active
+        expandOnFocus={false}
+        onRefresh={() => {}}
+      />
+    );
+    const input = await screen.findByRole('textbox', { name: '告诉 Nowly 你想做什么' });
+    await connected();
+    fireEvent.change(input, { target: { value: '继续处理这段对话' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    view.rerender(
+      <AssistantDock
+        client={client}
+        presentation="embedded"
+        active={false}
+        expandOnFocus={false}
+        onRefresh={() => {}}
+      />
+    );
+    await act(async () => resolve({ kind: 'clarify', message: '对话仍在继续', records: [], plan: null }));
+
+    expect(client.cancelRequest).not.toHaveBeenCalled();
+    expect(screen.getByText('对话仍在继续')).toBeInTheDocument();
+  });
+  it('keeps a revised embedded preview when the Nowly Bar conversation is hidden', async () => {
+    const client = clientFixture();
+    const onExpandedChange = vi.fn();
+    let resolve!: (next: Plan) => void;
+    client.revise.mockImplementationOnce(() => new Promise(next => { resolve = next; }));
+    const view = render(
+      <AssistantDock
+        client={client}
+        presentation="embedded"
+        active
+        expandOnFocus={false}
+        onExpandedChange={onExpandedChange}
+        onRefresh={() => {}}
+      />
+    );
+    await send();
+    fireEvent.change(await screen.findByRole('textbox', { name: '标题 1' }), { target: { value: '团队早会' } });
+    await click(screen.getByRole('button', { name: '更新预览' }));
+
+    view.rerender(
+      <AssistantDock
+        client={client}
+        presentation="embedded"
+        active={false}
+        expandOnFocus={false}
+        onExpandedChange={onExpandedChange}
+        onRefresh={() => {}}
+      />
+    );
+    await act(async () => resolve(plan('plan-2')));
+    view.rerender(
+      <AssistantDock
+        client={client}
+        presentation="embedded"
+        active
+        expandOnFocus={false}
+        onExpandedChange={onExpandedChange}
+        onRefresh={() => {}}
+      />
+    );
+
+    expect(client.cancelPlan).not.toHaveBeenCalledWith('plan-2');
+    expect(onExpandedChange).toHaveBeenLastCalledWith(true);
+    await click(screen.getByRole('button', { name: '确认执行 1 项' }));
+    expect(client.execute).toHaveBeenCalledWith('plan-2');
+  });
+  it('does not collapse an embedded conversation when another surface is clicked', async () => {
+    render(
+      <AssistantDock
+        client={clientFixture()}
+        presentation="embedded"
+        expandOnFocus={false}
+        onRefresh={() => {}}
+      />
+    );
+    await send();
+    expect(document.querySelector('.assistant-panel')).toHaveAttribute('data-open', 'true');
+
+    fireEvent.pointerDown(document.body);
+
+    expect(document.querySelector('.assistant-panel')).toHaveAttribute('data-open', 'true');
+  });
   it('asks the host to close when Escape is pressed in a compact embedded composer', async () => {
     const onRequestClose = vi.fn();
     render(

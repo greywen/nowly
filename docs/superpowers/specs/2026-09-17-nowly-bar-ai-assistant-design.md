@@ -15,9 +15,13 @@ left edge of the status capsule to the right edge of the rightmost action
 button. Today the logo is the rightmost and only action button. Future buttons
 extend that same right boundary without changing the composer contract.
 
-The composer replaces and covers the status content while active. It receives
-focus after the opening transition. The status capsule does not open its status
-details while the composer owns the header.
+The composer replaces and covers the status content while active, but the
+Nowly logo remains visible at the right edge as the persistent toggle back to
+the status capsule. It receives focus after the opening transition. The compact
+composer has no leading decorative icon and no history button. Its single
+trailing assistant action shows voice input for an empty draft and switches
+immediately to send when the draft contains text. The status capsule does not
+open its status details while the composer owns the header.
 
 Submitting non-empty text grows the same rail into the existing full-height
 sheet using the status sheet's width, height, easing, and duration. The sheet
@@ -25,10 +29,12 @@ first shows the submitted user message and the existing safe waiting state,
 then renders the assistant response, records, or editable operation plan.
 The composer remains available at the bottom for follow-up turns.
 
-Closing the assistant collapses the sheet first and then returns the header to
-the normal status capsule and logo. An unsent draft survives assistant sheet
-collapse during the current mounted session. Escape closes the full sheet; when
-only the composer is open, Escape returns directly to the status capsule.
+Clicking the visible Nowly logo again collapses the sheet if necessary and
+returns the header to the normal status capsule. Escape provides the same
+keyboard path. Clicking outside the rail or moving focus to another window does
+not close the embedded conversation. Unsent drafts, completed turns, and an
+in-flight model request survive temporary hiding during the current mounted
+session; reopening the logo resumes the same conversation.
 
 ## Architecture
 
@@ -38,11 +44,14 @@ only the composer is open, Escape returns directly to the status capsule.
 - `composer`: full-width compact assistant composer over the rail header.
 - `assistant`: full-height assistant sheet after a request is submitted.
 
-`TopRail` remains the visual shell. Its logo becomes a real button and it gains
-an assistant header/body slot. `AssistantDock` keeps ownership of assistant
-conversation state, plan confirmation, history, undo, cancellation, and draft.
-It exposes host callbacks for request submission and panel collapse so the rail
-can coordinate its native height without duplicating assistant logic.
+`TopRail` remains the visual shell. Its logo becomes a real persistent toggle
+above the embedded assistant surface and it gains an assistant header/body
+slot. `AssistantDock` keeps ownership of assistant conversation state, plan
+confirmation, history, undo, cancellation, and draft. The embedded Nowly Bar
+presentation omits the history entry without removing history from the full
+assistant presentation. It exposes host callbacks for request submission and
+panel collapse so the rail can coordinate its native height without duplicating
+assistant logic.
 
 The native `quick_panel` controller restores `PanelSource::Nowly`. The logo
 opening only activates the WebView composer and keeps the native window at
@@ -68,9 +77,10 @@ must tell the user to configure the model in the main application.
 ## Accessibility and motion
 
 The logo is a button named `Nowly`. The composer textarea keeps the existing
-`告诉 Nowly 你想做什么` label. `aria-expanded` reflects whether the assistant
-sheet is open. Focus moves to the composer after the logo transition and is
-returned to the logo when the compact composer closes.
+`告诉 Nowly 你想做什么` label. `aria-expanded` reflects whether either the
+compact composer or assistant sheet is active. Focus moves to the composer
+after the logo transition. The voice, send, and stop actions retain explicit
+accessible names.
 
 No new motion language is introduced. The horizontal composer reveal and
 vertical assistant sheet growth reuse the rail's approved grow/shrink tokens.
@@ -79,9 +89,12 @@ media query.
 
 ## Verification
 
-Frontend component tests cover logo activation, full-width composer takeover,
-focus, Escape, request submission, immediate user-message/waiting rendering,
-sheet growth, collapse, and preservation of status behavior.
+Frontend component tests cover logo activation and toggle-back, full-width
+composer takeover, draft preservation, background request continuation,
+outside-click persistence, the voice/send action swap, omission of compact
+decorative/history controls, focus, Escape, request submission, immediate
+user-message/waiting rendering, sheet growth, collapse, and preservation of
+status behavior.
 
 Rust tests cover the restored Nowly panel source, source switching, and native
 size selection. Focused frontend and Rust tests run before full frontend tests,

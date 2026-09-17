@@ -97,8 +97,8 @@ export function AssistantDock({
     return () => window.clearTimeout(timer);
   }, [active, autoFocus]);
   useEffect(() => {
-    onExpandedChange?.(expanded);
-  }, [expanded, onExpandedChange]);
+    if (active) onExpandedChange?.(expanded);
+  }, [active, expanded, onExpandedChange]);
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -110,9 +110,13 @@ export function AssistantDock({
   }, [client]);
   useEffect(() => {
     if (active) return;
+    if (presentation === 'embedded') {
+      recognitionRef.current?.stop();
+      return;
+    }
     stop(false); setExpanded(false); recognitionRef.current?.stop();
     // Hiding for wallpaper/layout/modal must not discard the typed draft.
-  }, [active]);
+  }, [active, presentation]);
   useEffect(() => {
     if (!plan || plan.status !== 'pending') return;
     const delay = Math.max(0, plan.expiresAt - Date.now());
@@ -125,7 +129,7 @@ export function AssistantDock({
     return () => window.clearTimeout(timer);
   }, [plan]);
   useEffect(() => {
-    if (!expanded) return;
+    if (!expanded || presentation === 'embedded') return;
     function closeOnOutsidePointer(event: PointerEvent) {
       if (event.target instanceof Node && dockRef.current?.contains(event.target)) return;
       inputFocusedRef.current = false; inputRef.current?.blur();
@@ -133,7 +137,7 @@ export function AssistantDock({
     }
     document.addEventListener('pointerdown', closeOnOutsidePointer);
     return () => document.removeEventListener('pointerdown', closeOnOutsidePointer);
-  }, [expanded]);
+  }, [expanded, presentation]);
 
   function adopt(next: Plan | null, replacedId?: string) {
     planRef.current = next; setPlan(next); setDirty(false); dirtyRef.current = false; setBlocked(false);
@@ -172,7 +176,7 @@ export function AssistantDock({
       if (turn !== generation.current) return;
       const response = await client.interpret({ requestId, message, history: historyMessages.current.slice(-12),
         previousPlanId: previous?.status === 'pending' || previous?.status === 'cancelled' ? previous.id : null });
-      if (turn !== generation.current || !mounted.current || !activeRef.current) {
+      if (turn !== generation.current || !mounted.current || (!activeRef.current && presentation !== 'embedded')) {
         if (response.plan) void client.cancelPlan(response.plan.id).catch(() => {});
         return;
       }
@@ -218,7 +222,10 @@ export function AssistantDock({
     const turn = generation.current;
     try {
       const next = await client.revise(planRef.current.id, actions.filter((_, i) => selected[i]));
-      if (!mounted.current || turn !== generation.current || !activeRef.current) { void client.cancelPlan(next.id).catch(() => {}); return; }
+      if (!mounted.current || turn !== generation.current || (!activeRef.current && presentation !== 'embedded')) {
+        void client.cancelPlan(next.id).catch(() => {});
+        return;
+      }
       adopt(next, planRef.current.id);
     } catch (e) { setError(assistantError(e)); }
     finally { if (mounted.current) lock(false); }
@@ -362,7 +369,9 @@ export function AssistantDock({
       </div>
     </section>
     <div className="assistant-composer" data-busy={reading || busy}>
-      <span className="assistant-composer-mark" aria-hidden="true"><Sparkles size={18} /></span>
+      {presentation !== 'embedded'
+        ? <span className="assistant-composer-mark" aria-hidden="true"><Sparkles size={18} /></span>
+        : null}
       <textarea ref={inputRef} aria-label="告诉 Nowly 你想做什么" rows={1} maxLength={4000}
         placeholder="告诉 Nowly 你想做什么…" value={draft} disabled={busy || Boolean(uncertain && !uncertain.preserveCurrent)}
         onFocus={() => {
@@ -386,8 +395,10 @@ export function AssistantDock({
           if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) { e.preventDefault(); void send(); }
         }} />
       <div className="assistant-composer-tools">
-        <button className={`btn btn-icon${surface === 'history' && expanded ? ' is-active' : ''}`} aria-label="操作记录"
-          aria-pressed={surface === 'history' && expanded} disabled={busy || reading} onClick={() => void toggleHistory()}><History size={18} /></button>
+        {presentation !== 'embedded'
+          ? <button className={`btn btn-icon${surface === 'history' && expanded ? ' is-active' : ''}`} aria-label="操作记录"
+              aria-pressed={surface === 'history' && expanded} disabled={busy || reading} onClick={() => void toggleHistory()}><History size={18} /></button>
+          : null}
         {reading ? <button className="btn btn-icon assistant-stop" aria-label="停止处理" onClick={() => stop()}><Square size={14} fill="currentColor" /></button>
           : draft.trim() ? <button className="btn btn-icon btn-primary" aria-label="发送请求" disabled={busy || Boolean(uncertain && !uncertain.preserveCurrent)} onClick={() => void send()}><Send size={18} /></button>
             : <button className={`btn btn-icon${listening ? ' assistant-listening' : ''}`} aria-label="语音输入" aria-pressed={listening}

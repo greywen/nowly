@@ -557,7 +557,7 @@ export function TopRail({
         className="status-rail__nowly"
         aria-label={t('statusIsland.nowly')}
         aria-haspopup="dialog"
-        aria-expanded={open && source === 'nowly'}
+        aria-expanded={surface !== 'status'}
         onClick={onActivateNowly}
       >
         <img src="/logo.png" alt="" />

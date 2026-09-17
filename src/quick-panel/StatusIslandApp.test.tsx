@@ -1162,20 +1162,28 @@ describe('the sheet inside the rail', () => {
     render(<StatusIslandApp />);
     await act(async () => { await Promise.resolve(); });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Nowly' }));
+    const nowly = screen.getByRole('button', { name: 'Nowly' });
+    fireEvent.click(nowly);
 
     const input = await screen.findByRole('textbox', { name: '告诉 Nowly 你想做什么' });
     expect(input).toHaveFocus();
+    expect(nowly).toHaveAttribute('aria-expanded', 'true');
     expect(document.querySelector('.status-rail')).toHaveAttribute('data-surface', 'composer');
     expect(document.querySelector('.status-rail')).toHaveAttribute('data-anim', 'grow');
     expect(document.querySelector('.status-rail')).toHaveAttribute('data-open', 'false');
     expect(invocations('toggle_nowly_panel')).toHaveLength(0);
 
-    fireEvent.keyDown(input, { key: 'Escape' });
+    fireEvent.change(input, { target: { value: '保留这段未发送的内容' } });
+    fireEvent.click(nowly);
 
     expect(document.querySelector('.status-rail')).toHaveAttribute('data-surface', 'status');
     expect(document.querySelector('.status-rail')).toHaveAttribute('data-anim', 'shrink');
     expect(screen.queryByRole('textbox', { name: '告诉 Nowly 你想做什么' })).not.toBeInTheDocument();
+
+    fireEvent.click(nowly);
+
+    expect(await screen.findByRole('textbox', { name: '告诉 Nowly 你想做什么' }))
+      .toHaveValue('保留这段未发送的内容');
   });
 
   it('grows the Nowly sheet only after submit and shows the user message while waiting', async () => {
