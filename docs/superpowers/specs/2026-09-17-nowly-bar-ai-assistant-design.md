@@ -94,18 +94,39 @@ window.
 
 ## Border treatment
 
-Within the Nowly Bar, borders that separate or frame content use the same
-`1px dashed` treatment:
+Within the Nowly Bar, the sheet/composer divider and the status detail panel
+may retain their existing dashed structural dividers. Chat content uses a
+quieter treatment:
 
-- the assistant sheet/composer divider;
-- user and assistant message frames;
-- system, response, operation, record, and change-card frames;
-- dividers inside assistant operation and history details;
-- the status detail panel title, grouped sections, and footer dividers.
+- user and assistant message bubbles have no border;
+- message text remains vertically centred and left aligned;
+- operation cards and their internal details do not use dashed borders;
+- ordinary information cards use either no divider or the weak solid divider
+  from `design.md`.
 
-The rule is scoped to the embedded Nowly Bar presentation and status detail
-panel. The main-window assistant and unrelated application controls keep their
-existing border treatment.
+The rule is scoped to the embedded Nowly Bar presentation. The main-window
+assistant and unrelated application controls keep their existing border
+treatment.
+
+## Chat operation layout
+
+A completed operation is represented by one expandable row rather than a
+separate header and `查看详情` button. The left side shows the operation kind
+and its title/content. The right side shows the neutral gray status and a Solar
+chevron. The entire row is the trigger and preserves `aria-expanded`,
+`aria-controls`, and keyboard activation.
+
+Operation statuses in the embedded Nowly Bar are plain gray text. They do not
+use colored text, colored pills, or colored backgrounds.
+
+Calendar operation details keep the `分类` field but omit the `颜色` field.
+Task operation details are unchanged.
+
+When a pending plan needs user action, its controls are a compact sticky
+toolbar floating at the bottom-right of the embedded panel. Text buttons remain
+40px high and use compact horizontal padding and shorter visible labels so the
+toolbar does not occupy the full panel width. The main-window assistant keeps
+its existing full-width action footer.
 
 ## Accessibility and motion
 
