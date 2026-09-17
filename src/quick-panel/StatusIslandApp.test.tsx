@@ -1168,16 +1168,18 @@ describe('the sheet inside the rail', () => {
     const input = await screen.findByRole('textbox', { name: '告诉 Nowly 你想做什么' });
     expect(input).toHaveFocus();
     expect(nowly).toHaveAttribute('aria-expanded', 'true');
+    expect(nowly).toHaveAttribute('aria-hidden', 'true');
     expect(document.querySelector('.status-rail')).toHaveAttribute('data-surface', 'composer');
     expect(document.querySelector('.status-rail')).toHaveAttribute('data-anim', 'grow');
     expect(document.querySelector('.status-rail')).toHaveAttribute('data-open', 'false');
     expect(invocations('toggle_nowly_panel')).toHaveLength(0);
 
     fireEvent.change(input, { target: { value: '保留这段未发送的内容' } });
-    fireEvent.click(nowly);
+    fireEvent.keyDown(input, { key: 'Escape' });
 
     expect(document.querySelector('.status-rail')).toHaveAttribute('data-surface', 'status');
     expect(document.querySelector('.status-rail')).toHaveAttribute('data-anim', 'shrink');
+    expect(nowly).not.toHaveAttribute('aria-hidden');
     expect(screen.queryByRole('textbox', { name: '告诉 Nowly 你想做什么' })).not.toBeInTheDocument();
 
     fireEvent.click(nowly);

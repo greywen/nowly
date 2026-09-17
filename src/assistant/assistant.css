@@ -114,8 +114,7 @@
 .assistant-dock .assistant-stop { color: var(--color-danger-active); background: var(--color-danger-light); }
 .assistant-dock .assistant-listening { color: var(--color-danger-active); background: var(--color-danger-light); }
 .assistant-dock--embedded { position: absolute; inset: 0; width: 100%; margin: 0; }
-.assistant-dock--embedded .assistant-composer { position: absolute; top: 0; right: 0; left: 0; height: 40px; gap: 8px; padding: 0 48px 0 16px; border: 0; border-radius: var(--radius-default); background: transparent; box-shadow: none; }
-.assistant-dock--embedded .assistant-composer:focus-within { box-shadow: inset 0 0 0 1px var(--color-primary), inset 0 0 0 4px var(--focus-ring); }
+.assistant-dock--embedded .assistant-composer { position: absolute; top: 0; right: 0; left: 0; height: 40px; gap: 8px; padding: 0 0 0 16px; border: 0; border-radius: var(--radius-default); background: transparent; box-shadow: none; }
 .assistant-dock--embedded .assistant-composer textarea { height: 40px; padding: 10px 0; color: var(--text-secondary); font-size: .95rem; font-weight: 400; }
 .assistant-dock--embedded .assistant-composer-tools { gap: 0; }
 .assistant-dock--embedded .assistant-composer-tools .btn-icon { width: 40px; min-width: 40px; min-height: 40px; height: 40px; padding: 0; border-radius: var(--radius-default); }

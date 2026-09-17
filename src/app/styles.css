@@ -248,19 +248,21 @@ button:disabled { cursor: default; opacity: .65; }
 
 /* The other half of the rail. Outside the sheet, because it has to stay visible
    beside the collapsed sheet; it fades once the sheet has grown over it. */
-.status-rail__nowly { box-sizing: border-box; position: absolute; z-index: 5; top: 0; right: 0; width: var(--nowly-d); height: var(--nowly-d); padding: 0; border: 1px solid var(--border-default); border-radius: 50%; display: grid; place-items: center; background: var(--bg-surface); box-shadow: none; overflow: hidden; cursor: pointer; }
+.status-rail__nowly { box-sizing: border-box; position: absolute; z-index: 3; top: 0; right: 0; width: var(--nowly-d); height: var(--nowly-d); padding: 0; border: 1px solid var(--border-default); border-radius: 50%; display: grid; place-items: center; background: var(--bg-surface); box-shadow: none; overflow: hidden; cursor: pointer; }
 .status-rail__nowly img { width: 22px; height: 22px; display: block; }
-.status-rail[data-open="true"][data-source="island"] .status-rail__nowly { opacity: 0; pointer-events: none; transition: opacity var(--rail-dot-out) ease-out var(--rail-in-delay) !important; }
+.status-rail[data-open="true"] .status-rail__nowly,
+.status-rail:not([data-surface="status"]) .status-rail__nowly { opacity: 0; pointer-events: none; transition: opacity var(--rail-dot-out) ease-out var(--rail-in-delay) !important; }
 .status-rail:not([data-open="true"]) .status-rail__nowly { transition: opacity var(--rail-out) ease-out var(--rail-dot-in-delay) !important; }
 .status-rail__nowly:focus-visible { box-shadow: inset 0 0 0 2px var(--color-primary); }
 
 /* The assistant begins at the Nowly logo's 40px footprint, then reveals left
    across the complete live rail width. Future action buttons extend --rail-w,
    so the composer always ends at the current rightmost button boundary. */
-.status-rail__assistant { box-sizing: border-box; position: absolute; z-index: 4; top: 0; right: 0; width: var(--nowly-d); height: var(--sheet-h); overflow: hidden; opacity: 0; pointer-events: none; transition: width var(--rail-grow) var(--rail-ease), opacity var(--rail-in) ease-out !important; }
+.status-rail__assistant { box-sizing: border-box; position: absolute; z-index: 4; top: 0; right: 0; width: var(--nowly-d); height: var(--rail-h); overflow: hidden; opacity: 0; pointer-events: none; transition: width var(--rail-grow) var(--rail-ease), height var(--rail-grow) var(--rail-ease), opacity var(--rail-in) ease-out !important; }
 .status-rail[data-surface="composer"] .status-rail__assistant,
 .status-rail[data-surface="assistant"] .status-rail__assistant { width: var(--rail-w); opacity: 1; pointer-events: auto; }
-.status-rail[data-anim="shrink"] .status-rail__assistant { transition: width var(--rail-shrink) var(--rail-ease), opacity var(--rail-out) ease-out !important; }
+.status-rail[data-open="true"][data-surface="assistant"] .status-rail__assistant { height: var(--sheet-h); }
+.status-rail[data-anim="shrink"] .status-rail__assistant { transition: width var(--rail-shrink) var(--rail-ease), height var(--rail-shrink) var(--rail-ease), opacity var(--rail-out) ease-out !important; }
 .status-rail[data-source="nowly"] > .status-island__dismiss[data-at="expanded"] { display: none; }
 
 /* The sheet's lower half. Standalone it is still a panel with its own frame; in

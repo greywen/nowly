@@ -549,6 +549,8 @@ describe('AssistantDock execution boundary', () => {
 
     expect(document.querySelector('.assistant-composer-mark')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '操作记录' })).not.toBeInTheDocument();
+    expect(screen.queryByText('当前聊天')).not.toBeInTheDocument();
+    expect(screen.queryByText('今天还没有对话。')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '语音输入' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '发送请求' })).not.toBeInTheDocument();
 
@@ -648,6 +650,104 @@ describe('AssistantDock execution boundary', () => {
     expect(document.querySelector('.assistant-panel')).toHaveAttribute('data-open', 'true');
 
     fireEvent.pointerDown(document.body);
+
+    expect(document.querySelector('.assistant-panel')).toHaveAttribute('data-open', 'true');
+  });
+  it('hides an embedded conversation with Escape without collapsing its previous answer state', async () => {
+    const onExpandedChange = vi.fn();
+    const onRequestClose = vi.fn();
+    const view = render(
+      <AssistantDock
+        client={clientFixture()}
+        presentation="embedded"
+        active
+        expandOnFocus={false}
+        onExpandedChange={onExpandedChange}
+        onRequestClose={onRequestClose}
+        onRefresh={() => {}}
+      />
+    );
+    const input = await send();
+    expect(document.querySelector('.assistant-panel')).toHaveAttribute('data-open', 'true');
+
+    fireEvent.keyDown(input, { key: 'Escape' });
+
+    expect(onRequestClose).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('.assistant-panel')).toHaveAttribute('data-open', 'true');
+
+    view.rerender(
+      <AssistantDock
+        client={clientFixture()}
+        presentation="embedded"
+        active={false}
+        expandOnFocus={false}
+        onExpandedChange={onExpandedChange}
+        onRequestClose={onRequestClose}
+        onRefresh={() => {}}
+      />
+    );
+    view.rerender(
+      <AssistantDock
+        client={clientFixture()}
+        presentation="embedded"
+        active
+        expandOnFocus={false}
+        onExpandedChange={onExpandedChange}
+        onRequestClose={onRequestClose}
+        onRefresh={() => {}}
+      />
+    );
+
+    expect(onExpandedChange).toHaveBeenLastCalledWith(true);
+    expect(screen.getByText('检查预览')).toBeInTheDocument();
+  });
+  it('uses Escape as the only embedded exit and handles it from the action button', async () => {
+    const onRequestClose = vi.fn();
+    render(
+      <AssistantDock
+        client={clientFixture()}
+        presentation="embedded"
+        expandOnFocus={false}
+        onRequestClose={onRequestClose}
+        onRefresh={() => {}}
+      />
+    );
+    await send();
+
+    expect(screen.queryByRole('button', { name: '收起助手' })).not.toBeInTheDocument();
+    const voice = screen.getByRole('button', { name: '语音输入' });
+    voice.focus();
+    fireEvent.keyDown(voice, { key: 'Escape' });
+
+    expect(onRequestClose).toHaveBeenCalledTimes(1);
+  });
+  it('keeps an embedded answer expanded when a query record is selected', async () => {
+    const client = clientFixture();
+    client.interpret.mockResolvedValue({
+      kind: 'results',
+      message: '找到一条日程',
+      records: [{
+        key: 'calendar:event-1',
+        domain: 'calendar',
+        title: '产品评审',
+        source: '本地日历',
+        readOnly: false,
+        data: { startAt: '2026-09-18T15:00' }
+      }],
+      plan: null
+    });
+    render(
+      <AssistantDock
+        client={client}
+        presentation="embedded"
+        expandOnFocus={false}
+        onRefresh={() => {}}
+      />
+    );
+    await send();
+    expect(document.querySelector('.assistant-panel')).toHaveAttribute('data-open', 'true');
+
+    await click(screen.getByRole('button', { name: '产品评审' }));
 
     expect(document.querySelector('.assistant-panel')).toHaveAttribute('data-open', 'true');
   });

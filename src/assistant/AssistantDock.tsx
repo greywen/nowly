@@ -317,8 +317,14 @@ export function AssistantDock({
     setSurface('chat'); setExpanded(true);
   }
   function closePanel() {
-    setExpanded(false);
+    if (presentation !== 'embedded') setExpanded(false);
     onRequestClose?.();
+  }
+  function hideFromEscape() {
+    inputFocusedRef.current = false;
+    inputRef.current?.blur();
+    if (expanded) closePanel();
+    else onRequestClose?.();
   }
   function dictate() {
     if (listening) { recognitionRef.current?.stop(); return; }
@@ -341,13 +347,19 @@ export function AssistantDock({
   const panelTitle = surface === 'history' ? '操作记录' : '当前聊天';
   const panelBadge = surface === 'history' ? `${historyCount(history ?? [], historyRange)} 条` : `${visibleItems.length} 条`;
   const PanelIcon = surface === 'history' ? History : MessageCircle;
-  return <div ref={dockRef} className={`assistant-dock assistant-dock--${presentation}`} hidden={!active} aria-label="Nowly AI 助手">
+  return <div ref={dockRef} className={`assistant-dock assistant-dock--${presentation}`} hidden={!active} aria-label="Nowly AI 助手"
+    onKeyDown={presentation === 'embedded' ? event => {
+      if (event.key !== 'Escape') return;
+      event.stopPropagation();
+      hideFromEscape();
+    } : undefined}>
     <section className="assistant-panel" aria-label={panelTitle} data-state={surface} data-open={expanded} aria-hidden={!expanded}>
-      <header className="assistant-panel-header"><div className="assistant-panel-title">
-        <span className="assistant-state-icon" aria-hidden="true"><PanelIcon size={18} /></span>
-        <h2>{panelTitle}</h2><span className="assistant-state-badge">{panelBadge}</span>
-      </div>
-        <button className="btn btn-icon" aria-label="收起助手" onClick={closePanel}><ChevronDown size={18} /></button></header>
+      {presentation !== 'embedded' ? <header className="assistant-panel-header"><div className="assistant-panel-title">
+          <span className="assistant-state-icon" aria-hidden="true"><PanelIcon size={18} /></span>
+          <h2>{panelTitle}</h2><span className="assistant-state-badge">{panelBadge}</span>
+        </div>
+        <button className="btn btn-icon" aria-label="收起助手" onClick={closePanel}><ChevronDown size={18} /></button>
+      </header> : null}
       <div className="assistant-panel-body" aria-live="polite">
         {surface === 'history' ? <>
           {historyError && <p role="alert" className="assistant-error">{historyError}</p>}
@@ -358,13 +370,18 @@ export function AssistantDock({
           <p role={connectionError ? 'alert' : 'status'}>{connectionError || '先在设置的“模型设置”里连接你的 AI 服务，并选择允许访问的数据范围。'}</p>
           {!connectionError && onOpenSettings && <button className="btn btn-primary" onClick={onOpenSettings}>打开模型设置</button>}
         </div>}
-        <AssistantChat items={visibleItems} currentPlanId={plan?.id ?? null} actions={actions} edits={edits} selected={selected}
+        {(presentation !== 'embedded' || visibleItems.length > 0) ? <AssistantChat items={visibleItems} currentPlanId={plan?.id ?? null} actions={actions} edits={edits} selected={selected}
           dirty={dirty} busy={busy} blocked={blocked || Boolean(uncertain && !uncertain.preserveCurrent)}
           uncertainPlanId={uncertain && !uncertain.preserveCurrent ? uncertain.id : null} openChange={openChange} onEdit={edit}
           onSelect={(i, checked) => { invalidate(); setSelected(current => current.map((value, index) => index === i ? checked : value)); }}
           onRevise={() => void revise()} onConfirm={() => void execute()} onCancel={() => void cancelPlan()}
           onUndo={target => void execute(true, target)} onRecover={() => { if (uncertain) void (async () => { lock(true); try { await recover(uncertain.id, uncertain.undo, undefined, uncertain.preserveCurrent); } finally { lock(false); } })(); }} onOpenChange={setOpenChange}
-          onOpenRecord={async (record, trigger) => { try { await onOpenRecord?.(record, inputRef.current ?? trigger); setExpanded(false); } catch (cause) { setError(assistantError(cause)); } }} />
+          onOpenRecord={async (record, trigger) => {
+            try {
+              await onOpenRecord?.(record, inputRef.current ?? trigger);
+              if (presentation !== 'embedded') setExpanded(false);
+            } catch (cause) { setError(assistantError(cause)); }
+          }} /> : null}
         </>}
       </div>
     </section>
@@ -387,9 +404,7 @@ export function AssistantDock({
         onKeyDown={e => {
           if (e.key === 'Escape') {
             e.stopPropagation();
-            e.currentTarget.blur();
-            if (expanded) closePanel();
-            else onRequestClose?.();
+            hideFromEscape();
             return;
           }
           if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) { e.preventDefault(); void send(); }
