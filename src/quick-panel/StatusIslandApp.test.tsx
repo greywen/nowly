@@ -1172,6 +1172,8 @@ describe('the sheet inside the rail', () => {
     expect(document.querySelector('.status-rail')).toHaveAttribute('data-surface', 'composer');
     expect(document.querySelector('.status-rail')).toHaveAttribute('data-anim', 'grow');
     expect(document.querySelector('.status-rail')).toHaveAttribute('data-open', 'false');
+    expect(document.querySelector('.status-rail__sheet'))
+      .toContainElement(document.querySelector('.status-rail__assistant'));
     expect(invocations('toggle_nowly_panel')).toHaveLength(0);
 
     fireEvent.change(input, { target: { value: '保留这段未发送的内容' } });

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, History, MessageCircle, Mic, Send, Sparkles, Square } from 'lucide-react';
+import { ChevronDown, History, MessageCircle, Mic, Send, Sparkles, Square } from '../components/icons';
 import { assistantClient, assistantError } from './client';
 import { AssistantChat } from './AssistantChat';
 import { AssistantHistory, historyCount, type HistoryRange } from './AssistantHistory';

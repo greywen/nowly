@@ -159,7 +159,7 @@ button:disabled { cursor: default; opacity: .65; }
 /* The one surface. design.md §6: it fills its own transparent native window edge
    to edge, so an outer shadow has nowhere to fall and the 1px border carries the
    layer instead. */
-.status-rail__sheet { box-sizing: border-box; position: absolute; top: 0; left: 0; width: var(--island-w); height: var(--rail-h); border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-surface); box-shadow: none; overflow: hidden; }
+.status-rail__sheet { box-sizing: border-box; width: var(--island-w); height: var(--rail-h); border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-surface); box-shadow: none; overflow: hidden; }
 .status-rail[data-open="true"] .status-rail__sheet { width: var(--rail-w); height: var(--sheet-h); }
 .status-rail[data-surface="composer"] .status-rail__sheet,
 .status-rail[data-surface="assistant"] .status-rail__sheet { width: var(--rail-w); }
@@ -174,6 +174,8 @@ button:disabled { cursor: default; opacity: .65; }
 .status-rail__header { position: relative; min-width: 0; }
 .status-rail__panel { min-height: 0; border-top: 1px solid var(--border-default); opacity: 0; transition: opacity var(--rail-out) ease-out !important; }
 .status-rail[data-open="true"] .status-rail__panel { opacity: 1; transition: opacity var(--rail-in) ease-out var(--rail-in-delay) !important; }
+.status-rail[data-surface="composer"] .status-rail__panel,
+.status-rail[data-surface="assistant"] .status-rail__panel { border-top-color: transparent; opacity: 0; pointer-events: none; }
 
 /* Both heads occupy the same slot and cross-fade; neither ever moves. The 54px
    right padding is the signals/dismiss lane, reserved in every mode so the copy

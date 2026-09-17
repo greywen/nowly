@@ -542,6 +542,9 @@ export function TopRail({
           </div>
           <div className="status-rail__panel">{panel}</div>
         </div>
+        <div className="status-rail__assistant" aria-hidden={surface === 'status'}>
+          {assistant}
+        </div>
       </div>
       <button
         type="button"
@@ -563,9 +566,6 @@ export function TopRail({
       >
         <img src="/logo.png" alt="" />
       </button>
-      <div className="status-rail__assistant" aria-hidden={surface === 'status'}>
-        {assistant}
-      </div>
     </div>
   );
 }

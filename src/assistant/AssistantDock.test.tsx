@@ -551,13 +551,17 @@ describe('AssistantDock execution boundary', () => {
     expect(screen.queryByRole('button', { name: '操作记录' })).not.toBeInTheDocument();
     expect(screen.queryByText('当前聊天')).not.toBeInTheDocument();
     expect(screen.queryByText('今天还没有对话。')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '语音输入' })).toBeInTheDocument();
+    const voice = screen.getByRole('button', { name: '语音输入' });
+    expect(voice).toBeInTheDocument();
+    expect(voice.querySelector('svg')).toHaveClass('app-icon');
     expect(screen.queryByRole('button', { name: '发送请求' })).not.toBeInTheDocument();
 
     fireEvent.change(input, { target: { value: '明天下午三点开会' } });
 
     expect(screen.queryByRole('button', { name: '语音输入' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '发送请求' })).toBeInTheDocument();
+    const sendButton = screen.getByRole('button', { name: '发送请求' });
+    expect(sendButton).toBeInTheDocument();
+    expect(sendButton.querySelector('svg')).toHaveClass('app-icon');
   });
   it('continues an embedded request while the Nowly Bar conversation is hidden', async () => {
     const client = clientFixture();
