@@ -101,12 +101,11 @@ describe('screen status island windows', () => {
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
   });
 
-  it('shows the Nowly logo as branding without an interactive panel', async () => {
+  it('shows the Nowly logo as the assistant entry without opening it on mount', async () => {
     render(<StatusIslandApp />);
     await act(async () => { await Promise.resolve(); });
 
-    expect(screen.getByRole('img', { name: 'Nowly 品牌标识' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Nowly' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Nowly' })).toHaveAttribute('aria-expanded', 'false');
     expect(invocations('hover_nowly_panel')).toHaveLength(0);
     expect(invocations('toggle_nowly_panel')).toHaveLength(0);
     expect(invocations('toggle_status_island_details')).toHaveLength(0);
@@ -192,7 +191,7 @@ describe('screen status island windows', () => {
     });
     render(<StatusIslandApp />);
     await act(async () => { await Promise.resolve(); });
-    const root = screen.getByLabelText('Nowly 状态岛');
+    const root = screen.getByLabelText('Nowly Bar');
 
     act(() => openPanel?.({ payload: { source: 'island', identity: null, hovered: true } }));
     fireEvent.mouseLeave(root);
@@ -214,7 +213,7 @@ describe('screen status island windows', () => {
     });
     render(<StatusIslandApp />);
     await act(async () => { await Promise.resolve(); });
-    const root = screen.getByLabelText('Nowly 状态岛');
+    const root = screen.getByLabelText('Nowly Bar');
 
     fireEvent.mouseEnter(root);
     fireEvent.mouseLeave(root);
@@ -1159,11 +1158,63 @@ describe('the sheet inside the rail', () => {
     expect(document.querySelector('.status-island__retry')).not.toBeInTheDocument();
   });
 
-  it('offers no AI entry point anywhere in the sheet', async () => {
+  it('turns the logo into a full-rail composer without opening the sheet', async () => {
     render(<StatusIslandApp />);
     await act(async () => { await Promise.resolve(); });
 
-    expect(screen.queryByText('问 Nowly')).not.toBeInTheDocument();
-    expect(invocations('open_quick_panel')).toHaveLength(0);
+    fireEvent.click(screen.getByRole('button', { name: 'Nowly' }));
+
+    const input = await screen.findByRole('textbox', { name: '告诉 Nowly 你想做什么' });
+    expect(input).toHaveFocus();
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-surface', 'composer');
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-anim', 'grow');
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-open', 'false');
+    expect(invocations('toggle_nowly_panel')).toHaveLength(0);
+
+    fireEvent.keyDown(input, { key: 'Escape' });
+
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-surface', 'status');
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-anim', 'shrink');
+    expect(screen.queryByRole('textbox', { name: '告诉 Nowly 你想做什么' })).not.toBeInTheDocument();
+  });
+
+  it('grows the Nowly sheet only after submit and shows the user message while waiting', async () => {
+    let openPanel: ((event: { payload: { source: 'nowly'; identity: null; hovered: false } }) => void) | null = null;
+    listenMock.mockImplementation((name: string, callback: typeof openPanel) => {
+      if (name === 'status-island-details-open') openPanel = callback;
+      return Promise.resolve(() => undefined);
+    });
+    let resolveInterpret!: (value: unknown) => void;
+    invokeMock.mockImplementation((command: string) => {
+      if (command === 'get_status_island_snapshot') return Promise.resolve(snapshot);
+      if (command === 'assistant_get_config') return Promise.resolve({
+        endpoint: 'https://example.com/v1',
+        model: 'fixture-model',
+        hasKey: true,
+        permissions: { calendar: true, tasks: true, external: false }
+      });
+      if (command === 'assistant_interpret') return new Promise(resolve => { resolveInterpret = resolve; });
+      return Promise.resolve(null);
+    });
+    render(<StatusIslandApp />);
+    await act(async () => { await Promise.resolve(); });
+    fireEvent.click(screen.getByRole('button', { name: 'Nowly' }));
+    const input = await screen.findByRole('textbox', { name: '告诉 Nowly 你想做什么' });
+    await waitFor(() => expect(input).toHaveFocus());
+
+    fireEvent.change(input, { target: { value: '明天下午三点创建产品评审' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(invokeMock).toHaveBeenCalledWith('toggle_nowly_panel');
+    await act(async () => openPanel?.({ payload: { source: 'nowly', identity: null, hovered: false } }));
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-surface', 'assistant');
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-open', 'true');
+    expect(screen.getByText('明天下午三点创建产品评审', { selector: '.assistant-chat-message p' })).toBeInTheDocument();
+    expect(screen.getByText('正在理解与查询…尚未执行任何变更。')).toBeInTheDocument();
+
+    fireEvent.keyDown(input, { key: 'Escape' });
+    expect(invocations('close_status_island_details')).toHaveLength(1);
+
+    await act(async () => resolveInterpret({ kind: 'clarify', message: '需要提醒吗？', records: [], plan: null }));
   });
 });

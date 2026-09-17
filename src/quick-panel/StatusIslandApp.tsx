@@ -12,6 +12,11 @@ import { reminderPanelContext } from '../app/status-island-model';
 import { useStatusIslandSnapshot } from './useStatusIslandSnapshot';
 import { useStatusIslandDrag } from './useStatusIslandDrag';
 import { useTransparentSurfaces } from './useTransparentSurfaces';
+import { useTranslation } from '../i18n';
+import { AssistantDock } from '../assistant/AssistantDock';
+
+type PanelSource = 'island' | 'nowly';
+type RailSurface = 'status' | 'composer' | 'assistant';
 
 // The top rail window. It is the *only* floating window: the sheet is the
 // capsule grown, and a native window cannot grow into another one, so the panel
@@ -37,10 +42,14 @@ async function withActionHold(run: () => Promise<unknown>): Promise<void> {
 
 export function StatusIslandApp() {
   useTransparentSurfaces();
+  const { t } = useTranslation();
   const { model, status, refresh, notificationMode } = useStatusIslandSnapshot();
   const drag = useStatusIslandDrag();
   const surfaceState = model.surface;
   const [open, setOpen] = useState(false);
+  const [source, setSource] = useState<PanelSource>('island');
+  const [assistantSurface, setAssistantSurface] = useState<Exclude<RailSurface, 'status'> | null>(null);
+  const assistantSheetRequested = useRef(false);
   // Null until the first transition, so the rail does not animate itself into
   // existence on mount.
   const [anim, setAnim] = useState<'grow' | 'shrink' | null>(null);
@@ -127,11 +136,15 @@ export function StatusIslandApp() {
     const removers: Array<() => void> = [];
     let disposed = false;
     const keep = (remove: () => void) => disposed ? remove() : removers.push(remove);
-    void listen<{ source: 'island'; identity: string | null; hovered?: boolean } | null>('status-island-details-open', event => {
+    void listen<{ source: PanelSource; identity: string | null; hovered?: boolean } | null>('status-island-details-open', event => {
       setNativeHidePending(false);
+      const nextSource = event.payload?.source ?? 'island';
+      setSource(nextSource);
+      assistantSheetRequested.current = false;
+      if (nextSource === 'nowly') setAssistantSurface('assistant');
       const reopenSummary = notificationModeRef.current === 'persistent'
         && reopenSummaryRef.current;
-      setPinnedIdentity(reopenSummary ? null : event.payload?.identity ?? null);
+      setPinnedIdentity(nextSource === 'island' && !reopenSummary ? event.payload?.identity ?? null : null);
       setAnim('grow');
       setOpen(true);
     }).then(keep);
@@ -143,6 +156,9 @@ export function StatusIslandApp() {
       setPinnedIdentity(null);
       setAnim('shrink');
       setOpen(false);
+      assistantSheetRequested.current = false;
+      setSource('island');
+      setAssistantSurface(null);
     }).then(keep);
     return () => { disposed = true; removers.forEach(remove => remove()); };
   }, []);
@@ -190,6 +206,40 @@ export function StatusIslandApp() {
     void invoke('toggle_status_island_details', { identity: primaryIdentity });
   }, [drag, primaryIdentity]);
 
+  const requestAssistantSheet = useCallback(() => {
+    if (assistantSheetRequested.current || (open && source === 'nowly')) return;
+    assistantSheetRequested.current = true;
+    setAssistantSurface('assistant');
+    void invoke('toggle_nowly_panel').catch(() => {
+      assistantSheetRequested.current = false;
+      setAssistantSurface('composer');
+    });
+  }, [open, source]);
+
+  const activateNowly = useCallback(() => {
+    if (drag.consumedClick()) return;
+    if (assistantSurface === 'composer') {
+      setAnim('shrink');
+      setAssistantSurface(null);
+      return;
+    }
+    if (assistantSurface === 'assistant' || (open && source === 'nowly')) {
+      collapse();
+      return;
+    }
+    setAnim('grow');
+    setAssistantSurface('composer');
+  }, [assistantSurface, collapse, drag, open, source]);
+
+  const closeAssistant = useCallback(() => {
+    if (open && source === 'nowly') {
+      collapse();
+      return;
+    }
+    setAnim('shrink');
+    setAssistantSurface(null);
+  }, [collapse, open, source]);
+
   const focusEnter = useCallback(() => reportPresence('keyboard', true), []);
   const focusLeave = useCallback(() => reportPresence('keyboard', false), []);
 
@@ -202,9 +252,10 @@ export function StatusIslandApp() {
     onGrab: grabStart,
     onNudge: drag.nudge,
     dragging: drag.dragging,
-    expanded: open
+    expanded: open && source === 'island'
   };
   const retry = status === 'error' ? { onRetryStatus: () => void refresh() } : {};
+  const railSurface: RailSurface = assistantSurface ?? 'status';
 
   const context = useMemo(() => {
     if (displayedSurface.mode === 'summary') {
@@ -248,15 +299,30 @@ export function StatusIslandApp() {
   return (
     <main
       className="screen-status-island-root"
-      aria-label="Nowly 状态岛"
+      aria-label={t('statusIsland.rootLabel')}
       onMouseEnter={() => reportPresence('details', true)}
       onMouseLeave={() => reportPresence('details', false)}
     >
       <TopRail
         open={open}
+        source={source}
+        surface={railSurface}
         anim={anim}
         mode={displayedSurface.mode}
         onCollapse={collapse}
+        onActivateNowly={activateNowly}
+        assistant={(
+          <AssistantDock
+            active={assistantSurface !== null}
+            presentation="embedded"
+            autoFocus={assistantSurface === 'composer'}
+            expandOnFocus={false}
+            onRefresh={refresh}
+            onSubmit={() => requestAssistantSheet()}
+            onExpandedChange={expanded => { if (expanded) requestAssistantSheet(); }}
+            onRequestClose={closeAssistant}
+          />
+        )}
         panel={(
           <StatusIslandPanel
             compact

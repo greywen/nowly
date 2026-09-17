@@ -7,11 +7,10 @@ import { SettingsDialog } from './SettingsDialog';
 const settings:AppSettings={wallpaperEnabled:false,launchAtLogin:false,targetMonitorId:null,density:'balanced',weekStart:'monday',dateFormat:'localized',showWeekends:true,iconStyle:'duotone',hideTopbarInWallpaper:true};
 
 describe('SettingsDialog',()=>{
-  it('does not expose a separate status island enable switch or settings tab', async () => {
+  it('does not expose a separate Nowly Bar enable switch or shortcut field', async () => {
     const save = vi.fn(async value => value);
     render(<SettingsDialog settings={settings} onClose={vi.fn()} onSave={save}/>);
-    expect(screen.queryByRole('tab', { name: '状态岛' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('checkbox', { name: '启用状态岛' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: '启用 Nowly Bar' })).not.toBeInTheDocument();
     expect(screen.queryByRole('textbox', { name: '快捷窗口快捷键' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '保存设置' }));
     expect(save).toHaveBeenCalledWith(expect.objectContaining({ quickPanelEnabled: true }));
@@ -42,7 +41,7 @@ describe('SettingsDialog',()=>{
     const user=userEvent.setup(); const save=vi.fn().mockImplementation(async value=>value);
     const legacySettings={...settings,notificationDisplay:'summary'} as AppSettings & {notificationDisplay:'summary'};
     render(<SettingsDialog settings={legacySettings} onClose={vi.fn()} onSave={save}/>);
-    await user.click(screen.getByRole('tab',{name:'通知'}));
+    await user.click(screen.getByRole('tab',{name:'Nowly Bar'}));
 
     expect(screen.queryByRole('combobox',{name:'通知栏显示'})).not.toBeInTheDocument();
     expect(screen.queryByRole('option',{name:'通知详情'})).not.toBeInTheDocument();

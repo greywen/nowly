@@ -697,6 +697,7 @@ fn main() {
             wallpaper::enter_wallpaper_mode,
             wallpaper::enter_foreground_mode,
             quick_panel::toggle_status_island_details,
+            quick_panel::toggle_nowly_panel,
             quick_panel::hover_status_island_details,
             quick_panel::close_status_island_details,
             quick_panel::begin_status_island_drag,

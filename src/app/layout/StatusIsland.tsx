@@ -504,16 +504,24 @@ export function StatusIslandSummaryView({
  */
 export function TopRail({
   open,
+  source,
+  surface,
   anim,
   mode,
   panel,
+  assistant,
+  onActivateNowly,
   onCollapse,
   children
 }: {
   open: boolean;
+  source: 'island' | 'nowly';
+  surface: 'status' | 'composer' | 'assistant';
   anim: 'grow' | 'shrink' | null;
   mode: 'idle' | 'detail' | 'summary';
   panel: React.ReactNode;
+  assistant: React.ReactNode;
+  onActivateNowly: () => void;
   onCollapse: () => void;
   children: React.ReactNode;
 }) {
@@ -522,7 +530,8 @@ export function TopRail({
     <div
       className="status-rail"
       data-open={open}
-      data-source="island"
+      data-source={source}
+      data-surface={surface}
       data-mode={mode}
       {...(anim ? { 'data-anim': anim } : {})}
     >
@@ -543,13 +552,19 @@ export function TopRail({
       >
         <X aria-hidden="true" />
       </button>
-      <span
+      <button
+        type="button"
         className="status-rail__nowly"
-        role="img"
-        aria-label={t('statusIsland.nowlyBrand')}
+        aria-label={t('statusIsland.nowly')}
+        aria-haspopup="dialog"
+        aria-expanded={open && source === 'nowly'}
+        onClick={onActivateNowly}
       >
         <img src="/logo.png" alt="" />
-      </span>
+      </button>
+      <div className="status-rail__assistant" aria-hidden={surface === 'status'}>
+        {assistant}
+      </div>
     </div>
   );
 }

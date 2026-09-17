@@ -498,4 +498,60 @@ describe('AssistantDock execution boundary', () => {
     expect(screen.getByRole('button', { name: '确认执行 1 项' })).toBeDisabled();
     expect(client.execute).not.toHaveBeenCalled();
   });
+  it('keeps the embedded composer compact on focus and expands only after submit', async () => {
+    const client = clientFixture();
+    let resolve!: (reply: Reply) => void;
+    client.interpret.mockImplementationOnce(() => new Promise(reply => { resolve = reply; }));
+    const onSubmit = vi.fn();
+    const onExpandedChange = vi.fn();
+    render(
+      <AssistantDock
+        client={client}
+        presentation="embedded"
+        autoFocus
+        expandOnFocus={false}
+        onSubmit={onSubmit}
+        onExpandedChange={onExpandedChange}
+        onRefresh={() => {}}
+      />
+    );
+    const input = await screen.findByRole('textbox', { name: '告诉 Nowly 你想做什么' });
+    await connected();
+    await waitFor(() => expect(input).toHaveFocus());
+
+    fireEvent.focus(input);
+    expect(document.querySelector('.assistant-panel')).toHaveAttribute('data-open', 'false');
+    expect(onExpandedChange).not.toHaveBeenCalledWith(true);
+
+    fireEvent.change(input, { target: { value: '明天下午三点创建产品评审' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(onSubmit).toHaveBeenCalledWith('明天下午三点创建产品评审');
+    expect(onExpandedChange).toHaveBeenCalledWith(true);
+    expect(document.querySelector('.assistant-panel')).toHaveAttribute('data-open', 'true');
+    expect(within(screen.getByRole('list', { name: '当前聊天消息' }))
+      .getByText('明天下午三点创建产品评审')).toBeInTheDocument();
+    expect(screen.getByText('正在理解与查询…尚未执行任何变更。')).toBeInTheDocument();
+
+    await act(async () => resolve({ kind: 'clarify', message: '需要提醒吗？', records: [], plan: null }));
+  });
+  it('asks the host to close when Escape is pressed in a compact embedded composer', async () => {
+    const onRequestClose = vi.fn();
+    render(
+      <AssistantDock
+        client={clientFixture()}
+        presentation="embedded"
+        expandOnFocus={false}
+        onRequestClose={onRequestClose}
+        onRefresh={() => {}}
+      />
+    );
+    const input = await screen.findByRole('textbox', { name: '告诉 Nowly 你想做什么' });
+    await connected();
+
+    fireEvent.keyDown(input, { key: 'Escape' });
+
+    expect(onRequestClose).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('.assistant-panel')).toHaveAttribute('data-open', 'false');
+  });
 });

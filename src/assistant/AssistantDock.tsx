@@ -9,7 +9,13 @@ import './assistant.css';
 export type AssistantDockProps = {
   client?: AssistantClient;
   active?: boolean;
+  presentation?: 'floating' | 'embedded';
+  autoFocus?: boolean;
+  expandOnFocus?: boolean;
   onRefresh: () => void | Promise<unknown>;
+  onSubmit?: (message: string) => void;
+  onExpandedChange?: (expanded: boolean) => void;
+  onRequestClose?: () => void;
   onOpenSettings?: () => void;
   onOpenRecord?: (record: AssistantRecord, trigger: HTMLElement) => void | Promise<void>;
 };
@@ -30,7 +36,19 @@ function upsertPlanItem(items: ChatItem[], next: Plan): ChatItem[] {
   return items.map((item, index) => index === existing && item.kind === 'plan' ? { ...item, plan: next } : item);
 }
 type PanelSurface = 'chat' | 'history';
-export function AssistantDock({ client = assistantClient, active = true, onRefresh, onOpenSettings, onOpenRecord }: AssistantDockProps) {
+export function AssistantDock({
+  client = assistantClient,
+  active = true,
+  presentation = 'floating',
+  autoFocus = false,
+  expandOnFocus = true,
+  onRefresh,
+  onSubmit,
+  onExpandedChange,
+  onRequestClose,
+  onOpenSettings,
+  onOpenRecord
+}: AssistantDockProps) {
   const [config, setConfig] = useState<AssistantConfig | null>(null);
   const [connectionError, setConnectionError] = useState('');
   const dockRef = useRef<HTMLDivElement>(null);
@@ -73,6 +91,14 @@ export function AssistantDock({ client = assistantClient, active = true, onRefre
       .catch(() => { if (alive) setConnectionError('AI 连接尚不可用。请在 Nowly 桌面版中打开；网页预览不会发送数据或保存 Key。'); });
     return () => { alive = false; };
   }, [client, active]);
+  useEffect(() => {
+    if (!active || !autoFocus) return;
+    const timer = window.setTimeout(() => inputRef.current?.focus(), 0);
+    return () => window.clearTimeout(timer);
+  }, [active, autoFocus]);
+  useEffect(() => {
+    onExpandedChange?.(expanded);
+  }, [expanded, onExpandedChange]);
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -130,8 +156,9 @@ export function AssistantDock({ client = assistantClient, active = true, onRefre
   }
   async function send() {
     if (!activeRef.current || requestRef.current || busyRef.current || (uncertain && !uncertain.preserveCurrent) || !draft.trim()) return;
-    if (!connectionReady(config)) { setExpanded(true); return; }
     const message = draft.trim(); const requestId = crypto.randomUUID();
+    onSubmit?.(message);
+    if (!connectionReady(config)) { setExpanded(true); return; }
     const turn = ++generation.current; requestRef.current = requestId;
     const previous = planRef.current;
     setReading(true); setExpanded(true); setError('');
@@ -284,6 +311,7 @@ export function AssistantDock({ client = assistantClient, active = true, onRefre
   }
   function closePanel() {
     setExpanded(false);
+    onRequestClose?.();
   }
   function dictate() {
     if (listening) { recognitionRef.current?.stop(); return; }
@@ -306,7 +334,7 @@ export function AssistantDock({ client = assistantClient, active = true, onRefre
   const panelTitle = surface === 'history' ? '操作记录' : '当前聊天';
   const panelBadge = surface === 'history' ? `${historyCount(history ?? [], historyRange)} 条` : `${visibleItems.length} 条`;
   const PanelIcon = surface === 'history' ? History : MessageCircle;
-  return <div ref={dockRef} className="assistant-dock" hidden={!active} aria-label="Nowly AI 助手">
+  return <div ref={dockRef} className={`assistant-dock assistant-dock--${presentation}`} hidden={!active} aria-label="Nowly AI 助手">
     <section className="assistant-panel" aria-label={panelTitle} data-state={surface} data-open={expanded} aria-hidden={!expanded}>
       <header className="assistant-panel-header"><div className="assistant-panel-title">
         <span className="assistant-state-icon" aria-hidden="true"><PanelIcon size={18} /></span>
@@ -339,13 +367,22 @@ export function AssistantDock({ client = assistantClient, active = true, onRefre
         placeholder="告诉 Nowly 你想做什么…" value={draft} disabled={busy || Boolean(uncertain && !uncertain.preserveCurrent)}
         onFocus={() => {
           inputFocusedRef.current = true;
-          if (!connectionReady(config)) { setExpanded(true); return; }
-          showChat();
+          if (!connectionReady(config)) {
+            if (expandOnFocus) setExpanded(true);
+            return;
+          }
+          if (expandOnFocus) showChat();
         }}
         onBlur={() => { inputFocusedRef.current = false; }}
         onChange={e => setDraft(e.target.value)}
         onKeyDown={e => {
-          if (e.key === 'Escape') { e.currentTarget.blur(); closePanel(); return; }
+          if (e.key === 'Escape') {
+            e.stopPropagation();
+            e.currentTarget.blur();
+            if (expanded) closePanel();
+            else onRequestClose?.();
+            return;
+          }
           if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) { e.preventDefault(); void send(); }
         }} />
       <div className="assistant-composer-tools">

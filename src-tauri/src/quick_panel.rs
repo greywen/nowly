@@ -55,12 +55,14 @@ pub struct HandlePositions {
     pub hidden_y: i32,
 }
 
-/// The rail has one interactive source. The Logo dot is branding only.
+/// Which half of the rail owns the single open sheet.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PanelSource {
     /// The status island capsule: today's reminders and summary.
     Island,
+    /// The Nowly logo entry and AI assistant.
+    Nowly,
 }
 
 /// Every details show/hide carries the generation it was requested with, so a
@@ -788,6 +790,11 @@ pub fn toggle_status_island_details(
     toggle_panel(app, PanelSource::Island, identity)
 }
 
+#[tauri::command]
+pub fn toggle_nowly_panel(app: AppHandle) -> Result<(), crate::error::CommandError> {
+    toggle_panel(app, PanelSource::Nowly, None)
+}
+
 fn toggle_panel(
     app: AppHandle,
     source: PanelSource,
@@ -1088,9 +1095,9 @@ pub fn end_status_island_drag(app: AppHandle) -> Result<(), crate::error::Comman
 #[cfg(test)]
 mod tests {
     use super::{
-        acknowledgement_identity, centered_x, handle_positions, load_offset_x,
-        collapse_to_summary_after_view, outside_click_action, point_is_inside_surface, resolve_target_monitor, screen_top,
-        starts_visible, surface_x, top_surface_size, DragAnchor, OutsideClickAction,
+        acknowledgement_identity, centered_x, collapse_to_summary_after_view, handle_positions,
+        load_offset_x, outside_click_action, point_is_inside_surface, resolve_target_monitor,
+        screen_top, starts_visible, surface_x, top_surface_size, DragAnchor, OutsideClickAction,
         PanelController, PanelSource, SurfaceBounds, WorkArea,
     };
     use tauri::PhysicalPosition;
@@ -1277,6 +1284,21 @@ mod tests {
         assert_eq!(top_surface_size(false, 2.0), (576, 80));
         assert_eq!(top_surface_size(true, 2.0), (576, 576));
         assert_eq!(handle_positions(-900, 60, 12).visible_y, -888);
+    }
+
+    #[test]
+    fn opening_the_other_half_swaps_the_sheet_instead_of_closing_it() {
+        let controller = PanelController::default();
+
+        let island = controller.toggle_details(PanelSource::Island);
+        assert_eq!(island.source, Some(PanelSource::Island));
+
+        let nowly = controller.toggle_details(PanelSource::Nowly);
+        assert_eq!(nowly.source, Some(PanelSource::Nowly));
+        assert!(controller.are_details_open());
+
+        assert_eq!(controller.toggle_details(PanelSource::Nowly).source, None);
+        assert!(!controller.are_details_open());
     }
 
     #[test]

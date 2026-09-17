@@ -161,6 +161,8 @@ button:disabled { cursor: default; opacity: .65; }
    layer instead. */
 .status-rail__sheet { box-sizing: border-box; position: absolute; top: 0; left: 0; width: var(--island-w); height: var(--rail-h); border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-surface); box-shadow: none; overflow: hidden; }
 .status-rail[data-open="true"] .status-rail__sheet { width: var(--rail-w); height: var(--sheet-h); }
+.status-rail[data-surface="composer"] .status-rail__sheet,
+.status-rail[data-surface="assistant"] .status-rail__sheet { width: var(--rail-w); }
 .status-rail[data-anim="grow"] .status-rail__sheet { transition: width var(--rail-grow) var(--rail-ease), height var(--rail-grow) var(--rail-ease) !important; }
 .status-rail[data-anim="shrink"] .status-rail__sheet { transition: width var(--rail-shrink) var(--rail-ease), height var(--rail-shrink) var(--rail-ease) !important; }
 /* design.md §7 reserves the dashed border for the top surface family, which the
@@ -178,6 +180,8 @@ button:disabled { cursor: default; opacity: .65; }
    cannot gain width when a badge disappears. */
 .status-rail__header > .status-island,
 .status-rail__nowly-head { position: absolute; inset: 0; padding: 6px 54px 6px 8px; display: flex; align-items: center; gap: 8px; transition: opacity var(--rail-out) ease-out !important; }
+.status-rail[data-surface="composer"] .status-rail__header > .status-island,
+.status-rail[data-surface="assistant"] .status-rail__header > .status-island { opacity: 0; pointer-events: none; }
 .status-rail__nowly-head { opacity: 0; pointer-events: none; }
 .status-rail[data-open="true"][data-source="nowly"] .status-rail__header > .status-island { opacity: 0; pointer-events: none; }
 .status-rail[data-open="true"][data-source="nowly"] .status-rail__nowly-head { opacity: 1; transition: opacity var(--rail-in) ease-out var(--rail-in-delay) !important; }
@@ -244,10 +248,21 @@ button:disabled { cursor: default; opacity: .65; }
 
 /* The other half of the rail. Outside the sheet, because it has to stay visible
    beside the collapsed sheet; it fades once the sheet has grown over it. */
-.status-rail__nowly { box-sizing: border-box; position: absolute; z-index: 3; top: 0; right: 0; width: var(--nowly-d); height: var(--nowly-d); padding: 0; border: 1px solid var(--border-default); border-radius: 50%; display: grid; place-items: center; background: var(--bg-surface); box-shadow: none; overflow: hidden; pointer-events: none; cursor: default; }
+.status-rail__nowly { box-sizing: border-box; position: absolute; z-index: 3; top: 0; right: 0; width: var(--nowly-d); height: var(--nowly-d); padding: 0; border: 1px solid var(--border-default); border-radius: 50%; display: grid; place-items: center; background: var(--bg-surface); box-shadow: none; overflow: hidden; cursor: pointer; }
 .status-rail__nowly img { width: 22px; height: 22px; display: block; }
-.status-rail[data-open="true"] .status-rail__nowly { opacity: 0; pointer-events: none; transition: opacity var(--rail-dot-out) ease-out var(--rail-in-delay) !important; }
+.status-rail[data-open="true"] .status-rail__nowly,
+.status-rail:not([data-surface="status"]) .status-rail__nowly { opacity: 0; pointer-events: none; transition: opacity var(--rail-dot-out) ease-out var(--rail-in-delay) !important; }
 .status-rail:not([data-open="true"]) .status-rail__nowly { transition: opacity var(--rail-out) ease-out var(--rail-dot-in-delay) !important; }
+.status-rail__nowly:focus-visible { box-shadow: inset 0 0 0 2px var(--color-primary); }
+
+/* The assistant begins at the Nowly logo's 40px footprint, then reveals left
+   across the complete live rail width. Future action buttons extend --rail-w,
+   so the composer always ends at the current rightmost button boundary. */
+.status-rail__assistant { box-sizing: border-box; position: absolute; z-index: 4; top: 0; right: 0; width: var(--nowly-d); height: var(--sheet-h); overflow: hidden; opacity: 0; pointer-events: none; transition: width var(--rail-grow) var(--rail-ease), opacity var(--rail-in) ease-out !important; }
+.status-rail[data-surface="composer"] .status-rail__assistant,
+.status-rail[data-surface="assistant"] .status-rail__assistant { width: var(--rail-w); opacity: 1; pointer-events: auto; }
+.status-rail[data-anim="shrink"] .status-rail__assistant { transition: width var(--rail-shrink) var(--rail-ease), opacity var(--rail-out) ease-out !important; }
+.status-rail[data-source="nowly"] > .status-island__dismiss[data-at="expanded"] { display: none; }
 
 /* The sheet's lower half. Standalone it is still a panel with its own frame; in
    the rail it is the sheet's own body, so it drops the frame and the title the
@@ -1168,12 +1183,12 @@ body:has(.screen-status-island-root),
 .event-form__category,
 .event-form__recurrence,
 .event-form__note,
-.event-form__quick-settings { padding: 20px 0; border-top: 1px solid var(--border-default); }
+.event-form__quick-settings { padding: 20px 0; }
 .event-form__time-range h3,
 .event-form__category h3,
 .event-form__recurrence h3,
 .event-form__quick-settings h3,
-.event-form__note h3 { margin: 0 0 12px; color: var(--text-primary); font-size: 1rem; font-weight: 600; line-height: 1.2; }
+.event-form__note h3 { margin: 0 0 12px; color: var(--text-secondary); font-size: 1rem; font-weight: 500; line-height: 1.2; }
 .event-form__row-heading { margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .event-form__row-heading h3 { margin: 0; }
 .event-form__row-heading .form-check { flex: none; }
