@@ -415,9 +415,9 @@ export function AssistantDock({
               aria-pressed={surface === 'history' && expanded} disabled={busy || reading} onClick={() => void toggleHistory()}><History size={18} /></button>
           : null}
         {reading ? <button className="btn btn-icon assistant-stop" aria-label="停止处理" onClick={() => stop()}><Square size={14} fill="currentColor" /></button>
-          : draft.trim() ? <button className="btn btn-icon btn-primary" aria-label="发送请求" disabled={busy || Boolean(uncertain && !uncertain.preserveCurrent)} onClick={() => void send()}><Send size={18} /></button>
+          : draft.trim() ? <button className="btn btn-icon btn-primary" aria-label="发送请求" disabled={busy || Boolean(uncertain && !uncertain.preserveCurrent)} onClick={() => void send()}><Send size={16} /></button>
             : <button className={`btn btn-icon${listening ? ' assistant-listening' : ''}`} aria-label="语音输入" aria-pressed={listening}
-              disabled={busy || Boolean(uncertain && !uncertain.preserveCurrent)} onClick={dictate}><Mic size={18} /></button>}
+              disabled={busy || Boolean(uncertain && !uncertain.preserveCurrent)} onClick={dictate}><Mic size={16} /></button>}
       </div>
     </div>
   </div>;

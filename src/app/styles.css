@@ -260,7 +260,7 @@ button:disabled { cursor: default; opacity: .65; }
 /* The assistant begins at the Nowly logo's 40px footprint, then reveals left
    across the complete live rail width. Future action buttons extend --rail-w,
    so the composer always ends at the current rightmost button boundary. */
-.status-rail__assistant { box-sizing: border-box; position: absolute; z-index: 4; top: 0; right: 0; width: var(--nowly-d); height: var(--rail-h); overflow: hidden; opacity: 0; pointer-events: none; transition: width var(--rail-grow) var(--rail-ease), height var(--rail-grow) var(--rail-ease), opacity var(--rail-in) ease-out !important; }
+.status-rail__assistant { box-sizing: border-box; position: absolute; z-index: 4; top: 0; right: 0; width: var(--nowly-d); height: var(--rail-h); overflow: hidden; border-radius: var(--radius-default); opacity: 0; pointer-events: none; transition: width var(--rail-grow) var(--rail-ease), height var(--rail-grow) var(--rail-ease), opacity var(--rail-in) ease-out !important; }
 .status-rail[data-surface="composer"] .status-rail__assistant,
 .status-rail[data-surface="assistant"] .status-rail__assistant { width: var(--rail-w); opacity: 1; pointer-events: auto; }
 .status-rail[data-open="true"][data-surface="assistant"] .status-rail__assistant { height: var(--sheet-h); }
