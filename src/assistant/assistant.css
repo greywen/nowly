@@ -120,11 +120,13 @@
 .assistant-dock .assistant-stop { color: var(--color-danger-active); background: var(--color-danger-light); }
 .assistant-dock .assistant-listening { color: var(--color-danger-active); background: var(--color-danger-light); }
 .assistant-dock--embedded { position: absolute; inset: 0; width: 100%; margin: 0; }
-.assistant-dock--embedded .assistant-composer { position: absolute; top: 0; right: 0; left: 0; height: 40px; gap: 8px; padding: 0 0 0 16px; border: 0; border-radius: var(--radius-default); background: transparent; box-shadow: none; }
+.assistant-dock--embedded .assistant-composer { position: absolute; right: 0; bottom: 0; left: 0; height: 40px; gap: 8px; padding: 0 0 0 16px; border: 0; border-top: 1px dashed var(--border-default); border-radius: 0; background: transparent; box-shadow: none; }
 .assistant-dock--embedded .assistant-composer textarea { height: 40px; padding: 10px 0; color: var(--text-secondary); font-size: .95rem; font-weight: 400; }
+.assistant-dock--embedded .assistant-composer textarea:focus,
+.assistant-dock--embedded .assistant-composer textarea:focus-visible { outline: none; border: 0; box-shadow: none; }
 .assistant-dock--embedded .assistant-composer-tools { gap: 0; }
 .assistant-dock--embedded .assistant-composer-tools .btn-icon { width: 40px; min-width: 40px; min-height: 40px; height: 40px; padding: 0; border-radius: var(--radius-default); }
-.assistant-dock--embedded .assistant-panel { top: 40px; right: 0; bottom: auto; left: 0; height: calc(100% - 40px); max-height: none; border: 0; border-top: 1px dashed var(--border-default); border-radius: 0; box-shadow: none; }
+.assistant-dock--embedded .assistant-panel { top: 0; right: 0; bottom: 40px; left: 0; height: auto; max-height: none; border: 0; border-radius: 0; box-shadow: none; }
 .assistant-dock--embedded .assistant-panel-header { min-height: 44px; padding: 4px 8px; }
 .assistant-dock--embedded .assistant-panel-title { gap: 8px; }
 .assistant-dock--embedded .assistant-state-icon { width: 32px; height: 32px; border-radius: var(--radius-sm); }
@@ -142,7 +144,7 @@
 .assistant-dock--embedded .assistant-operation { border: 0; background: var(--bg-subtle); }
 .assistant-dock--embedded .assistant-operation-details { padding-top: 8px; border-top: 1px solid var(--border-subtle); }
 .assistant-dock--embedded .assistant-operation-status { color: var(--text-muted); background: transparent; }
-.assistant-dock--embedded .assistant-actions { bottom: 0; width: fit-content; max-width: 100%; justify-self: end; margin: 16px 0 0 auto; padding: 8px; border: 1px solid var(--border-subtle); border-radius: var(--radius-default); background: color-mix(in srgb, var(--bg-surface) 94%, transparent); box-shadow: var(--shadow-sm); }
+.assistant-dock--embedded .assistant-actions { bottom: 0; width: 100%; max-width: none; justify-content: flex-end; justify-self: stretch; margin: 16px 0 0; padding: 8px 0 0; border: 0; border-top: 1px solid var(--border-subtle); border-radius: 0; background: var(--bg-surface); box-shadow: none; }
 .assistant-dock--embedded .assistant-actions .btn { padding-inline: 16px; }
 .assistant-dock--embedded :is(
   .assistant-change-header,

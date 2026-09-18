@@ -13,8 +13,6 @@ export type AssistantDockProps = {
   autoFocus?: boolean;
   expandOnFocus?: boolean;
   onRefresh: () => void | Promise<unknown>;
-  onSubmit?: (message: string) => void;
-  onExpandedChange?: (expanded: boolean) => void;
   onRequestClose?: () => void;
   onOpenSettings?: () => void;
   onOpenRecord?: (record: AssistantRecord, trigger: HTMLElement) => void | Promise<void>;
@@ -43,8 +41,6 @@ export function AssistantDock({
   autoFocus = false,
   expandOnFocus = true,
   onRefresh,
-  onSubmit,
-  onExpandedChange,
   onRequestClose,
   onOpenSettings,
   onOpenRecord
@@ -97,8 +93,8 @@ export function AssistantDock({
     return () => window.clearTimeout(timer);
   }, [active, autoFocus]);
   useEffect(() => {
-    if (active) onExpandedChange?.(expanded);
-  }, [active, expanded, onExpandedChange]);
+    if (active && presentation === 'embedded') setExpanded(true);
+  }, [active, presentation]);
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -161,7 +157,6 @@ export function AssistantDock({
   async function send() {
     if (!activeRef.current || requestRef.current || busyRef.current || (uncertain && !uncertain.preserveCurrent) || !draft.trim()) return;
     const message = draft.trim(); const requestId = crypto.randomUUID();
-    onSubmit?.(message);
     if (!connectionReady(config)) { setExpanded(true); return; }
     const turn = ++generation.current; requestRef.current = requestId;
     const previous = planRef.current;

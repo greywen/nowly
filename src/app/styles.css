@@ -128,72 +128,90 @@ button:disabled { cursor: default; opacity: .65; }
 .workspace { position: relative; z-index: 1; min-width: 0; min-height: 0; padding: 24px 36px 36px; display: flex; }
 
 /* ── The top rail ────────────────────────────────────────────────────────────
-   One object in two sizes. Collapsed it splits into the 240x40 status capsule
-   and the 40px Nowly dot, 8px apart; open it merges into one 288x288 sheet.
-   The sheet is the capsule grown, never a second popup, which is why its content
-   is laid out at the open size and simply gets uncovered as the sheet grows.
+   Two independent panels share a native host. The collapsed status and Nowly
+   controls share one continuous 288x40 surface; status detail stays 288x288
+   while the AI conversation alone grows to 408x440. Each clips fixed content.
    The growth is design.md §10's third named motion exception, so every
    transition here has to out-shout the global `transition: none !important`. */
 .status-rail {
-  --rail-w: 288px;
+   --rail-collapsed-w: 288px;
+   --rail-frame-w: var(--rail-collapsed-w);
+   --rail-w: 288px;
   --rail-h: 40px;
-  --island-w: 240px;
+  --status-action-w: 240px;
+  --nowly-w: 48px;
   --nowly-d: 40px;
-  --sheet-h: 288px;
+   --sheet-h: 288px;
   /* The sheet's 1px border eats into every size below it, so the content grid
      subtracts it rather than overflowing the capsule by 2px and leaving the head
      a pixel off centre. */
   --rail-edge: 1px;
-  --rail-grow: 220ms;
-  --rail-shrink: 160ms;
+  --rail-grow: 280ms;
+  --rail-shrink: 220ms;
   /* Fades are carried as variables so `prefers-reduced-motion` can zero them in
      one place, rather than a second block trying to out-specify every rule. */
   --rail-in: 140ms;
   --rail-in-delay: 90ms;
   --rail-out: 110ms;
-  --rail-dot-out: 130ms;
-  --rail-dot-in-delay: 50ms;
+  --rail-peer-in: 140ms;
+  --rail-peer-out: 110ms;
   --rail-ease: cubic-bezier(.22, 1, .36, 1);
-  position: absolute; top: 0; left: 0; width: var(--rail-w); height: var(--sheet-h); color: var(--text-secondary);
+  /* Shared Fluid Morph parameters, but each shell owns its animation state. */
+  --logo-grow: var(--rail-grow);
+  --logo-shrink: var(--rail-shrink);
+  --logo-in: 140ms;
+  --logo-in-delay: 90ms;
+  --logo-out: 110ms;
+  --logo-radius: calc(var(--nowly-d) / 2);
+   position: absolute; top: 0; left: 50%; width: var(--rail-frame-w); height: var(--sheet-h); color: var(--text-secondary); transform: translateX(-50%);
 }
-/* The one surface. design.md §6: it fills its own transparent native window edge
-   to edge, so an outer shadow has nowhere to fall and the 1px border carries the
-   layer instead. */
-.status-rail__sheet { box-sizing: border-box; width: var(--island-w); height: var(--rail-h); border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-surface); box-shadow: none; overflow: hidden; }
-.status-rail[data-open="true"] .status-rail__sheet { width: var(--rail-w); height: var(--sheet-h); }
-.status-rail[data-surface="composer"] .status-rail__sheet,
-.status-rail[data-surface="assistant"] .status-rail__sheet { width: var(--rail-w); }
-.status-rail[data-anim="grow"] .status-rail__sheet { transition: width var(--rail-grow) var(--rail-ease), height var(--rail-grow) var(--rail-ease) !important; }
-.status-rail[data-anim="shrink"] .status-rail__sheet { transition: width var(--rail-shrink) var(--rail-ease), height var(--rail-shrink) var(--rail-ease) !important; }
+.status-rail[data-surface="assistant"] { --rail-frame-w: 408px; --rail-w: 408px; --sheet-h: 440px; }
+.status-rail[data-assistant-closing="true"] { --rail-w: 408px; --sheet-h: 440px; }
+.status-rail[data-frame-anim="grow"] { transition: width var(--logo-grow) var(--rail-ease) !important; }
+.status-rail[data-frame-anim="shrink"] { transition: width var(--logo-shrink) var(--rail-ease) !important; }
+/* The status presence is the one visible status shell. Its white fill means no
+   pixel between the independent controls can reveal the window behind it. */
+.status-rail__status-presence { box-sizing: border-box; position: absolute; top: 0; left: 50%; width: var(--rail-collapsed-w); height: var(--rail-h); border: 1px solid var(--border-default); border-radius: calc(var(--rail-h) / 2); background: var(--bg-surface); box-shadow: none; overflow: hidden; transform: translateX(-50%); opacity: 1; visibility: visible; transition: opacity var(--rail-peer-in) var(--rail-ease), visibility 0s !important; }
+.status-rail[data-status-open="true"] .status-rail__status-presence { height: 288px; border-radius: var(--radius-default); }
+.status-rail__status-presence[data-anim="grow"] { transition: height var(--rail-grow) var(--rail-ease), border-radius var(--rail-grow) var(--rail-ease), opacity var(--rail-peer-in) var(--rail-ease), visibility 0s !important; }
+.status-rail__status-presence[data-anim="shrink"] { transition: height var(--rail-shrink) var(--rail-ease), border-radius var(--rail-shrink) var(--rail-ease), opacity var(--rail-peer-in) var(--rail-ease), visibility 0s !important; }
+.status-rail__sheet { position: absolute; inset: 0 auto 0 0; width: calc(var(--status-action-w) - var(--rail-edge)); height: 100%; border: 0; border-radius: inherit; background: transparent; box-shadow: none; overflow: hidden; }
+.status-rail[data-status-open="true"] .status-rail__sheet { width: 100%; }
+.status-rail__status-presence[data-anim="grow"] .status-rail__sheet { transition: width var(--rail-grow) var(--rail-ease) !important; }
+.status-rail__status-presence[data-anim="shrink"] .status-rail__sheet { transition: width var(--rail-shrink) var(--rail-ease) !important; }
+.status-rail__status-presence, .status-rail__nowly { user-select: none; }
+.status-rail:not([data-surface="status"]) .status-rail__status-presence { opacity: 0; visibility: hidden; transition: opacity var(--rail-peer-out) var(--rail-ease), visibility 0s var(--rail-peer-out) !important; }
+/* Returning capsule fades as one complete surface above the shrinking opaque
+   AI shell. Otherwise its moving left edge wipes the capsule a second time. */
+.status-rail[data-surface="status"][data-frame-anim="shrink"] .status-rail__status-presence { z-index: 5; }
+.status-rail[data-assistant-closing="true"] .status-rail__status-presence { pointer-events: none; }
+.status-rail[data-surface="status"][data-frame-anim="shrink"][data-status-hidden="false"] .status-rail__sheet { pointer-events: auto; }
+.status-rail[data-status-hidden="true"] .status-rail__sheet { pointer-events: none; }
 /* design.md §7 reserves the dashed border for the top surface family, which the
    user can pick up and move. */
-.status-rail:not([data-open="true"]) .status-rail__sheet:hover { background: var(--bg-subtle); }
+.status-rail:not([data-status-open="true"]) .status-rail__status-presence:hover { background: var(--bg-subtle); }
 /* Laid out at the open size, so nothing inside reflows or moves as the sheet
    grows: the icon and title land on the same pixel in both sizes. */
-.status-rail__content { position: absolute; top: 0; left: 0; width: calc(var(--rail-w) - var(--rail-edge) * 2); height: calc(var(--sheet-h) - var(--rail-edge) * 2); display: grid; grid-template-rows: calc(var(--rail-h) - var(--rail-edge) * 2) minmax(0, 1fr); }
+.status-rail__content { position: absolute; top: 0; left: 0; width: calc(var(--rail-collapsed-w) - var(--rail-edge) * 2); height: calc(288px - var(--rail-edge) * 2); display: grid; grid-template-rows: calc(var(--rail-h) - var(--rail-edge) * 2) minmax(0, 1fr); }
 .status-rail__header { position: relative; min-width: 0; }
-.status-rail__panel { min-height: 0; border-top: 1px dashed var(--border-default); opacity: 0; transition: opacity var(--rail-out) ease-out !important; }
-.status-rail[data-open="true"] .status-rail__panel { opacity: 1; transition: opacity var(--rail-in) ease-out var(--rail-in-delay) !important; }
-.status-rail[data-surface="composer"] .status-rail__panel,
-.status-rail[data-surface="assistant"] .status-rail__panel { border-top-color: transparent; opacity: 0; pointer-events: none; }
+.status-rail__panel { min-height: 0; border-top: 1px dashed var(--border-default); visibility: hidden; opacity: 0; pointer-events: none; transition: opacity var(--rail-out) var(--rail-ease), visibility 0s var(--rail-out) !important; }
+.status-rail[data-status-open="true"] .status-rail__panel { visibility: visible; opacity: 1; pointer-events: auto; transition: opacity var(--rail-in) var(--rail-ease) var(--rail-in-delay), visibility 0s !important; }
+/* Switching owners must never retain the status exit content over the AI shell. */
+.status-rail[data-status-hidden="true"] .status-rail__panel { visibility: hidden; transition: none !important; }
 
-/* Both heads occupy the same slot and cross-fade; neither ever moves. The 54px
+/* The status header belongs only to its own sheet. The 54px
    right padding is the signals/dismiss lane, reserved in every mode so the copy
    cannot gain width when a badge disappears. */
-.status-rail__header > .status-island,
-.status-rail__nowly-head { position: absolute; inset: 0; padding: 6px 54px 6px 8px; display: flex; align-items: center; gap: 8px; transition: opacity var(--rail-out) ease-out !important; }
-.status-rail[data-surface="composer"] .status-rail__header > .status-island,
-.status-rail[data-surface="assistant"] .status-rail__header > .status-island { opacity: 0; pointer-events: none; }
-.status-rail__nowly-head { opacity: 0; pointer-events: none; }
-.status-rail[data-open="true"][data-source="nowly"] .status-rail__header > .status-island { opacity: 0; pointer-events: none; }
-.status-rail[data-open="true"][data-source="nowly"] .status-rail__nowly-head { opacity: 1; transition: opacity var(--rail-in) ease-out var(--rail-in-delay) !important; }
-.status-rail__nowly-head .status-island__icon img { width: 16px; height: 16px; display: block; }
+.status-rail__header > .status-island { position: absolute; inset: 0; padding: 6px 54px 6px 8px; display: flex; align-items: center; gap: 8px; }
+.status-rail:not([data-status-open="true"]) .status-island { pointer-events: none; }
+.status-rail:not([data-status-open="true"]) .status-island__trigger,
+.status-rail:not([data-status-open="true"]) .status-island__dismiss[data-at="collapsed"],
+.status-rail:not([data-status-open="true"]) .status-island__retry { pointer-events: auto; }
 
 .status-island { color: var(--text-secondary); }
-.status-island__drag-hint { position: absolute; z-index: 4; top: calc(var(--rail-h) + 8px); left: 50%; transform: translateX(-50%); width: 280px; padding: 12px; border: 1px solid var(--border-default); border-radius: var(--radius-default); display: grid; gap: 4px; color: var(--text-secondary); background: var(--bg-surface); box-shadow: var(--shadow-sm); font-size: 0.85rem; }
-.status-island__drag-hint strong { color: var(--text-primary); font-weight: 600; }
-.status-island__drag-hint button { justify-self: end; min-height: 32px; padding: 4px 12px; border: 0; border-radius: var(--radius-sm); color: var(--color-primary-active); background: var(--color-primary-light); font-weight: 600; }
+.status-island__movement-note { margin: 0; color: var(--text-muted); font-size: 0.85rem; line-height: 1.5; }
 .status-island__content { min-width: 0; flex: 1; display: flex; align-items: center; gap: 8px; }
+.status-island__content, .status-island__content *, .status-island__signals, .status-island__signals * { pointer-events: none; }
 .status-island__icon { width: 24px; height: 24px; flex: none; display: grid; place-items: center; border-radius: var(--radius-sm); color: var(--color-primary-active); background: var(--color-primary-light); }
 .status-island[data-primary="task"] .status-island__icon { color: var(--color-danger-active); background: var(--color-danger-light); }
 .status-island[data-primary="conflict"] .status-island__icon { color: var(--color-danger-active); background: var(--color-danger-light); }
@@ -224,48 +242,69 @@ button:disabled { cursor: default; opacity: .65; }
 .status-island__signal.is-info { color: var(--color-info-active, #2d5bb8); background: var(--color-info-light, #e3ecfd); }
 .status-island__signal.is-teal { color: var(--color-primary-active); background: var(--color-primary-light); }
 .status-island__signal.is-green { color: var(--color-success-active, #1f7a45); background: var(--color-success-light, #e2f5e9); }
-.status-rail[data-open="true"] .status-island__signals,
+.status-rail[data-status-open="true"] .status-island__signals,
 .status-rail[data-mode="idle"] .status-island__signals,
-.status-rail:not([data-open="true"]):hover .status-island__signals { opacity: 0; pointer-events: none; }
+.status-rail:not([data-status-open="true"]):hover .status-island__signals { opacity: 0; pointer-events: none; }
 
 /* The hit area is an overlay, not a button wrapped around the text: the sheet
    owns the border and background, and the dismiss buttons sit above the same
    pixels. It keeps the capsule's width so the Nowly dot stays clickable. */
-.status-island__trigger { position: absolute; z-index: 1; top: 0; left: 0; width: calc(var(--island-w, 240px) - var(--rail-edge, 1px) * 2); height: calc(var(--rail-h, 40px) - var(--rail-edge, 1px) * 2); padding: 0; border: 0; border-radius: var(--radius-default); background: transparent; cursor: default; }
+.status-island__trigger { position: absolute; z-index: 1; top: 0; left: 0; width: calc(var(--status-action-w, 240px) - var(--rail-edge, 1px)); height: calc(var(--rail-h, 40px) - var(--rail-edge, 1px) * 2); padding: 0; appearance: none; -webkit-appearance: none; border: 0; border-radius: calc(var(--rail-h) / 2); outline: 0; background: transparent; box-shadow: none; -webkit-tap-highlight-color: transparent; cursor: default; }
+.status-rail[data-status-open="true"] .status-island__trigger { width: 100%; }
+.status-island__trigger:focus, .status-island__trigger:active { outline: 0; background: transparent; box-shadow: none; }
 .status-island__trigger:focus-visible { box-shadow: inset 0 0 0 2px var(--color-primary); }
 .status-island[data-dragging="true"] .status-island__trigger { cursor: grabbing; }
 
 /* Two dismiss buttons at two positions, cross-fading. Moving one element would
    be a position tween, which design.md §10 does not allow here. */
 .status-island__dismiss { position: absolute; z-index: 2; width: 28px; height: 28px; padding: 0; border: 0; border-radius: var(--radius-sm); display: grid; place-items: center; color: var(--text-muted); background: transparent; opacity: 0; pointer-events: none; transition: opacity var(--rail-out) ease-out !important; }
-.status-island__dismiss svg { width: 15px; height: 15px; }
+.status-island__dismiss svg { width: 20px; height: 20px; }
 .status-island__dismiss:hover { color: var(--text-primary); background: var(--bg-secondary); }
 .status-island__dismiss:focus-visible { box-shadow: inset 0 0 0 2px var(--color-primary); }
+.status-island__dismiss[data-at="collapsed"]:focus-visible,
+.status-island__dismiss[data-at="collapsed"]:active { box-shadow: none; }
 .status-island__dismiss[data-at="collapsed"] { top: 6px; right: 54px; }
-.status-rail:not([data-open="true"]):not([data-mode="idle"]):hover .status-island__dismiss[data-at="collapsed"],
-.status-rail:not([data-open="true"]):not([data-mode="idle"]):focus-within .status-island__dismiss[data-at="collapsed"] { opacity: 1; pointer-events: auto; }
+.status-rail:not([data-status-open="true"]):not([data-mode="idle"]):hover .status-island__dismiss[data-at="collapsed"],
+.status-rail:not([data-status-open="true"]):not([data-mode="idle"]):focus-within .status-island__dismiss[data-at="collapsed"] { opacity: 1; pointer-events: auto; }
 /* Open, it takes the room the Nowly dot vacated and stays visible. */
-.status-island__dismiss[data-at="expanded"] { top: 6px; right: 8px; }
-.status-rail[data-open="true"] .status-island__dismiss[data-at="expanded"] { opacity: 1; pointer-events: auto; transition: opacity var(--rail-in) ease-out var(--rail-in-delay) !important; }
+.status-island__dismiss[data-at="expanded"] { top: 5px; right: 7px; }
+.status-rail[data-status-open="true"] .status-island__dismiss[data-owner="status"] { opacity: 1; pointer-events: auto; transition: opacity var(--rail-in) ease-out var(--rail-in-delay) !important; }
+.status-rail__panel-close { z-index: 6; top: 0; right: 0; width: 40px; height: 40px; border-radius: var(--radius-default); transition: opacity var(--logo-out) var(--rail-ease) !important; }
+.status-island__dismiss[data-owner="assistant"][aria-hidden="false"] { opacity: 1; pointer-events: auto; transition: opacity var(--logo-in) var(--rail-ease) var(--logo-in-delay) !important; }
+.status-rail__panel-close:hover { color: var(--color-primary); background: var(--bg-secondary); }
 
-/* The other half of the rail. Outside the sheet, because it has to stay visible
-   beside the collapsed sheet; it fades once the sheet has grown over it. */
-.status-rail__nowly { box-sizing: border-box; position: absolute; z-index: 3; top: 0; right: 0; width: var(--nowly-d); height: var(--nowly-d); padding: 0; border: 1px solid var(--border-default); border-radius: 50%; display: grid; place-items: center; background: var(--bg-surface); box-shadow: none; overflow: hidden; cursor: pointer; }
-.status-rail__nowly img { width: 22px; height: 22px; display: block; }
+/* The Nowly control is a 48px action lane inside the same shell. Its separator
+   communicates ownership without reopening a transparent gap. */
+.status-rail__nowly { box-sizing: border-box; position: absolute; z-index: 3; top: -1px; right: -1px; width: var(--nowly-w); height: var(--rail-h); padding: 0; appearance: none; -webkit-appearance: none; border: 0; border-radius: 0; outline: 0; display: grid; place-items: center; background: transparent; box-shadow: none; overflow: hidden; -webkit-tap-highlight-color: transparent; cursor: pointer; opacity: 1; transition: opacity var(--rail-peer-in) var(--rail-ease) !important; }
+.status-rail__nowly::before { content: ""; position: absolute; top: 9px; left: 0; width: 1px; height: 22px; background: var(--border-subtle, #f6f1e9); pointer-events: none; }
+.status-rail__nowly img { width: 22px; height: 22px; display: block; user-select: none; -webkit-user-drag: none; }
 .status-rail[data-open="true"] .status-rail__nowly,
-.status-rail:not([data-surface="status"]) .status-rail__nowly { opacity: 0; pointer-events: none; transition: opacity var(--rail-dot-out) ease-out var(--rail-in-delay) !important; }
-.status-rail:not([data-open="true"]) .status-rail__nowly { transition: opacity var(--rail-out) ease-out var(--rail-dot-in-delay) !important; }
+.status-rail:not([data-surface="status"]) .status-rail__nowly { opacity: 0; pointer-events: none; transition: opacity var(--rail-peer-out) var(--rail-ease) !important; }
+.status-rail[data-assistant-closing="true"] .status-rail__nowly { pointer-events: none; }
+.status-rail__nowly[data-available="false"] { pointer-events: none; }
+.status-rail__nowly:focus, .status-rail__nowly:active { outline: 0; background: transparent; box-shadow: none; }
 .status-rail__nowly:focus-visible { box-shadow: inset 0 0 0 2px var(--color-primary); }
 
 /* The assistant begins at the Nowly logo's 40px footprint, then reveals left
    across the complete live rail width. Future action buttons extend --rail-w,
    so the composer always ends at the current rightmost button boundary. */
-.status-rail__assistant { box-sizing: border-box; position: absolute; z-index: 4; top: 0; right: 0; width: var(--nowly-d); height: var(--rail-h); overflow: hidden; border-radius: var(--radius-default); opacity: 0; pointer-events: none; transition: width var(--rail-grow) var(--rail-ease), height var(--rail-grow) var(--rail-ease), opacity var(--rail-in) ease-out !important; }
-.status-rail[data-surface="composer"] .status-rail__assistant,
-.status-rail[data-surface="assistant"] .status-rail__assistant { width: var(--rail-w); opacity: 1; pointer-events: auto; }
+.status-rail__assistant { box-sizing: border-box; position: absolute; z-index: 4; top: 0; right: 0; width: var(--nowly-w); height: var(--rail-h); overflow: hidden; border-radius: var(--logo-radius); background: var(--bg-surface); box-shadow: none; opacity: 0; pointer-events: none; transition: width var(--logo-grow) var(--rail-ease), height var(--logo-grow) var(--rail-ease), border-radius var(--logo-grow) var(--rail-ease), opacity 0s var(--logo-shrink) !important; }
+.status-rail__panel, .status-rail__assistant { user-select: text; }
+/* Border above the opaque content, so all four corners remain legible. */
+.status-rail__assistant::before { content: ""; position: absolute; z-index: 10; inset: 0; border: 1px solid var(--border-default); border-radius: inherit; pointer-events: none; }
+.status-rail[data-surface="assistant"] .status-rail__assistant { width: var(--rail-w); border-radius: var(--radius-default); opacity: 1; pointer-events: auto; transition-delay: 0s !important; }
 .status-rail[data-open="true"][data-surface="assistant"] .status-rail__assistant { height: var(--sheet-h); }
-.status-rail[data-anim="shrink"] .status-rail__assistant { transition: width var(--rail-shrink) var(--rail-ease), height var(--rail-shrink) var(--rail-ease), opacity var(--rail-out) ease-out !important; }
-.status-rail[data-source="nowly"] > .status-island__dismiss[data-at="expanded"] { display: none; }
+.status-rail__assistant[data-anim="shrink"] { transition-duration: var(--logo-shrink), var(--logo-shrink), var(--logo-shrink), 0s !important; }
+.status-rail__assistant:not([data-anim]) { transition: none !important; }
+/* Fixed destination layout: shell clips it, never scales or rewraps it. */
+.status-rail .status-rail__assistant > .assistant-dock--embedded { inset: 0 0 auto auto; width: var(--rail-w); height: var(--rail-h); opacity: 0; transition: opacity var(--logo-out) var(--rail-ease) !important; }
+.status-rail[data-surface="assistant"] .status-rail__assistant > .assistant-dock--embedded,
+.status-rail[data-assistant-closing="true"] .status-rail__assistant > .assistant-dock--embedded { height: var(--sheet-h); }
+.status-rail:not([data-surface="status"]) .status-rail__assistant > .assistant-dock--embedded { opacity: 1; transition: opacity var(--logo-in) var(--rail-ease) var(--logo-in-delay) !important; }
+/* Retain the visual content during exit; inert on the shell disables it. */
+.status-rail__assistant[data-anim="shrink"] > .assistant-dock--embedded[hidden] { display: block; }
+.status-rail__assistant::after { content: ""; position: absolute; top: 9px; right: 13px; width: 22px; height: 22px; background: url('/logo.png') center / contain no-repeat; pointer-events: none; opacity: 1; transition: opacity var(--rail-peer-in) var(--rail-ease) !important; }
+.status-rail:not([data-surface="status"]) .status-rail__assistant::after { opacity: 0; transition-delay: 0s !important; }
 
 /* The sheet's lower half. Standalone it is still a panel with its own frame; in
    the rail it is the sheet's own body, so it drops the frame and the title the
@@ -319,15 +358,17 @@ body:has(.screen-status-island-root),
      second rule trying to out-specify every transition above. */
   .status-rail {
     --rail-grow: 0s; --rail-shrink: 0s; --rail-in: 0s; --rail-in-delay: 0s;
-    --rail-out: 0s; --rail-dot-out: 0s; --rail-dot-in-delay: 0s;
+    --rail-out: 0s; --rail-peer-in: 0s; --rail-peer-out: 0s;
+    --logo-grow: 0s; --logo-shrink: 0s; --logo-in: 0s; --logo-in-delay: 0s; --logo-out: 0s;
   }}
 
 @media (prefers-reduced-transparency: reduce) {
-  .status-rail__sheet, .status-rail__nowly, .status-island__details { background: var(--bg-surface); }
+  .status-rail__status-presence, .status-island__details { background: var(--bg-surface); }
 }
 
 @media (prefers-contrast: more) {
-  .status-rail__sheet, .status-rail__nowly, .status-island__details { border-color: CanvasText; }
+  .status-rail__status-presence, .status-island__details { border-color: CanvasText; }
+  .status-rail__nowly::before { background: CanvasText; }
   .status-island__signal { outline: 1px solid CanvasText; }
 }
 

@@ -496,7 +496,14 @@ pub fn update_subscription_display(
             "UPDATE calendar_subscriptions
                 SET name=?2,color=?3,category_id=?4,refresh_interval_minutes=?5,updated_at=?6
              WHERE id=?1",
-            params![id, name, color, category_id, refresh_interval_minutes, now_utc()],
+            params![
+                id,
+                name,
+                color,
+                category_id,
+                refresh_interval_minutes,
+                now_utc()
+            ],
         )
         .map_err(CommandError::database)?;
     if affected == 0 {

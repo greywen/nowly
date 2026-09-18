@@ -51,9 +51,8 @@ fn validate_draft(draft: &CategoryDraft) -> Result<(String, String), CommandErro
 
 /// 列出全部分类，按 position 升序（创建时间兜底）。
 pub fn list(connection: &Connection) -> Result<Vec<Category>, CommandError> {
-    let sql = format!(
-        "SELECT {CATEGORY_COLUMNS} FROM categories ORDER BY position ASC, created_at ASC"
-    );
+    let sql =
+        format!("SELECT {CATEGORY_COLUMNS} FROM categories ORDER BY position ASC, created_at ASC");
     let mut statement = connection.prepare(&sql).map_err(CommandError::database)?;
     let rows = statement
         .query_map([], read_category)
@@ -76,10 +75,7 @@ fn fetch_one(connection: &Connection, id: &str) -> Result<Category, CommandError
 }
 
 /// 新建分类，追加到列表末尾。超过 `MAX_CATEGORIES` 拒绝。
-pub fn create(
-    connection: &mut Connection,
-    draft: CategoryDraft,
-) -> Result<Category, CommandError> {
+pub fn create(connection: &mut Connection, draft: CategoryDraft) -> Result<Category, CommandError> {
     let (name, color) = validate_draft(&draft)?;
     let count: i64 = connection
         .query_row("SELECT COUNT(*) FROM categories", [], |row| row.get(0))
@@ -315,9 +311,11 @@ mod tests {
         delete(&mut connection, &cat.id).unwrap();
 
         let (category, color): (String, String) = connection
-            .query_row("SELECT category,color FROM events WHERE id='e1'", [], |row| {
-                Ok((row.get(0)?, row.get(1)?))
-            })
+            .query_row(
+                "SELECT category,color FROM events WHERE id='e1'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
             .unwrap();
         assert_eq!(category, "");
         assert_eq!(color, "");

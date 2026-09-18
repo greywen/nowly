@@ -29,21 +29,24 @@ struct DragAnchor {
 }
 
 const TOP_MARGIN: f64 = 8.0;
-/// The rail: a 240 capsule, an 8px transparent gap, and the 40px Nowly entry.
-/// One window holds all of it, because the panel is the capsule grown rather
-/// than a second surface, and a native window cannot grow into another one.
+/// Visible surfaces keep their own widths, but the native host always reserves
+/// the AI width. Both panels change height only: no horizontal WebView resize
+/// or native recentering is allowed at the end of a morph.
 const RAIL_WIDTH: f64 = 288.0;
 const RAIL_HEIGHT: f64 = 40.0;
-/// The rail expanded: 40 of header plus 248 of panel, as one sheet.
-const EXPANDED_HEIGHT: f64 = 288.0;
+const STATUS_HEIGHT: f64 = 288.0;
+const ASSISTANT_WIDTH: f64 = 408.0;
+const ASSISTANT_HEIGHT: f64 = 440.0;
+const RAIL_RADIUS: f64 = 20.0;
+const PANEL_RADIUS: f64 = 15.2;
 /// A quick pass over the island must not open anything. Only a sustained hover
 /// does, and the delay is coordinated natively so it survives the pointer
 /// crossing the transparent gap inside the window.
 const HOVER_OPEN_DELAY: Duration = Duration::from_millis(300);
 /// The window may only shrink back once the sheet has finished collapsing inside
 /// the WebView, or the last frames get clipped by the window edge. design.md §10
-/// puts the collapse at 160ms; the rest is margin for a late frame.
-const COLLAPSE_ANIMATION: Duration = Duration::from_millis(200);
+/// puts both independent morphs at 220ms; add 40ms for a late frame.
+const COLLAPSE_ANIMATION: Duration = Duration::from_millis(260);
 /// Where the user parked the top surface, as a logical-pixel offset from the
 /// work area's horizontal centre. Stored rather than an absolute x so the same
 /// value keeps meaning the same place across monitors, resolutions and DPI.
@@ -75,6 +78,7 @@ pub struct DetailsTransition {
 
 #[derive(Clone, serde::Serialize)]
 struct DetailsOpen {
+    generation: u64,
     source: PanelSource,
     /// Which reminder the island sheet is pinned to. `None` for a summary.
     identity: Option<String>,
@@ -84,27 +88,66 @@ struct DetailsOpen {
 #[derive(Clone, Copy, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct DetailsClose {
+    generation: u64,
     hide_after_collapse: bool,
     collapse_to_summary: bool,
+}
+
+#[derive(Clone, Copy, serde::Serialize)]
+struct DetailsClosed {
+    generation: u64,
 }
 
 pub fn screen_top(monitor_y: i32, _work_area_y: i32) -> i32 {
     monitor_y
 }
 
-/// The rail never changes width: collapsed it shows the capsule and the dot,
-/// expanded it shows the same 288 as one sheet. Only the height moves, so the
-/// saved horizontal offset keeps meaning the same place in both states.
-pub fn top_surface_size(expanded: bool, scale_factor: f64) -> (u32, u32) {
-    let height = if expanded {
-        EXPANDED_HEIGHT
-    } else {
-        RAIL_HEIGHT
+/// Stable native viewport width for every source, including the compact rail.
+pub fn top_surface_size(source: Option<PanelSource>, scale_factor: f64) -> (u32, u32) {
+    let height = match source {
+        Some(PanelSource::Island) => STATUS_HEIGHT,
+        Some(PanelSource::Nowly) => ASSISTANT_HEIGHT,
+        None => RAIL_HEIGHT,
     };
     (
-        (RAIL_WIDTH * scale_factor).round() as u32,
+        (ASSISTANT_WIDTH * scale_factor).round() as u32,
         (height * scale_factor).round() as u32,
     )
+}
+
+fn physical_pixels(logical: f64, scale: f64) -> i32 {
+    (logical * scale).round() as i32
+}
+
+/// Rounded region in native client pixels. The extra side gutters of the
+/// compact rail and status panel must not intercept clicks intended for other
+/// applications.
+fn surface_region(source: Option<PanelSource>, scale: f64) -> SurfaceRegion {
+    let (host_width, height) = top_surface_size(source, scale);
+    let width = if source == Some(PanelSource::Nowly) {
+        host_width
+    } else {
+        physical_pixels(RAIL_WIDTH, scale) as u32
+    };
+    let left = ((host_width - width) / 2) as i32;
+    SurfaceRegion {
+        left,
+        top: 0,
+        right: left + width as i32,
+        bottom: height as i32,
+        radius: physical_pixels(
+            if source.is_none() {
+                RAIL_RADIUS
+            } else {
+                PANEL_RADIUS
+            },
+            scale,
+        ),
+    }
+}
+
+fn surface_client_bounds(source: Option<PanelSource>, scale: f64) -> SurfaceBounds {
+    surface_region(source, scale).bounds()
 }
 
 /// Negative origins on a left-of-primary monitor must survive, so this stays
@@ -162,6 +205,37 @@ pub struct SurfaceBounds {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct SurfaceRegion {
+    left: i32,
+    top: i32,
+    right: i32,
+    bottom: i32,
+    radius: i32,
+}
+
+impl SurfaceRegion {
+    fn bounds(self) -> SurfaceBounds {
+        SurfaceBounds {
+            left: self.left,
+            top: self.top,
+            right: self.right,
+            bottom: self.bottom,
+        }
+    }
+}
+
+/// `CreateRoundRectRgn` is a binary clip with no antialiasing. Clipping it to
+/// the exact CSS radius cuts through WebView2's partially covered corner pixels
+/// and leaves a jagged fringe. Keep the same bounds but make the native clip one
+/// physical pixel fuller, so CSS owns the visible antialiased edge.
+fn native_clip_region(region: SurfaceRegion) -> SurfaceRegion {
+    SurfaceRegion {
+        radius: region.radius.saturating_sub(1),
+        ..region
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OutsideClickAction {
     Collapse,
     CollapseThenHide,
@@ -177,6 +251,44 @@ pub fn collapse_to_summary_after_view() -> bool {
 
 pub fn point_is_inside_surface(x: i32, y: i32, bounds: SurfaceBounds) -> bool {
     x >= bounds.left && x < bounds.right && y >= bounds.top && y < bounds.bottom
+}
+
+fn point_is_inside_rounded_surface(x: i32, y: i32, region: SurfaceRegion) -> bool {
+    if !point_is_inside_surface(x, y, region.bounds()) {
+        return false;
+    }
+
+    let width = region.right - region.left;
+    let height = region.bottom - region.top;
+    let radius = region.radius.min(width / 2).min(height / 2).max(0);
+    if radius == 0 {
+        return true;
+    }
+
+    let local_x = x - region.left;
+    let local_y = y - region.top;
+    if (local_x >= radius && local_x < width - radius)
+        || (local_y >= radius && local_y < height - radius)
+    {
+        return true;
+    }
+
+    // Test pixel centres against the same quarter-circle geometry used by the
+    // native rounded HRGN. This keeps the low-level outside-click hook aligned
+    // with the visible/click-through Windows surface at the four corners.
+    let center_x = if local_x < radius {
+        radius as f64
+    } else {
+        (width - radius) as f64
+    };
+    let center_y = if local_y < radius {
+        radius as f64
+    } else {
+        (height - radius) as f64
+    };
+    let dx = local_x as f64 + 0.5 - center_x;
+    let dy = local_y as f64 + 0.5 - center_y;
+    dx * dx + dy * dy <= f64::from(radius * radius)
 }
 
 pub fn outside_click_action(notification_mode: &str) -> OutsideClickAction {
@@ -288,6 +400,7 @@ impl PanelController {
     /// Starts a drag from the current offset, pinned to the geometry the caller
     /// already resolved.
     fn begin_drag(&self, anchor: DragAnchor) -> bool {
+        let _positioning = self.positioning.lock().unwrap();
         let mut state = self.state.lock().unwrap();
         if !state.enabled {
             return false;
@@ -346,6 +459,7 @@ impl PanelController {
     /// the sheet is open swaps its content rather than closing it: there is only
     /// one sheet, so the two sources cannot both be open.
     pub fn toggle_details(&self, source: PanelSource) -> DetailsTransition {
+        let _positioning = self.positioning.lock().unwrap();
         let mut state = self.state.lock().unwrap();
         state.details_generation += 1;
         state.hover_source = None;
@@ -363,6 +477,7 @@ impl PanelController {
     /// Reserves a hover-open without opening yet, so the 300ms wait can be
     /// abandoned if anything else happens first.
     pub fn reserve_hover_open(&self, source: PanelSource) -> Option<u64> {
+        let _positioning = self.positioning.lock().unwrap();
         let mut state = self.state.lock().unwrap();
         if !state.allows_details() || state.details_source.is_some() {
             return None;
@@ -373,6 +488,7 @@ impl PanelController {
     }
 
     pub fn complete_hover_open(&self, generation: u64) -> bool {
+        let _positioning = self.positioning.lock().unwrap();
         let mut state = self.state.lock().unwrap();
         if state.details_generation != generation
             || !state.allows_details()
@@ -385,6 +501,7 @@ impl PanelController {
     }
 
     pub fn close_details(&self) -> DetailsTransition {
+        let _positioning = self.positioning.lock().unwrap();
         let mut state = self.state.lock().unwrap();
         state.details_generation += 1;
         state.details_source = None;
@@ -430,6 +547,24 @@ impl PanelController {
         Some(hide())
     }
 
+    pub fn hide_if_current<T>(
+        &self,
+        details_generation: u64,
+        visibility_generation: u64,
+        hide: impl FnOnce() -> T,
+    ) -> Option<T> {
+        let _positioning = self.positioning.lock().unwrap();
+        let _visibility = self.visibility.lock().unwrap();
+        let state = self.state.lock().unwrap();
+        if state.details_generation != details_generation
+            || state.visibility_generation != visibility_generation
+        {
+            return None;
+        }
+        drop(state);
+        Some(hide())
+    }
+
     pub fn is_visibility_current(&self, generation: u64) -> bool {
         self.state.lock().unwrap().visibility_generation == generation
     }
@@ -446,16 +581,83 @@ impl PanelController {
 }
 
 pub fn initialize<R: Runtime>(app: &AppHandle<R>, notification_mode: &str) -> Result<(), String> {
-    reposition_handle(app)?;
     let handle = app
         .get_webview_window("quick-panel-handle")
         .ok_or_else(|| "quick-panel-handle window not found".to_owned())?;
-    if starts_visible(notification_mode) {
-        handle.show()
-    } else {
-        handle.hide()
+    let initialized = (|| {
+        normalize_handle_window_style(&handle)
+            .map_err(|error| format!("failed to normalize popup window style: {error}"))?;
+        configure_transparent_webview(&handle)
+            .map_err(|error| format!("failed to configure transparent WebView: {error}"))?;
+        reposition_handle(app)
+            .map_err(|error| format!("failed to position native Bar surface: {error}"))?;
+        if starts_visible(notification_mode) {
+            handle.show()
+        } else {
+            handle.hide()
+        }
+        .map_err(|error| error.to_string())
+    })();
+    if let Err(error) = initialized {
+        if let Err(hide_error) = handle.hide() {
+            return Err(format!(
+                "{error}; additionally failed to hide quick-panel-handle: {hide_error}"
+            ));
+        }
+        return Err(error);
     }
-    .map_err(|error| error.to_string())
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn transparent_webview_background(
+) -> webview2_com::Microsoft::Web::WebView2::Win32::COREWEBVIEW2_COLOR {
+    webview2_com::Microsoft::Web::WebView2::Win32::COREWEBVIEW2_COLOR {
+        R: 0,
+        G: 0,
+        B: 0,
+        A: 0,
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn configure_transparent_webview<R: Runtime>(
+    handle: &tauri::WebviewWindow<R>,
+) -> Result<(), String> {
+    use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Controller2;
+    use windows::core::Interface;
+
+    let result = std::sync::Arc::new(Mutex::new(Ok(())));
+    let callback_result = result.clone();
+    handle
+        .with_webview(move |webview| unsafe {
+            let controller = webview.controller();
+            let configured = controller
+                .cast::<ICoreWebView2Controller2>()
+                .map_err(|error| {
+                    format!("failed to access the status rail WebView2 controller: {error}")
+                })
+                .and_then(|controller| {
+                    controller
+                        .SetDefaultBackgroundColor(transparent_webview_background())
+                        .map_err(|error| {
+                            format!(
+                                "failed to make the status rail WebView background transparent: {error}"
+                            )
+                        })
+                });
+            *callback_result.lock().unwrap() = configured;
+        })
+        .map_err(|error| error.to_string())?;
+    let configured = result.lock().unwrap().clone();
+    configured
+}
+
+#[cfg(not(target_os = "windows"))]
+fn configure_transparent_webview<R: Runtime>(
+    _handle: &tauri::WebviewWindow<R>,
+) -> Result<(), String> {
+    Ok(())
 }
 
 fn starts_visible(notification_mode: &str) -> bool {
@@ -547,6 +749,159 @@ fn monitor_work_area(monitor: &tauri::Monitor) -> Result<WorkArea, String> {
     })
 }
 
+#[cfg(target_os = "windows")]
+fn handle_position_flags() -> windows::Win32::UI::WindowsAndMessaging::SET_WINDOW_POS_FLAGS {
+    use windows::Win32::UI::WindowsAndMessaging::{SWP_NOACTIVATE, SWP_NOCOPYBITS, SWP_NOZORDER};
+    // Moving the centered host while shrinking 408 -> 288 changes the WebView's
+    // client origin. Preserved client pixels still belong to the old viewport:
+    // Windows can briefly copy that image into the moved, narrower window,
+    // shifting the capsule and clipping the Logo before WebView2 repaints.
+    // Discard those pixels; keep normal repainting and do not hide the host.
+    SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOCOPYBITS
+}
+
+#[cfg(target_os = "windows")]
+fn normalized_handle_style(
+    style: windows::Win32::UI::WindowsAndMessaging::WINDOW_STYLE,
+) -> windows::Win32::UI::WindowsAndMessaging::WINDOW_STYLE {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        WINDOW_STYLE, WS_CAPTION, WS_MAXIMIZEBOX, WS_MINIMIZEBOX, WS_POPUP, WS_SYSMENU,
+        WS_THICKFRAME,
+    };
+    let forbidden = WS_CAPTION | WS_THICKFRAME | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX;
+    WINDOW_STYLE((style | WS_POPUP).0 & !forbidden.0)
+}
+
+#[cfg(target_os = "windows")]
+fn normalize_handle_window_style<R: Runtime>(
+    handle: &tauri::WebviewWindow<R>,
+) -> Result<(), String> {
+    use windows::Win32::Foundation::{GetLastError, SetLastError, WIN32_ERROR};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetWindowLongPtrW, SetWindowLongPtrW, SetWindowPos, GWL_STYLE, SWP_FRAMECHANGED,
+        SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, WINDOW_STYLE,
+    };
+
+    let hwnd = handle.hwnd().map_err(|error| error.to_string())?;
+    unsafe {
+        SetLastError(WIN32_ERROR(0));
+        let current_raw = GetWindowLongPtrW(hwnd, GWL_STYLE);
+        let read_error = GetLastError();
+        if current_raw == 0 && read_error != WIN32_ERROR(0) {
+            return Err(windows::core::Error::from_win32().to_string());
+        }
+        let current = WINDOW_STYLE(current_raw as u32);
+        let normalized = normalized_handle_style(current);
+        if current == normalized {
+            return Ok(());
+        }
+
+        SetLastError(WIN32_ERROR(0));
+        let previous = SetWindowLongPtrW(hwnd, GWL_STYLE, normalized.0 as isize);
+        let write_error = GetLastError();
+        if previous == 0 && write_error != WIN32_ERROR(0) {
+            return Err(windows::core::Error::from_win32().to_string());
+        }
+        SetWindowPos(
+            hwnd,
+            None,
+            0,
+            0,
+            0,
+            0,
+            SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE,
+        )
+        .map_err(|error| error.to_string())
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn normalize_handle_window_style<R: Runtime>(
+    _handle: &tauri::WebviewWindow<R>,
+) -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn set_handle_bounds<R: Runtime>(
+    handle: &tauri::WebviewWindow<R>,
+    position: PhysicalPosition<i32>,
+    size: PhysicalSize<u32>,
+    region: SurfaceRegion,
+) -> Result<(), String> {
+    use windows::Win32::UI::WindowsAndMessaging::SetWindowPos;
+
+    let hwnd = handle.hwnd().map_err(|error| error.to_string())?;
+    unsafe {
+        SetWindowPos(
+            hwnd,
+            None,
+            position.x,
+            position.y,
+            size.width as i32,
+            size.height as i32,
+            handle_position_flags(),
+        )
+        .map_err(|error| error.to_string())?;
+    }
+    set_handle_region(handle, region)
+}
+
+#[cfg(target_os = "windows")]
+fn set_handle_region<R: Runtime>(
+    handle: &tauri::WebviewWindow<R>,
+    region: SurfaceRegion,
+) -> Result<(), String> {
+    use windows::Win32::Graphics::Gdi::{
+        CreateRectRgn, CreateRoundRectRgn, DeleteObject, EqualRgn, GetWindowRgn, SetWindowRgn,
+    };
+    let hwnd = handle.hwnd().map_err(|error| error.to_string())?;
+    unsafe {
+        let region = native_clip_region(region);
+        let diameter = region.radius.saturating_mul(2);
+        let clip = CreateRoundRectRgn(
+            region.left,
+            region.top,
+            region.right,
+            region.bottom,
+            diameter,
+            diameter,
+        );
+        if clip.is_invalid() {
+            return Err("failed to create status rail rounded window region".into());
+        }
+        let current = CreateRectRgn(0, 0, 0, 0);
+        if !current.is_invalid() {
+            let _ = GetWindowRgn(hwnd, current);
+            let same = EqualRgn(clip, current).as_bool();
+            let _ = DeleteObject(current.into());
+            if same {
+                let _ = DeleteObject(clip.into());
+                return Ok(());
+            }
+        }
+        if SetWindowRgn(hwnd, Some(clip), true) == 0 {
+            let _ = DeleteObject(clip.into());
+            return Err("failed to set status rail window region".into());
+        }
+        // Windows owns clip after a successful SetWindowRgn.
+        Ok(())
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn set_handle_bounds<R: Runtime>(
+    handle: &tauri::WebviewWindow<R>,
+    position: PhysicalPosition<i32>,
+    size: PhysicalSize<u32>,
+    _region: SurfaceRegion,
+) -> Result<(), String> {
+    handle.set_size(size).map_err(|error| error.to_string())?;
+    handle
+        .set_position(position)
+        .map_err(|error| error.to_string())
+}
+
 pub fn reposition_handle<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
     if !app.state::<PanelController>().is_enabled() {
         return Ok(());
@@ -554,17 +909,13 @@ pub fn reposition_handle<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
     let handle = app
         .get_webview_window("quick-panel-handle")
         .ok_or_else(|| "quick-panel-handle window not found".to_owned())?;
+    normalize_handle_window_style(&handle)?;
     let monitor = target_monitor(&handle)?;
     let work_area = monitor_work_area(&monitor)?;
     let top = screen_top(monitor.position().y, work_area.y);
-    let expanded = app.state::<PanelController>().are_details_open();
-    let desired_size = top_surface_size(expanded, monitor.scale_factor());
+    let source = app.state::<PanelController>().details_source();
+    let desired_size = top_surface_size(source, monitor.scale_factor());
     let physical_size = PhysicalSize::new(desired_size.0, desired_size.1);
-    if handle.outer_size().map_err(|error| error.to_string())? != physical_size {
-        handle
-            .set_size(physical_size)
-            .map_err(|error| error.to_string())?;
-    }
     let handle_x = surface_x(
         work_area.x,
         work_area.width,
@@ -574,11 +925,19 @@ pub fn reposition_handle<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
     let visible_offset = (TOP_MARGIN * monitor.scale_factor()).round() as i32;
     let positions = handle_positions(top, desired_size.1, visible_offset);
     let handle_position = PhysicalPosition::new(handle_x, positions.visible_y);
+    let current_size = handle.outer_size().map_err(|error| error.to_string())?;
     let current_position = handle.outer_position().map_err(|error| error.to_string())?;
-    if current_position != handle_position {
-        handle
-            .set_position(handle_position)
-            .map_err(|error| error.to_string())?;
+    if current_size != physical_size || current_position != handle_position {
+        set_handle_bounds(
+            &handle,
+            handle_position,
+            physical_size,
+            surface_region(source, monitor.scale_factor()),
+        )?;
+    } else {
+        // Also initialize the region when startup bounds already match.
+        #[cfg(target_os = "windows")]
+        set_handle_region(&handle, surface_region(source, monitor.scale_factor()))?;
     }
     Ok(())
 }
@@ -587,6 +946,19 @@ pub fn reconcile_positions<R: Runtime>(app: &AppHandle<R>) -> Result<(), String>
     let controller = app.state::<PanelController>();
     let _positioning = controller.positioning.lock().unwrap();
     reposition_handle(app)
+}
+
+fn reconcile_positions_if_current<R: Runtime>(
+    app: &AppHandle<R>,
+    generation: u64,
+) -> Result<bool, String> {
+    let controller = app.state::<PanelController>();
+    let _positioning = controller.positioning.lock().unwrap();
+    if !controller.is_details_current(generation) {
+        return Ok(false);
+    }
+    reposition_handle(app)?;
+    Ok(true)
 }
 
 pub fn request_position_reconcile<R: Runtime>(app: AppHandle<R>) {
@@ -685,6 +1057,7 @@ fn show_details<R: Runtime>(
         .emit(
             "status-island-details-open",
             DetailsOpen {
+                generation,
                 source,
                 identity: identity.clone(),
                 hovered: !focus,
@@ -721,6 +1094,7 @@ fn hide_details_with_action<R: Runtime>(
     let _ = handle.emit(
         "status-island-details-close",
         DetailsClose {
+            generation,
             hide_after_collapse: action == OutsideClickAction::CollapseThenHide,
             collapse_to_summary,
         },
@@ -728,20 +1102,24 @@ fn hide_details_with_action<R: Runtime>(
     let app = app.clone();
     std::thread::spawn(move || {
         std::thread::sleep(COLLAPSE_ANIMATION);
-        if !app
-            .state::<PanelController>()
-            .is_details_current(generation)
-        {
-            return;
+        match reconcile_positions_if_current(&app, generation) {
+            Ok(true) => {}
+            Ok(false) => return,
+            Err(error) => {
+                eprintln!("failed to shrink the status island rail: {error}");
+                return;
+            }
         }
-        if let Err(error) = reconcile_positions(&app) {
-            eprintln!("failed to shrink the status island rail: {error}");
+        if let Some(handle) = app.get_webview_window("quick-panel-handle") {
+            let _ = handle.emit("status-island-details-closed", DetailsClosed { generation });
         }
         if action == OutsideClickAction::CollapseThenHide {
             if let Some(handle) = app.get_webview_window("quick-panel-handle") {
-                let hidden = app
-                    .state::<PanelController>()
-                    .hide_if_visibility_current(visibility_generation, || handle.hide());
+                let hidden = app.state::<PanelController>().hide_if_current(
+                    generation,
+                    visibility_generation,
+                    || handle.hide(),
+                );
                 if let Some(Err(error)) = hidden {
                     eprintln!("failed to hide notification-only status island: {error}");
                 }
@@ -862,7 +1240,8 @@ pub fn close_status_island_details(app: AppHandle) -> Result<(), crate::error::C
 #[cfg(target_os = "windows")]
 mod outside_click_watch {
     use super::{
-        close_details_after_outside_click, point_is_inside_surface, PanelController, SurfaceBounds,
+        close_details_after_outside_click, native_clip_region, point_is_inside_rounded_surface,
+        surface_region, PanelController, SurfaceRegion, ASSISTANT_WIDTH,
     };
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::OnceLock;
@@ -906,13 +1285,18 @@ mod outside_click_watch {
                     return;
                 }
                 let data = unsafe { &*(lparam.0 as *const MSLLHOOKSTRUCT) };
-                let bounds = SurfaceBounds {
-                    left: rect.left,
-                    top: rect.top,
-                    right: rect.right,
-                    bottom: rect.bottom,
+                let content = native_clip_region(surface_region(
+                    app.state::<PanelController>().details_source(),
+                    f64::from(rect.right - rect.left) / ASSISTANT_WIDTH,
+                ));
+                let region = SurfaceRegion {
+                    left: rect.left + content.left,
+                    top: rect.top + content.top,
+                    right: rect.left + content.right,
+                    bottom: rect.top + content.bottom,
+                    radius: content.radius,
                 };
-                if point_is_inside_surface(data.pt.x, data.pt.y, bounds)
+                if point_is_inside_rounded_surface(data.pt.x, data.pt.y, region)
                     || HANDLING_OUTSIDE_CLICK.swap(true, Ordering::SeqCst)
                 {
                     return;
@@ -1019,7 +1403,7 @@ fn settle_offset<R: Runtime>(app: &AppHandle<R>) -> Result<f64, String> {
     let work_area = monitor_work_area(&monitor)?;
     let scale = monitor.scale_factor();
     let controller = app.state::<PanelController>();
-    let (width, _) = top_surface_size(controller.are_details_open(), scale);
+    let (width, _) = top_surface_size(controller.details_source(), scale);
     let x = surface_x(
         work_area.x,
         work_area.width,
@@ -1043,7 +1427,7 @@ fn drag_anchor<R: Runtime>(app: &AppHandle<R>) -> Result<DragAnchor, String> {
     let monitor = target_monitor(&handle)?;
     let work_area = monitor_work_area(&monitor)?;
     let scale = monitor.scale_factor();
-    let (width, _) = top_surface_size(false, scale);
+    let (width, _) = top_surface_size(None, scale);
     let top = screen_top(monitor.position().y, work_area.y);
     Ok(DragAnchor {
         work_area,
@@ -1099,6 +1483,60 @@ pub fn end_status_island_drag(app: AppHandle) -> Result<(), crate::error::Comman
 
 #[cfg(test)]
 mod tests {
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn native_resize_discards_old_pixels_without_hiding_or_suppressing_redraw() {
+        use windows::Win32::UI::WindowsAndMessaging::{
+            SWP_HIDEWINDOW, SWP_NOACTIVATE, SWP_NOCOPYBITS, SWP_NOREDRAW, SWP_NOZORDER,
+        };
+        let flags = super::handle_position_flags();
+        assert!(
+            flags.contains(SWP_NOCOPYBITS),
+            "resized WebView must not inherit old client pixels"
+        );
+        assert!(flags.contains(SWP_NOACTIVATE | SWP_NOZORDER));
+        assert_eq!((flags & (SWP_HIDEWINDOW | SWP_NOREDRAW)).0, 0);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn webview_clear_color_is_fully_transparent() {
+        let color = super::transparent_webview_background();
+        assert_eq!((color.R, color.G, color.B, color.A), (0, 0, 0, 0));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn handle_style_is_a_popup_without_native_window_controls() {
+        use windows::Win32::UI::WindowsAndMessaging::{
+            WINDOW_STYLE, WS_CAPTION, WS_CLIPSIBLINGS, WS_MAXIMIZEBOX, WS_MINIMIZEBOX, WS_POPUP,
+            WS_SYSMENU, WS_THICKFRAME, WS_VISIBLE,
+        };
+
+        let original = WINDOW_STYLE(
+            WS_CAPTION.0
+                | WS_THICKFRAME.0
+                | WS_SYSMENU.0
+                | WS_MINIMIZEBOX.0
+                | WS_MAXIMIZEBOX.0
+                | WS_VISIBLE.0
+                | WS_CLIPSIBLINGS.0,
+        );
+        let normalized = super::normalized_handle_style(original);
+        let forbidden = WS_CAPTION | WS_THICKFRAME | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX;
+
+        assert!(normalized.contains(WS_POPUP));
+        assert_eq!((normalized & forbidden).0, 0);
+        assert!(normalized.contains(WS_VISIBLE | WS_CLIPSIBLINGS));
+        assert_eq!(super::normalized_handle_style(normalized), normalized);
+    }
+
+    #[test]
+    fn both_morphs_finish_before_native_collapse() {
+        // Geometry-independent: status and AI share 220ms + a 40ms frame margin.
+        assert_eq!(super::COLLAPSE_ANIMATION.as_millis(), 260);
+    }
+
     use super::{
         acknowledgement_identity, centered_x, collapse_to_summary_after_view, handle_positions,
         load_offset_x, outside_click_action, outside_click_closes_source, point_is_inside_surface,
@@ -1135,6 +1573,9 @@ mod tests {
         assert_eq!(handle["shadow"], false);
         assert_eq!(handle["transparent"], true);
         assert_eq!(handle["backgroundColor"], "#00000000");
+        assert_eq!(handle["resizable"], false);
+        assert_eq!(handle["minimizable"], false);
+        assert_eq!(handle["maximizable"], false);
     }
 
     #[test]
@@ -1184,7 +1625,7 @@ mod tests {
             .find(|window| window["label"] == "quick-panel-handle")
             .unwrap();
 
-        assert_eq!(handle["width"], 288);
+        assert_eq!(handle["width"], 408);
         assert_eq!(handle["height"], 40);
     }
 
@@ -1263,6 +1704,19 @@ mod tests {
     }
 
     #[test]
+    fn a_stale_details_generation_cannot_hide_a_reopened_surface() {
+        let controller = PanelController::default();
+        let closed = controller.close_details();
+        let visibility_generation = controller.visibility_generation();
+        controller.toggle_details(PanelSource::Nowly);
+
+        let hidden = controller.hide_if_current(closed.generation, visibility_generation, || ());
+
+        assert!(hidden.is_none());
+        assert!(controller.are_details_open());
+    }
+
+    #[test]
     fn clicks_on_the_status_bar_or_expanded_panel_are_not_outside_clicks() {
         let bounds = SurfaceBounds {
             left: 816,
@@ -1278,24 +1732,120 @@ mod tests {
     }
 
     #[test]
+    fn rounded_surface_hit_testing_excludes_transparent_corner_pixels() {
+        let region = super::surface_region(None, 1.0);
+
+        assert!(!super::point_is_inside_rounded_surface(60, 0, region));
+        assert!(!super::point_is_inside_rounded_surface(347, 0, region));
+        assert!(super::point_is_inside_rounded_surface(204, 0, region));
+        assert!(super::point_is_inside_rounded_surface(60, 20, region));
+        assert!(super::point_is_inside_rounded_surface(204, 20, region));
+    }
+
+    #[test]
     fn top_surfaces_ignore_a_top_taskbar_work_area_inset() {
         assert_eq!(screen_top(0, 48), 0);
         assert_eq!(screen_top(-900, -852), -900);
     }
 
     #[test]
-    fn the_rail_only_changes_height_and_scales_with_dpi() {
-        // Collapsed: the 240 capsule, an 8px gap and the 40px Nowly dot.
-        assert_eq!(top_surface_size(false, 1.0), (288, 40));
-        // Expanded: the same width, because the sheet *is* the capsule grown and
-        // the saved horizontal offset has to keep meaning the same place.
-        assert_eq!(top_surface_size(true, 1.0), (288, 288));
+    fn top_surface_sizes_are_source_specific_and_scale_with_dpi() {
+        assert_eq!(top_surface_size(None, 1.0), (408, 40));
+        assert_eq!(top_surface_size(Some(PanelSource::Island), 1.0), (408, 288));
+        assert_eq!(top_surface_size(Some(PanelSource::Nowly), 1.0), (408, 440));
         // Every edge lands on a whole device pixel at the scales Windows uses.
-        assert_eq!(top_surface_size(false, 1.5), (432, 60));
-        assert_eq!(top_surface_size(true, 1.5), (432, 432));
-        assert_eq!(top_surface_size(false, 2.0), (576, 80));
-        assert_eq!(top_surface_size(true, 2.0), (576, 576));
+        assert_eq!(top_surface_size(None, 1.5), (612, 60));
+        assert_eq!(top_surface_size(Some(PanelSource::Island), 1.5), (612, 432));
+        assert_eq!(top_surface_size(Some(PanelSource::Nowly), 1.5), (612, 660));
+        assert_eq!(top_surface_size(None, 2.0), (816, 80));
+        assert_eq!(top_surface_size(Some(PanelSource::Island), 2.0), (816, 576));
+        assert_eq!(top_surface_size(Some(PanelSource::Nowly), 2.0), (816, 880));
         assert_eq!(handle_positions(-900, 60, 12).visible_y, -888);
+    }
+
+    #[test]
+    fn both_panels_keep_the_same_native_x_even_at_screen_edges() {
+        for scale in [1.0, 1.25, 1.5, 1.75, 2.0] {
+            for offset in [-5000.0, 0.0, 5000.0] {
+                let collapsed = top_surface_size(None, scale);
+                for source in [PanelSource::Island, PanelSource::Nowly] {
+                    let expanded = top_surface_size(Some(source), scale);
+                    assert_eq!(expanded.0, collapsed.0);
+                    assert_eq!(
+                        surface_x(-1920, 1920, expanded.0, offset),
+                        surface_x(-1920, 1920, collapsed.0, offset)
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn transparent_host_gutters_are_outside_the_status_hit_region_at_each_dpi() {
+        for scale in [1.0, 1.25, 1.5, 1.75, 2.0] {
+            for source in [None, Some(PanelSource::Island)] {
+                let bounds = super::surface_client_bounds(source, scale);
+                let host = top_surface_size(source, scale);
+                assert_eq!(bounds.left, (60.0 * scale) as i32);
+                assert_eq!(bounds.right, (348.0 * scale) as i32);
+                assert!(!point_is_inside_surface(bounds.left - 1, 1, bounds));
+                assert!(point_is_inside_surface(bounds.left, 1, bounds));
+                assert!(point_is_inside_surface(bounds.right - 1, 1, bounds));
+                assert!(!point_is_inside_surface(bounds.right, 1, bounds));
+                assert_eq!(bounds.bottom, host.1 as i32);
+            }
+            let ai = super::surface_client_bounds(Some(PanelSource::Nowly), scale);
+            assert_eq!(ai.left, 0);
+            assert_eq!(ai.right, top_surface_size(None, scale).0 as i32);
+        }
+    }
+
+    #[test]
+    fn native_regions_match_each_visible_rounded_surface_at_every_supported_dpi() {
+        for scale in [1.0, 1.25, 1.5, 1.75, 2.0] {
+            let collapsed = super::surface_region(None, scale);
+            assert_eq!(collapsed.left, (60.0_f64 * scale).round() as i32);
+            assert_eq!(collapsed.top, 0);
+            assert_eq!(collapsed.right, (348.0_f64 * scale).round() as i32);
+            assert_eq!(collapsed.bottom, (40.0_f64 * scale).round() as i32);
+            assert_eq!(collapsed.radius, (20.0_f64 * scale).round() as i32);
+
+            let status = super::surface_region(Some(PanelSource::Island), scale);
+            assert_eq!(status.left, (60.0_f64 * scale).round() as i32);
+            assert_eq!(status.top, 0);
+            assert_eq!(status.right, (348.0_f64 * scale).round() as i32);
+            assert_eq!(status.bottom, (288.0_f64 * scale).round() as i32);
+            assert_eq!(status.radius, (15.2_f64 * scale).round() as i32);
+
+            let assistant = super::surface_region(Some(PanelSource::Nowly), scale);
+            assert_eq!(assistant.left, 0);
+            assert_eq!(assistant.top, 0);
+            assert_eq!(assistant.right, (408.0_f64 * scale).round() as i32);
+            assert_eq!(assistant.bottom, (440.0_f64 * scale).round() as i32);
+            assert_eq!(assistant.radius, (15.2_f64 * scale).round() as i32);
+        }
+    }
+
+    #[test]
+    fn native_clip_leaves_one_physical_pixel_for_css_corner_antialiasing() {
+        for scale in [1.0, 1.25, 1.5, 1.75, 2.0] {
+            for source in [None, Some(PanelSource::Island), Some(PanelSource::Nowly)] {
+                let visual = super::surface_region(source, scale);
+                let clip = super::native_clip_region(visual);
+
+                assert_eq!(clip.bounds(), visual.bounds());
+                assert_eq!(clip.radius, visual.radius.saturating_sub(1));
+            }
+        }
+    }
+
+    #[test]
+    fn native_clip_hit_testing_includes_the_css_antialiasing_margin() {
+        let visual = super::surface_region(None, 1.0);
+        let clip = super::native_clip_region(visual);
+
+        assert!(!super::point_is_inside_rounded_surface(75, 0, visual));
+        assert!(super::point_is_inside_rounded_surface(75, 0, clip));
     }
 
     #[test]

@@ -2315,7 +2315,10 @@ mod tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert!(has_index, "idx_task_view_memberships must survive the rebuild");
+        assert!(
+            has_index,
+            "idx_task_view_memberships must survive the rebuild"
+        );
 
         // ...nor the assistant revision triggers attached to it. Change
         // tracking for this table would break silently otherwise.
@@ -2341,13 +2344,24 @@ mod tests {
         // A real write still bumps the assistant revision clock through the
         // reinstalled triggers.
         let before: i64 = connection
-            .query_row("SELECT revision FROM assistant_clock WHERE id=1", [], |row| row.get(0))
+            .query_row(
+                "SELECT revision FROM assistant_clock WHERE id=1",
+                [],
+                |row| row.get(0),
+            )
             .unwrap();
         connection
-            .execute("DELETE FROM task_view_memberships WHERE task_id='t1' AND view='matrix'", [])
+            .execute(
+                "DELETE FROM task_view_memberships WHERE task_id='t1' AND view='matrix'",
+                [],
+            )
             .unwrap();
         let after: i64 = connection
-            .query_row("SELECT revision FROM assistant_clock WHERE id=1", [], |row| row.get(0))
+            .query_row(
+                "SELECT revision FROM assistant_clock WHERE id=1",
+                [],
+                |row| row.get(0),
+            )
             .unwrap();
         assert!(after > before, "trigger must bump the revision clock");
     }

@@ -524,20 +524,15 @@ describe('AssistantDock execution boundary', () => {
     expect(screen.getByRole('button', { name: '确认执行 1 项' })).toBeDisabled();
     expect(client.execute).not.toHaveBeenCalled();
   });
-  it('keeps the embedded composer compact on focus and expands only after submit', async () => {
+  it('opens the embedded chat immediately and keeps it open while submitting', async () => {
     const client = clientFixture();
     let resolve!: (reply: Reply) => void;
     client.interpret.mockImplementationOnce(() => new Promise(reply => { resolve = reply; }));
-    const onSubmit = vi.fn();
-    const onExpandedChange = vi.fn();
     render(
       <AssistantDock
         client={client}
         presentation="embedded"
         autoFocus
-        expandOnFocus={false}
-        onSubmit={onSubmit}
-        onExpandedChange={onExpandedChange}
         onRefresh={() => {}}
       />
     );
@@ -545,15 +540,11 @@ describe('AssistantDock execution boundary', () => {
     await connected();
     await waitFor(() => expect(input).toHaveFocus());
 
-    fireEvent.focus(input);
-    expect(document.querySelector('.assistant-panel')).toHaveAttribute('data-open', 'false');
-    expect(onExpandedChange).not.toHaveBeenCalledWith(true);
+    expect(document.querySelector('.assistant-panel')).toHaveAttribute('data-open', 'true');
 
     fireEvent.change(input, { target: { value: '明天下午三点创建产品评审' } });
     fireEvent.keyDown(input, { key: 'Enter' });
 
-    expect(onSubmit).toHaveBeenCalledWith('明天下午三点创建产品评审');
-    expect(onExpandedChange).toHaveBeenCalledWith(true);
     expect(document.querySelector('.assistant-panel')).toHaveAttribute('data-open', 'true');
     expect(within(screen.getByRole('list', { name: '当前聊天消息' }))
       .getByText('明天下午三点创建产品评审')).toBeInTheDocument();
@@ -623,7 +614,6 @@ describe('AssistantDock execution boundary', () => {
   });
   it('keeps a revised embedded preview when the Nowly Bar conversation is hidden', async () => {
     const client = clientFixture();
-    const onExpandedChange = vi.fn();
     let resolve!: (next: Plan) => void;
     client.revise.mockImplementationOnce(() => new Promise(next => { resolve = next; }));
     const view = render(
@@ -632,7 +622,6 @@ describe('AssistantDock execution boundary', () => {
         presentation="embedded"
         active
         expandOnFocus={false}
-        onExpandedChange={onExpandedChange}
         onRefresh={() => {}}
       />
     );
@@ -646,7 +635,6 @@ describe('AssistantDock execution boundary', () => {
         presentation="embedded"
         active={false}
         expandOnFocus={false}
-        onExpandedChange={onExpandedChange}
         onRefresh={() => {}}
       />
     );
@@ -657,13 +645,12 @@ describe('AssistantDock execution boundary', () => {
         presentation="embedded"
         active
         expandOnFocus={false}
-        onExpandedChange={onExpandedChange}
         onRefresh={() => {}}
       />
     );
 
     expect(client.cancelPlan).not.toHaveBeenCalledWith('plan-2');
-    expect(onExpandedChange).toHaveBeenLastCalledWith(true);
+    expect(document.querySelector('.assistant-panel')).toHaveAttribute('data-open', 'true');
     await click(screen.getByRole('button', { name: '确认执行 1 项' }));
     expect(client.execute).toHaveBeenCalledWith('plan-2');
   });
@@ -684,7 +671,6 @@ describe('AssistantDock execution boundary', () => {
     expect(document.querySelector('.assistant-panel')).toHaveAttribute('data-open', 'true');
   });
   it('hides an embedded conversation with Escape without collapsing its previous answer state', async () => {
-    const onExpandedChange = vi.fn();
     const onRequestClose = vi.fn();
     const view = render(
       <AssistantDock
@@ -692,7 +678,6 @@ describe('AssistantDock execution boundary', () => {
         presentation="embedded"
         active
         expandOnFocus={false}
-        onExpandedChange={onExpandedChange}
         onRequestClose={onRequestClose}
         onRefresh={() => {}}
       />
@@ -711,7 +696,6 @@ describe('AssistantDock execution boundary', () => {
         presentation="embedded"
         active={false}
         expandOnFocus={false}
-        onExpandedChange={onExpandedChange}
         onRequestClose={onRequestClose}
         onRefresh={() => {}}
       />
@@ -722,16 +706,15 @@ describe('AssistantDock execution boundary', () => {
         presentation="embedded"
         active
         expandOnFocus={false}
-        onExpandedChange={onExpandedChange}
         onRequestClose={onRequestClose}
         onRefresh={() => {}}
       />
     );
 
-    expect(onExpandedChange).toHaveBeenLastCalledWith(true);
+    expect(document.querySelector('.assistant-panel')).toHaveAttribute('data-open', 'true');
     expect(screen.getByText('检查预览')).toBeInTheDocument();
   });
-  it('uses Escape as the only embedded exit and handles it from the action button', async () => {
+  it('leaves embedded closing to the rail header and keeps voice as the default empty-input action', async () => {
     const onRequestClose = vi.fn();
     render(
       <AssistantDock
@@ -745,7 +728,10 @@ describe('AssistantDock execution boundary', () => {
     await send();
 
     expect(screen.queryByRole('button', { name: '收起助手' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '折叠助手' })).not.toBeInTheDocument();
     const voice = screen.getByRole('button', { name: '语音输入' });
+    expect(screen.queryByRole('button', { name: '发送请求' })).not.toBeInTheDocument();
+
     voice.focus();
     fireEvent.keyDown(voice, { key: 'Escape' });
 
@@ -781,13 +767,12 @@ describe('AssistantDock execution boundary', () => {
 
     expect(document.querySelector('.assistant-panel')).toHaveAttribute('data-open', 'true');
   });
-  it('asks the host to close when Escape is pressed in a compact embedded composer', async () => {
+  it('asks the host to close when Escape is pressed in the embedded assistant', async () => {
     const onRequestClose = vi.fn();
     render(
       <AssistantDock
         client={clientFixture()}
         presentation="embedded"
-        expandOnFocus={false}
         onRequestClose={onRequestClose}
         onRefresh={() => {}}
       />
@@ -798,6 +783,6 @@ describe('AssistantDock execution boundary', () => {
     fireEvent.keyDown(input, { key: 'Escape' });
 
     expect(onRequestClose).toHaveBeenCalledTimes(1);
-    expect(document.querySelector('.assistant-panel')).toHaveAttribute('data-open', 'false');
+    expect(document.querySelector('.assistant-panel')).toHaveAttribute('data-open', 'true');
   });
 });

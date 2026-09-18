@@ -69,6 +69,10 @@ fn should_activate_tray(kind: TrayClickKind, button: MouseButton) -> bool {
         )
 }
 
+fn should_prevent_close(window_label: &str) -> bool {
+    window_label == "quick-panel-handle"
+}
+
 fn sync_window_visibility<F>(show: F) -> tauri::Result<()>
 where
     F: FnOnce() -> tauri::Result<()>,
@@ -523,7 +527,11 @@ fn main() {
         })
         .on_window_event(|window, event| {
             if window.label() == "quick-panel-handle" {
-                if matches!(
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    if should_prevent_close(window.label()) {
+                        api.prevent_close();
+                    }
+                } else if matches!(
                     event,
                     tauri::WindowEvent::ScaleFactorChanged { .. }
                         | tauri::WindowEvent::Resized(_)
@@ -723,8 +731,16 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{should_activate_tray, sync_window_visibility, TrayClickKind};
+    use super::{
+        should_activate_tray, should_prevent_close, sync_window_visibility, TrayClickKind,
+    };
     use tauri::tray::{MouseButton, MouseButtonState};
+
+    #[test]
+    fn nowly_bar_close_requests_are_prevented() {
+        assert!(should_prevent_close("quick-panel-handle"));
+        assert!(!should_prevent_close("main"));
+    }
 
     #[test]
     fn foreground_restore_resynchronizes_tauri_visibility() {

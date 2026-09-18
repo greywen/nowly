@@ -70,6 +70,13 @@ function invocations(command: string) {
   return invokeMock.mock.calls.filter(call => call[0] === command);
 }
 
+async function emitPanelEvent(name: string, payload: unknown) {
+  await act(async () => { await Promise.resolve(); });
+  const listener = listenMock.mock.calls.find(call => call[0] === name)?.[1];
+  expect(listener).toBeTypeOf('function');
+  await act(async () => listener({ payload }));
+}
+
 // `findBy*` polls on real timers, so tests that need one cannot freeze the clock.
 // Those build their event relative to now instead of pinning a fixed time.
 function localMinute(date: Date): string {
@@ -346,6 +353,8 @@ describe('screen status island windows', () => {
     expect(invokeMock).not.toHaveBeenCalledWith('set_status_island_visibility', { visible: false });
 
     await act(async () => { vi.advanceTimersByTime(220); });
+    expect(invokeMock).not.toHaveBeenCalledWith('set_status_island_visibility', { visible: false });
+    await act(async () => { vi.advanceTimersByTime(80); });
     expect(invokeMock).toHaveBeenCalledWith('set_status_island_visibility', { visible: false });
   });
 
@@ -1018,14 +1027,14 @@ describe('sheet pinning', () => {
     expect(screen.getByRole('button', { name: '打开任务：完善 Nowly' })).toBeInTheDocument();
   });
 
-  it('unpins when the sheet closes', async () => {
+  it('retains outgoing detail during collapse, then releases it after native close', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-12T14:18:00'));
     let open: (event: { payload: OpenPayload }) => void = () => undefined;
-    let close: () => void = () => undefined;
+    let close: (event: { payload: { generation: number } }) => void = () => undefined;
     listenMock.mockImplementation((name: string, callback: (event: { payload: OpenPayload }) => void) => {
       if (name === 'status-island-details-open') open = callback;
-      if (name === 'status-island-details-close') close = callback as unknown as () => void;
+      if (name === 'status-island-details-close') close = callback as unknown as typeof close;
       return Promise.resolve(() => undefined);
     });
     respondWith(snapshotWith({ tasks: [undatedTask, overdueTask] }));
@@ -1035,22 +1044,69 @@ describe('sheet pinning', () => {
     await act(async () => open({ payload: { source: 'island', identity: undatedIdentity } }));
     expect(screen.getByRole('button', { name: '打开任务：文件测试' })).toBeInTheDocument();
 
-    await act(async () => close());
+    await act(async () => close({ payload: { generation: 2 } }));
 
     // Shrinking, not unmounting: the sheet is the capsule, so closing it changes
     // the rail's size rather than taking the surface away.
     expect(document.querySelector('.status-rail')).toHaveAttribute('data-open', 'false');
-    expect(document.querySelector('.status-rail')).toHaveAttribute('data-anim', 'shrink');
-    expect(screen.getByRole('button', { name: '打开任务：完善 Nowly' })).toBeInTheDocument();
+    expect(document.querySelector('.status-rail__status-presence')).toHaveAttribute('data-anim', 'shrink');
+    expect(screen.getByRole('button', { name: '打开任务：文件测试', hidden: true })).toBeInTheDocument();
+    expect(document.querySelector('.status-rail__panel')).toHaveAttribute('inert');
+    await emitPanelEvent('status-island-details-closed', { generation: 2 });
+    expect(screen.getByRole('button', { name: '打开任务：完善 Nowly', hidden: true })).toBeInTheDocument();
   });
 });
 
 describe('the sheet inside the rail', () => {
+  afterEach(() => vi.useRealTimers());
   beforeEach(() => {
     invokeMock.mockReset();
     listenMock.mockReset();
     listenMock.mockResolvedValue(() => undefined);
     respondWith(snapshot);
+  });
+
+  it('does not downgrade status reminders or start a status animation when AI closes', async () => {
+    respondWith(snapshotWith({ tasks: [urgentTask] }));
+    render(<StatusIslandApp />);
+    await act(async () => { await Promise.resolve(); });
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-mode', 'detail');
+    await emitPanelEvent('status-island-details-open', { generation: 1, source: 'nowly', identity: null });
+    expect(document.querySelector('.status-rail__sheet')).toHaveAttribute('inert');
+    expect(document.querySelector('.status-rail__status-presence')).not.toHaveAttribute('data-anim');
+    expect(document.querySelector('.status-rail__assistant')).toHaveAttribute('data-anim', 'grow');
+
+    await emitPanelEvent('status-island-details-close', { generation: 2, collapseToSummary: true });
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-mode', 'detail');
+    expect(document.querySelector('.status-rail__status-presence')).not.toHaveAttribute('data-anim');
+    expect(document.querySelector('.status-rail__assistant')).toHaveAttribute('data-anim', 'shrink');
+    expect(document.querySelector('.status-rail__panel')).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.queryByRole('button', { name: '完成任务' })).not.toBeInTheDocument();
+
+    await emitPanelEvent('status-island-details-closed', { generation: 2 });
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-mode', 'detail');
+    expect(document.querySelector('.status-rail__assistant')).not.toHaveAttribute('data-anim');
+  });
+
+  it('switches native panel ownership without carrying the other panel animation or controls', async () => {
+    render(<StatusIslandApp />);
+    await emitPanelEvent('status-island-details-open', { generation: 1, source: 'nowly', identity: null });
+    await emitPanelEvent('status-island-details-open', { generation: 2, source: 'island', identity: null });
+    expect(document.querySelector('.status-rail__status-presence')).toHaveAttribute('data-anim', 'grow');
+    expect(document.querySelector('.status-rail__assistant')).not.toHaveAttribute('data-anim');
+    expect(document.querySelector('.status-rail__assistant')).toHaveAttribute('inert');
+    expect(screen.queryByRole('textbox', { name: '告诉 Nowly 你想做什么' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '收起' })).toHaveAttribute('data-owner', 'status');
+    await emitPanelEvent('status-island-details-close', { generation: 1 });
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-status-open', 'true');
+  });
+
+  it('ignores status hover while the AI panel is opening', async () => {
+    render(<StatusIslandApp />);
+    await act(async () => { await Promise.resolve(); });
+    fireEvent.click(screen.getByRole('button', { name: 'Nowly' }));
+    fireEvent.mouseEnter(document.querySelector('.status-island__trigger')!);
+    expect(invocations('hover_status_island_details')).toHaveLength(0);
   });
 
   it('stays collapsed until native reports it open, and grows rather than appearing', async () => {
@@ -1069,7 +1125,7 @@ describe('the sheet inside the rail', () => {
     await act(async () => open({ payload: { source: 'island', identity: null } }));
 
     expect(rail).toHaveAttribute('data-open', 'true');
-    expect(rail).toHaveAttribute('data-anim', 'grow');
+    expect(document.querySelector('.status-rail__status-presence')).toHaveAttribute('data-anim', 'grow');
     expect(rail).toHaveAttribute('data-source', 'island');
   });
 
@@ -1106,6 +1162,7 @@ describe('the sheet inside the rail', () => {
   it('holds the surface open for the duration of an action', async () => {
     respondWith(snapshotWith({ tasks: [urgentTask] }));
     render(<StatusIslandApp />);
+    await emitPanelEvent('status-island-details-open', { source: 'island', identity: null });
 
     fireEvent.click(await screen.findByRole('button', { name: '完成任务' }));
 
@@ -1116,6 +1173,7 @@ describe('the sheet inside the rail', () => {
 
   it('routes focus actions through native commands', async () => {
     render(<StatusIslandApp />);
+    await emitPanelEvent('status-island-details-open', { source: 'island', identity: null });
 
     fireEvent.click(await screen.findByRole('button', { name: '开始专注' }));
 
@@ -1131,6 +1189,7 @@ describe('the sheet inside the rail', () => {
     render(<StatusIslandApp />);
     await act(async () => { await Promise.resolve(); });
 
+    await emitPanelEvent('status-island-details-open', { source: 'island', identity: null });
     fireEvent.click(screen.getByRole('button', { name: '打开日程：产品评审' }));
 
     await act(async () => { await Promise.resolve(); });
@@ -1158,42 +1217,53 @@ describe('the sheet inside the rail', () => {
     expect(document.querySelector('.status-island__retry')).not.toBeInTheDocument();
   });
 
-  it('turns the logo into a full-rail composer without opening the sheet', async () => {
+  it('opens the full assistant panel directly from the logo without a compact composer state', async () => {
+    let openPanel: ((event: { payload: { generation: number; source: 'nowly'; identity: null; hovered: false } }) => void) | null = null;
+    listenMock.mockImplementation((name: string, callback: typeof openPanel) => {
+      if (name === 'status-island-details-open') openPanel = callback;
+      return Promise.resolve(() => undefined);
+    });
+    invokeMock.mockImplementation((command: string) => {
+      if (command === 'get_status_island_snapshot') return Promise.resolve(snapshot);
+      if (command === 'assistant_get_config') return Promise.resolve({
+        endpoint: 'https://example.com/v1',
+        model: 'fixture-model',
+        hasKey: true,
+        permissions: { calendar: true, tasks: true, external: false }
+      });
+      return Promise.resolve(null);
+    });
     render(<StatusIslandApp />);
     await act(async () => { await Promise.resolve(); });
 
     const nowly = screen.getByRole('button', { name: 'Nowly' });
     fireEvent.click(nowly);
 
-    const input = await screen.findByRole('textbox', { name: '告诉 Nowly 你想做什么' });
-    expect(input).toHaveFocus();
-    expect(nowly).toHaveAttribute('aria-expanded', 'true');
-    expect(nowly).toHaveAttribute('aria-hidden', 'true');
-    expect(document.querySelector('.status-rail')).toHaveAttribute('data-surface', 'composer');
-    expect(document.querySelector('.status-rail')).toHaveAttribute('data-anim', 'grow');
-    expect(document.querySelector('.status-rail')).toHaveAttribute('data-open', 'false');
-    expect(document.querySelector('.status-rail__sheet'))
-      .toContainElement(document.querySelector('.status-rail__assistant'));
-    expect(invocations('toggle_nowly_panel')).toHaveLength(0);
-
-    fireEvent.change(input, { target: { value: '保留这段未发送的内容' } });
-    fireEvent.keyDown(input, { key: 'Escape' });
-
+    expect(invocations('toggle_nowly_panel')).toHaveLength(1);
     expect(document.querySelector('.status-rail')).toHaveAttribute('data-surface', 'status');
-    expect(document.querySelector('.status-rail')).toHaveAttribute('data-anim', 'shrink');
-    expect(nowly).not.toHaveAttribute('aria-hidden');
     expect(screen.queryByRole('textbox', { name: '告诉 Nowly 你想做什么' })).not.toBeInTheDocument();
 
-    fireEvent.click(nowly);
+    await act(async () => openPanel?.({ payload: { generation: 7, source: 'nowly', identity: null, hovered: false } }));
 
-    expect(await screen.findByRole('textbox', { name: '告诉 Nowly 你想做什么' }))
-      .toHaveValue('保留这段未发送的内容');
+    const input = await screen.findByRole('textbox', { name: '告诉 Nowly 你想做什么' });
+    await waitFor(() => expect(input).toHaveFocus());
+    expect(nowly).toHaveAttribute('aria-expanded', 'true');
+    expect(nowly).toHaveAttribute('aria-hidden', 'true');
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-surface', 'assistant');
+    expect(document.querySelector('.status-rail__assistant')).toHaveAttribute('data-anim', 'grow');
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-open', 'true');
+    expect(document.querySelector('.assistant-panel')).toHaveAttribute('data-open', 'true');
+    expect(document.querySelector('.status-rail')).not.toHaveAttribute('data-surface', 'composer');
   });
 
-  it('grows the Nowly sheet only after submit and shows the user message while waiting', async () => {
-    let openPanel: ((event: { payload: { source: 'nowly'; identity: null; hovered: false } }) => void) | null = null;
-    listenMock.mockImplementation((name: string, callback: typeof openPanel) => {
-      if (name === 'status-island-details-open') openPanel = callback;
+  it('submits from the already-open Nowly sheet and shows the user message while waiting', async () => {
+    let openPanel: ((event: { payload: { generation: number; source: 'nowly'; identity: null; hovered: false } }) => void) | null = null;
+    let closePanel: ((event: { payload: { generation: number; hideAfterCollapse: false; collapseToSummary: false } }) => void) | null = null;
+    let finishClose: ((event: { payload: { generation: number } }) => void) | null = null;
+    listenMock.mockImplementation((name: string, callback: typeof openPanel | typeof closePanel | typeof finishClose) => {
+      if (name === 'status-island-details-open') openPanel = callback as typeof openPanel;
+      if (name === 'status-island-details-close') closePanel = callback as typeof closePanel;
+      if (name === 'status-island-details-closed') finishClose = callback as typeof finishClose;
       return Promise.resolve(() => undefined);
     });
     let resolveInterpret!: (value: unknown) => void;
@@ -1211,21 +1281,34 @@ describe('the sheet inside the rail', () => {
     render(<StatusIslandApp />);
     await act(async () => { await Promise.resolve(); });
     fireEvent.click(screen.getByRole('button', { name: 'Nowly' }));
+    expect(invokeMock).toHaveBeenCalledWith('toggle_nowly_panel');
+    await act(async () => openPanel?.({ payload: { generation: 7, source: 'nowly', identity: null, hovered: false } }));
     const input = await screen.findByRole('textbox', { name: '告诉 Nowly 你想做什么' });
     await waitFor(() => expect(input).toHaveFocus());
 
     fireEvent.change(input, { target: { value: '明天下午三点创建产品评审' } });
     fireEvent.keyDown(input, { key: 'Enter' });
 
-    expect(invokeMock).toHaveBeenCalledWith('toggle_nowly_panel');
-    await act(async () => openPanel?.({ payload: { source: 'nowly', identity: null, hovered: false } }));
     expect(document.querySelector('.status-rail')).toHaveAttribute('data-surface', 'assistant');
     expect(document.querySelector('.status-rail')).toHaveAttribute('data-open', 'true');
     expect(screen.getByText('明天下午三点创建产品评审', { selector: '.assistant-chat-message p' })).toBeInTheDocument();
     expect(screen.getByText('正在理解与查询…尚未执行任何变更。')).toBeInTheDocument();
 
+    await act(async () => closePanel?.({ payload: { generation: 6, hideAfterCollapse: false, collapseToSummary: false } }));
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-surface', 'assistant');
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-open', 'true');
+
     fireEvent.keyDown(input, { key: 'Escape' });
     expect(invocations('close_status_island_details')).toHaveLength(1);
+    await act(async () => closePanel?.({ payload: { generation: 8, hideAfterCollapse: false, collapseToSummary: false } }));
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-assistant-closing', 'true');
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-surface', 'status');
+    fireEvent(window, new Event('resize'));
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-assistant-closing', 'true');
+    await act(async () => finishClose?.({ payload: { generation: 7 } }));
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-assistant-closing', 'true');
+    await act(async () => finishClose?.({ payload: { generation: 8 } }));
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-assistant-closing', 'false');
 
     await act(async () => resolveInterpret({ kind: 'clarify', message: '需要提醒吗？', records: [], plan: null }));
   });

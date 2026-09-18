@@ -2,70 +2,57 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Restore the existing AI calendar/task assistant as a morphing composer and sheet inside Nowly Bar.
+**Goal:** Open the complete Nowly Bar AI conversation directly from the Logo and unify the status/AI close-button styling.
 
-**Architecture:** `StatusIslandApp` coordinates status, compact composer, and assistant-sheet states in the existing `quick-panel-handle` window. `AssistantDock` gains an embedded-bar presentation and host callbacks while retaining all conversation and execution logic. Rust restores the Nowly panel source so the same native window grows only after submission.
+**Architecture:** `StatusIslandApp` coordinates only `status` and `assistant` surfaces. Logo activation immediately requests the native `408×440px` Nowly panel; `AssistantDock` becomes active and expanded only after the native open event. `TopRail` gives both panels one shared close-button variant.
 
-**Tech Stack:** React, TypeScript, Vitest, Tauri 2, Rust, CSS.
+**Tech Stack:** React, TypeScript, Vitest, Playwright, Tauri 2, Rust, CSS.
 
 ---
 
-### Task 1: Restore the interactive Nowly source
+### Task 1: Replace the compact intermediate state with direct native opening
 
 **Files:**
-- Modify: `src-tauri/src/quick_panel.rs`
-- Modify: `src-tauri/src/main.rs`
-- Test: `src-tauri/src/quick_panel.rs`
+- Modify: `src/quick-panel/StatusIslandApp.tsx`
+- Test: `src/quick-panel/StatusIslandApp.test.tsx`
 
-- [ ] Add a Rust test asserting that `PanelSource::Nowly` can take over the single open sheet and that toggling it again closes the sheet.
-- [ ] Run `cargo test quick_panel::tests::opening_the_other_half_swaps_the_sheet_instead_of_closing_it` from `src-tauri` and verify it fails because `PanelSource::Nowly` is absent.
-- [ ] Restore `PanelSource::Nowly`, `toggle_nowly_panel`, and source-aware acknowledgement without restoring hover-open behavior for the logo.
-- [ ] Register `toggle_nowly_panel` in the Tauri invoke handler.
-- [ ] Re-run the focused Rust test and verify it passes.
+- [x] Write failing tests asserting that Logo click immediately invokes `toggle_nowly_panel`, exposes no assistant input before the native event, and activates the complete assistant after that event.
+- [x] Remove the `composer` rail surface, submit-driven expansion callbacks, and local compact open/close branches.
+- [x] Prevent status hover opening while the native AI open request is pending.
+- [x] Verify focused Nowly Bar tests pass.
 
-### Task 2: Add the compact bar composer contract
+### Task 2: Open the embedded conversation whenever its native panel is active
 
 **Files:**
 - Modify: `src/assistant/AssistantDock.tsx`
-- Modify: `src/assistant/AssistantDock.test.tsx`
-- Modify: `src/assistant/assistant.css`
+- Test: `src/assistant/AssistantDock.test.tsx`
 
-- [ ] Add failing tests for the embedded presentation: focusing does not expand the full sheet, submitting reports expansion, the user message appears immediately, and Escape reports compact close.
-- [ ] Run `npm test -- src/assistant/AssistantDock.test.tsx` and verify the new tests fail for missing embedded props and behavior.
-- [ ] Add an `embedded` presentation plus `autoFocus`, `onSubmit`, `onExpandedChange`, and `onRequestClose` callbacks with default floating behavior unchanged.
-- [ ] Add scoped embedded CSS so the composer and panel participate in the rail layout rather than using the main-app absolute positioning.
-- [ ] Re-run the focused assistant tests and verify they pass.
+- [x] Replace compact-on-focus expectations with immediate embedded expansion.
+- [x] Expand the embedded conversation when `active` becomes true and keep submission inside the existing full panel.
+- [x] Preserve input focus, draft state, request safety, Escape handling, voice/send switching, and floating presentation behavior.
+- [x] Verify focused AssistantDock tests pass.
 
-### Task 3: Integrate the assistant into Nowly Bar
+### Task 3: Share one close-button presentation
 
 **Files:**
 - Modify: `src/app/layout/StatusIsland.tsx`
-- Modify: `src/quick-panel/StatusIslandApp.tsx`
-- Modify: `src/quick-panel/StatusIslandApp.test.tsx`
 - Modify: `src/app/styles.css`
-- Modify: `src/i18n/translations.ts`
+- Test: `src/app/layout/StatusIsland.test.tsx`
 
-- [ ] Replace the existing no-AI-entry assertion with failing tests for a clickable logo, a full-rail composer takeover, automatic focus, compact Escape, and submit-driven sheet growth.
-- [ ] Run `npm test -- src/quick-panel/StatusIslandApp.test.tsx` and verify the new tests fail because the logo is branding-only.
-- [ ] Make the logo a button and add assistant header/body slots to `TopRail`.
-- [ ] Add `status`, `composer`, and `assistant` surface coordination in `StatusIslandApp`; invoke `toggle_nowly_panel` only after submission and close it through the existing collapse path.
-- [ ] Add rail-scoped CSS using the existing grow/shrink variables and cover the complete width through the rightmost action boundary.
-- [ ] Add Chinese and English accessibility strings for the assistant entry and compact close action.
-- [ ] Re-run the focused Nowly Bar tests and verify they pass.
+- [x] Add a failing structural assertion requiring both expanded close buttons to use `status-rail__panel-close`.
+- [x] Apply the shared class to status and AI close buttons.
+- [x] Move `40×40px`, radius, hover color/background, and transition styling to the shared class.
+- [x] Verify focused layout tests pass.
 
-### Task 4: Regression and delivery
+### Task 4: Remove obsolete state references and verify
 
 **Files:**
-- Test: `src/assistant/AssistantDock.test.tsx`
-- Test: `src/quick-panel/StatusIslandApp.test.tsx`
-- Test: `src-tauri/src/quick_panel.rs`
+- Modify: `design.md`
+- Modify: `docs/superpowers/specs/2026-09-17-nowly-bar-ai-assistant-design.md`
+- Modify: `docs/superpowers/plans/2026-09-17-nowly-bar-ai-assistant.md`
+- Modify: `tests/nowly-bar-assistant.spec.ts`
 
-- [ ] Run the two focused frontend test files.
-- [ ] Run `cargo test quick_panel::tests` from `src-tauri`.
-- [ ] Run `npm test`.
-- [ ] Run `cargo test` from `src-tauri`.
-- [ ] Run `npm run build`.
-- [ ] Run `cargo fmt --check` from `src-tauri`.
-- [ ] Run `git diff --check`.
-- [ ] Review `git diff` to keep pre-existing calendar-form changes separate and ensure no credential material is present.
-- [ ] Commit the approved design, implementation, tests, and related existing Nowly Bar naming changes with repository-format commit messages.
+- [x] Remove the compact rail state from authoritative design and plan documentation.
+- [x] Update browser assertions for direct full-panel opening and shared close styling.
+- [x] Run focused component tests and Nowly Bar Playwright checks.
+- [x] Run the full frontend suite, production build, and `git diff --check`.

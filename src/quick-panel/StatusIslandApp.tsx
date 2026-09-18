@@ -16,11 +16,10 @@ import { useTranslation } from '../i18n';
 import { AssistantDock } from '../assistant/AssistantDock';
 
 type PanelSource = 'island' | 'nowly';
-type RailSurface = 'status' | 'composer' | 'assistant';
+type RailSurface = 'status' | 'assistant';
 
-// The top rail window. It is the *only* floating window: the sheet is the
-// capsule grown, and a native window cannot grow into another one, so the panel
-// that used to live in `status-island-details` is rendered here.
+// One native window hosts two independent sibling panels. The native source
+// selects which panel is open; each panel owns its own animation state.
 //
 // Native owns whether the sheet is open, because it also owns the window size,
 // the 300ms hover delay and the acknowledgement that goes with opening. This
@@ -48,13 +47,19 @@ export function StatusIslandApp() {
   const surfaceState = model.surface;
   const [open, setOpen] = useState(false);
   const [source, setSource] = useState<PanelSource>('island');
-  const [assistantSurface, setAssistantSurface] = useState<Exclude<RailSurface, 'status'> | null>(null);
+  const nativeSource = useRef<PanelSource>('island');
+  const [assistantSurface, setAssistantSurface] = useState<'assistant' | null>(null);
+  const assistantSurfaceRef = useRef<'assistant' | null>(null);
+  assistantSurfaceRef.current = assistantSurface;
+  const [assistantClosing, setAssistantClosing] = useState(false);
+  const closingGeneration = useRef<number | null>(null);
+  const transitionGeneration = useRef(0);
   const assistantSheetRequested = useRef(false);
   // Null until the first transition, so the rail does not animate itself into
   // existence on mount.
-  const [anim, setAnim] = useState<'grow' | 'shrink' | null>(null);
+  const [statusAnim, setStatusAnim] = useState<'grow' | 'shrink' | null>(null);
+  const [assistantAnim, setAssistantAnim] = useState<'grow' | 'shrink' | null>(null);
   const [collapsedNotificationKey, setCollapsedNotificationKey] = useState<string | null>(null);
-  const [dragHintSeen, setDragHintSeen] = useState(() => localStorage.getItem('status-island-drag-hint-seen') === 'true');
   // The sheet is opened *for* one reminder and stays pinned to it by identity.
   // It must not follow the live queue head: once the shown reminder is hidden the
   // head becomes the next reminder, and an unpinned sheet would silently swap its
@@ -94,6 +99,7 @@ export function StatusIslandApp() {
   const primaryIdentity = surfaceState.mode === 'detail' ? surfaceState.reminder.identity : null;
   const lastPresence = useRef(false);
   const [nativeHidePending, setNativeHidePending] = useState(false);
+  const lastStatusActivationSource = useRef<'pointer' | 'keyboard' | null>(null);
   const visibilityRequest = useRef<Promise<void>>(Promise.resolve());
   const requestVisibility = useCallback((visible: boolean) => {
     visibilityRequest.current = visibilityRequest.current
@@ -128,7 +134,8 @@ export function StatusIslandApp() {
 
   useEffect(() => {
     if (!nativeHidePending) return;
-    const timer = setTimeout(() => setNativeHidePending(false), 220);
+    // Native collapse waits 260ms; allow one more late frame before fallback.
+    const timer = setTimeout(() => setNativeHidePending(false), 300);
     return () => clearTimeout(timer);
   }, [nativeHidePending]);
 
@@ -136,29 +143,55 @@ export function StatusIslandApp() {
     const removers: Array<() => void> = [];
     let disposed = false;
     const keep = (remove: () => void) => disposed ? remove() : removers.push(remove);
-    void listen<{ source: PanelSource; identity: string | null; hovered?: boolean } | null>('status-island-details-open', event => {
+    void listen<{ generation?: number; source: PanelSource; identity: string | null; hovered?: boolean } | null>('status-island-details-open', event => {
+      const generation = event.payload?.generation;
+      if (generation !== undefined) {
+        if (generation < transitionGeneration.current) return;
+        transitionGeneration.current = generation;
+      }
       setNativeHidePending(false);
+      setAssistantClosing(false);
+      closingGeneration.current = null;
       const nextSource = event.payload?.source ?? 'island';
+      nativeSource.current = nextSource;
       setSource(nextSource);
       assistantSheetRequested.current = false;
-      if (nextSource === 'nowly') setAssistantSurface('assistant');
+      setAssistantSurface(nextSource === 'nowly' ? 'assistant' : null);
       const reopenSummary = notificationModeRef.current === 'persistent'
         && reopenSummaryRef.current;
       setPinnedIdentity(nextSource === 'island' && !reopenSummary ? event.payload?.identity ?? null : null);
-      setAnim('grow');
+      setStatusAnim(nextSource === 'island' ? 'grow' : null);
+      setAssistantAnim(nextSource === 'nowly' ? 'grow' : null);
       setOpen(true);
     }).then(keep);
-    void listen<{ hideAfterCollapse?: boolean; collapseToSummary?: boolean } | null>('status-island-details-close', event => {
+    void listen<{ generation?: number; hideAfterCollapse?: boolean; collapseToSummary?: boolean } | null>('status-island-details-close', event => {
+      const generation = event?.payload?.generation;
+      if (generation !== undefined) {
+        if (generation < transitionGeneration.current) return;
+        transitionGeneration.current = generation;
+      }
+      closingGeneration.current = generation ?? null;
+      const closingAssistant = nativeSource.current === 'nowly';
+      setAssistantClosing(closingAssistant && assistantSurfaceRef.current === 'assistant');
       setNativeHidePending(event?.payload?.hideAfterCollapse === true);
-      setCollapsedNotificationKey(
-        event?.payload?.collapseToSummary === true ? unseenNotificationKeyRef.current : null
-      );
-      setPinnedIdentity(null);
-      setAnim('shrink');
+      if (!closingAssistant) {
+        setCollapsedNotificationKey(
+          event?.payload?.collapseToSummary === true ? unseenNotificationKeyRef.current : null
+        );
+        setPinnedIdentity(null);
+      }
+      setStatusAnim(closingAssistant ? null : 'shrink');
+      if (closingAssistant) setAssistantAnim('shrink');
       setOpen(false);
       assistantSheetRequested.current = false;
-      setSource('island');
-      setAssistantSurface(null);
+      if (closingAssistant) setAssistantSurface(null);
+    }).then(keep);
+    void listen<{ generation: number }>('status-island-details-closed', event => {
+      if (closingGeneration.current !== event.payload.generation) return;
+      closingGeneration.current = null;
+      setStatusAnim(null);
+      if (assistantSurfaceRef.current === null) setAssistantAnim(null);
+      setAssistantClosing(false);
     }).then(keep);
     return () => { disposed = true; removers.forEach(remove => remove()); };
   }, []);
@@ -171,7 +204,17 @@ export function StatusIslandApp() {
   useEffect(() => {
     if (!open) return;
     function dismissOnEscape(event: KeyboardEvent) {
-      if (event.key === 'Escape') collapse();
+      if (event.key !== 'Escape') return;
+      const active = document.activeElement;
+      if (
+        lastStatusActivationSource.current === 'pointer'
+        && active instanceof HTMLElement
+        && active.matches('.status-island__trigger')
+      ) {
+        active.blur();
+      }
+      lastStatusActivationSource.current = null;
+      collapse();
     }
     document.addEventListener('keydown', dismissOnEscape);
     return () => document.removeEventListener('keydown', dismissOnEscape);
@@ -180,13 +223,13 @@ export function StatusIslandApp() {
   const hoverStart = useCallback(() => {
     // A drag is a move, not a hover: the sheet is the rail grown, so it must not
     // open while the rail is being moved out from under the pointer.
-    if (drag.dragging) return;
+    if (drag.dragging || assistantSheetRequested.current || assistantSurface !== null || assistantClosing) return;
     lastPresence.current = true;
     reportPresence('island', true);
     // Native waits 300ms before opening, so a quick pass neither opens the sheet
     // nor acknowledges anything.
     void invoke('hover_status_island_details');
-  }, [drag.dragging]);
+  }, [assistantClosing, assistantSurface, drag.dragging]);
 
   const hoverEnd = useCallback(() => {
     lastPresence.current = false;
@@ -199,46 +242,30 @@ export function StatusIslandApp() {
     drag.onGrab(event);
   }, [drag]);
 
-  const activate = useCallback(() => {
+  const activate = useCallback((activationSource: 'pointer' | 'keyboard') => {
     // Releasing a drag over the rail still fires a click. That click is the end
     // of the move, not a request to open anything.
     if (drag.consumedClick()) return;
+    lastStatusActivationSource.current = activationSource;
     void invoke('toggle_status_island_details', { identity: primaryIdentity });
   }, [drag, primaryIdentity]);
 
-  const requestAssistantSheet = useCallback(() => {
-    if (assistantSheetRequested.current || (open && source === 'nowly')) return;
-    assistantSheetRequested.current = true;
-    setAssistantSurface('assistant');
-    void invoke('toggle_nowly_panel').catch(() => {
-      assistantSheetRequested.current = false;
-      setAssistantSurface('composer');
-    });
-  }, [open, source]);
-
   const activateNowly = useCallback(() => {
     if (drag.consumedClick()) return;
-    if (assistantSurface === 'composer') {
-      setAnim('shrink');
-      setAssistantSurface(null);
-      return;
-    }
     if (assistantSurface === 'assistant' || (open && source === 'nowly')) {
       collapse();
       return;
     }
-    setAnim('grow');
-    setAssistantSurface('composer');
+    if (assistantSheetRequested.current) return;
+    assistantSheetRequested.current = true;
+    void invoke('toggle_nowly_panel').catch(() => {
+      assistantSheetRequested.current = false;
+    });
   }, [assistantSurface, collapse, drag, open, source]);
 
   const closeAssistant = useCallback(() => {
-    if (open && source === 'nowly') {
-      collapse();
-      return;
-    }
-    setAnim('shrink');
-    setAssistantSurface(null);
-  }, [collapse, open, source]);
+    collapse();
+  }, [collapse]);
 
   const focusEnter = useCallback(() => reportPresence('keyboard', true), []);
   const focusLeave = useCallback(() => reportPresence('keyboard', false), []);
@@ -267,6 +294,14 @@ export function StatusIslandApp() {
     // exists at all (task completed, event deleted) falls back to live context.
     return reminderPanelContext(pinnedReminder ?? undefined, model.indicatorState.focus) ?? model.panelContext;
   }, [displayedSurface.mode, model, pinnedIdentity, pinnedReminder]);
+
+  // The live capsule may advance immediately, but the fading body must keep
+  // the detail that was actually open. Its wrapper is already inert on close.
+  const outgoingContext = useRef(context);
+  useEffect(() => {
+    if (open && source === 'island') outgoingContext.current = context;
+  }, [context, open, source]);
+  const panelContext = statusAnim === 'shrink' ? outgoingContext.current : context;
 
   const acknowledgeEvent = useCallback(async (event: { id: string; occurrenceStartAt: string | null; startAt: string }) => {
     const reminder = model.reminders.find(candidate =>
@@ -307,7 +342,9 @@ export function StatusIslandApp() {
         open={open}
         source={source}
         surface={railSurface}
-        anim={anim}
+        assistantClosing={assistantClosing}
+        statusAnim={statusAnim}
+        assistantAnim={assistantAnim}
         mode={displayedSurface.mode}
         onCollapse={collapse}
         onActivateNowly={activateNowly}
@@ -315,18 +352,15 @@ export function StatusIslandApp() {
           <AssistantDock
             active={assistantSurface !== null}
             presentation="embedded"
-            autoFocus={assistantSurface === 'composer'}
-            expandOnFocus={false}
+            autoFocus={assistantSurface === 'assistant'}
             onRefresh={refresh}
-            onSubmit={() => requestAssistantSheet()}
-            onExpandedChange={expanded => { if (expanded) requestAssistantSheet(); }}
             onRequestClose={closeAssistant}
           />
         )}
         panel={(
           <StatusIslandPanel
             compact
-            context={context}
+            context={panelContext}
             actions={{
               onOpenEvent: event => void withActionHold(async () => {
                 await acknowledgeEvent(event);
@@ -371,7 +405,7 @@ export function StatusIslandApp() {
         ) : displayedSurface.mode === 'summary' ? (
           <StatusIslandSummaryView summary={displayedSurface.summary} {...retry} {...surface} />
         ) : (
-          <StatusIslandIdleView {...retry} {...surface} dragHintVisible={!dragHintSeen && notificationMode === 'persistent'} onAcknowledgeDragHint={() => { localStorage.setItem('status-island-drag-hint-seen', 'true'); setDragHintSeen(true); }} />
+          <StatusIslandIdleView {...retry} {...surface} />
         )}
       </TopRail>
     </main>

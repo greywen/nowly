@@ -136,21 +136,39 @@ for (const scale of [1, 1.5, 2]) {
       await page.goto('/');
     });
 
-    test('splits the window into the capsule, the gap and the Nowly dot', async ({ page }) => {
+    test('uses one continuous shell with separate status and Nowly action lanes', async ({ page }) => {
       const trigger = page.getByRole('button', { name: /^产品发布评审 ·/ });
       await expect(trigger).toBeVisible();
-      // 240 + 8 + 40. The 8px gap is a transparent dead zone: one native window
-      // cannot be two shapes, so the sheet and the dot are drawn in the same one.
-      expect(await page.locator('.status-rail__sheet').boundingBox())
-        .toEqual({ x: 0, y: 0, width: 240, height: 40 });
-      // Inside the sheet's 1px border, so the ring itself is not a click target.
-      expect(await trigger.boundingBox()).toEqual({ x: 1, y: 1, width: 238, height: 38 });
+      const shell = page.locator('.status-rail__status-presence');
+      expect(await shell.boundingBox()).toEqual({ x: 0, y: 0, width: 288, height: 40 });
+      await expect(shell).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+      await expect(shell).toHaveCSS('border-top-width', '1px');
+      await expect(shell).toHaveCSS('border-top-color', 'rgb(234, 234, 234)');
+      await expect(shell).toHaveCSS('border-radius', '20px');
+      await expect(shell).toHaveCSS('overflow', 'hidden');
+      expect(await trigger.boundingBox()).toEqual({ x: 1, y: 1, width: 239, height: 38 });
       // The same pixel the open sheet puts it on: the head is what carries the
       // growth, so it may not move between the two sizes.
       expect(await page.locator('.status-island__icon').first().boundingBox())
         .toEqual({ x: 9, y: 8, width: 24, height: 24 });
-      expect(await page.getByRole('img', { name: 'Nowly 品牌标识' }).boundingBox())
-        .toEqual({ x: 248, y: 0, width: 40, height: 40 });
+      const nowly = page.locator('.status-rail__nowly');
+      expect(await nowly.boundingBox()).toEqual({ x: 240, y: 0, width: 48, height: 40 });
+      await expect(nowly).toHaveCSS('border-top-width', '0px');
+      await expect(nowly).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+      expect(await nowly.evaluate(element => {
+        const separator = getComputedStyle(element, '::before');
+        return {
+          width: separator.width,
+          height: separator.height,
+          color: separator.backgroundColor,
+          top: separator.top
+        };
+      })).toEqual({
+        width: '1px',
+        height: '22px',
+        color: 'rgb(246, 241, 233)',
+        top: '9px'
+      });
       // The sheet is laid out at its open size the whole time, so the collapsed
       // window has to clip it rather than gain a scrollbar.
       expect(await page.evaluate(() => ({
@@ -162,9 +180,11 @@ for (const scale of [1, 1.5, 2]) {
       expect(await commands(page)).toContain('toggle_status_island_details');
     });
 
-    test('keeps the Nowly dot as branding only', async ({ page }) => {
-      await expect(page.getByRole('img', { name: 'Nowly 品牌标识' })).toBeVisible();
-      await expect(page.getByRole('button', { name: 'Nowly' })).toHaveCount(0);
+    test('keeps the Nowly control separate inside the continuous shell', async ({ page }) => {
+      const nowly = page.getByRole('button', { name: 'Nowly' });
+      await expect(nowly).toBeVisible();
+      await nowly.click();
+      await expect(page.getByRole('textbox', { name: '告诉 Nowly 你想做什么' })).toBeVisible();
       expect(await commands(page)).not.toContain('toggle_nowly_panel');
       expect(await commands(page)).not.toContain('hover_nowly_panel');
     });
@@ -189,8 +209,8 @@ test.describe('an empty day', () => {
     // The rail is one object at one size. An empty day is something the surface
     // reports, not a reason for it to become a different shape.
     await expect(page.locator('.status-rail')).toHaveAttribute('data-mode', 'idle');
-    expect(await page.locator('.status-rail__sheet').boundingBox())
-      .toEqual({ x: 0, y: 0, width: 240, height: 40 });
+    expect(await page.locator('.status-rail__status-presence').boundingBox())
+      .toEqual({ x: 0, y: 0, width: 288, height: 40 });
     await expect(page.locator('.status-island .status-island__copy strong')).toHaveText('今天没有安排');
     await expect(page.locator('.status-island .status-island__copy > span')).toHaveText('0 项日程 · 0 项待办');
     // Nothing to count and nothing to acknowledge.
@@ -210,7 +230,7 @@ test.describe('summary content', () => {
     await installRail(page, passiveSnapshot);
     await page.goto('/');
 
-    await expect(page.getByLabel('Nowly 状态岛')).toBeVisible();
+    await expect(page.locator('.status-rail__status-presence')).toBeVisible();
     await expect(page.locator('.status-island')).toHaveAttribute('data-mode', 'summary');
 
     // Colour never carries the meaning alone, and the text is a phrase rather
@@ -234,7 +254,7 @@ test.describe('summary content', () => {
     const island = page.locator('.status-island__trigger');
     const nowly = page.locator('.status-rail__nowly');
     await expect(island).toHaveCSS('cursor', 'default');
-    await expect(nowly).toHaveCSS('cursor', 'default');
+    await expect(nowly).toHaveCSS('cursor', 'pointer');
 
     const box = await island.boundingBox();
     if (!box) throw new Error('status island trigger is not visible');
@@ -243,7 +263,7 @@ test.describe('summary content', () => {
     await page.waitForTimeout(400);
 
     await expect(island).toHaveCSS('cursor', 'grabbing');
-    await expect(nowly).toHaveCSS('cursor', 'default');
+    await expect(nowly).toHaveCSS('cursor', 'pointer');
     await page.mouse.up();
   });
 
@@ -343,7 +363,7 @@ test.describe('the open sheet', () => {
     const rail = page.locator('.status-rail');
     await expect(rail).toHaveAttribute('data-open', 'true');
     // Polled, because the growth is a real 220ms transition rather than a swap.
-    await expect.poll(() => page.locator('.status-rail__sheet').boundingBox())
+    await expect.poll(() => page.locator('.status-rail__status-presence').boundingBox())
       .toEqual({ x: 0, y: 0, width: 288, height: 288 });
     // The continuity anchor: the icon is on the same pixel it occupies collapsed,
     // so the sheet reads as the capsule grown rather than a panel that replaced it.
@@ -352,8 +372,8 @@ test.describe('the open sheet', () => {
     expect(await page.locator('.status-island__icon').first().boundingBox())
       .toEqual({ x: 9, y: 8, width: 24, height: 24 });
     // The dot is absorbed and the always-on dismiss takes the space it left.
-    await expect(page.getByRole('img', { name: 'Nowly 品牌标识' })).toHaveCSS('opacity', '0');
-    const dismiss = page.locator('.status-island__dismiss[data-at="expanded"]');
+    await expect(page.locator('.status-rail__nowly')).toHaveCSS('opacity', '0');
+    const dismiss = page.locator('.status-island__dismiss[data-owner="status"]');
     await expect(dismiss).toHaveCSS('opacity', '1');
     expect(await dismiss.boundingBox()).toEqual({ x: 252, y: 6, width: 28, height: 28 });
     // The sheet's own body drops the frame and the title the head already carries.
@@ -372,16 +392,13 @@ test.describe('the open sheet', () => {
     await installRail(page, passiveSnapshot, { source: 'island', identity: null });
     await page.goto('/');
 
-    const rail = page.locator('.status-rail');
-    await expect(rail).toHaveAttribute('data-anim', 'grow');
-    const sheet = page.locator('.status-rail__sheet');
+    const shell = page.locator('.status-rail__status-presence');
+    await expect(shell).toHaveAttribute('data-anim', 'grow');
     // design.md §10 names the whitelist and the durations. Anything else moving
     // would make the sheet read as a popup rather than the capsule growing.
-    await expect(sheet).toHaveCSS('transition-property', 'width, height');
-    await expect(sheet).toHaveCSS('transition-duration', '0.22s, 0.22s');
-    await expect(sheet).toHaveCSS('transition-timing-function',
-      'cubic-bezier(0.22, 1, 0.36, 1), cubic-bezier(0.22, 1, 0.36, 1)');
-    await expect(sheet).toHaveCSS('transform', /^(none|matrix\(1, 0, 0, 1, 0, 0\))$/);
+    await expect(shell).toHaveCSS('transition-property', 'height, border-radius, opacity, visibility');
+    await expect(shell).toHaveCSS('transition-duration', '0.28s, 0.28s, 0.14s, 0s');
+    await expect(shell).toHaveCSS('transform', 'matrix(1, 0, 0, 1, -144, 0)');
   });
 
   test('routes sheet actions and Escape through native commands', async ({ page }) => {
@@ -421,9 +438,10 @@ test.describe('the open sheet', () => {
 
     // The exception in design.md §10 is opt-out, not mandatory: asked for no
     // motion, the rail simply is its new size.
-    await expect(page.locator('.status-rail__sheet')).toHaveCSS('transition-duration', '0s, 0s');
-    await expect(page.locator('.status-rail__panel')).toHaveCSS('transition-duration', '0s');
-    expect(await page.locator('.status-rail__sheet').boundingBox())
+    await expect(page.locator('.status-rail__status-presence'))
+      .toHaveCSS('transition-duration', '0s, 0s, 0s, 0s');
+    await expect(page.locator('.status-rail__panel')).toHaveCSS('transition-duration', '0s, 0s');
+    expect(await page.locator('.status-rail__status-presence').boundingBox())
       .toEqual({ x: 0, y: 0, width: 288, height: 288 });
   });
 
@@ -433,7 +451,7 @@ test.describe('the open sheet', () => {
     await installRail(page, passiveSnapshot, { source: 'island', identity: null });
     await page.goto('/');
 
-    const background = await page.locator('.status-rail__sheet')
+    const background = await page.locator('.status-rail__status-presence')
       .evaluate(element => getComputedStyle(element).backgroundColor);
     expect(background).not.toMatch(/rgba\([^)]*,\s*0?\.\d+\)/);
   });
