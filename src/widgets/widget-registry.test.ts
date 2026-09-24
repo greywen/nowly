@@ -1,43 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import type { SandboxExtension } from '../data/nowly-repository';
 import {
-  SANDBOX_ID_PREFIX,
   GRID_COLS,
   GRID_ROWS,
   buildDefinitions,
   builtinDefinitions,
   canPlace,
   clampToBounds,
-  devModuleDefinition,
-  sandboxExtensionToDefinition,
   defaultLayout,
   extensionDefinitions,
   findFreeSlot,
   getWidgetDefinition,
-  isSandboxWidgetId,
   isWithinBounds,
   normalizeLayout,
   rectsOverlap,
   type LayoutState
 } from './widget-registry';
-
-function extension(overrides: Partial<SandboxExtension> = {}): SandboxExtension {
-  return {
-    id: 'ext1',
-    name: '用户模块',
-    description: '示例模块',
-    source: 'Nowly.defineModule(() => {});',
-    permissions: ['state', 'today'],
-    allowedHosts: [],
-    minW: 3,
-    minH: 3,
-    defaultW: 4,
-    defaultH: 4,
-    createdAt: '2026-07-23T00:00:00Z',
-    updatedAt: '2026-07-23T00:00:00Z',
-    ...overrides
-  };
-}
 
 describe('widget definitions', () => {
   it('defines built-in calendar, matrix, and notes with valid geometry', () => {
@@ -74,51 +51,12 @@ describe('widget definitions', () => {
     expect(kanban?.name).toBe('看板');
     expect(kanban?.category).toBe('builtin');
   });
-});
 
-describe('user modules (sandbox extensions)', () => {
-  it('recognizes sandbox widget ids by prefix', () => {
-    expect(isSandboxWidgetId(`${SANDBOX_ID_PREFIX}ext1`)).toBe(true);
-    expect(isSandboxWidgetId('calendar')).toBe(false);
-  });
-
-  it('turns an installed module into a placeable definition', () => {
-    const definition = sandboxExtensionToDefinition(extension());
-    expect(definition.id).toBe(`${SANDBOX_ID_PREFIX}ext1`);
-    expect(definition.category).toBe('sandbox');
-    expect(definition.default).toEqual({ x: 0, y: 0, w: 4, h: 4 });
-    expect(definition.extension?.source).toContain('defineModule');
-  });
-
-  it('merges built-ins, extensions, and user modules into the full set', () => {
-    const all = buildDefinitions([extension()], false);
-    expect(all.map((definition) => definition.id)).toContain(`${SANDBOX_ID_PREFIX}ext1`);
+  it('merges built-ins and extensions into the full placeable set', () => {
+    const all = buildDefinitions();
     // Built-in count is 4: calendar, matrix, notes, plus the picker-only kanban.
     expect(all.filter((definition) => definition.category === 'builtin')).toHaveLength(4);
     expect(all.filter((definition) => definition.category === 'extension')).toHaveLength(1);
-    expect(all.filter((definition) => definition.category === 'sandbox')).toHaveLength(1);
-  });
-});
-
-describe('developer module (dev-only)', () => {
-  it('is a builtin definition with valid geometry', () => {
-    expect(devModuleDefinition.id).toBe('devModule');
-    expect(devModuleDefinition.category).toBe('builtin');
-    expect(devModuleDefinition.minW).toBeGreaterThan(0);
-    expect(devModuleDefinition.minH).toBeGreaterThan(0);
-    expect(devModuleDefinition.default.w).toBeGreaterThanOrEqual(devModuleDefinition.minW);
-    expect(devModuleDefinition.default.h).toBeGreaterThanOrEqual(devModuleDefinition.minH);
-  });
-
-  it('is included only when includeDevModule is true', () => {
-    const withDev = buildDefinitions([], true);
-    expect(withDev.map((definition) => definition.id)).toContain('devModule');
-    const withoutDev = buildDefinitions([], false);
-    expect(withoutDev.map((definition) => definition.id)).not.toContain('devModule');
-  });
-
-  it('is kept out of the default layout', () => {
-    expect(defaultLayout.map((item) => item.id)).not.toContain('devModule');
   });
 });
 
@@ -234,11 +172,10 @@ describe('normalizeLayout', () => {
     expect(normalizeLayout(stored)).toEqual(stored);
   });
 
-  it('accepts user module ids when their definitions are provided', () => {
-    const definitions = buildDefinitions([extension()]);
-    const stored = [{ id: `${SANDBOX_ID_PREFIX}ext1`, x: 0, y: 0, w: 4, h: 4 }];
-    expect(normalizeLayout(stored, definitions)).toEqual(stored);
-    // Without the user module definition, the entry is dropped.
+  it('accepts extension module ids when their definitions are provided', () => {
+    const stored = [{ id: 'focusTimer', x: 0, y: 0, w: 4, h: 4 }];
+    expect(normalizeLayout(stored, buildDefinitions())).toEqual(stored);
+    // Without the extension definition in scope, the entry is dropped.
     expect(normalizeLayout(stored)).toEqual([]);
   });
 });

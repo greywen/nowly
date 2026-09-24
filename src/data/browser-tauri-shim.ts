@@ -36,9 +36,7 @@ type Store = {
   notes: Dict[];
   settings: Dict;
   moduleLayout: Dict[];
-  moduleState: Record<string, string>;
   focusSessions: Dict[];
-  extensions: Dict[];
   kanban: {
     lanes: Dict[];
     cards: Dict[];
@@ -74,9 +72,7 @@ function emptyStore(): Store {
     notes: [],
     settings: { ...defaultSettings },
     moduleLayout: [],
-    moduleState: {},
     focusSessions: [],
-    extensions: [],
     kanban: { lanes: [], cards: [], priorities: [], tags: [], collaborators: [] }
   };
 }
@@ -91,7 +87,6 @@ function loadStore(): Store {
       ...base,
       ...parsed,
       settings: { ...base.settings, ...(parsed.settings ?? {}) },
-      moduleState: { ...(parsed.moduleState ?? {}) },
       kanban: { ...base.kanban, ...(parsed.kanban ?? {}) }
     };
   } catch {
@@ -788,16 +783,6 @@ export function installBrowserTauriBackend() {
       persist();
       return store.moduleLayout;
     },
-    // Draft modules live on the real filesystem (%APPDATA%/com.nowly.app/dev-modules),
-    // which the browser shim cannot read. The standalone preview page (channel
-    // B) covers browser-based previewing, so here we just report no drafts.
-    list_dev_modules: () => [],
-    dev_modules_dir_path: () => '',
-    get_module_state: (a) => store.moduleState[a.moduleId as string] ?? null,
-    set_module_state: (a) => {
-      store.moduleState[a.moduleId as string] = a.state as string;
-      persist();
-    },
 
     // Focus timer
     create_focus_session: (a) => {
@@ -852,44 +837,6 @@ export function installBrowserTauriBackend() {
     pause_focus_timer: () => undefined,
     resume_focus_timer: () => undefined,
     cancel_focus_timer: () => undefined,
-
-    // Sandbox extensions
-    list_extensions: () => store.extensions,
-    install_extension: (a) => {
-      const ext = {
-        id: id('ext'),
-        allowedHosts: [],
-        minW: 1,
-        minH: 1,
-        createdAt: nowIso(),
-        updatedAt: nowIso(),
-        ...(a.draft as Dict)
-      };
-      store.extensions.push(ext);
-      persist();
-      return ext;
-    },
-    uninstall_extension: (a) => {
-      store.extensions = store.extensions.filter((e) => e.id !== a.id);
-      persist();
-    },
-    proxy_fetch: async (a) => {
-      const req = a.request as { url: string; method?: string; headers?: [string, string][]; body?: string };
-      const res = await fetch(req.url, {
-        method: req.method ?? 'GET',
-        headers: req.headers,
-        body: req.body
-      });
-      const text = await res.text();
-      return {
-        ok: res.ok,
-        status: res.status,
-        headers: [...res.headers.entries()] as [string, string][],
-        text
-      };
-    },
-    fetch_registry: async (a) => (await fetch(a.url as string)).text(),
-    download_module: async (a) => (await fetch(a.url as string)).text(),
 
     // Kanban
     get_kanban_snapshot: () => store.kanban,

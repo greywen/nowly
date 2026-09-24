@@ -40,7 +40,6 @@ describe('browser Tauri task linking compatibility', () => {
       notes: [],
       settings: { taskViewLinkingEnabled: false },
       moduleLayout: [],
-      moduleState: {},
       focusSessions: [],
       extensions: [],
       kanban: { lanes: [], cards: [], priorities: [], tags: [], collaborators: [] }

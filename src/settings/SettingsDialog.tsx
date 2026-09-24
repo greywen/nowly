@@ -11,17 +11,12 @@ import { t, useTranslation, type Language } from '../i18n';
 type Props={settings:AppSettings;monitors?:MonitorInfo[];onClose():void;onSave(settings:AppSettings):Promise<AppSettings>};
 type SettingsTab='interface'|'desktop'|'notifications'|'model';
 function errorMessage(error:unknown){return typeof error==='object'&&error!==null&&'message'in error&&typeof error.message==='string'?error.message:t('settings.saveError')}
-function currentSettings(settings:AppSettings):AppSettings {
- const copy={...settings} as AppSettings&Record<string,unknown>;
- delete copy.notificationDisplay;
- return copy;
-}
 
 export function SettingsDialog({settings,monitors=[],onClose,onSave}:Props){
  // Language switches in real time via the i18n store, independent of the save
  // button, so the whole UI updates the moment the user picks a language.
  const {language,setLanguage}=useTranslation();
- const [draft,setDraft]=useState(()=>({...currentSettings(settings), notificationMode: settings.notificationMode ?? 'persistent', quickPanelEnabled: true, quickPanelShortcut: settings.quickPanelShortcut ?? 'Ctrl+Space'})); const [saving,setSaving]=useState(false); const [error,setError]=useState<string|null>(null);
+ const [draft,setDraft]=useState(()=>({...settings, notificationMode: settings.notificationMode ?? 'persistent', quickPanelEnabled: true, quickPanelShortcut: settings.quickPanelShortcut ?? 'Ctrl+Space'})); const [saving,setSaving]=useState(false); const [error,setError]=useState<string|null>(null);
  const [tab,setTab]=useState<SettingsTab>('interface');
  // Resolve the monitor that should appear selected: the saved id when it still
  // matches a connected monitor, otherwise the primary (or first) one. Falling

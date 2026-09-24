@@ -150,7 +150,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'onboarding.workspace.title': '你的工作区',
     'onboarding.workspace.body': '所有模块都在这里：日历安排日程、四象限梳理任务优先级、看板跟踪进度、便签速记想法、专注计时帮你保持专注。',
     'onboarding.editLayout.title': '编辑布局',
-    'onboarding.editLayout.body': '点击这里进入编辑模式，可拖动和缩放模块。编辑时顶栏还会出现“添加模块”和“模块市场”，用来增删或安装更多模块。',
+    'onboarding.editLayout.body': '点击这里进入编辑模式，可拖动和缩放模块。编辑时顶栏还会出现“添加模块”，用来增删模块。',
     'onboarding.settings.title': '设置',
     'onboarding.settings.body': '在这里调整语言、界面密度、每周开始日、日期格式和开机启动等偏好。',
     'onboarding.wallpaper.title': '设为壁纸',
@@ -815,69 +815,8 @@ export const translations: Record<Language, Record<string, string>> = {
     'template.added': '已添加',
     'template.removeShort': '移除',
     'template.addShort': '添加',
-    'template.uploadError': '模块上传失败，请重试。',
-    'template.unnamed': '未命名模块',
     'template.title': '添加模块',
     'template.close': '关闭',
-    'template.builtin': '内置模块',
-    'template.myModules': '我的模块',
-    'template.upload': '上传模块',
-    'template.uploadComingSoon': '功能开发中，敬请期待',
-    'template.uploadHint': '选择一个 JavaScript 文件即可上传并识别模块。模块运行在隔离沙箱中，只能通过受限接口访问自身状态、日期与声明的联网域名。',
-    'template.deleteModule': '删除模块 {name}',
-    'template.market': '模块市场',
-
-    // Module manifest errors
-    'manifest.missing-header': '模块缺少清单头注释。请在文件顶部添加 /** @nowly-module 1 ... */。',
-    'manifest.bad-version-tag': '清单版本无效，@nowly-module 当前必须为 1。',
-    'manifest.bad-id': '@id 无效，只能包含小写字母、数字和连字符。',
-    'manifest.missing-name': '清单缺少 @name。',
-    'manifest.missing-version': '清单缺少 @version。',
-    'manifest.unknown-permission': '声明了未知权限，仅支持 state、today、network。',
-    'manifest.network-without-hosts': '声明了 network 权限但未提供 @network 域名。',
-    'manifest.hosts-without-network': '提供了 @network 域名但未声明 network 权限。',
-
-    // Module market
-    'market.title': '模块市场',
-    'market.close': '关闭',
-    'market.loading': '正在加载模块列表…',
-    'market.loadError': '无法加载模块市场，请稍后重试。',
-    'market.retry': '重试',
-    'market.empty': '模块市场暂时没有可用模块。',
-    'market.search': '搜索模块',
-    'market.install': '安装',
-    'market.installed': '已安装',
-    'market.update': '更新',
-    'market.installing': '安装中…',
-    'market.installError': '模块安装失败，请重试。',
-    'market.integrityError': '模块文件校验失败，可能已被篡改，已阻止安装。',
-    'market.by': '作者：{author}',
-    'market.network': '联网',
-
-    // Developer module (channel A preview, dev builds only)
-    'widget.devModule.name': '开发者模块',
-    'widget.devModule.desc': '选择并实时预览 dev-modules 里的草稿（仅开发版）',
-    'devModule.selectLabel': '选择草稿模块',
-    'devModule.none': 'dev-modules 目录下没有草稿。把 .js 文件写到下面这个目录：',
-    'devModule.loading': '正在读取草稿…',
-    'devModule.selectPrompt': '从上方选择一个草稿模块开始预览。',
-    'devModule.lintResults': '校验结果',
-    'devModule.lintPass': '校验：通过',
-    'devModule.lintCount': '校验：{count} 项问题',
-    'devModule.manifestError': '清单错误：{message}',
-
-    // Install risk dialog
-    'risk.title': '此模块会联网',
-    'risk.warning': '模块可以向以下地址收发数据。请只安装你信任的来源。',
-    'risk.hosts': '可访问域名',
-    'risk.permissions': '申请的权限',
-    'risk.source': '来源',
-    'risk.author': '作者',
-    'risk.permission.state': '保存自身数据',
-    'risk.permission.today': '读取今天的日期',
-    'risk.permission.network': '联网收发数据',
-    'risk.confirm': '我信任此来源，安装',
-    'risk.cancel': '取消',
 
     // Widget registry
     'widget.calendar.name': '日历',
@@ -889,13 +828,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'widget.kanban.name': '看板',
     'widget.kanban.desc': '用泳道管理任务状态的看板。',
     'widget.focusTimer.name': '专注计时',
-    'widget.focusTimer.desc': '番茄钟式专注计时，帮助保持节奏。',
-
-    // Sandbox protocol
-    'sandbox.noPermission': '扩展未获得「{permission}」权限。',
-    'sandbox.throttled': '请求过于频繁，已被限流。',
-    'sandbox.hostNotAllowed': '请求域名不在该模块声明的白名单内。',
-    'sandbox.runError': '扩展运行出错：'
+    'widget.focusTimer.desc': '番茄钟式专注计时，帮助保持节奏。'
   },
   en: {
     // Common
@@ -1039,7 +972,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'onboarding.workspace.title': 'Your workspace',
     'onboarding.workspace.body': 'Every module lives here: the calendar for scheduling, the matrix for prioritizing tasks, the kanban board for tracking progress, notes for quick capture, and the focus timer to stay on task.',
     'onboarding.editLayout.title': 'Edit layout',
-    'onboarding.editLayout.body': 'Click here to enter edit mode, where you can drag and resize modules. Editing also reveals “Add module” and “Module market” in the top bar for adding, removing, or installing more modules.',
+    'onboarding.editLayout.body': 'Click here to enter edit mode, where you can drag and resize modules. Editing also reveals “Add module” in the top bar for adding or removing modules.',
     'onboarding.settings.title': 'Settings',
     'onboarding.settings.body': 'Adjust preferences here: language, interface density, week start day, date format, and launch at login.',
     'onboarding.wallpaper.title': 'Set as wallpaper',
@@ -1702,69 +1635,8 @@ export const translations: Record<Language, Record<string, string>> = {
     'template.added': 'Added',
     'template.removeShort': 'Remove',
     'template.addShort': 'Add',
-    'template.uploadError': 'Module upload failed. Please try again.',
-    'template.unnamed': 'Untitled module',
     'template.title': 'Add module',
     'template.close': 'Close',
-    'template.builtin': 'Built-in modules',
-    'template.myModules': 'My modules',
-    'template.upload': 'Upload module',
-    'template.uploadComingSoon': 'This feature is under development. Coming soon.',
-    'template.uploadHint': 'Choose a JavaScript file to upload and register a module. Modules run in an isolated sandbox and can only access their own state, the date, and the network hosts they declare through a restricted interface.',
-    'template.deleteModule': 'Delete module {name}',
-    'template.market': 'Module market',
-
-    // Module manifest errors
-    'manifest.missing-header': 'The module is missing its manifest header. Add /** @nowly-module 1 ... */ at the top of the file.',
-    'manifest.bad-version-tag': 'Invalid manifest version; @nowly-module must currently be 1.',
-    'manifest.bad-id': 'Invalid @id; use lowercase letters, digits, and hyphens only.',
-    'manifest.missing-name': 'The manifest is missing @name.',
-    'manifest.missing-version': 'The manifest is missing @version.',
-    'manifest.unknown-permission': 'Unknown permission declared; only state, today, and network are supported.',
-    'manifest.network-without-hosts': 'The network permission was declared without any @network hosts.',
-    'manifest.hosts-without-network': '@network hosts were provided without declaring the network permission.',
-
-    // Module market
-    'market.title': 'Module market',
-    'market.close': 'Close',
-    'market.loading': 'Loading modules…',
-    'market.loadError': 'Could not load the module market. Please try again later.',
-    'market.retry': 'Retry',
-    'market.empty': 'No modules are available in the market yet.',
-    'market.search': 'Search modules',
-    'market.install': 'Install',
-    'market.installed': 'Installed',
-    'market.update': 'Update',
-    'market.installing': 'Installing…',
-    'market.installError': 'Module installation failed. Please try again.',
-    'market.integrityError': 'Module integrity check failed; the file may have been tampered with. Installation blocked.',
-    'market.by': 'By {author}',
-    'market.network': 'Network',
-
-    // Module workbench (channel A preview)
-    'widget.devModule.name': 'Developer module',
-    'widget.devModule.desc': 'Pick and live-preview a draft from dev-modules (dev builds only)',
-    'devModule.selectLabel': 'Select draft module',
-    'devModule.none': 'No drafts under dev-modules. Write a .js file to the directory below:',
-    'devModule.loading': 'Reading drafts…',
-    'devModule.selectPrompt': 'Pick a draft module above to preview it.',
-    'devModule.lintPass': 'Lint: passed',
-    'devModule.lintCount': 'Lint: {count} issue(s)',
-    'devModule.manifestError': 'Manifest error: {message}',
-    'devModule.lintResults': 'Lint results',
-
-    // Install risk dialog
-    'risk.title': 'This module accesses the network',
-    'risk.warning': 'The module can send and receive data with the addresses below. Only install sources you trust.',
-    'risk.hosts': 'Reachable hosts',
-    'risk.permissions': 'Requested permissions',
-    'risk.source': 'Source',
-    'risk.author': 'Author',
-    'risk.permission.state': 'Store its own data',
-    'risk.permission.today': 'Read today\u2019s date',
-    'risk.permission.network': 'Send and receive data online',
-    'risk.confirm': 'I trust this source, install',
-    'risk.cancel': 'Cancel',
 
     // Widget registry
     'widget.calendar.name': 'Calendar',
@@ -1776,12 +1648,6 @@ export const translations: Record<Language, Record<string, string>> = {
     'widget.kanban.name': 'Kanban',
     'widget.kanban.desc': 'A board that manages task status with lanes.',
     'widget.focusTimer.name': 'Focus timer',
-    'widget.focusTimer.desc': 'Pomodoro-style focus timer to keep your rhythm.',
-
-    // Sandbox protocol
-    'sandbox.noPermission': 'The extension was not granted the "{permission}" permission.',
-    'sandbox.throttled': 'Too many requests. Please slow down.',
-    'sandbox.hostNotAllowed': 'The requested host is not in the module\u2019s declared allow-list.',
-    'sandbox.runError': 'The extension failed to run:'
+    'widget.focusTimer.desc': 'Pomodoro-style focus timer to keep your rhythm.'
   }
 };

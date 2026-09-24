@@ -62,13 +62,6 @@ export type AppSettings = {
 
 export type ModuleLayoutEntry = { id: string; x: number; y: number; w: number; h: number };
 
-// A work-in-progress module file discovered under the app's dev-modules/
-// directory. The desktop backend reads %APPDATA%/com.nowly.app/dev-modules/*.js
-// at runtime so the in-app workbench (preview channel A) can render drafts that an
-// AI tool wrote to a machine-stable path. `source` is the raw file text; the
-// full path stays on the backend.
-export type DevModuleFile = { name: string; source: string };
-
 export type FocusSession = {
   id: string;
   plannedSeconds: number;
@@ -93,55 +86,6 @@ export type FocusStatistics = {
   interruptedCount: number;
   completionRate: number;
   points: FocusStatisticsPoint[];
-};
-
-// A permission a sandbox extension may declare. Kept in lockstep with the
-// backend allow-list so the installer and host agree on the capability surface.
-export type SandboxPermission = 'state' | 'today' | 'network';
-
-export type SandboxExtension = {
-  id: string;
-  name: string;
-  description: string;
-  source: string;
-  permissions: SandboxPermission[];
-  // Hosts the module may reach through `host.fetch`. Non-empty only when the
-  // `network` permission was granted.
-  allowedHosts: string[];
-  minW: number;
-  minH: number;
-  defaultW: number;
-  defaultH: number;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type SandboxExtensionDraft = {
-  name: string;
-  description: string;
-  source: string;
-  permissions: SandboxPermission[];
-  allowedHosts: string[];
-  defaultW: number;
-  defaultH: number;
-};
-
-// A single proxied network request made on behalf of a sandboxed module. The
-// `allowedHosts` list is forwarded so the Rust proxy can re-check it as the
-// real trust boundary.
-export type ProxyFetchRequest = {
-  url: string;
-  method?: 'GET' | 'POST';
-  headers?: [string, string][];
-  body?: string;
-  allowedHosts: string[];
-};
-
-export type ProxyFetchResponse = {
-  ok: boolean;
-  status: number;
-  headers: [string, string][];
-  text: string;
 };
 
 export type MonitorInfo = { id:string; name:string; isPrimary:boolean; positionX:number; positionY:number; width:number; height:number; scaleFactor:number };
@@ -271,28 +215,9 @@ export type NowlyRepository = {
   listMonitors(): Promise<MonitorInfo[]>;
   listModuleLayout(): Promise<ModuleLayoutEntry[]>;
   saveModuleLayout(layout: ModuleLayoutEntry[]): Promise<ModuleLayoutEntry[]>;
-  // List the draft module files under the app's dev-modules/ directory. Optional
-  // so lightweight test doubles need not implement it; the workbench treats a
-  // missing method as "no drafts".
-  listDevModules?(): Promise<DevModuleFile[]>;
-  // Absolute path of the app-data dev-modules/ directory, resolved on the
-  // backend (OS-specific) and shown in the workbench empty state. Optional for
-  // the same reason as listDevModules.
-  devModulesDir?(): Promise<string>;
-  getModuleState(moduleId: string): Promise<string | null>;
-  setModuleState(moduleId: string, state: string): Promise<void>;
   createFocusSession(session: FocusSession): Promise<FocusSession>;
   listFocusSessions(range: FocusRange): Promise<FocusSession[]>;
   getFocusStatistics(boundaries: FocusPeriodBoundary[]): Promise<FocusStatistics>;
-  listExtensions(): Promise<SandboxExtension[]>;
-  installExtension(draft: SandboxExtensionDraft): Promise<SandboxExtension>;
-  uninstallExtension(id: string): Promise<void>;
-  // Proxy a module network request through the trusted backend.
-  proxyFetch(request: ProxyFetchRequest): Promise<ProxyFetchResponse>;
-  // Fetch the raw text of the module market registry index.
-  fetchRegistry(url: string): Promise<string>;
-  // Download the raw source of a single module from the market.
-  downloadModule(url: string): Promise<string>;
   getKanbanSnapshot(): Promise<KanbanSnapshot>;
   createKanbanLane(draft: KanbanLaneDraft): Promise<KanbanLane>;
   updateKanbanLane(id: string, draft: KanbanLaneDraft): Promise<KanbanLane>;

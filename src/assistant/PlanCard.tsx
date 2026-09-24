@@ -32,9 +32,12 @@ export function displayField(key: string, value: unknown, plan?: Plan): string {
   if (typeof value === 'boolean') return value ? '是' : '否';
   return String(value).replace('T', ' ');
 }
-export function ChangeDetails({ change, plan, hideCalendarColor = false }: { change: Change; plan: Plan; hideCalendarColor?: boolean }) {
+// The plan preview as it appears in the Nowly Bar. An event's color is left out
+// of the diff: it is chosen from the category, not something the assistant asks
+// the user to verify here.
+export function ChangeDetails({ change, plan }: { change: Change; plan: Plan }) {
   return <dl className="assistant-diff">
-    {Object.entries(fields).filter(([key]) => !(hideCalendarColor && change.kind.endsWith('Event') && key === 'color'))
+    {Object.entries(fields).filter(([key]) => !(change.kind.endsWith('Event') && key === 'color'))
       .filter(([key]) => change.before === null || change.after === null
       ? (change.before ?? change.after)?.[key] !== undefined
       : JSON.stringify(change.before[key]) !== JSON.stringify(change.after[key]))
@@ -57,11 +60,10 @@ function DateField({ label, value, onChange, time = false }: { label: string; va
 }
 type Props = {
   plan: Plan; actions: Action[]; edits: Fields[]; selected: boolean[]; dirty: boolean; busy: boolean; blocked: boolean;
-  compact?: boolean;
   onEdit: (index: number, fields: Fields) => void; onSelect: (index: number, checked: boolean) => void;
   onRevise: () => void; onConfirm: () => void; onCancel: () => void;
 };
-export function PlanCard({ plan, actions, edits, selected, dirty, busy, blocked, compact = false, onEdit, onSelect, onRevise, onConfirm, onCancel }: Props) {
+export function PlanCard({ plan, actions, edits, selected, dirty, busy, blocked, onEdit, onSelect, onRevise, onConfirm, onCancel }: Props) {
   const count = selected.filter(Boolean).length;
   const deletes = actions.filter((a, i) => selected[i] && a.kind.startsWith('delete')).length;
   const expired = plan.expiresAt <= Date.now() || plan.status !== 'pending';
@@ -82,7 +84,7 @@ export function PlanCard({ plan, actions, edits, selected, dirty, busy, blocked,
               onChange={e => onSelect(index, e.target.checked)} />
             <span className="form-check-label">{kinds[action.kind]} · {change.title}{recurring ? ' · 仅这一次' : ''}</span>
           </label><span className="assistant-change-number">{String(index + 1).padStart(2, '0')}</span></header>
-        <ChangeDetails change={change} plan={plan} hideCalendarColor={compact} />
+        <ChangeDetails change={change} plan={plan} />
         {!action.kind.startsWith('delete') && <details className="assistant-editor" open={actions.length === 1}>
           <summary>调整{kinds[action.kind]} · {change.title}<ChevronDown aria-hidden="true" size={17} /></summary>
           <fieldset disabled={busy || !selected[index] || blocked || expired} className="assistant-edit">
@@ -115,11 +117,11 @@ export function PlanCard({ plan, actions, edits, selected, dirty, busy, blocked,
     {dirty && <p role="status">内容已调整，旧预览已失效。请更新预览后再确认。</p>}
     {(expired || blocked) && <p role="status">此预览不能继续确认，请重新发送请求生成新预览。</p>}
     <div className="assistant-actions">
-      <button className="btn" aria-label="取消方案" onClick={onCancel} disabled={busy}><X aria-hidden="true" />{compact ? '取消' : '取消方案'}</button>
-      {dirty && <button className="btn" aria-label="更新预览" onClick={onRevise} disabled={busy || !count || expired || blocked}><RefreshCw aria-hidden="true" />{compact ? '更新' : '更新预览'}</button>}
+      <button className="btn" aria-label="取消方案" onClick={onCancel} disabled={busy}><X aria-hidden="true" />取消</button>
+      {dirty && <button className="btn" aria-label="更新预览" onClick={onRevise} disabled={busy || !count || expired || blocked}><RefreshCw aria-hidden="true" />更新</button>}
       <button className={`btn ${deletes ? 'btn-danger' : 'btn-primary'}`} onClick={onConfirm}
         aria-label={`确认执行 ${count} 项`} disabled={busy || dirty || !count || expired || blocked}>
-        {deletes ? <Trash2 aria-hidden="true" /> : <Check aria-hidden="true" />}{compact ? `确认 ${count} 项` : `确认执行 ${count} 项`}
+        {deletes ? <Trash2 aria-hidden="true" /> : <Check aria-hidden="true" />}{`确认 ${count} 项`}
       </button>
     </div>
   </section>;

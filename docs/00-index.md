@@ -3,7 +3,7 @@
 ## Current Status
 
 - 阶段 1–4 业务纵切已完成（2026-07-29）；阶段 5「设置与窗口生命周期」和阶段 6「Windows 系统集成」已完成（2026-08-03）。
-- 阶段 7 的自动化门禁及 Windows 安装包构建已通过；交互式 Windows 10/11 实机矩阵和空闲资源记录仍待人工执行，清单见 `docs/release/windows-verification.md`。
+- 阶段 7 的自动化门禁及 Windows 安装包构建已通过。
 - 总进度见 [Nowly Windows 完整产品实施路线图](./superpowers/plans/2026-07-29-nowly-windows-product-roadmap.md) 的 Overall status 表。
 
 ## Module Index
@@ -53,26 +53,7 @@ cargo test --manifest-path src-tauri/Cargo.toml    # Rust 测试
 - [Good 离线时间选择器设计规格](./superpowers/specs/2026-07-29-good-offline-time-picker-design.md)
 - [Good 离线 Select 设计规格](./superpowers/specs/2026-07-29-good-offline-select-design.md)
 - [Nowly 日程重复规则设计规格](./superpowers/specs/2026-08-20-nowly-recurring-events-design.md)
-- [Nowly 模块系统 v2 与模块技能包设计规格](./superpowers/specs/2026-08-25-nowly-module-system-v2-design.md)
 - [Nowly 导航状态岛规格](./superpowers/specs/2026-09-12-status-island/00-master-plan.md)
-
-## Custom Modules
-
-主 skill（路由 + 硬约束）：
-
-- [编写 Nowly 自定义模块（主 skill）](./custom-modules/SKILL.md)
-
-子 skill（按需读）：
-
-- [清单头与元数据](./custom-modules/manifest.md)
-- [运行契约（host / 状态 / 联网 / 弹框 / 可见性）](./custom-modules/runtime.md)
-- [视觉样式（nm-* 令牌与语义类）](./custom-modules/style.md)
-- [内置部件（Select / Tabs / DatePicker 等）](./custom-modules/widgets.md)
-- [尺寸与断点](./custom-modules/size.md)
-- [实时预览工作台](./custom-modules/preview.md)
-- [安装与发布](./custom-modules/publish.md)
-- [提交前检查清单](./custom-modules/checklist.md)
-- [给 AI 工具的入口](./custom-modules/install/AGENTS.md)
 
 ## Skill 写作规范
 
@@ -93,7 +74,6 @@ cargo test --manifest-path src-tauri/Cargo.toml    # Rust 测试
 - [Nowly Windows 系统集成实施计划](./superpowers/plans/2026-07-29-nowly-windows-integration.md)
 - [Nowly 发布验证实施计划](./superpowers/plans/2026-07-29-nowly-release-verification.md)
 - [Nowly 统一任务与跨视图联动实施文档](./superpowers/plans/2026-08-26-nowly-unified-task-views.md)
-- [Nowly Windows 发布验证记录](./release/windows-verification.md)
 - [Nowly MVP Implementation Plan](./superpowers/plans/2026-07-23-nowly-mvp.md)
 - [Nowly Final UI/UX HTML Implementation Plan](./superpowers/plans/2026-07-29-nowly-final-uiux-html.md)
 - [Nowly Good 设计系统原型重设计实施计划](./superpowers/plans/2026-07-29-nowly-good-design-system-prototype-redesign.md)
@@ -102,5 +82,4 @@ cargo test --manifest-path src-tauri/Cargo.toml    # Rust 测试
 - [Good 离线时间选择器实施计划](./superpowers/plans/2026-07-29-good-offline-time-picker.md)
 - [Good 离线 Select 实施计划](./superpowers/plans/2026-07-29-good-offline-select.md)
 - [Nowly 日程重复规则实施计划](./superpowers/plans/2026-08-20-nowly-recurring-events.md)
-- [Nowly 模块技能包与样式底座实施计划](./superpowers/plans/2026-08-25-nowly-module-skill-package.md)
 - [Nowly 导航状态岛实施计划](./superpowers/plans/2026-09-12-status-island.md)

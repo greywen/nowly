@@ -8,12 +8,6 @@ pub enum WindowMode {
     HiddenToTray,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CloseAction {
-    Wallpaper,
-    HideToTray,
-}
-
 #[derive(Debug)]
 pub struct WindowLifecycle {
     mode: WindowMode,
@@ -40,16 +34,6 @@ impl WindowLifecycle {
     pub fn hide_to_tray(&mut self) {
         self.mode = WindowMode::HiddenToTray;
     }
-    pub fn close_action(enabled: bool) -> CloseAction {
-        if enabled {
-            CloseAction::Wallpaper
-        } else {
-            CloseAction::HideToTray
-        }
-    }
-    pub fn wallpaper_failed(&mut self) {
-        self.hide_to_tray();
-    }
 }
 
 #[tauri::command]
@@ -64,7 +48,7 @@ pub fn get_window_mode(
 
 #[cfg(test)]
 mod tests {
-    use super::{CloseAction, WindowLifecycle, WindowMode};
+    use super::{WindowLifecycle, WindowMode};
 
     #[test]
     fn starts_foreground_and_records_successful_transitions() {
@@ -74,23 +58,6 @@ mod tests {
         assert_eq!(lifecycle.mode(), WindowMode::Wallpaper);
         lifecycle.enter_foreground();
         assert_eq!(lifecycle.mode(), WindowMode::Foreground);
-    }
-
-    #[test]
-    fn close_decision_uses_persisted_wallpaper_preference() {
-        assert_eq!(WindowLifecycle::close_action(true), CloseAction::Wallpaper);
-        assert_eq!(
-            WindowLifecycle::close_action(false),
-            CloseAction::HideToTray
-        );
-    }
-
-    #[test]
-    fn failed_wallpaper_restore_falls_back_to_tray() {
-        let mut lifecycle = WindowLifecycle::default();
-        lifecycle.enter_wallpaper();
-        lifecycle.wallpaper_failed();
-        assert_eq!(lifecycle.mode(), WindowMode::HiddenToTray);
     }
 
     #[test]

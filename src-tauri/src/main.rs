@@ -8,18 +8,15 @@ mod categories;
 mod color;
 mod commands;
 mod db;
-mod dev_modules;
 mod error;
 mod event_exceptions;
 mod events;
-mod extensions;
 mod feedback;
 mod focus;
 mod focus_timer;
 mod ics_parser;
 mod layout;
 mod models;
-mod module_state;
 mod monitors;
 mod net;
 mod notes;
@@ -657,19 +654,6 @@ fn main() {
             update::check_for_update,
             layout::list_module_layout,
             layout::save_module_layout,
-            module_state::get_module_state,
-            module_state::set_module_state,
-            dev_modules::list_dev_modules,
-            dev_modules::dev_modules_dir_path,
-            extensions::list_extensions,
-            extensions::install_extension,
-            extensions::uninstall_extension,
-            net::proxy_fetch,
-            net::fetch_registry,
-            net::download_module,
-            net::proxy_fetch,
-            net::fetch_registry,
-            net::download_module,
             focus::create_focus_session,
             focus::list_focus_sessions,
             focus::get_focus_statistics,

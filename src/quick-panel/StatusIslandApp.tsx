@@ -351,7 +351,6 @@ export function StatusIslandApp() {
         assistant={(
           <AssistantDock
             active={assistantSurface !== null}
-            presentation="embedded"
             autoFocus={assistantSurface === 'assistant'}
             onRefresh={refresh}
             onRequestClose={closeAssistant}

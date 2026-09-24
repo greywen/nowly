@@ -6,14 +6,9 @@ import {
   type WidgetDefinition,
   type WidgetId
 } from '../../widgets/widget-registry';
-import type {
-  SandboxExtension,
-  SandboxExtensionDraft,
-  UpdateInfo
-} from '../../data/nowly-repository';
+import type { UpdateInfo } from '../../data/nowly-repository';
 import { useModuleLayout } from '../../widgets/useModuleLayout';
 import { TemplatePickerDialog } from '../../widgets/TemplatePickerDialog';
-import { ModuleMarketDialog } from '../../widgets/ModuleMarketDialog';
 import { AboutDialog } from '../../settings/AboutDialog';
 import { ModuleGrid, type ModuleGridItem } from './ModuleGrid';
 import { Tip } from '../../components/Tip';
@@ -28,10 +23,6 @@ type DesktopShellProps = {
   summary: string;
   modules: Partial<Record<WidgetId, ReactNode>>;
   definitions?: WidgetDefinition[];
-  sandboxExtensions?: SandboxExtension[];
-  onInstallExtension?: (draft: SandboxExtensionDraft) => Promise<unknown>;
-  onUninstallExtension?: (id: string) => Promise<unknown>;
-  onReloadExtensions?: () => void;
   isModeSwitching?: boolean;
   onSetWallpaper?: () => void;
   onWallpaperDoubleClick?: () => void;
@@ -59,10 +50,6 @@ export function DesktopShell({
   summary,
   modules,
   definitions = builtinDefinitions,
-  sandboxExtensions = [],
-  onInstallExtension,
-  onUninstallExtension,
-  onReloadExtensions,
   isModeSwitching = false,
   onSetWallpaper,
   onWallpaperDoubleClick,
@@ -80,7 +67,6 @@ export function DesktopShell({
   const { blur, setBlur } = useBlur();
   const [isEditing, setIsEditing] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [marketOpen, setMarketOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const updateAvailable = update?.updateAvailable ?? false;
   const [previewingBlur, setPreviewingBlur] = useState(false);
@@ -139,7 +125,6 @@ export function DesktopShell({
               </button>
             </Tip>
           ) : null}
-          {/* 模块市场功能暂时隐藏 */}
           {foreground ? (
             <Tip content={isEditing ? t('shell.finishEditing') : t('shell.editLayout')}>
               <button type="button" data-guide="edit-layout" className={`btn btn-icon${isEditing ? ' is-active' : ''}`} aria-label={isEditing ? t('shell.finishEditing') : t('shell.editLayout')} aria-pressed={isEditing} onClick={() => setIsEditing((current) => !current)}>
@@ -179,20 +164,9 @@ export function DesktopShell({
       {foreground && pickerOpen ? (
         <TemplatePickerDialog
           presentIds={presentIds}
-          sandboxExtensions={sandboxExtensions}
           onClose={() => setPickerOpen(false)}
           onAdd={(id) => addWidget(id)}
           onRemove={(id) => removeWidget(id)}
-          onInstallExtension={(draft) => onInstallExtension?.(draft) ?? Promise.resolve()}
-          onUninstallExtension={(extension) => void onUninstallExtension?.(extension.id)}
-        />
-      ) : null}
-
-      {foreground && marketOpen ? (
-        <ModuleMarketDialog
-          installedIds={new Set(sandboxExtensions.map((extension) => extension.id))}
-          onClose={() => setMarketOpen(false)}
-          onInstalled={() => onReloadExtensions?.()}
         />
       ) : null}
 

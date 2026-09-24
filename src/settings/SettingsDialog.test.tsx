@@ -37,20 +37,6 @@ describe('SettingsDialog',()=>{
     expect(screen.getByRole('dialog',{name:'设置'})).toBeInTheDocument();
   });
 
-  it('removes the notification display choice and drops a legacy value on save',async()=>{
-    const user=userEvent.setup(); const save=vi.fn().mockImplementation(async value=>value);
-    const legacySettings={...settings,notificationDisplay:'summary'} as AppSettings & {notificationDisplay:'summary'};
-    render(<SettingsDialog settings={legacySettings} onClose={vi.fn()} onSave={save}/>);
-    await user.click(screen.getByRole('tab',{name:'Nowly Bar'}));
-
-    expect(screen.queryByRole('combobox',{name:'通知栏显示'})).not.toBeInTheDocument();
-    expect(screen.queryByRole('option',{name:'通知详情'})).not.toBeInTheDocument();
-    expect(screen.queryByRole('option',{name:'通知概要'})).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button',{name:'保存设置'}));
-
-    expect(save.mock.calls[0][0]).not.toHaveProperty('notificationDisplay');
-  });
-
   it('switches the icon style between the three drawing modes',async()=>{
     const user=userEvent.setup(); const save=vi.fn().mockImplementation(async value=>value);
     render(<SettingsDialog settings={settings} onClose={vi.fn()} onSave={save}/>);

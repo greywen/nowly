@@ -30,8 +30,6 @@ Nowly 的中文名是「此刻」。它是一款面向 Windows 10/11 的本地�
 - **壁纸模式** —— 将 Nowly 嵌入桌面图标之后，支持任务栏感知定位，也可作为
   普通窗口运行。
 - **灵活布局** —— 在 12×8 网格上自由摆放每个模块，可开关模块并自由调整大小。
-- **自定义模块** —— 从本地文件或内置「模块市场」安装沙箱化的 `.js` 扩展，
-  每个模块运行在隔离的 iframe 中。
 - **个性化** —— 高斯模糊、全局取色器、日历格式、密度控制以及开机自启。
 - **多语言** —— 支持英文与简体中文，启动时跟随系统语言。
 
@@ -79,20 +77,10 @@ src/                 React 前端
   kanban/            看板
   notes/             便签
   focus/             专注计时器与统计
-  widgets/           扩展/自定义模块系统与沙箱
+  widgets/           模块注册表、选择器与网格布局
   components/        共享 UI（Dialog、Select、DatePicker 等）
   data/              仓储接口与 Tauri 实现
   i18n/              多语言（en/zh）
 src-tauri/           Rust 后端（Tauri 命令、SQLite、壁纸、托盘）
-registry/            自定义模块注册表与示例
 docs/                设计规格与实施计划
 ```
-
-## 自定义模块
-
-自定义模块是自描述的 `.js` 文件，运行在隔离的 iframe 沙箱中
-（`allow-scripts`、null origin、严格 CSP）。它们不能 import 包、不能访问父页面
-DOM，也不能直接联网 —— 宿主仅暴露一个小型 `host` API（`state`、`today`，以及
-带权限控制的 `host.fetch`）和一个用于渲染的 `root` 元素。安装后，模块会成为
-12×8 网格上可自由摆放的组件，与内置模块并列。完整的模块格式与运行时契约见
-`docs/custom-modules/SKILL.md`。

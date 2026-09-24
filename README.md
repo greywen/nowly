@@ -40,8 +40,6 @@ focusing. All data stays on your machine in a local SQLite database.
   positioning, or run it as a regular window.
 - **Flexible layout** — arrange every module on a 12x8 grid; toggle modules on
   or off and resize them freely.
-- **Custom modules** — install sandboxed `.js` extensions from a local file or
-  the built-in module market, each running in an isolated iframe.
 - **Personalization** — Gaussian blur, a global color picker, calendar
   formatting, density controls, and login-on-startup.
 - **Localization** — English and Simplified Chinese, following your system
@@ -97,21 +95,10 @@ src/                 React frontend
   kanban/            Kanban board
   notes/             Notes
   focus/             Focus timer and statistics
-  widgets/           Extension/custom-module system and sandbox
+  widgets/           Module registry, picker, and grid layout
   components/        Shared UI (Dialog, Select, DatePicker, ...)
   data/              Repository interface and Tauri implementation
   i18n/              Localization (en/zh)
 src-tauri/           Rust backend (Tauri commands, SQLite, wallpaper, tray)
-registry/            Custom-module registry and examples
 docs/                Design specs and implementation plans
 ```
-
-## Custom Modules
-
-Custom modules are self-describing `.js` files that run in an isolated iframe
-sandbox (`allow-scripts`, null origin, strict CSP). They cannot import packages,
-touch the parent DOM, or reach the network directly — the host exposes a small
-`host` API (`state`, `today`, and a permissioned `host.fetch`) plus a `root`
-element to render into. Once installed, a module becomes a freely placed widget
-on the 12x8 grid alongside the built-in modules. See
-`docs/custom-modules/SKILL.md` for the full module format and runtime contract.

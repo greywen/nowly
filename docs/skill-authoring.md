@@ -86,6 +86,4 @@ docs/<domain>/<topic>.md          ← 子 skill：一个主题一个文件，自
 
 ## 5. 现有 skill
 
-| Skill | 主文件 | 用途 |
-|---|---|---|
-| `nowly-custom-module` | [custom-modules/SKILL.md](./custom-modules/SKILL.md) | 编写、预览、发布 Nowly 自定义模块 |
+_当前仓库没有已发布的 skill：模块系统相关的 skill 随「我的模块 / 开发者模块」一并移除。新增时按上面的结构补一行。_

@@ -146,10 +146,6 @@ fn surface_region(source: Option<PanelSource>, scale: f64) -> SurfaceRegion {
     }
 }
 
-fn surface_client_bounds(source: Option<PanelSource>, scale: f64) -> SurfaceBounds {
-    surface_region(source, scale).bounds()
-}
-
 /// Negative origins on a left-of-primary monitor must survive, so this stays
 /// signed arithmetic rather than unsigned centering.
 pub fn centered_x(work_area_x: i32, work_area_width: u32, width: u32) -> i32 {
@@ -535,18 +531,6 @@ impl PanelController {
         hide()
     }
 
-    pub fn hide_if_visibility_current<T>(
-        &self,
-        generation: u64,
-        hide: impl FnOnce() -> T,
-    ) -> Option<T> {
-        let _visibility = self.visibility.lock().unwrap();
-        if !self.is_visibility_current(generation) {
-            return None;
-        }
-        Some(hide())
-    }
-
     pub fn hide_if_current<T>(
         &self,
         details_generation: u64,
@@ -563,10 +547,6 @@ impl PanelController {
         }
         drop(state);
         Some(hide())
-    }
-
-    pub fn is_visibility_current(&self, generation: u64) -> bool {
-        self.state.lock().unwrap().visibility_generation == generation
     }
 
     pub fn set_enabled(&self, enabled: bool) {
@@ -1682,7 +1662,7 @@ mod tests {
 
         let hiding = Arc::clone(&controller);
         let hide_thread = std::thread::spawn(move || {
-            hiding.hide_if_visibility_current(generation, || {
+            hiding.hide_serialized(|| {
                 hide_started_tx.send(()).unwrap();
                 release_hide_rx.recv().unwrap();
             })
@@ -1784,7 +1764,7 @@ mod tests {
     fn transparent_host_gutters_are_outside_the_status_hit_region_at_each_dpi() {
         for scale in [1.0, 1.25, 1.5, 1.75, 2.0] {
             for source in [None, Some(PanelSource::Island)] {
-                let bounds = super::surface_client_bounds(source, scale);
+                let bounds = super::surface_region(source, scale).bounds();
                 let host = top_surface_size(source, scale);
                 assert_eq!(bounds.left, (60.0 * scale) as i32);
                 assert_eq!(bounds.right, (348.0 * scale) as i32);
@@ -1794,7 +1774,7 @@ mod tests {
                 assert!(!point_is_inside_surface(bounds.right, 1, bounds));
                 assert_eq!(bounds.bottom, host.1 as i32);
             }
-            let ai = super::surface_client_bounds(Some(PanelSource::Nowly), scale);
+            let ai = super::surface_region(Some(PanelSource::Nowly), scale).bounds();
             assert_eq!(ai.left, 0);
             assert_eq!(ai.right, top_surface_size(None, scale).0 as i32);
         }
