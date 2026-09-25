@@ -4,7 +4,7 @@
  * #ccc #f0f0f0) with 4px corners, which clashes with design.md's warm surfaces
  * and teal accent. The rules below keep snow's structure — it is the layout the
  * reference editor uses — and repaint it onto the design tokens. Every value
- * here comes from design.md §2, §3, §5, §7 and §8.5; none is invented.
+ * here comes from design.md §2, §3, §5, §7 and §10.4; none is invented.
  *
  * Motion: snow contains no `transition`, `animation` or `@keyframes` at all, so
  * the global no-motion rule in styles.css needs no exception for it. Hover,
@@ -36,7 +36,7 @@
   border-color: var(--color-primary);
   box-shadow: 0 0 0 4px var(--focus-ring);
 }
-/* Drop target feedback is a colour change only, per design.md §9. */
+/* Drop target feedback is a colour change only, per design.md §11. */
 .rich-editor__surface[data-dropping='true'] {
   border-color: var(--color-primary);
   background: var(--color-primary-light);
@@ -100,7 +100,7 @@
 .rich-editor .ql-toolbar.ql-snow button:focus .ql-fill {
   fill: var(--color-primary-active);
 }
-/* Active mark uses the light primary fill from design.md §9.3. */
+/* Active mark uses the light primary fill from design.md §11. */
 .rich-editor .ql-toolbar.ql-snow button.ql-active {
   background: var(--color-primary-light);
 }
@@ -343,7 +343,7 @@
 /* ---- The rest of the formats ---- */
 
 /* Headings. snow sizes these on an em ladder (2em / 1.5em / 1.17em / 1em);
-   design.md §3.3 fixes them in rem so the whole scale tracks the root size.
+   design.md §3.2 fixes them in rem so the whole scale tracks the root size.
    H5 and H6 are absent from the toolbar because §3.3 stops at H4. */
 .rich-editor .ql-editor h3 {
   margin: 0;

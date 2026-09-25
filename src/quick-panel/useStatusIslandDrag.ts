@@ -10,7 +10,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 // pixels cannot mean both "open" and "move" without one of them firing by
 // accident. The press has to be held before anything moves.
 //
-// This is input-driven motion (design.md §10: "直接响应输入的运动（拖拽跟手）"),
+// This is input-driven motion (design.md §12.2: "直接响应输入的运动（拖拽跟手）"),
 // not a transition. Nothing here interpolates; the surface is wherever the
 // pointer has moved it.
 

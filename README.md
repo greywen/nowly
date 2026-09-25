@@ -60,7 +60,8 @@ focusing. All data stays on your machine in a local SQLite database.
 ## Tech Stack
 
 - **Frontend** — React + TypeScript, built with Vite and styled with
-  Tailwind CSS.
+  hand-authored CSS against the tokens in `design.md`. No utility-class or
+  CSS-in-JS framework.
 - **Desktop shell** — Tauri 2 with a Rust backend.
 - **Storage** — local SQLite via `rusqlite` (bundled).
 - **Icons** — the [Solar icon set](https://www.figma.com/community/file/1166831539721848736)

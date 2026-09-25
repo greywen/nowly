@@ -131,7 +131,7 @@ describe('RichEditor', () => {
   });
 
   it('offers only design system values in its colour, size and font pickers', async () => {
-    // design.md §2 forbids near-miss colours and §3.3 forbids absolute px, so
+    // design.md §2 forbids near-miss colours and §3.2 forbids absolute px, so
     // Quill's stock palettes and small/large/huge sizes are replaced.
     const { container } = renderEditor();
     await editorSurface();

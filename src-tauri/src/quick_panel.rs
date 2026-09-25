@@ -44,7 +44,7 @@ const PANEL_RADIUS: f64 = 15.2;
 /// crossing the transparent gap inside the window.
 const HOVER_OPEN_DELAY: Duration = Duration::from_millis(300);
 /// The window may only shrink back once the sheet has finished collapsing inside
-/// the WebView, or the last frames get clipped by the window edge. design.md §10
+/// the WebView, or the last frames get clipped by the window edge. design.md §12.3
 /// puts both independent morphs at 220ms; add 40ms for a late frame.
 const COLLAPSE_ANIMATION: Duration = Duration::from_millis(260);
 /// Where the user parked the top surface, as a logical-pixel offset from the
@@ -1000,7 +1000,7 @@ pub fn set_enabled<R: Runtime>(
 
 /// Grows the rail into the sheet. The window has to be the full expanded size
 /// *before* the WebView starts animating, or the sheet would be clipped by the
-/// window edge on every frame (design.md §10).
+/// window edge on every frame (design.md §12.3).
 fn acknowledgement_identity(
     source: PanelSource,
     explicit: bool,

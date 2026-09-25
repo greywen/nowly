@@ -43,7 +43,8 @@ Nowly 的中文名是「此刻」。它是一款面向 Windows 10/11 的本地�
 
 ## 技术栈
 
-- **前端** —— React + TypeScript，基于 Vite 构建，使用 Tailwind CSS 样式。
+- **前端** —— React + TypeScript，基于 Vite 构建，样式为手写 CSS，全部取值来自 `design.md`
+  的 Token，不使用工具类或 CSS-in-JS 框架。
 - **桌面外壳** —— Tauri 2，后端使用 Rust。
 - **存储** —— 通过 `rusqlite`（bundled）使用本地 SQLite。
 - **图标** —— [Solar 图标集](https://www.figma.com/community/file/1166831539721848736)，

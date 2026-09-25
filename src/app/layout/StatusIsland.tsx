@@ -223,7 +223,7 @@ type IslandShellProps = {
  * The capsule's head. All three modes render through it, so the icon, title and
  * meta land on identical pixels whatever the capsule is carrying — and, because
  * the head is laid out at its *expanded* width and clipped by the sheet, on
- * identical pixels in both sizes of the rail too (design.md §10).
+ * identical pixels in both sizes of the rail too (design.md §12.3).
  *
  * The hit area is a sibling overlay rather than a button wrapped around the text:
  * the sheet owns the border and background now, and the two dismiss buttons have

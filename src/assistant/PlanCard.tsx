@@ -88,7 +88,7 @@ export function PlanCard({ plan, actions, edits, selected, dirty, busy, blocked,
         {!action.kind.startsWith('delete') && <details className="assistant-editor" open={actions.length === 1}>
           <summary>调整{kinds[action.kind]} · {change.title}<ChevronDown aria-hidden="true" size={17} /></summary>
           <fieldset disabled={busy || !selected[index] || blocked || expired} className="assistant-edit">
-          <legend className="sr-only">调整这项变更</legend>
+          <legend className="visually-hidden">调整这项变更</legend>
           <label>标题<input aria-label={`标题 ${index + 1}`} value={String(value.title ?? '')} maxLength={500} onChange={e => edit('title', e.target.value)} /></label>
           {event ? <>
             <DateField label={`开始 ${index + 1}`} value={String(value.startAt ?? '')} time onChange={v => edit('startAt', v)} />

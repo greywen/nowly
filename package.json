@@ -47,7 +47,6 @@
   "devDependencies": {
     "@iconify-json/solar": "^1.2.10",
     "@playwright/test": "latest",
-    "@tailwindcss/postcss": "^4.3.3",
     "@tauri-apps/cli": "latest",
     "@testing-library/jest-dom": "latest",
     "@testing-library/react": "latest",
@@ -59,7 +58,6 @@
     "cross-env": "^10.1.0",
     "jsdom": "latest",
     "postcss": "latest",
-    "tailwindcss": "latest",
     "typescript": "latest",
     "vite": "latest",
     "vitest": "latest"

@@ -1,12 +1,12 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
+/* The complete token set from design.md §14. Nothing outside this block may
+   hardcode a colour, radius, shadow or spacing value. */
 :root {
+  /* 主色与功能色 */
   --color-primary: #4fc9da;
-  --color-primary-active: #30a6b6;
   --color-primary-hover: #69d1e0;
+  --color-primary-active: #30a6b6;
   --color-primary-light: #ddf8fc;
+  --color-primary-border-subtle: #b9e9f0;
   --color-success: #b8d935;
   --color-success-active: #9fbe22;
   --color-success-light: #f4fbdb;
@@ -19,31 +19,64 @@
   --color-danger: #f06445;
   --color-danger-active: #db5437;
   --color-danger-light: #fff0ed;
+
+  /* 背景与表面 */
   --bg-page: #ffffff;
   --bg-surface: #ffffff;
   --bg-module: rgba(248, 246, 242, 0.3);
   --bg-subtle: #f8f6f2;
   --bg-secondary: #f6f1e9;
+  --bg-neutral: #f9f9f9;
+  --bg-overlay: rgba(0, 0, 0, 0.2);
+
+  /* 文字 */
   --text-primary: #211f1c;
   --text-strong: #403d38;
   --text-secondary: #716d66;
   --text-tertiary: #8e887a;
   --text-muted: #968e7e;
   --text-disabled: #b5b0a1;
+  --text-inverse: #ffffff;
+  --text-link: #4fc9da;
+  --text-link-active: #30a6b6;
+
+  /* 边框与焦点 */
   --border-default: #eaeaea;
+  --border-subtle: #f6f1e9;
   --border-emphasis: #dad3c3;
+  --focus-ring: rgba(79, 201, 218, 0.25);
+
+  /* 圆角 */
   --radius-sm: 7.6px;
   --radius-md: 10px;
   --radius-default: 15.2px;
   --radius-pill: 999px;
-  --focus-ring: rgba(79, 201, 218, 0.25);
-  --shadow-focus: 0 0 0 4px rgba(79, 201, 218, 0.25);
+
+  /* 阴影 */
+  --shadow-xs: 0 1.6px 12px 4px rgba(0, 0, 0, 0.05);
   --shadow-sm: 0 1.6px 16px 4px rgba(0, 0, 0, 0.05);
   --shadow-md: 0 8px 24px 8px rgba(0, 0, 0, 0.075);
   --shadow-lg: 0 16px 32px 16px rgba(0, 0, 0, 0.1);
   --shadow-dropdown: 0 0 50px 0 rgba(82, 63, 105, 0.15);
   --shadow-tooltip: 0 0 30px rgba(0, 0, 0, 0.15);
+  --shadow-focus: 0 0 0 4px rgba(79, 201, 218, 0.25);
+
+  /* 间距 */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+  --space-8: 32px;
+  --space-9: 36px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* 字体 */
   --font-sans: Inter, "Microsoft YaHei", "PingFang SC", Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
 }
 
 *,
@@ -131,7 +164,7 @@ button:disabled { cursor: default; opacity: .65; }
    Two independent panels share a native host. The collapsed status and Nowly
    controls share one continuous 288x40 surface; status detail stays 288x288
    while the AI conversation alone grows to 408x440. Each clips fixed content.
-   The growth is design.md §10's third named motion exception, so every
+   The growth is design.md §12.3's third named motion exception, so every
    transition here has to out-shout the global `transition: none !important`. */
 .status-rail {
    --rail-collapsed-w: 288px;
@@ -256,7 +289,7 @@ button:disabled { cursor: default; opacity: .65; }
 .status-island[data-dragging="true"] .status-island__trigger { cursor: grabbing; }
 
 /* Two dismiss buttons at two positions, cross-fading. Moving one element would
-   be a position tween, which design.md §10 does not allow here. */
+   be a position tween, which design.md §12.3 does not allow here. */
 .status-island__dismiss { position: absolute; z-index: 2; width: 28px; height: 28px; padding: 0; border: 0; border-radius: var(--radius-sm); display: grid; place-items: center; color: var(--text-muted); background: transparent; opacity: 0; pointer-events: none; transition: opacity var(--rail-out) ease-out !important; }
 .status-island__dismiss svg { width: 20px; height: 20px; }
 .status-island__dismiss:hover { color: var(--text-primary); background: var(--bg-secondary); }
@@ -419,8 +452,8 @@ body:has(.screen-status-island-root),
 .heading-group p { margin: 4px 0 0; color: var(--text-muted); font-size: 0.85rem; font-weight: 500; }
 .btn { box-sizing: border-box; flex: none; height: 40px; min-height: 40px; padding: 8px 24px; border: 1px solid transparent; border-radius: var(--radius-default); display: inline-flex; align-items: center; justify-content: center; gap: 8px; color: var(--text-strong); background: var(--bg-subtle); font-size: 1rem; font-weight: 500; white-space: nowrap; }
 .btn:hover { color: var(--color-primary); background: var(--bg-secondary); }
-.btn-primary { color: #fff; background: var(--color-primary); border-color: var(--color-primary); }
-.btn-primary:hover { color: #fff; background: var(--color-primary-hover); border-color: var(--color-primary-hover); }
+.btn-primary { color: var(--text-inverse); background: var(--color-primary); border-color: var(--color-primary); }
+.btn-primary:hover { color: var(--text-inverse); background: var(--color-primary-hover); border-color: var(--color-primary-hover); }
 .btn-icon { width: 40px; min-width: 40px; height: 40px; min-height: 40px; padding: 0; }
 .btn svg { width: 18px; height: 18px; flex: none; }
 .calendar-body { min-height: 0; flex: 1; padding: 12px 24px 24px; display: flex; flex-direction: column; }
@@ -523,7 +556,7 @@ body:has(.screen-status-island-root),
 .view-switch { display: inline-flex; padding: 4px; gap: 4px; border-radius: var(--radius-default); background: var(--bg-subtle); }
 .view-switch__btn { min-height: 32px; padding: 4px 12px; border: 0; border-radius: var(--radius-sm); color: var(--text-secondary); background: transparent; font-size: 0.85rem; font-weight: 600; }
 .view-switch__btn:hover { color: var(--color-primary-active); }
-.view-switch__btn.is-active { color: #fff; background: var(--color-primary); }
+.view-switch__btn.is-active { color: var(--text-inverse); background: var(--color-primary); }
 .view-switch__btn--icon { width: 32px; padding: 0; display: inline-grid; place-items: center; }
 .view-switch__btn--icon svg { width: 16px; height: 16px; }
 
@@ -688,7 +721,7 @@ body:has(.screen-status-island-root),
 .notes-settings__option:hover { border-color: var(--border-emphasis); background: var(--bg-subtle); }
 .notes-settings__option.is-active { border-color: var(--color-primary); background: var(--color-primary-light); }
 .notes-settings__option-icon { display: grid; width: 40px; height: 40px; flex: none; place-items: center; border-radius: var(--radius-default); color: var(--text-secondary); background: var(--bg-subtle); }
-.notes-settings__option.is-active .notes-settings__option-icon { color: #fff; background: var(--color-primary); }
+.notes-settings__option.is-active .notes-settings__option-icon { color: var(--text-inverse); background: var(--color-primary); }
 .notes-settings__option-icon svg { width: 20px; height: 20px; }
 .notes-settings__option-text { display: grid; gap: 4px; min-width: 0; flex: 1; }
 .notes-settings__option-label { color: var(--text-primary); font-size: 0.95rem; font-weight: 600; line-height: 1.5; }
@@ -809,14 +842,14 @@ body:has(.screen-status-island-root),
 }
 .good-button { box-sizing: border-box; height: 40px; min-height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 8px 24px; }
 .good-button:hover { color: var(--color-primary); background: var(--bg-secondary); }
-.good-button--primary { color: #fff; border-color: var(--color-primary); background: var(--color-primary); }
-.good-button--primary:hover { color: #fff; border-color: var(--color-primary-hover); background: var(--color-primary-hover); }
+.good-button--primary { color: var(--text-inverse); border-color: var(--color-primary); background: var(--color-primary); }
+.good-button--primary:hover { color: var(--text-inverse); border-color: var(--color-primary-hover); background: var(--color-primary-hover); }
 .good-icon-button { box-sizing: border-box; display: grid; width: 40px; height: 40px; min-height: 40px; padding: 0; place-items: center; }
 .good-icon-button svg { width: 18px; height: 18px; flex: none; }
 .good-button:focus-visible,
 .good-icon-button:focus-visible { outline: 0; }
 
-/* Underline tabs (design.md §8.12). The only tab shape in the app: no pill,
+/* Underline tabs (design.md §10.10). The only tab shape in the app: no pill,
    no filled segment, no card. Every settings surface reuses this block. */
 .good-tabs { display: flex; align-items: stretch; gap: 32px; }
 .good-tabs__tab { box-sizing: border-box; padding: 0 0 12px; border: 0; border-bottom: 3px solid transparent; border-radius: 0; background: transparent; color: var(--text-muted); font-size: 0.95rem; font-weight: 600; line-height: 1.5; white-space: nowrap; }
@@ -904,8 +937,8 @@ body:has(.screen-status-island-root),
 
 /* Category select: dropdown that both picks and manages calendar categories.
    Reuses the base .select-* primitives; these rules cover the per-row tools,
-   the add-category entry and the inline create/edit editor (design.md §8.10,
-   §8.5, §8.1). */
+   the add-category entry and the inline create/edit editor (design.md §10.5,
+   §10.4, §10.1). */
 .category-select__placeholder { color: var(--text-muted); }
 .category-select__popup { display: grid; gap: 8px; padding: 12px; }
 
@@ -956,7 +989,7 @@ body:has(.screen-status-island-root),
   padding: 32px;
   display: grid;
   place-items: center;
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--bg-overlay);
 }
 .good-dialog {
   box-sizing: border-box;
@@ -1018,8 +1051,8 @@ body:has(.screen-status-island-root),
 .field-error,
 .dialog-error { color: var(--color-danger-active); font-size: 0.85rem; font-weight: 500; line-height: 1.5; }
 .dialog-error { margin-top: 16px; padding: 12px 16px; border-radius: var(--radius-default); background: var(--color-danger-light); }
-.good-button--danger { color: #fff; border-color: var(--color-danger); background: var(--color-danger); }
-.good-button--danger:hover { color: #fff; border-color: var(--color-danger-active); background: var(--color-danger-active); }
+.good-button--danger { color: var(--text-inverse); border-color: var(--color-danger); background: var(--color-danger); }
+.good-button--danger:hover { color: var(--text-inverse); border-color: var(--color-danger-active); background: var(--color-danger-active); }
 
 .date-picker { position: relative; display: grid; gap: 8px; }
 .date-picker__label { color: var(--text-secondary); font-size: 0.95rem; font-weight: 500; line-height: 1.5; }
@@ -1086,7 +1119,7 @@ body:has(.screen-status-island-root),
 .date-picker__day--outside { color: var(--text-muted); }
 .date-picker__day--today { color: var(--text-secondary); background: var(--bg-secondary); }
 .date-picker__day--selected,
-.date-picker__day--selected:hover { color: #fff; background: var(--color-primary); }
+.date-picker__day--selected:hover { color: var(--text-inverse); background: var(--color-primary); }
 .date-picker__footer { margin-top: 12px; padding-top: 12px; display: flex; justify-content: space-between; border-top: 1px solid var(--border-default); }
 .date-picker__footer button { min-height: 36px; padding: 4px 12px; }
 
@@ -1265,10 +1298,13 @@ body:has(.screen-status-island-root),
 .task-dialog__actions .dialog-error { margin: 0 auto 0 0; }
 .form-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .form-check { position: relative; display: inline-flex; align-items: center; gap: 12px; }
-.form-check-input { box-sizing: border-box; width: 28px; height: 28px; margin: 0; padding: 0; flex: none; appearance: none; border: 0; border-radius: 7.2px; background: #dad3c3; }
+.form-check-input { box-sizing: border-box; width: 28px; height: 28px; margin: 0; padding: 0; flex: none; appearance: none; border: 0; border-radius: var(--radius-sm); background: var(--border-emphasis); }
 .form-check-input[type="checkbox"]:checked { background-color: var(--color-primary); background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 12 10 16 18 8'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: center center; background-origin: border-box; background-size: 16px 16px; }
 .form-check-input[type="radio"] { border-radius: 50%; }
-.form-check-input[type="radio"]:checked { box-shadow: inset 0 0 0 8px var(--color-primary), inset 0 0 0 10px #fff; }
+/* Solid primary fill plus a white dot, drawn as a background image like the
+   checkbox's tick. Stacked inset shadows would leave the unchecked grey
+   showing through the centre, because :checked does not repaint it. */
+.form-check-input[type="radio"]:checked { background-color: var(--color-primary); background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'%3E%3Ccircle cx='4' cy='4' r='4' fill='%23fff'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: center center; background-origin: border-box; background-size: 10px 10px; }
 .form-check-input:disabled { pointer-events: none; opacity: .5; }
 .form-check-label { color: var(--text-secondary); font-size: 0.95rem; font-weight: 500; }
 .color-options { margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 16px; border: 0; }
@@ -1276,7 +1312,7 @@ body:has(.screen-status-island-root),
 .event-dialog__actions { width: 100%; display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 .event-dialog__actions .dialog-error { margin: 0 auto 0 0; }
 .good-button--danger-ghost { color: var(--color-danger-active); background: var(--color-danger-light); }
-.good-button--danger-ghost:hover { color: #fff; background: var(--color-danger); }
+.good-button--danger-ghost:hover { color: var(--text-inverse); background: var(--color-danger); }
 
 .note-content { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .note-title { display: flex; align-items: center; gap: 8px; }
@@ -1592,7 +1628,7 @@ body:has(.screen-status-island-root),
 .kanban-menu__item:hover:not(:disabled) { color: var(--color-primary); background: var(--bg-subtle); }
 .kanban-menu__item:disabled { color: var(--text-disabled); }
 .kanban-menu__item--danger { color: var(--color-danger-active); }
-.kanban-menu__item--danger:hover:not(:disabled) { color: #fff; background: var(--color-danger); }
+.kanban-menu__item--danger:hover:not(:disabled) { color: var(--text-inverse); background: var(--color-danger); }
 .kanban-menu__icon { display: inline-flex; }
 
 /* Dialogs shared bits */
@@ -1793,7 +1829,7 @@ body:has(.screen-status-island-root),
 .subscription-list__dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
 .subscription-list__name { font-weight: 500; }
 .subscription-list__status { margin-left: auto; color: var(--text-muted); font-size: 0.85rem; }
-.subscription-list__status.is-failed { color: var(--danger, #c0563b); }
+.subscription-list__status.is-failed { color: var(--color-danger-active); }
 .subscription-list__provider { color: var(--text-muted); font-size: 0.85rem; padding: 2px 8px; border-radius: var(--radius-sm); background: var(--bg-subtle); }
 .subscription-list__tools { display: flex; gap: 4px; }
 .subscription-guide { padding: 12px 16px; border: 1px dashed var(--border-default); border-radius: var(--radius-default); background: var(--bg-subtle); }

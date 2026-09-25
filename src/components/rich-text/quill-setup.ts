@@ -19,7 +19,7 @@
 //    pinned to http/https.
 //
 // 2. Design system conformance. Quill's stock colour, size and font pickers
-//    offer arbitrary values, which design.md §2 and §3.3 forbid. Rather than
+//    offer arbitrary values, which design.md §2 and §3.2 forbid. Rather than
 //    dropping the controls, their option lists are replaced with design tokens,
 //    so every reachable value is one the design system defines.
 
@@ -75,7 +75,7 @@ export const richTextBackgrounds: ReadonlyArray<{ value: string; token: string }
 ];
 
 /**
- * Inline sizes, taken from design.md §3.3's scale. `false` is the default (Body,
+ * Inline sizes, taken from design.md §3.2's scale. `false` is the default (Body,
  * 1rem) and emits no attribute at all. Values are rem because §3.3 forbids
  * absolute px, so the whole scale still tracks the root font size.
  */
@@ -102,7 +102,7 @@ export const richTextFonts: ReadonlyArray<string | false> = [false, 'mono'];
 const FONT_WHITELIST = richTextFonts.filter((font): font is string => typeof font === 'string');
 
 /**
- * Heading levels. design.md §3.3 defines H1–H4 and no deeper, so 5 and 6 are
+ * Heading levels. design.md §3.2 defines H1–H4 and no deeper, so 5 and 6 are
  * absent rather than styled by guesswork.
  */
 export const richTextHeaders: ReadonlyArray<number | false> = [1, 2, 3, 4, false];
@@ -237,7 +237,7 @@ export function registerRichTextFormats(): void {
 
   // Replace the stock size and font attributors so only design tokens are
   // reachable. Size stays a style attributor because the values are rem from
-  // design.md §3.3; font is a class attributor so the family itself lives in CSS
+  // design.md §3.2; font is a class attributor so the family itself lives in CSS
   // next to the token it comes from.
   const SizeStyle = new StyleAttributor('size', 'font-size', {
     scope: Scope.INLINE,

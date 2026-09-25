@@ -215,7 +215,7 @@ test('renders Good solid checkbox states', async ({ page }) => {
     const style = getComputedStyle(element);
     return { width: style.width, height: style.height, background: style.backgroundColor, border: style.borderWidth, radius: style.borderRadius };
   });
-  expect(unchecked).toEqual({ width: '28px', height: '28px', background: 'rgb(218, 211, 195)', border: '0px', radius: '7.2px' });
+  expect(unchecked).toEqual({ width: '28px', height: '28px', background: 'rgb(218, 211, 195)', border: '0px', radius: '7.6px' });
   await checkbox.check();
   const checked = await checkbox.evaluate((element) => {
     const style = getComputedStyle(element);

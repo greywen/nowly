@@ -394,7 +394,7 @@ test.describe('the open sheet', () => {
 
     const shell = page.locator('.status-rail__status-presence');
     await expect(shell).toHaveAttribute('data-anim', 'grow');
-    // design.md §10 names the whitelist and the durations. Anything else moving
+    // design.md §12.3 names the whitelist and the durations. Anything else moving
     // would make the sheet read as a popup rather than the capsule growing.
     await expect(shell).toHaveCSS('transition-property', 'height, border-radius, opacity, visibility');
     await expect(shell).toHaveCSS('transition-duration', '0.28s, 0.28s, 0.14s, 0s');
@@ -436,7 +436,7 @@ test.describe('the open sheet', () => {
     await installRail(page, passiveSnapshot, { source: 'island', identity: null });
     await page.goto('/');
 
-    // The exception in design.md §10 is opt-out, not mandatory: asked for no
+    // The exception in design.md §12.3 is opt-out, not mandatory: asked for no
     // motion, the rail simply is its new size.
     await expect(page.locator('.status-rail__status-presence'))
       .toHaveCSS('transition-duration', '0s, 0s, 0s, 0s');
