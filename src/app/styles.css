@@ -831,7 +831,13 @@ body:has(.screen-status-island-root),
   outline: 0;
   background: var(--bg-subtle);
 }
-.good-input:focus-visible { outline: 0; }
+/* Focus / active border is shared with the select family and the rich text
+   surface (design.md §10.4): the border turns --color-primary and nothing
+   else moves. No 4px ring, so a text box, a select trigger and the editor all
+   read identically when active. Uses :focus (not :focus-visible) because a
+   click into a text box is the same active state as a keyboard tab into it. */
+.good-input:focus,
+.good-input:focus-visible { outline: 0; border-color: var(--color-primary); }
 .good-textarea { min-height: 96px; resize: none; }
 
 .good-button,
@@ -912,7 +918,8 @@ body:has(.screen-status-island-root),
   outline: 0;
   background: var(--bg-subtle);
 }
-.select-search:focus-visible { outline: 0; }
+.select-search:focus,
+.select-search:focus-visible { outline: 0; border-color: var(--color-primary); }
 .select-listbox { max-height: 240px; overflow-y: auto; }
 .select-option {
   display: flex;
@@ -1460,7 +1467,7 @@ body:has(.screen-status-island-root),
 .module-market-dialog { width: min(760px, calc(100vw - 32px)); }
 .module-market { display: grid; gap: 16px; }
 .module-market__search { display: flex; align-items: center; gap: 8px; padding: 0 16px; height: 44px; border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-subtle); }
-.module-market__search:focus-within { border-color: var(--color-primary); box-shadow: var(--shadow-focus); background: var(--bg-secondary); }
+.module-market__search:focus-within { border-color: var(--color-primary); background: var(--bg-secondary); }
 .module-market__search svg { width: 18px; height: 18px; flex: none; color: var(--text-tertiary); }
 .module-market__search input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--text-strong); font-size: 1rem; line-height: 1.5; outline: none; }
 .module-market__search input::placeholder { color: var(--text-muted); }
@@ -1547,7 +1554,8 @@ body:has(.screen-status-island-root),
 .color-picker__footer { display: flex; align-items: center; gap: 8px; }
 .color-picker__preview { flex: none; width: 32px; height: 32px; border-radius: var(--radius-sm); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .18); }
 .color-picker__hex { flex: 1; min-width: 0; box-sizing: border-box; height: 32px; padding: 0 10px; border: 1px solid var(--border-default); border-radius: var(--radius-sm); background: var(--bg-surface); color: var(--text-primary); font-size: 0.85rem; font-family: var(--font-mono, monospace); text-transform: uppercase; }
-.color-picker__hex:focus-visible { outline: 0; border-color: var(--color-primary); box-shadow: 0 0 0 3px var(--focus-ring); }
+.color-picker__hex:focus,
+.color-picker__hex:focus-visible { outline: 0; border-color: var(--color-primary); }
 .color-picker__recent { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .color-picker__recent-empty { margin: 0; color: var(--text-muted); font-size: 0.85rem; }
 .color-picker__recent-color { width: 28px; height: 28px; padding: 0; border: 1px solid var(--border-default); border-radius: 50%; background: var(--selected-color); cursor: pointer; }
@@ -1792,7 +1800,7 @@ body:has(.screen-status-island-root),
 .focus-statistics-dialog{width:min(760px,calc(100vw - 32px))}.focus-statistics__intro{margin:0 0 16px;color:var(--text-muted)}.focus-statistics__periods{display:flex;gap:8px;flex-wrap:wrap}.focus-statistics__periods [aria-pressed="true"]{color:var(--color-primary-active);background:var(--color-primary-light)}
 .focus-statistics__summaries{margin:20px 0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.focus-statistics__summaries div{padding:16px;border-radius:var(--radius-default);background:var(--bg-subtle)}.focus-statistics__summaries strong,.focus-statistics__summaries span{display:block}.focus-statistics__summaries strong{color:var(--text-primary);font-size:1.15rem}.focus-statistics__summaries span{color:var(--text-muted);font-size:0.85rem}
 @media(max-width:700px){.focus-statistics__summaries{grid-template-columns:repeat(2,1fr)}}
-.focus-timer__custom{flex:none;width:100%;display:flex;flex-wrap:wrap;align-items:center;gap:8px}.focus-timer__custom-input{box-sizing:border-box;height:40px;flex:1 1 0;min-width:0;padding:8px 16px;border:1px solid var(--border-default);border-radius:var(--radius-default);color:var(--text-secondary);background:var(--bg-subtle)}.focus-timer__custom-input:focus{border-color:var(--color-primary);box-shadow:0 0 0 4px var(--focus-ring)}.focus-timer__custom-apply{flex:0 0 auto;padding:8px 16px;font-size:0.95rem}.focus-timer__custom [role="alert"]{flex:1 0 100%;color:var(--color-danger);font-size:0.85rem}
+.focus-timer__custom{flex:none;width:100%;display:flex;flex-wrap:wrap;align-items:center;gap:8px}.focus-timer__custom-input{box-sizing:border-box;height:40px;flex:1 1 0;min-width:0;padding:8px 16px;border:1px solid var(--border-default);border-radius:var(--radius-default);color:var(--text-secondary);background:var(--bg-subtle)}.focus-timer__custom-input:focus{border-color:var(--color-primary)}.focus-timer__custom-apply{flex:0 0 auto;padding:8px 16px;font-size:0.95rem}.focus-timer__custom [role="alert"]{flex:1 0 100%;color:var(--color-danger);font-size:0.85rem}
 
 /* First-run guided tour (coach-mark spotlight). No animation per design.md:
    the spotlight and card jump between steps instantly. The scrim is a warm

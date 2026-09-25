@@ -376,7 +376,9 @@ app-shell（100vw × 100vh，grid-template-rows: 70px minmax(0, 1fr)）
 - 内边距 `11px 16px`（单行等效垂直居中），字号 `1rem`，字重 `400`，文字 `--text-secondary`，占位符 `--text-muted`。
 - 背景 `--bg-subtle`，边框 `1px solid transparent`，圆角 `15.2px`，`outline: 0`。
 - hover：背景 `--bg-secondary`。
-- focus / 展开：边框 `--color-primary`；键盘焦点叠加 `--shadow-focus`。
+- focus / 展开：**边框 `--color-primary`，不叠加 `--shadow-focus`，不加任何外环。** 文本框、多行文本框、富文本编辑器与下拉选择（§10.5）、日期 / 时间选择器触发控件（§10.7 / §10.8）共用这一条规则：激活时只有边框换色，几何尺寸与阴影完全不变。
+- 文本类控件用 `:focus`（而非只用 `:focus-visible`）：鼠标点进输入框与键盘 Tab 进输入框是同一个激活态，表现必须一致。
+- 富文本编辑器把工具栏与编辑区包在同一个表面里，`:focus-within` 时整体换边框色，不得让工具栏与编辑区各画一次边框或各亮一次焦点。
 - error：边框 `--color-danger`；错误文案 `0.85rem / 500`，`--color-danger-active`。
 - disabled：文字 `--text-disabled`，`opacity: 0.65`，`pointer-events: none`。
 - 字段结构：`label`（`0.95rem / 500`，`--text-secondary`）→ `8px` → 控件；字段之间 `20px`。
@@ -535,7 +537,7 @@ app-shell（100vw × 100vh，grid-template-rows: 70px minmax(0, 1fr)）
 | Default | 遵循组件基础样式 |
 | Hover | 只改颜色、背景、边框、图标色；禁止改变尺寸与位置 |
 | Active / Selected | 用 `--color-primary`、`--color-primary-active` 或 `--color-primary-light` 表达 |
-| Focus-visible | `--shadow-focus`（`4px` 主色半透明环）；被原生窗口裁切的浮层改用 `inset 0 0 0 2px --color-primary` |
+| Focus-visible | `--shadow-focus`（`4px` 主色半透明环）；被原生窗口裁切的浮层改用 `inset 0 0 0 2px --color-primary`；**文本框 / 多行文本框 / 富文本 / 下拉与日期时间触发控件例外，只换边框色，见 §10.4** |
 | Disabled | `opacity: 0.65`（Checkbox / Chip 用 `0.5`），`pointer-events: none` 或移除交互；不得只改光标 |
 | Error | 危险色边框 + 文字说明，必要时加浅危险底提示块 |
 | Loading | 只允许静态文案或静态占位，禁止旋转、脉冲、闪烁、骨架微光 |

@@ -43,7 +43,8 @@
 .assistant-edit > label, .assistant-form > label { display: grid; gap: 8px; min-width: 0; color: var(--text-secondary); font-size: .95rem; }
 .assistant-edit textarea, .assistant-edit input:not([type=checkbox]), .assistant-form input:not([type=checkbox]) { box-sizing: border-box; width: 100%; min-width: 0; min-height: 48px; padding: 12px 16px; border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-subtle); font: inherit; color: var(--text-strong); }
 .assistant-edit textarea { resize: vertical; min-height: 72px; }
-.assistant-edit input:focus-visible, .assistant-edit textarea:focus-visible, .assistant-form input:focus-visible, .assistant-form select:focus-visible { outline: none; border-color: var(--color-primary); box-shadow: var(--shadow-focus); }
+.assistant-edit input:focus, .assistant-edit textarea:focus, .assistant-form input:focus, .assistant-form select:focus,
+.assistant-edit input:focus-visible, .assistant-edit textarea:focus-visible, .assistant-form input:focus-visible, .assistant-form select:focus-visible { outline: none; border-color: var(--color-primary); }
 .assistant-edit:disabled { opacity: .65; }
 .assistant-date { display: grid; gap: 8px; min-width: 0; }
 .assistant-date .date-picker__popup, .assistant-date .time-picker__popup { position: static; }

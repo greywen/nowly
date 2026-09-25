@@ -32,9 +32,10 @@
   background: var(--bg-subtle);
   overflow: hidden;
 }
+/* Active state is the same single signal the select trigger and .good-input
+   use (design.md §10.4): border turns primary, no ring. */
 .rich-editor__surface:focus-within {
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 4px var(--focus-ring);
 }
 /* Drop target feedback is a colour change only, per design.md §11. */
 .rich-editor__surface[data-dropping='true'] {
@@ -490,6 +491,14 @@
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   background: var(--bg-subtle);
+}
+/* Same active border as every other text box (design.md §10.4). Snow ships no
+   focus style for this input at all, so without this the link field is the one
+   text box in the app that gives no feedback when it is focused. */
+.rich-editor .ql-snow .ql-tooltip input[type='text']:focus,
+.rich-editor .ql-snow .ql-tooltip input[type='text']:focus-visible {
+  outline: 0;
+  border-color: var(--color-primary);
 }
 .rich-editor .ql-snow .ql-tooltip a.ql-action,
 .rich-editor .ql-snow .ql-tooltip a.ql-remove {
