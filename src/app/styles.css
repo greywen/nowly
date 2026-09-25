@@ -291,7 +291,7 @@ button:disabled { cursor: default; opacity: .65; }
 /* Two dismiss buttons at two positions, cross-fading. Moving one element would
    be a position tween, which design.md §12.3 does not allow here. */
 .status-island__dismiss { position: absolute; z-index: 2; width: 28px; height: 28px; padding: 0; border: 0; border-radius: var(--radius-sm); display: grid; place-items: center; color: var(--text-muted); background: transparent; opacity: 0; pointer-events: none; transition: opacity var(--rail-out) ease-out !important; }
-.status-island__dismiss svg { width: 20px; height: 20px; }
+.status-island__dismiss svg { width: 16px; height: 16px; }
 .status-island__dismiss:hover { color: var(--text-primary); background: var(--bg-secondary); }
 .status-island__dismiss:focus-visible { box-shadow: inset 0 0 0 2px var(--color-primary); }
 .status-island__dismiss[data-at="collapsed"]:focus-visible,
@@ -302,7 +302,9 @@ button:disabled { cursor: default; opacity: .65; }
 /* Open, it takes the room the Nowly dot vacated and stays visible. */
 .status-island__dismiss[data-at="expanded"] { top: 5px; right: 7px; }
 .status-rail[data-status-open="true"] .status-island__dismiss[data-owner="status"] { opacity: 1; pointer-events: auto; transition: opacity var(--rail-in) ease-out var(--rail-in-delay) !important; }
-.status-rail__panel-close { z-index: 6; top: 0; right: 0; width: 40px; height: 40px; border-radius: var(--radius-default); transition: opacity var(--logo-out) var(--rail-ease) !important; }
+/* Same compact box as the collapsed dismiss: 28 x 28 + --radius-sm from the base
+   rule. Only stacking and the fade differ, so both close keys stay identical. */
+.status-rail__panel-close { z-index: 6; transition: opacity var(--logo-out) var(--rail-ease) !important; }
 .status-island__dismiss[data-owner="assistant"][aria-hidden="false"] { opacity: 1; pointer-events: auto; transition: opacity var(--logo-in) var(--rail-ease) var(--logo-in-delay) !important; }
 .status-rail__panel-close:hover { color: var(--color-primary); background: var(--bg-secondary); }
 

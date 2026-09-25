@@ -120,12 +120,12 @@
 .assistant-dock .assistant-stop { color: var(--color-danger-active); background: var(--color-danger-light); }
 .assistant-dock .assistant-listening { color: var(--color-danger-active); background: var(--color-danger-light); }
 .assistant-dock--embedded { position: absolute; inset: 0; width: 100%; margin: 0; }
-.assistant-dock--embedded .assistant-composer { position: absolute; right: 0; bottom: 0; left: 0; height: 40px; gap: 8px; padding: 0 0 0 16px; border: 0; border-top: 1px dashed var(--border-default); border-radius: 0; background: transparent; box-shadow: none; }
+.assistant-dock--embedded .assistant-composer { position: absolute; right: 0; bottom: 0; left: 0; height: 40px; gap: 8px; padding: 0 7px 0 16px; border: 0; border-top: 1px dashed var(--border-default); border-radius: 0; background: transparent; box-shadow: none; }
 .assistant-dock--embedded .assistant-composer textarea { height: 40px; padding: 10px 0; color: var(--text-secondary); font-size: .95rem; font-weight: 400; }
 .assistant-dock--embedded .assistant-composer textarea:focus,
 .assistant-dock--embedded .assistant-composer textarea:focus-visible { outline: none; border: 0; box-shadow: none; }
 .assistant-dock--embedded .assistant-composer-tools { gap: 0; }
-.assistant-dock--embedded .assistant-composer-tools .btn-icon { width: 40px; min-width: 40px; min-height: 40px; height: 40px; padding: 0; border-radius: var(--radius-default); }
+.assistant-dock--embedded .assistant-composer-tools .btn-icon { width: 28px; min-width: 28px; min-height: 28px; height: 28px; padding: 0; border-radius: var(--radius-sm); }
 .assistant-dock--embedded .assistant-panel { top: 0; right: 0; bottom: 40px; left: 0; height: auto; max-height: none; border: 0; border-radius: 0; box-shadow: none; }
 .assistant-dock--embedded .assistant-panel-header { min-height: 44px; padding: 4px 8px; }
 .assistant-dock--embedded .assistant-panel-title { gap: 8px; }
