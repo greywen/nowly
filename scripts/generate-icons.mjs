@@ -34,6 +34,7 @@ const ICON_SOURCES = {
   ChevronUp: 'alt-arrow-up',
   CircleAlert: 'danger-circle',
   Clock3: 'clock-circle',
+  Crop: 'crop-minimalistic',
   Download: 'download-minimalistic',
   Droplets: 'waterdrop',
   FileText: 'file-text',

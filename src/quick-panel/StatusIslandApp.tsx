@@ -13,7 +13,25 @@ import { useStatusIslandSnapshot } from './useStatusIslandSnapshot';
 import { useStatusIslandDrag } from './useStatusIslandDrag';
 import { useTransparentSurfaces } from './useTransparentSurfaces';
 import { useTranslation } from '../i18n';
+import { t } from '../i18n';
+import type { BarAppId } from '../app/bar-buttons';
 import { AssistantDock } from '../assistant/AssistantDock';
+
+// Which command each app button invokes. The screenshot session is specified in
+// docs/superpowers/specs/2026-09-25-nowly-screenshot-design.md; until it lands
+// the command rejects, and the button reports that in place.
+const BAR_BUTTON_COMMANDS: Record<BarAppId, string> = {
+  screenshot: 'start_screen_capture'
+};
+
+function barButtonErrorMessage(reason: unknown): string {
+  if (typeof reason === 'object' && reason !== null && 'message' in reason) {
+    const { message } = reason as { message?: unknown };
+    if (typeof message === 'string' && message.trim()) return message;
+  }
+  if (typeof reason === 'string' && reason.trim()) return reason;
+  return t('barButtons.unavailable');
+}
 
 type PanelSource = 'island' | 'nowly';
 type RailSurface = 'status' | 'assistant';
@@ -42,7 +60,7 @@ async function withActionHold(run: () => Promise<unknown>): Promise<void> {
 export function StatusIslandApp() {
   useTransparentSurfaces();
   const { t } = useTranslation();
-  const { model, status, refresh, notificationMode } = useStatusIslandSnapshot();
+  const { model, status, refresh, notificationMode, barButtons } = useStatusIslandSnapshot();
   const drag = useStatusIslandDrag();
   const surfaceState = model.surface;
   const [open, setOpen] = useState(false);
@@ -267,6 +285,22 @@ export function StatusIslandApp() {
     collapse();
   }, [collapse]);
 
+  // Each app button calls its own command. A rejection is reported on the button
+  // that failed, not as a toast, and clears on the next attempt.
+  const [barButtonErrors, setBarButtonErrors] = useState<Partial<Record<BarAppId, string>>>({});
+  const activateBarButton = useCallback((id: BarAppId) => {
+    if (drag.consumedClick()) return;
+    setBarButtonErrors(current => {
+      if (!(id in current)) return current;
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+    void invoke(BAR_BUTTON_COMMANDS[id]).catch((reason: unknown) => {
+      setBarButtonErrors(current => ({ ...current, [id]: barButtonErrorMessage(reason) }));
+    });
+  }, [drag]);
+
   const focusEnter = useCallback(() => reportPresence('keyboard', true), []);
   const focusLeave = useCallback(() => reportPresence('keyboard', false), []);
 
@@ -346,6 +380,9 @@ export function StatusIslandApp() {
         statusAnim={statusAnim}
         assistantAnim={assistantAnim}
         mode={displayedSurface.mode}
+        barButtons={barButtons}
+        barButtonErrors={barButtonErrors}
+        onActivateBarButton={activateBarButton}
         onCollapse={collapse}
         onActivateNowly={activateNowly}
         assistant={(

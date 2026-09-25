@@ -57,6 +57,7 @@ pub fn read_app_settings(connection: &Connection) -> Result<AppSettings, rusqlit
             "quick_panel_shortcut",
             "Ctrl+Space".to_owned(),
         )?,
+        bar_buttons: read_value_or(connection, "bar_buttons", Vec::new())?,
         recent_colors: read_value_or(connection, "recent_colors", Vec::new())?,
     })
 }
@@ -92,6 +93,20 @@ pub(crate) fn validate(settings: &AppSettings) -> Result<(), rusqlite::Error> {
         "duotone" | "solid" | "outline"
     ) {
         return Err(rusqlite::Error::InvalidParameterName("iconStyle".into()));
+    }
+    // The bar's geometry is derived from this length, so an over-long or
+    // duplicated list would widen the shell past the host window. Reject it here
+    // rather than clamping silently, so a malformed save is visible.
+    if settings.bar_buttons.len() > crate::quick_panel::BAR_BUTTON_SLOTS {
+        return Err(rusqlite::Error::InvalidParameterName("barButtons".into()));
+    }
+    for (index, id) in settings.bar_buttons.iter().enumerate() {
+        if !crate::quick_panel::is_known_bar_app(id) {
+            return Err(rusqlite::Error::InvalidParameterName("barButtons".into()));
+        }
+        if settings.bar_buttons[..index].contains(id) {
+            return Err(rusqlite::Error::InvalidParameterName("barButtons".into()));
+        }
     }
     Ok(())
 }
@@ -138,6 +153,10 @@ pub fn write_app_settings(
         (
             "quick_panel_shortcut",
             serde_json::to_string(&settings.quick_panel_shortcut),
+        ),
+        (
+            "bar_buttons",
+            serde_json::to_string(&settings.bar_buttons),
         ),
         (
             "recent_colors",
@@ -188,6 +207,53 @@ mod tests {
         assert_eq!(settings.icon_style, "duotone");
         assert!(settings.hide_topbar_in_wallpaper);
         assert_eq!(settings.notification_mode, "persistent");
+        // No app buttons until the user configures them, so a fresh install has
+        // the historic bar geometry.
+        assert!(settings.bar_buttons.is_empty());
+    }
+
+    /// The bar's width is derived from this list, so a malformed one is rejected
+    /// rather than clamped: a silent clamp would disagree with what the user saved.
+    #[test]
+    fn malformed_bar_button_lists_are_rejected() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        migrate(&mut connection).unwrap();
+        let before = read_app_settings(&connection).unwrap();
+
+        for invalid_list in [
+            // Unknown id: would render a button with no handler.
+            vec!["not-an-app".to_string()],
+            // Duplicate: one app cannot occupy two slots.
+            vec!["screenshot".to_string(), "screenshot".to_string()],
+            // Over the slot count: would widen the shell past the host window.
+            vec![
+                "screenshot".to_string(),
+                "a".to_string(),
+                "b".to_string(),
+                "c".to_string(),
+            ],
+        ] {
+            let mut invalid = before.clone();
+            invalid.bar_buttons = invalid_list;
+            assert!(super::write_app_settings(&mut connection, &invalid).is_err());
+            assert_eq!(read_app_settings(&connection).unwrap(), before);
+        }
+    }
+
+    #[test]
+    fn a_catalogued_bar_button_is_accepted() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        migrate(&mut connection).unwrap();
+        let mut settings = read_app_settings(&connection).unwrap();
+        settings.bar_buttons = vec!["screenshot".to_string()];
+
+        let saved = super::write_app_settings(&mut connection, &settings).unwrap();
+
+        assert_eq!(saved.bar_buttons, vec!["screenshot".to_string()]);
+        assert_eq!(
+            read_app_settings(&connection).unwrap().bar_buttons,
+            vec!["screenshot".to_string()]
+        );
     }
 
     #[test]
@@ -210,6 +276,7 @@ mod tests {
             // never written.
             quick_panel_enabled: false,
             quick_panel_shortcut: "Ctrl+Shift+K".into(),
+            bar_buttons: vec!["screenshot".into()],
             recent_colors: vec![],
         };
 

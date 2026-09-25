@@ -324,6 +324,10 @@ pub struct AppSettings {
     pub quick_panel_enabled: bool,
     #[serde(default = "default_quick_panel_shortcut")]
     pub quick_panel_shortcut: String,
+    /// Ordered app ids occupying the Nowly Bar's button slots, left to right.
+    /// Capped at `BAR_BUTTON_SLOTS`; see `quick_panel::bar_buttons`.
+    #[serde(default)]
+    pub bar_buttons: Vec<String>,
     #[serde(default)]
     pub recent_colors: Vec<String>,
 }

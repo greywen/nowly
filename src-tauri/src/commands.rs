@@ -147,6 +147,17 @@ pub fn update_app_settings(
     if saved.notification_mode != previous_settings.notification_mode {
         crate::status_island::invalidate(&app)?;
     }
+    // The bar's app buttons change its width, so the host window has to be
+    // resized and re-clipped before the WebView can render the new lane.
+    if app
+        .state::<crate::quick_panel::PanelController>()
+        .set_bar_button_count(saved.bar_buttons.len())
+    {
+        crate::quick_panel::request_position_reconcile(app.clone());
+    }
+    if saved.bar_buttons != previous_settings.bar_buttons {
+        crate::status_island::invalidate(&app)?;
+    }
     Ok(saved)
 }
 
@@ -172,6 +183,7 @@ mod tests {
             notification_mode: "persistent".into(),
             quick_panel_enabled: false,
             quick_panel_shortcut: "Ctrl+Space".into(),
+            bar_buttons: Vec::new(),
             recent_colors: Vec::new(),
         }
     }

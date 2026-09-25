@@ -29,16 +29,53 @@ struct DragAnchor {
 }
 
 const TOP_MARGIN: f64 = 8.0;
-/// Visible surfaces keep their own widths, but the native host always reserves
-/// the AI width. Both panels change height only: no horizontal WebView resize
-/// or native recentering is allowed at the end of a morph.
+/// The collapsed shell's fixed left part: the status action area.
+const STATUS_ACTION_WIDTH: f64 = 240.0;
+/// One lane. The Nowly logo and each configurable app button are equally wide.
+const BAR_LANE_WIDTH: f64 = 48.0;
+/// How many app buttons the bar offers. design.md §8.3 fixes this at three.
+pub const BAR_BUTTON_SLOTS: usize = 3;
+/// Status detail panel width. Independent of the collapsed width, so opening a
+/// panel never depends on how many app buttons are configured.
 const RAIL_WIDTH: f64 = 288.0;
 const RAIL_HEIGHT: f64 = 40.0;
 const STATUS_HEIGHT: f64 = 288.0;
+/// AI panel width. Also independent of the collapsed width.
 const ASSISTANT_WIDTH: f64 = 408.0;
 const ASSISTANT_HEIGHT: f64 = 440.0;
 const RAIL_RADIUS: f64 = 20.0;
 const PANEL_RADIUS: f64 = 15.2;
+
+/// Apps that may occupy a bar button slot. Mirrors `BAR_APPS` in
+/// `src/app/bar-buttons.ts`; the front end renders them, this validates them.
+const BAR_APPS: [&str; 1] = ["screenshot"];
+
+pub fn is_known_bar_app(id: &str) -> bool {
+    BAR_APPS.contains(&id)
+}
+
+/// Collapsed shell width: status area + logo lane + one lane per app button.
+fn collapsed_width(button_count: usize) -> f64 {
+    STATUS_ACTION_WIDTH + BAR_LANE_WIDTH * (1 + button_count.min(BAR_BUTTON_SLOTS)) as f64
+}
+
+/// Host width: wide enough for whichever visible form is widest. It changes only
+/// with the button configuration, never when a panel opens or closes.
+fn host_width(button_count: usize) -> f64 {
+    collapsed_width(button_count).max(ASSISTANT_WIDTH)
+}
+
+/// Width of the currently visible surface, which is what the hit region and the
+/// outside-click test must use.
+fn visible_width(source: Option<PanelSource>, button_count: usize) -> f64 {
+    match source {
+        // The status panel keeps its own constant width and shares the collapsed
+        // shell's left edge.
+        Some(PanelSource::Island) => RAIL_WIDTH,
+        Some(PanelSource::Nowly) => ASSISTANT_WIDTH,
+        None => collapsed_width(button_count),
+    }
+}
 /// A quick pass over the island must not open anything. Only a sustained hover
 /// does, and the delay is coordinated natively so it survives the pointer
 /// crossing the transparent gap inside the window.
@@ -102,15 +139,20 @@ pub fn screen_top(monitor_y: i32, _work_area_y: i32) -> i32 {
     monitor_y
 }
 
-/// Stable native viewport width for every source, including the compact rail.
-pub fn top_surface_size(source: Option<PanelSource>, scale_factor: f64) -> (u32, u32) {
+/// Stable native viewport width for every source: the host reserves the widest
+/// visible form, so a panel opening or closing only changes height.
+pub fn top_surface_size(
+    source: Option<PanelSource>,
+    button_count: usize,
+    scale_factor: f64,
+) -> (u32, u32) {
     let height = match source {
         Some(PanelSource::Island) => STATUS_HEIGHT,
         Some(PanelSource::Nowly) => ASSISTANT_HEIGHT,
         None => RAIL_HEIGHT,
     };
     (
-        (ASSISTANT_WIDTH * scale_factor).round() as u32,
+        (host_width(button_count) * scale_factor).round() as u32,
         (height * scale_factor).round() as u32,
     )
 }
@@ -119,17 +161,19 @@ fn physical_pixels(logical: f64, scale: f64) -> i32 {
     (logical * scale).round() as i32
 }
 
-/// Rounded region in native client pixels. The extra side gutters of the
-/// compact rail and status panel must not intercept clicks intended for other
-/// applications.
-fn surface_region(source: Option<PanelSource>, scale: f64) -> SurfaceRegion {
-    let (host_width, height) = top_surface_size(source, scale);
-    let width = if source == Some(PanelSource::Nowly) {
-        host_width
-    } else {
-        physical_pixels(RAIL_WIDTH, scale) as u32
+/// Rounded region in native client pixels. The transparent host gutters beside
+/// the collapsed rail and the status panel must not intercept clicks intended
+/// for other applications, so the region tracks each real visible form.
+fn surface_region(source: Option<PanelSource>, button_count: usize, scale: f64) -> SurfaceRegion {
+    let (host_px, height) = top_surface_size(source, button_count, scale);
+    let width = physical_pixels(visible_width(source, button_count), scale) as u32;
+    // The collapsed shell centres in the host; the status panel shares its left
+    // edge so status content lands on the same pixel in both forms. Only the AI
+    // panel centres on its own width.
+    let left = match source {
+        Some(PanelSource::Nowly) => ((host_px - width) / 2) as i32,
+        _ => physical_pixels(shell_left(button_count), scale),
     };
-    let left = ((host_width - width) / 2) as i32;
     SurfaceRegion {
         left,
         top: 0,
@@ -144,6 +188,12 @@ fn surface_region(source: Option<PanelSource>, scale: f64) -> SurfaceRegion {
             scale,
         ),
     }
+}
+
+/// Left edge of the collapsed shell inside the host, in logical pixels. The
+/// status panel shares it.
+fn shell_left(button_count: usize) -> f64 {
+    (host_width(button_count) - collapsed_width(button_count)) / 2.0
 }
 
 /// Negative origins on a left-of-primary monitor must survive, so this stays
@@ -318,6 +368,9 @@ struct PanelState {
     visibility_generation: u64,
     /// Logical pixels from the work area's horizontal centre.
     offset_x: f64,
+    /// How many app buttons the bar renders. Drives the host width and the hit
+    /// region, so native and WebView agree on the visible geometry.
+    bar_button_count: usize,
     /// `Some` *is* "a drag is in progress".
     drag: Option<Drag>,
 }
@@ -351,6 +404,7 @@ impl Default for PanelController {
                 details_generation: 0,
                 visibility_generation: 0,
                 offset_x: 0.0,
+                bar_button_count: 0,
                 drag: None,
             }),
             positioning: Mutex::new(()),
@@ -366,6 +420,20 @@ impl PanelController {
 
     pub fn target_monitor_id(&self) -> Option<String> {
         self.state.lock().unwrap().target_monitor_id.clone()
+    }
+
+    pub fn bar_button_count(&self) -> usize {
+        self.state.lock().unwrap().bar_button_count
+    }
+
+    /// Returns whether the count actually changed, so callers only reposition the
+    /// host window when the geometry really moved.
+    pub fn set_bar_button_count(&self, count: usize) -> bool {
+        let count = count.min(BAR_BUTTON_SLOTS);
+        let mut state = self.state.lock().unwrap();
+        let changed = state.bar_button_count != count;
+        state.bar_button_count = count;
+        changed
     }
 
     pub fn set_target_monitor_id(&self, target_monitor_id: Option<String>) {
@@ -894,7 +962,8 @@ pub fn reposition_handle<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
     let work_area = monitor_work_area(&monitor)?;
     let top = screen_top(monitor.position().y, work_area.y);
     let source = app.state::<PanelController>().details_source();
-    let desired_size = top_surface_size(source, monitor.scale_factor());
+    let button_count = app.state::<PanelController>().bar_button_count();
+    let desired_size = top_surface_size(source, button_count, monitor.scale_factor());
     let physical_size = PhysicalSize::new(desired_size.0, desired_size.1);
     let handle_x = surface_x(
         work_area.x,
@@ -912,12 +981,15 @@ pub fn reposition_handle<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
             &handle,
             handle_position,
             physical_size,
-            surface_region(source, monitor.scale_factor()),
+            surface_region(source, button_count, monitor.scale_factor()),
         )?;
     } else {
         // Also initialize the region when startup bounds already match.
         #[cfg(target_os = "windows")]
-        set_handle_region(&handle, surface_region(source, monitor.scale_factor()))?;
+        set_handle_region(
+            &handle,
+            surface_region(source, button_count, monitor.scale_factor()),
+        )?;
     }
     Ok(())
 }
@@ -1221,7 +1293,7 @@ pub fn close_status_island_details(app: AppHandle) -> Result<(), crate::error::C
 mod outside_click_watch {
     use super::{
         close_details_after_outside_click, native_clip_region, point_is_inside_rounded_surface,
-        surface_region, PanelController, SurfaceRegion, ASSISTANT_WIDTH,
+        surface_region, PanelController, SurfaceRegion,
     };
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::OnceLock;
@@ -1265,9 +1337,14 @@ mod outside_click_watch {
                     return;
                 }
                 let data = unsafe { &*(lparam.0 as *const MSLLHOOKSTRUCT) };
+                let button_count = app.state::<PanelController>().bar_button_count();
+                // The host reserves the widest visible form, so its logical width
+                // depends on the button configuration. Recovering the scale from
+                // a hard-coded 408 would mis-scale the region at three buttons.
                 let content = native_clip_region(surface_region(
                     app.state::<PanelController>().details_source(),
-                    f64::from(rect.right - rect.left) / ASSISTANT_WIDTH,
+                    button_count,
+                    f64::from(rect.right - rect.left) / super::host_width(button_count),
                 ));
                 let region = SurfaceRegion {
                     left: rect.left + content.left,
@@ -1383,7 +1460,11 @@ fn settle_offset<R: Runtime>(app: &AppHandle<R>) -> Result<f64, String> {
     let work_area = monitor_work_area(&monitor)?;
     let scale = monitor.scale_factor();
     let controller = app.state::<PanelController>();
-    let (width, _) = top_surface_size(controller.details_source(), scale);
+    let (width, _) = top_surface_size(
+        controller.details_source(),
+        controller.bar_button_count(),
+        scale,
+    );
     let x = surface_x(
         work_area.x,
         work_area.width,
@@ -1407,7 +1488,7 @@ fn drag_anchor<R: Runtime>(app: &AppHandle<R>) -> Result<DragAnchor, String> {
     let monitor = target_monitor(&handle)?;
     let work_area = monitor_work_area(&monitor)?;
     let scale = monitor.scale_factor();
-    let (width, _) = top_surface_size(None, scale);
+    let (width, _) = top_surface_size(None, app.state::<PanelController>().bar_button_count(), scale);
     let top = screen_top(monitor.position().y, work_area.y);
     Ok(DragAnchor {
         work_area,
@@ -1713,7 +1794,7 @@ mod tests {
 
     #[test]
     fn rounded_surface_hit_testing_excludes_transparent_corner_pixels() {
-        let region = super::surface_region(None, 1.0);
+        let region = super::surface_region(None, 0, 1.0);
 
         assert!(!super::point_is_inside_rounded_surface(60, 0, region));
         assert!(!super::point_is_inside_rounded_surface(347, 0, region));
@@ -1730,31 +1811,111 @@ mod tests {
 
     #[test]
     fn top_surface_sizes_are_source_specific_and_scale_with_dpi() {
-        assert_eq!(top_surface_size(None, 1.0), (408, 40));
-        assert_eq!(top_surface_size(Some(PanelSource::Island), 1.0), (408, 288));
-        assert_eq!(top_surface_size(Some(PanelSource::Nowly), 1.0), (408, 440));
+        assert_eq!(top_surface_size(None, 0, 1.0), (408, 40));
+        assert_eq!(
+            top_surface_size(Some(PanelSource::Island), 0, 1.0),
+            (408, 288)
+        );
+        assert_eq!(
+            top_surface_size(Some(PanelSource::Nowly), 0, 1.0),
+            (408, 440)
+        );
         // Every edge lands on a whole device pixel at the scales Windows uses.
-        assert_eq!(top_surface_size(None, 1.5), (612, 60));
-        assert_eq!(top_surface_size(Some(PanelSource::Island), 1.5), (612, 432));
-        assert_eq!(top_surface_size(Some(PanelSource::Nowly), 1.5), (612, 660));
-        assert_eq!(top_surface_size(None, 2.0), (816, 80));
-        assert_eq!(top_surface_size(Some(PanelSource::Island), 2.0), (816, 576));
-        assert_eq!(top_surface_size(Some(PanelSource::Nowly), 2.0), (816, 880));
+        assert_eq!(top_surface_size(None, 0, 1.5), (612, 60));
+        assert_eq!(
+            top_surface_size(Some(PanelSource::Island), 0, 1.5),
+            (612, 432)
+        );
+        assert_eq!(
+            top_surface_size(Some(PanelSource::Nowly), 0, 1.5),
+            (612, 660)
+        );
+        assert_eq!(top_surface_size(None, 0, 2.0), (816, 80));
+        assert_eq!(
+            top_surface_size(Some(PanelSource::Island), 0, 2.0),
+            (816, 576)
+        );
+        assert_eq!(
+            top_surface_size(Some(PanelSource::Nowly), 0, 2.0),
+            (816, 880)
+        );
         assert_eq!(handle_positions(-900, 60, 12).visible_y, -888);
+    }
+
+    /// design.md §8.3's geometry table. The host only widens past 408 at three
+    /// buttons, and a panel opening never changes it.
+    #[test]
+    fn the_host_reserves_the_widest_visible_form_for_each_button_count() {
+        for (count, host, collapsed, left) in [
+            (0usize, 408u32, 288.0_f64, 60.0_f64),
+            (1, 408, 336.0, 36.0),
+            (2, 408, 384.0, 12.0),
+            (3, 432, 432.0, 0.0),
+        ] {
+            assert_eq!(super::collapsed_width(count), collapsed);
+            assert_eq!(super::shell_left(count), left);
+            for source in [None, Some(PanelSource::Island), Some(PanelSource::Nowly)] {
+                assert_eq!(top_surface_size(source, count, 1.0).0, host);
+            }
+        }
+        // Out-of-range counts clamp rather than widening the host without bound.
+        assert_eq!(super::collapsed_width(99), super::collapsed_width(3));
+    }
+
+    /// The panels' widths are their own constants: adding app buttons must not
+    /// change either panel, only the collapsed shell.
+    #[test]
+    fn panel_widths_are_independent_of_the_configured_button_count() {
+        for count in 0..=super::BAR_BUTTON_SLOTS {
+            let status = super::surface_region(Some(PanelSource::Island), count, 1.0).bounds();
+            let assistant = super::surface_region(Some(PanelSource::Nowly), count, 1.0).bounds();
+            assert_eq!(status.right - status.left, 288);
+            assert_eq!(assistant.right - assistant.left, 408);
+        }
+    }
+
+    /// What keeps status content on the same pixel in both forms: the status
+    /// panel shares the collapsed shell's left edge at every button count.
+    #[test]
+    fn the_status_panel_shares_the_collapsed_shell_left_edge() {
+        for scale in [1.0, 1.25, 1.5, 1.75, 2.0] {
+            for count in 0..=super::BAR_BUTTON_SLOTS {
+                let collapsed = super::surface_region(None, count, scale).bounds();
+                let status = super::surface_region(Some(PanelSource::Island), count, scale).bounds();
+                assert_eq!(collapsed.left, status.left);
+            }
+        }
+    }
+
+    /// Each app button adds exactly one 48px lane to the visible collapsed
+    /// surface, and the hit region follows it so the new lane is clickable.
+    #[test]
+    fn each_app_button_widens_the_collapsed_hit_region_by_one_lane() {
+        let mut previous = super::surface_region(None, 0, 1.0).bounds();
+        for count in 1..=super::BAR_BUTTON_SLOTS {
+            let current = super::surface_region(None, count, 1.0).bounds();
+            assert_eq!(
+                (current.right - current.left) - (previous.right - previous.left),
+                48
+            );
+            previous = current;
+        }
     }
 
     #[test]
     fn both_panels_keep_the_same_native_x_even_at_screen_edges() {
         for scale in [1.0, 1.25, 1.5, 1.75, 2.0] {
             for offset in [-5000.0, 0.0, 5000.0] {
-                let collapsed = top_surface_size(None, scale);
-                for source in [PanelSource::Island, PanelSource::Nowly] {
-                    let expanded = top_surface_size(Some(source), scale);
-                    assert_eq!(expanded.0, collapsed.0);
-                    assert_eq!(
-                        surface_x(-1920, 1920, expanded.0, offset),
-                        surface_x(-1920, 1920, collapsed.0, offset)
-                    );
+                for count in 0..=super::BAR_BUTTON_SLOTS {
+                    let collapsed = top_surface_size(None, count, scale);
+                    for source in [PanelSource::Island, PanelSource::Nowly] {
+                        let expanded = top_surface_size(Some(source), count, scale);
+                        assert_eq!(expanded.0, collapsed.0);
+                        assert_eq!(
+                            surface_x(-1920, 1920, expanded.0, offset),
+                            surface_x(-1920, 1920, collapsed.0, offset)
+                        );
+                    }
                 }
             }
         }
@@ -1764,8 +1925,8 @@ mod tests {
     fn transparent_host_gutters_are_outside_the_status_hit_region_at_each_dpi() {
         for scale in [1.0, 1.25, 1.5, 1.75, 2.0] {
             for source in [None, Some(PanelSource::Island)] {
-                let bounds = super::surface_region(source, scale).bounds();
-                let host = top_surface_size(source, scale);
+                let bounds = super::surface_region(source, 0, scale).bounds();
+                let host = top_surface_size(source, 0, scale);
                 assert_eq!(bounds.left, (60.0 * scale) as i32);
                 assert_eq!(bounds.right, (348.0 * scale) as i32);
                 assert!(!point_is_inside_surface(bounds.left - 1, 1, bounds));
@@ -1774,30 +1935,53 @@ mod tests {
                 assert!(!point_is_inside_surface(bounds.right, 1, bounds));
                 assert_eq!(bounds.bottom, host.1 as i32);
             }
-            let ai = super::surface_region(Some(PanelSource::Nowly), scale).bounds();
+            let ai = super::surface_region(Some(PanelSource::Nowly), 0, scale).bounds();
             assert_eq!(ai.left, 0);
-            assert_eq!(ai.right, top_surface_size(None, scale).0 as i32);
+            assert_eq!(ai.right, top_surface_size(None, 0, scale).0 as i32);
+        }
+    }
+
+    /// With buttons configured the gutters shrink, but they must still be excluded
+    /// wherever they remain — the old hard-coded 60px would leak clicks.
+    #[test]
+    fn remaining_host_gutters_stay_outside_the_hit_region_with_buttons_configured() {
+        for scale in [1.0, 1.5, 2.0] {
+            for count in 0..=super::BAR_BUTTON_SLOTS {
+                let bounds = super::surface_region(None, count, scale).bounds();
+                let host = top_surface_size(None, count, scale);
+                assert_eq!(
+                    bounds.left,
+                    (super::shell_left(count) * scale).round() as i32
+                );
+                if bounds.left > 0 {
+                    assert!(!point_is_inside_surface(bounds.left - 1, 1, bounds));
+                }
+                assert!(point_is_inside_surface(bounds.left, 1, bounds));
+                assert!(point_is_inside_surface(bounds.right - 1, 1, bounds));
+                assert!(!point_is_inside_surface(bounds.right, 1, bounds));
+                assert!(bounds.right <= host.0 as i32);
+            }
         }
     }
 
     #[test]
     fn native_regions_match_each_visible_rounded_surface_at_every_supported_dpi() {
         for scale in [1.0, 1.25, 1.5, 1.75, 2.0] {
-            let collapsed = super::surface_region(None, scale);
+            let collapsed = super::surface_region(None, 0, scale);
             assert_eq!(collapsed.left, (60.0_f64 * scale).round() as i32);
             assert_eq!(collapsed.top, 0);
             assert_eq!(collapsed.right, (348.0_f64 * scale).round() as i32);
             assert_eq!(collapsed.bottom, (40.0_f64 * scale).round() as i32);
             assert_eq!(collapsed.radius, (20.0_f64 * scale).round() as i32);
 
-            let status = super::surface_region(Some(PanelSource::Island), scale);
+            let status = super::surface_region(Some(PanelSource::Island), 0, scale);
             assert_eq!(status.left, (60.0_f64 * scale).round() as i32);
             assert_eq!(status.top, 0);
             assert_eq!(status.right, (348.0_f64 * scale).round() as i32);
             assert_eq!(status.bottom, (288.0_f64 * scale).round() as i32);
             assert_eq!(status.radius, (15.2_f64 * scale).round() as i32);
 
-            let assistant = super::surface_region(Some(PanelSource::Nowly), scale);
+            let assistant = super::surface_region(Some(PanelSource::Nowly), 0, scale);
             assert_eq!(assistant.left, 0);
             assert_eq!(assistant.top, 0);
             assert_eq!(assistant.right, (408.0_f64 * scale).round() as i32);
@@ -1810,7 +1994,7 @@ mod tests {
     fn native_clip_leaves_one_physical_pixel_for_css_corner_antialiasing() {
         for scale in [1.0, 1.25, 1.5, 1.75, 2.0] {
             for source in [None, Some(PanelSource::Island), Some(PanelSource::Nowly)] {
-                let visual = super::surface_region(source, scale);
+                let visual = super::surface_region(source, 0, scale);
                 let clip = super::native_clip_region(visual);
 
                 assert_eq!(clip.bounds(), visual.bounds());
@@ -1821,11 +2005,34 @@ mod tests {
 
     #[test]
     fn native_clip_hit_testing_includes_the_css_antialiasing_margin() {
-        let visual = super::surface_region(None, 1.0);
+        let visual = super::surface_region(None, 0, 1.0);
         let clip = super::native_clip_region(visual);
 
         assert!(!super::point_is_inside_rounded_surface(75, 0, visual));
         assert!(super::point_is_inside_rounded_surface(75, 0, clip));
+    }
+
+    /// Only catalogued apps may be persisted: an unknown id would render a button
+    /// with no handler, and a miscounted list would desynchronise the geometry.
+    #[test]
+    fn only_catalogued_bar_apps_are_recognised() {
+        assert!(super::is_known_bar_app("screenshot"));
+        assert!(!super::is_known_bar_app("not-an-app"));
+        assert!(!super::is_known_bar_app(""));
+    }
+
+    /// The controller reports whether the count moved, so a save that leaves the
+    /// configuration alone does not reposition the host window.
+    #[test]
+    fn setting_the_button_count_reports_only_real_changes() {
+        let controller = PanelController::default();
+        assert_eq!(controller.bar_button_count(), 0);
+        assert!(controller.set_bar_button_count(1));
+        assert_eq!(controller.bar_button_count(), 1);
+        assert!(!controller.set_bar_button_count(1));
+        // Clamped to the slot count, so a malformed value cannot widen the host.
+        assert!(controller.set_bar_button_count(99));
+        assert_eq!(controller.bar_button_count(), super::BAR_BUTTON_SLOTS);
     }
 
     #[test]

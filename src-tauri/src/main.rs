@@ -28,6 +28,7 @@ mod reminders;
 mod remote_events;
 mod rrule_bridge;
 mod rrule_engine;
+mod screen_capture;
 mod settings;
 mod shell;
 mod status_island;
@@ -284,11 +285,14 @@ fn main() {
             let quick_settings = settings::read_app_settings(&app.state::<AppDb>().0.lock().unwrap()).unwrap_or_else(|_| crate::models::AppSettings {
                 wallpaper_enabled: false, launch_at_login: false, target_monitor_id: None, density: "balanced".into(),
                 week_start: "monday".into(), date_format: "localized".into(), show_weekends: true, icon_style: "duotone".into(),
-                hide_topbar_in_wallpaper: true, notification_mode: crate::models::default_notification_mode(), quick_panel_enabled: true, quick_panel_shortcut: "Ctrl+Space".into(), recent_colors: vec![]
+                hide_topbar_in_wallpaper: true, notification_mode: crate::models::default_notification_mode(), quick_panel_enabled: true, quick_panel_shortcut: "Ctrl+Space".into(), bar_buttons: vec![], recent_colors: vec![]
             });
             let quick_panel_controller = quick_panel::PanelController::default();
             quick_panel_controller.set_enabled(true);
             quick_panel_controller.set_target_monitor_id(quick_settings.target_monitor_id.clone());
+            // The configured app buttons decide the host width and hit region, so
+            // they must be known before the window is first placed.
+            quick_panel_controller.set_bar_button_count(quick_settings.bar_buttons.len());
             // Where the user last dragged the top surface along the top edge.
             // Restored before the window is first placed, so it never appears
             // centred and then jumps.
@@ -695,6 +699,7 @@ fn main() {
             quick_panel::begin_status_island_drag,
             quick_panel::drag_status_island,
             quick_panel::end_status_island_drag,
+            screen_capture::start_screen_capture,
             status_island::get_status_island_snapshot,
             status_island::acknowledge_status_island_reminder,
             status_island::set_status_island_visibility,

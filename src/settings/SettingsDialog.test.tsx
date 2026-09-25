@@ -45,4 +45,14 @@ describe('SettingsDialog',()=>{
     await user.click(screen.getByRole('button',{name:'保存设置'}));
     expect(save).toHaveBeenCalledWith(expect.objectContaining({iconStyle:'outline'}));
   });
+
+  it('configures the Nowly Bar app buttons and saves them with the document',async()=>{
+    const user=userEvent.setup(); const save=vi.fn().mockImplementation(async value=>value);
+    render(<SettingsDialog settings={settings} onClose={vi.fn()} onSave={save}/>);
+    await user.click(screen.getByRole('tab',{name:'Nowly Bar'}));
+    await user.click(screen.getByRole('button',{name:'添加应用按钮到第 1 个位置'}));
+    await user.click(screen.getByRole('menuitemradio',{name:/截屏/}));
+    await user.click(screen.getByRole('button',{name:'保存设置'}));
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({barButtons:['screenshot']}));
+  });
 });

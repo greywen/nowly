@@ -333,6 +333,7 @@ fn migration_4_default_settings(transaction: &Transaction<'_>) -> Result<()> {
         ("calendar_enabled", "true"),
         ("matrix_enabled", "true"),
         ("notes_enabled", "true"),
+        ("bar_buttons", "[]"),
         ("recent_colors", "[]"),
     ];
     for (key, value) in DEFAULTS {

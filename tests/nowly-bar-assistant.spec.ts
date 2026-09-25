@@ -356,7 +356,14 @@ test('keeps movement help inside the status panel and AI animations out of it on
   await page.getByRole('button', { name: 'Nowly' }).click();
   await expect(assistant).toHaveAttribute('data-anim', 'grow');
   await expect(statusShell).not.toHaveAttribute('data-anim');
-  expect(await assistant.evaluate(element => element.parentElement?.className)).toBe('status-rail');
+  // The panels are siblings, never nested: the assistant lives in its own frame
+  // and the status shell is positioned against the host, so neither can animate
+  // the other. The frame is a positioning box only and takes no pointer events.
+  expect(await assistant.evaluate(element => element.parentElement?.className))
+    .toBe('status-rail__assistant-frame');
+  expect(await assistant.evaluate(element =>
+    element.closest('.status-rail__status-presence') !== null)).toBe(false);
+  await expect(page.locator('.status-rail__assistant-frame')).toHaveCSS('pointer-events', 'none');
   const input = page.getByRole('textbox', { name: '告诉 Nowly 你想做什么' });
   await input.fill('检查两个面板是否独立');
   await input.press('Enter');
@@ -661,7 +668,11 @@ test('keeps the rail centered while the assistant closes', async ({ page }) => {
 
   const rail = page.locator('.status-rail');
   await expect(rail).toHaveAttribute('data-assistant-closing', 'true');
-  await expect.poll(() => rail.evaluate(element => Math.round(element.getBoundingClientRect().left))).toBe(60);
+  // The returning capsule is the status shell. The rail is now the constant-width
+  // host box (408 here), so the shell's own left edge is what must land on 60 and
+  // stay there — §12.3's "keeps its final screen position".
+  await expect.poll(() => page.locator('.status-rail__status-presence')
+    .evaluate(element => Math.round(element.getBoundingClientRect().left))).toBe(60);
   await expect(page.locator('.status-rail__sheet')).toHaveCSS('transform', 'none');
 
   // Native host keeps its width and x; only its bottom edge is removed.

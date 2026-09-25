@@ -57,6 +57,9 @@ export type AppSettings = {
   notificationMode?: 'persistent' | 'notification';
   quickPanelEnabled?: boolean;
   quickPanelShortcut?: string;
+  // Ordered app ids occupying the Nowly Bar's button slots, left to right.
+  // Capped at three by design.md §8.3; see `src/app/bar-buttons.ts`.
+  barButtons?: string[];
   recentColors?: HexColor[];
 };
 

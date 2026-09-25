@@ -318,6 +318,8 @@ pub struct StatusIslandSnapshot {
     pub focus: FocusStatusSnapshot,
     pub reminders: Vec<ReminderSnapshotState>,
     pub notification_mode: String,
+    /// Ordered app ids the bar renders as buttons, left to right.
+    pub bar_buttons: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -388,6 +390,7 @@ pub fn get_status_island_snapshot(
     let settings =
         crate::settings::read_app_settings(&connection).map_err(CommandError::database)?;
     let notification_mode = settings.notification_mode;
+    let bar_buttons = settings.bar_buttons;
     drop(connection);
     let focus = timer
         .lock()
@@ -416,6 +419,7 @@ pub fn get_status_island_snapshot(
         focus,
         reminders: states,
         notification_mode,
+        bar_buttons,
     })
 }
 

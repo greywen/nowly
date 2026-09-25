@@ -198,6 +198,94 @@ for (const scale of [1, 1.5, 2]) {
   });
 }
 
+// The configurable app buttons (design.md §8.3). Each one adds a 48px lane to the
+// right of the logo; the panels' widths are their own constants and must not
+// follow. These are real layout numbers, so they can only be checked in a browser.
+test.describe('configured app buttons', () => {
+  const withScreenshot = { ...reminderSnapshot, barButtons: ['screenshot'] };
+
+  test.describe('one button', () => {
+    // The native host is still 408 wide at one button, and the visible collapsed
+    // shell is 336.
+    test.use({ viewport: { width: 336, height: 40 } });
+
+    test('adds one lane to the right of the logo without moving the status area', async ({ page }) => {
+      await page.clock.setFixedTime(new Date(FIXED_TIME));
+      await installRail(page, withScreenshot);
+      await page.goto('/');
+
+      const shell = page.locator('.status-rail__status-presence');
+      expect(await shell.boundingBox()).toEqual({ x: 0, y: 0, width: 336, height: 40 });
+      // The status area and the logo keep the exact geometry they have with no
+      // buttons configured: the lane is added, nothing is rearranged.
+      expect(await page.getByRole('button', { name: /^产品发布评审 ·/ }).boundingBox())
+        .toEqual({ x: 1, y: 1, width: 239, height: 38 });
+      expect(await page.locator('.status-rail__nowly').boundingBox())
+        .toEqual({ x: 240, y: 0, width: 48, height: 40 });
+      // The app button takes the next lane and ends on the shell's right edge.
+      const button = page.getByRole('button', { name: '截屏' });
+      expect(await button.boundingBox()).toEqual({ x: 288, y: 0, width: 48, height: 40 });
+      // §10.1's compact box, drawn as the lane's ::after, centred in the lane.
+      expect(await button.evaluate(element => {
+        const box = getComputedStyle(element, '::after');
+        const separator = getComputedStyle(element, '::before');
+        const icon = element.querySelector('svg');
+        return {
+          box: { width: box.width, height: box.height, radius: box.borderTopLeftRadius },
+          separator: { width: separator.width, height: separator.height, top: separator.top },
+          icon: { width: icon?.getAttribute('width'), height: icon?.getAttribute('height') }
+        };
+      })).toEqual({
+        box: { width: '28px', height: '28px', radius: '7.6px' },
+        separator: { width: '1px', height: '22px', top: '9px' },
+        icon: { width: '16', height: '16' }
+      });
+    });
+
+    test('invokes its own command and reports a rejection in place', async ({ page }) => {
+      await page.clock.setFixedTime(new Date(FIXED_TIME));
+      await installRail(page, withScreenshot);
+      await page.goto('/');
+
+      const button = page.getByRole('button', { name: '截屏' });
+      await button.click();
+      expect(await commands(page)).toContain('start_screen_capture');
+      // The mock resolves, so no error is reported. The failure path is covered by
+      // the unit tests; what matters here is that the button calls its own command
+      // and not the panel's.
+      expect(await commands(page)).not.toContain('toggle_nowly_panel');
+      expect(await commands(page)).not.toContain('toggle_status_island_details');
+    });
+  });
+
+  test.describe('three buttons', () => {
+    // At three buttons the collapsed shell is 432 and the native host widens to
+    // match it.
+    test.use({ viewport: { width: 432, height: 40 } });
+
+    test('fills every slot without overflowing the shell', async ({ page }) => {
+      await page.clock.setFixedTime(new Date(FIXED_TIME));
+      // Only one app exists so far, so the geometry is driven directly here to
+      // prove the full three-lane form is reachable.
+      await installRail(page, reminderSnapshot);
+      await page.goto('/');
+      await page.evaluate(() => {
+        const rail = document.querySelector('.status-rail') as HTMLElement;
+        rail.style.setProperty('--app-buttons', '3');
+      });
+
+      expect(await page.locator('.status-rail__status-presence').boundingBox())
+        .toEqual({ x: 0, y: 0, width: 432, height: 40 });
+      // The status area and the logo still have not moved.
+      expect(await page.locator('.status-rail__nowly').boundingBox())
+        .toEqual({ x: 240, y: 0, width: 48, height: 40 });
+      // Still no scrollbar: the shell has the room its geometry asks for.
+      expect(await page.evaluate(() => window.innerWidth - document.documentElement.clientWidth))
+        .toBe(0);
+    });
+  });
+});
+
 test.describe('an empty day', () => {
   test.use({ viewport: COLLAPSED });
 
@@ -396,9 +484,16 @@ test.describe('the open sheet', () => {
     await expect(shell).toHaveAttribute('data-anim', 'grow');
     // design.md §12.3 names the whitelist and the durations. Anything else moving
     // would make the sheet read as a popup rather than the capsule growing.
-    await expect(shell).toHaveCSS('transition-property', 'height, border-radius, opacity, visibility');
-    await expect(shell).toHaveCSS('transition-duration', '0.28s, 0.28s, 0.14s, 0s');
-    await expect(shell).toHaveCSS('transform', 'matrix(1, 0, 0, 1, -144, 0)');
+    // Width is in the list because the collapsed shell carries the app button
+    // lanes: opening the panel sheds them by shrinking the right edge back to the
+    // panel's own constant width, with the left edge fixed.
+    await expect(shell).toHaveCSS('transition-property', 'width, height, border-radius, opacity, visibility');
+    await expect(shell).toHaveCSS('transition-duration', '0.28s, 0.28s, 0.28s, 0.14s, 0s');
+    // The shell is positioned from the host's left edge, not centred, so the
+    // host box is what carries the centring transform. The host is 408 wide with
+    // no app buttons configured, so it offsets by half of that.
+    await expect(shell).toHaveCSS('transform', 'none');
+    await expect(page.locator('.status-rail')).toHaveCSS('transform', 'matrix(1, 0, 0, 1, -204, 0)');
   });
 
   test('routes sheet actions and Escape through native commands', async ({ page }) => {
@@ -439,7 +534,7 @@ test.describe('the open sheet', () => {
     // The exception in design.md §12.3 is opt-out, not mandatory: asked for no
     // motion, the rail simply is its new size.
     await expect(page.locator('.status-rail__status-presence'))
-      .toHaveCSS('transition-duration', '0s, 0s, 0s, 0s');
+      .toHaveCSS('transition-duration', '0s, 0s, 0s, 0s, 0s');
     await expect(page.locator('.status-rail__panel')).toHaveCSS('transition-duration', '0s, 0s');
     expect(await page.locator('.status-rail__status-presence').boundingBox())
       .toEqual({ x: 0, y: 0, width: 288, height: 288 });

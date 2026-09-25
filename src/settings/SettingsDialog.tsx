@@ -2,6 +2,7 @@ import { X } from '../components/icons';
 import type { IconStyle } from '../components/icon-style';
 import { useEffect, useState } from 'react';
 import { AssistantSettingsPanel } from '../assistant/AssistantSettingsPanel';
+import { BarButtonSettings } from './BarButtonSettings';
 import { Dialog } from '../components/Dialog';
 import { Select } from '../components/Select';
 import { TabPanel, Tabs, type TabItem } from '../components/Tabs';
@@ -46,6 +47,7 @@ export function SettingsDialog({settings,monitors=[],onClose,onSave}:Props){
     <div className="settings-grid">
      <Select id="settings-notification-mode" label={t('settings.notificationMode')} value={draft.notificationMode ?? 'persistent'} options={[{value:'persistent',label:t('settings.notificationModePersistent')},{value:'notification',label:t('settings.notificationModeNotification')}]} onChange={value=>setDraft({...draft,notificationMode:value as NonNullable<AppSettings['notificationMode']>})}/>
     </div>
+    <BarButtonSettings buttons={draft.barButtons} onChange={barButtons=>setDraft(current=>({...current,barButtons}))}/>
    </TabPanel>
    <TabPanel idPrefix="settings" tabId="desktop" active={tab==='desktop'}>
     {monitors.length?<Select id="settings-monitor" label={t('settings.targetMonitor')} value={resolvedMonitorId??''} options={monitors.map(item=>({value:item.id,label:`${item.name}${item.isPrimary?t('settings.primaryMonitor'):''} · ${item.width}×${item.height} · ${Math.round(item.scaleFactor*100)}%`}))} onChange={value=>setDraft({...draft,targetMonitorId:value})}/>:null}

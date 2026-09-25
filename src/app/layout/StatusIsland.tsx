@@ -12,6 +12,8 @@ import {
   X
 } from '../../components/icons';
 import { useTranslation } from '../../i18n';
+import { BarButtonLane, useBarButtonLaneAnim } from './BarButtonLane';
+import type { BarAppId } from '../bar-buttons';
 import type { CalendarEvent } from '../../calendar/calendar-model';
 import type { Task } from '../../tasks/task-model';
 import type {
@@ -25,7 +27,9 @@ import type {
 
 // The top rail hosts two independent panels: the 240x40 status action grows to
 // 288x288; the 48px Nowly action grows into its own 408x440 AI conversation.
-// Collapsed, both actions share one continuous 288x40 shell.
+// Collapsed, both actions share one continuous shell, 40px high and
+// 288 + 48px per configured app button wide (design.md §8.3). The panels' widths
+// are their own constants and do not follow the collapsed width.
 //
 // The capsule carries exactly one of three things, always on the same slots and
 // at the same size, so switching content never moves or resizes anything:
@@ -489,8 +493,7 @@ export function StatusIslandSummaryView({
 /**
  * One native host, two sibling panels. Each panel owns its content, close
  * control and animation. AI transitions must never animate the status sheet.
- */
-export function TopRail({
+ */export function TopRail({
   open,
   source,
   surface,
@@ -500,6 +503,9 @@ export function TopRail({
   mode,
   panel,
   assistant,
+  barButtons = [],
+  barButtonErrors,
+  onActivateBarButton,
   onActivateNowly,
   onCollapse,
   children
@@ -513,6 +519,10 @@ export function TopRail({
   mode: 'idle' | 'detail' | 'summary';
   panel: React.ReactNode;
   assistant: React.ReactNode;
+  /** Configured app buttons, left to right, already normalized. */
+  barButtons?: readonly BarAppId[];
+  barButtonErrors?: Partial<Record<BarAppId, string>>;
+  onActivateBarButton?: (id: BarAppId) => void;
   onActivateNowly: () => void;
   onCollapse: () => void;
   children: React.ReactNode;
@@ -525,6 +535,7 @@ export function TopRail({
     && !statusOpen
     && statusAnim !== 'shrink'
     && !assistantClosing;
+  const laneAnim = useBarButtonLaneAnim(barButtons.length);
   return (
     <div
       className="status-rail"
@@ -535,6 +546,10 @@ export function TopRail({
       data-status-open={statusOpen}
       data-status-hidden={statusHidden}
       data-mode={mode}
+      // The collapsed shell's width and its centred position both derive from
+      // this count (design.md §8.3). The panels' widths do not.
+      style={{ '--app-buttons': barButtons.length } as React.CSSProperties}
+      {...(laneAnim ? { 'data-lane-anim': laneAnim } : {})}
       {...(assistantAnim ? { 'data-frame-anim': assistantAnim } : {})}
     >
       <div
@@ -573,22 +588,30 @@ export function TopRail({
         >
           <img src="/logo.png" alt="" />
         </button>
+        <BarButtonLane
+          buttons={barButtons}
+          available={nowlyAvailable}
+          errors={barButtonErrors}
+          onActivate={id => onActivateBarButton?.(id)}
+        />
       </div>
-      <div className="status-rail__assistant" aria-hidden={surface === 'status'} inert={surface === 'status'}
-        {...(assistantAnim ? { 'data-anim': assistantAnim } : {})}>
-        {assistant}
-        <button
-          type="button"
-          className="status-island__dismiss status-rail__panel-close"
-          data-at="expanded"
-          data-owner="assistant"
-          aria-hidden={!assistantOpen}
-          tabIndex={assistantOpen ? 0 : -1}
-          aria-label={t('statusIsland.collapse')}
-          onClick={onCollapse}
-        >
-          <X aria-hidden="true" />
-        </button>
+      <div className="status-rail__assistant-frame">
+        <div className="status-rail__assistant" aria-hidden={surface === 'status'} inert={surface === 'status'}
+          {...(assistantAnim ? { 'data-anim': assistantAnim } : {})}>
+          {assistant}
+          <button
+            type="button"
+            className="status-island__dismiss status-rail__panel-close"
+            data-at="expanded"
+            data-owner="assistant"
+            aria-hidden={!assistantOpen}
+            tabIndex={assistantOpen ? 0 : -1}
+            aria-label={t('statusIsland.collapse')}
+            onClick={onCollapse}
+          >
+            <X aria-hidden="true" />
+          </button>
+        </div>
       </div>
     </div>
   );

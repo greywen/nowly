@@ -42,7 +42,7 @@ export const AlertTriangle=createIcon('AlertTriangle'), BarChart3=createIcon('Ba
   Bell=createIcon('Bell'), CalendarDays=createIcon('CalendarDays'), CalendarRange=createIcon('CalendarRange'),
   Check=createIcon('Check'), ChevronDown=createIcon('ChevronDown'), ChevronLeft=createIcon('ChevronLeft'),
   ChevronRight=createIcon('ChevronRight'), ChevronUp=createIcon('ChevronUp'),
-  CircleAlert=createIcon('CircleAlert'), Clock3=createIcon('Clock3'), Download=createIcon('Download'),
+  CircleAlert=createIcon('CircleAlert'), Clock3=createIcon('Clock3'), Crop=createIcon('Crop'), Download=createIcon('Download'),
   Droplets=createIcon('Droplets'), FileText=createIcon('FileText'), GripVertical=createIcon('GripVertical'), History=createIcon('History'),
   Layers=createIcon('Layers'), LayoutGrid=createIcon('LayoutGrid'), List=createIcon('List'),
   Mail=createIcon('Mail'), MessageCircle=createIcon('MessageCircle'), Mic=createIcon('Mic'), Minus=createIcon('Minus'),

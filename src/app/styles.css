@@ -162,18 +162,37 @@ button:disabled { cursor: default; opacity: .65; }
 
 /* ── The top rail ────────────────────────────────────────────────────────────
    Two independent panels share a native host. The collapsed status and Nowly
-   controls share one continuous 288x40 surface; status detail stays 288x288
-   while the AI conversation alone grows to 408x440. Each clips fixed content.
+   controls share one continuous shell, 40px high and 288 + 48px per configured
+   app button wide; status detail stays 288x288 while the AI conversation alone
+   grows to 408x440. Each panel's width is its own constant and does not follow
+   the collapsed width (design.md §8.3).
+
+   The host box is a constant width per configuration. The status shell is
+   positioned against it, not against the AI frame, because the AI frame's width
+   animates — anything positioned inside it would slide during the AI morph.
    The growth is design.md §12.3's third named motion exception, so every
    transition here has to out-shout the global `transition: none !important`. */
 .status-rail {
-   --rail-collapsed-w: 288px;
-   --rail-frame-w: var(--rail-collapsed-w);
-   --rail-w: 288px;
-  --rail-h: 40px;
+  /* Set inline by TopRail. Everything below is derived from it. */
+  --app-buttons: 0;
   --status-action-w: 240px;
   --nowly-w: 48px;
   --nowly-d: 40px;
+  /* The logo lane plus one lane per app button. */
+  --rail-lane-w: calc(var(--nowly-w) * (1 + var(--app-buttons)));
+  --rail-collapsed-w: calc(var(--status-action-w) + var(--rail-lane-w));
+  /* Panel widths: constants, deliberately independent of the collapsed width. */
+  --status-panel-w: 288px;
+  --assistant-panel-w: 408px;
+  /* The host reserves the widest visible form, so opening a panel never resizes
+     it. Mirrors `host_width` in quick_panel.rs. */
+  --rail-host-w: max(var(--rail-collapsed-w), var(--assistant-panel-w));
+  /* The collapsed shell centres in the host; the status panel shares this edge,
+     which is what keeps status content on the same pixel in both forms. */
+  --shell-left: calc((var(--rail-host-w) - var(--rail-collapsed-w)) / 2);
+   --rail-frame-w: var(--rail-collapsed-w);
+   --rail-w: 288px;
+  --rail-h: 40px;
    --sheet-h: 288px;
   /* The sheet's 1px border eats into every size below it, so the content grid
      subtracts it rather than overflowing the capsule by 2px and leaving the head
@@ -181,6 +200,9 @@ button:disabled { cursor: default; opacity: .65; }
   --rail-edge: 1px;
   --rail-grow: 280ms;
   --rail-shrink: 220ms;
+  /* Zero unless a button was just added or removed, so nothing tweens on mount
+     or when an unrelated setting changes. */
+  --lane-dur: 0s;
   /* Fades are carried as variables so `prefers-reduced-motion` can zero them in
      one place, rather than a second block trying to out-specify every rule. */
   --rail-in: 140ms;
@@ -196,18 +218,29 @@ button:disabled { cursor: default; opacity: .65; }
   --logo-in-delay: 90ms;
   --logo-out: 110ms;
   --logo-radius: calc(var(--nowly-d) / 2);
-   position: absolute; top: 0; left: 50%; width: var(--rail-frame-w); height: var(--sheet-h); color: var(--text-secondary); transform: translateX(-50%);
+   position: absolute; top: 0; left: 50%; width: var(--rail-host-w); height: var(--sheet-h); color: var(--text-secondary); transform: translateX(-50%);
 }
-.status-rail[data-surface="assistant"] { --rail-frame-w: 408px; --rail-w: 408px; --sheet-h: 440px; }
+.status-rail[data-lane-anim="grow"] { --lane-dur: var(--rail-grow); }
+.status-rail[data-lane-anim="shrink"] { --lane-dur: var(--rail-shrink); }
+.status-rail[data-surface="assistant"] { --rail-frame-w: var(--assistant-panel-w); --rail-w: 408px; --sheet-h: 440px; }
 .status-rail[data-assistant-closing="true"] { --rail-w: 408px; --sheet-h: 440px; }
-.status-rail[data-frame-anim="grow"] { transition: width var(--logo-grow) var(--rail-ease) !important; }
-.status-rail[data-frame-anim="shrink"] { transition: width var(--logo-shrink) var(--rail-ease) !important; }
+/* The AI frame is the only thing that changes width during the AI morph. It
+   centres in the host, so the assistant's right edge lands on the collapsed
+   shell's right edge when collapsed and on the panel's edge when open. It is a
+   positioning box and nothing else: it must not take pointer events, or it would
+   cover the status shell underneath it. The assistant re-enables them for itself
+   when it is the open surface. */
+.status-rail__assistant-frame { position: absolute; z-index: 4; top: 0; left: 50%; width: var(--rail-frame-w); height: 100%; transform: translateX(-50%); pointer-events: none; transition: width var(--lane-dur) var(--rail-ease) !important; }
+.status-rail[data-frame-anim="grow"] .status-rail__assistant-frame { transition: width var(--logo-grow) var(--rail-ease) !important; }
+.status-rail[data-frame-anim="shrink"] .status-rail__assistant-frame { transition: width var(--logo-shrink) var(--rail-ease) !important; }
 /* The status presence is the one visible status shell. Its white fill means no
-   pixel between the independent controls can reveal the window behind it. */
-.status-rail__status-presence { box-sizing: border-box; position: absolute; top: 0; left: 50%; width: var(--rail-collapsed-w); height: var(--rail-h); border: 1px solid var(--border-default); border-radius: calc(var(--rail-h) / 2); background: var(--bg-surface); box-shadow: none; overflow: hidden; transform: translateX(-50%); opacity: 1; visibility: visible; transition: opacity var(--rail-peer-in) var(--rail-ease), visibility 0s !important; }
-.status-rail[data-status-open="true"] .status-rail__status-presence { height: 288px; border-radius: var(--radius-default); }
-.status-rail__status-presence[data-anim="grow"] { transition: height var(--rail-grow) var(--rail-ease), border-radius var(--rail-grow) var(--rail-ease), opacity var(--rail-peer-in) var(--rail-ease), visibility 0s !important; }
-.status-rail__status-presence[data-anim="shrink"] { transition: height var(--rail-shrink) var(--rail-ease), border-radius var(--rail-shrink) var(--rail-ease), opacity var(--rail-peer-in) var(--rail-ease), visibility 0s !important; }
+   pixel between the independent controls can reveal the window behind it. Its
+   left edge is fixed per configuration: only the right edge moves when the
+   status panel takes over. */
+.status-rail__status-presence { box-sizing: border-box; position: absolute; top: 0; left: var(--shell-left); width: var(--rail-collapsed-w); height: var(--rail-h); border: 1px solid var(--border-default); border-radius: calc(var(--rail-h) / 2); background: var(--bg-surface); box-shadow: none; overflow: hidden; opacity: 1; visibility: visible; transition: width var(--lane-dur) var(--rail-ease), left var(--lane-dur) var(--rail-ease), opacity var(--rail-peer-in) var(--rail-ease), visibility 0s !important; }
+.status-rail[data-status-open="true"] .status-rail__status-presence { width: var(--status-panel-w); height: 288px; border-radius: var(--radius-default); }
+.status-rail__status-presence[data-anim="grow"] { transition: width var(--rail-grow) var(--rail-ease), height var(--rail-grow) var(--rail-ease), border-radius var(--rail-grow) var(--rail-ease), opacity var(--rail-peer-in) var(--rail-ease), visibility 0s !important; }
+.status-rail__status-presence[data-anim="shrink"] { transition: width var(--rail-shrink) var(--rail-ease), height var(--rail-shrink) var(--rail-ease), border-radius var(--rail-shrink) var(--rail-ease), opacity var(--rail-peer-in) var(--rail-ease), visibility 0s !important; }
 .status-rail__sheet { position: absolute; inset: 0 auto 0 0; width: calc(var(--status-action-w) - var(--rail-edge)); height: 100%; border: 0; border-radius: inherit; background: transparent; box-shadow: none; overflow: hidden; }
 .status-rail[data-status-open="true"] .status-rail__sheet { width: 100%; }
 .status-rail__status-presence[data-anim="grow"] .status-rail__sheet { transition: width var(--rail-grow) var(--rail-ease) !important; }
@@ -225,7 +258,7 @@ button:disabled { cursor: default; opacity: .65; }
 .status-rail:not([data-status-open="true"]) .status-rail__status-presence:hover { background: var(--bg-subtle); }
 /* Laid out at the open size, so nothing inside reflows or moves as the sheet
    grows: the icon and title land on the same pixel in both sizes. */
-.status-rail__content { position: absolute; top: 0; left: 0; width: calc(var(--rail-collapsed-w) - var(--rail-edge) * 2); height: calc(288px - var(--rail-edge) * 2); display: grid; grid-template-rows: calc(var(--rail-h) - var(--rail-edge) * 2) minmax(0, 1fr); }
+.status-rail__content { position: absolute; top: 0; left: 0; width: calc(var(--status-panel-w) - var(--rail-edge) * 2); height: calc(288px - var(--rail-edge) * 2); display: grid; grid-template-rows: calc(var(--rail-h) - var(--rail-edge) * 2) minmax(0, 1fr); }
 .status-rail__header { position: relative; min-width: 0; }
 .status-rail__panel { min-height: 0; border-top: 1px dashed var(--border-default); visibility: hidden; opacity: 0; pointer-events: none; transition: opacity var(--rail-out) var(--rail-ease), visibility 0s var(--rail-out) !important; }
 .status-rail[data-status-open="true"] .status-rail__panel { visibility: visible; opacity: 1; pointer-events: auto; transition: opacity var(--rail-in) var(--rail-ease) var(--rail-in-delay), visibility 0s !important; }
@@ -309,8 +342,10 @@ button:disabled { cursor: default; opacity: .65; }
 .status-rail__panel-close:hover { color: var(--color-primary); background: var(--bg-secondary); }
 
 /* The Nowly control is a 48px action lane inside the same shell. Its separator
-   communicates ownership without reopening a transparent gap. */
-.status-rail__nowly { box-sizing: border-box; position: absolute; z-index: 3; top: -1px; right: -1px; width: var(--nowly-w); height: var(--rail-h); padding: 0; appearance: none; -webkit-appearance: none; border: 0; border-radius: 0; outline: 0; display: grid; place-items: center; background: transparent; box-shadow: none; overflow: hidden; -webkit-tap-highlight-color: transparent; cursor: pointer; opacity: 1; transition: opacity var(--rail-peer-in) var(--rail-ease) !important; }
+   communicates ownership without reopening a transparent gap. It is placed from
+   the shell's left edge, right after the status action area, so app buttons can
+   extend past it without the logo moving inside the shell. */
+.status-rail__nowly { box-sizing: border-box; position: absolute; z-index: 3; top: -1px; left: calc(var(--status-action-w) - var(--rail-edge)); width: var(--nowly-w); height: var(--rail-h); padding: 0; appearance: none; -webkit-appearance: none; border: 0; border-radius: 0; outline: 0; display: grid; place-items: center; background: transparent; box-shadow: none; overflow: hidden; -webkit-tap-highlight-color: transparent; cursor: pointer; opacity: 1; transition: opacity var(--rail-peer-in) var(--rail-ease) !important; }
 .status-rail__nowly::before { content: ""; position: absolute; top: 9px; left: 0; width: 1px; height: 22px; background: var(--border-subtle, #f6f1e9); pointer-events: none; }
 .status-rail__nowly img { width: 22px; height: 22px; display: block; user-select: none; -webkit-user-drag: none; }
 .status-rail[data-open="true"] .status-rail__nowly,
@@ -319,6 +354,29 @@ button:disabled { cursor: default; opacity: .65; }
 .status-rail__nowly[data-available="false"] { pointer-events: none; }
 .status-rail__nowly:focus, .status-rail__nowly:active { outline: 0; background: transparent; box-shadow: none; }
 .status-rail__nowly:focus-visible { box-shadow: inset 0 0 0 2px var(--color-primary); }
+
+/* Configurable app buttons, one 48px lane each, to the right of the logo. The
+   shell's width makes the room; each lane is placed from the shell's left edge so
+   a lane never moves once it exists — adding or removing one only changes where
+   the shell's right edge is. Slot 0 is the lane immediately after the logo. */
+.status-rail__app-button { box-sizing: border-box; position: absolute; z-index: 3; top: -1px; left: calc(var(--status-action-w) - var(--rail-edge) + var(--nowly-w) * (1 + var(--app-slot, 0))); width: var(--nowly-w); height: var(--rail-h); padding: 0; appearance: none; -webkit-appearance: none; border: 0; border-radius: 0; outline: 0; display: grid; place-items: center; color: var(--text-secondary); background: transparent; box-shadow: none; -webkit-tap-highlight-color: transparent; cursor: pointer; opacity: 1; transition: opacity var(--rail-in) var(--rail-ease) var(--rail-in-delay) !important; }
+/* Separator on the left edge of every lane, identical to the logo's. */
+.status-rail__app-button::before { content: ""; position: absolute; top: 9px; left: 0; width: 1px; height: 22px; background: var(--border-subtle, #f6f1e9); pointer-events: none; }
+/* design.md §10.1's Bar app visual: a 28x28 box with a 24px Solar canvas,
+   centred in the 48x40 lane. Its visible glyph balances the 22px Nowly logo. */
+.status-rail__app-button::after { content: ""; position: absolute; top: 50%; left: 50%; width: 28px; height: 28px; border-radius: var(--radius-sm); background: transparent; transform: translate(-50%, -50%); pointer-events: none; }
+.status-rail__app-button svg { position: relative; z-index: 1; width: 24px; height: 24px; }
+.status-rail__app-button:hover { color: var(--color-primary); }
+.status-rail__app-button:hover::after { background: var(--bg-secondary); }
+.status-rail__app-button:focus, .status-rail__app-button:active { outline: 0; }
+/* Natively clipped surface, so §11 asks for the inset ring rather than the ring shadow. */
+.status-rail__app-button:focus-visible { box-shadow: inset 0 0 0 2px var(--color-primary); }
+.status-rail__app-button[data-error="true"] { color: var(--color-danger); }
+/* Fades out with the logo whenever a panel takes the shell over, and is cut from
+   the tab order at the same moment. */
+.status-rail__app-button[data-available="false"],
+.status-rail[data-open="true"] .status-rail__app-button,
+.status-rail:not([data-surface="status"]) .status-rail__app-button { opacity: 0; pointer-events: none; transition: opacity var(--rail-out) var(--rail-ease) !important; }
 
 /* The assistant begins at the Nowly logo's 40px footprint, then reveals left
    across the complete live rail width. Future action buttons extend --rail-w,
@@ -403,7 +461,7 @@ body:has(.screen-status-island-root),
 
 @media (prefers-contrast: more) {
   .status-rail__status-presence, .status-island__details { border-color: CanvasText; }
-  .status-rail__nowly::before { background: CanvasText; }
+  .status-rail__nowly::before, .status-rail__app-button::before { background: CanvasText; }
   .status-island__signal { outline: 1px solid CanvasText; }
 }
 
@@ -1374,6 +1432,48 @@ body:has(.screen-status-island-root),
 .settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .settings-hint { margin: 12px 0 0; color: var(--text-muted); font-size: 0.8rem; line-height: 1.5; }
 .settings-checks { padding: 20px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; border-radius: var(--radius-default); background: var(--bg-subtle); }
+
+/* ── Nowly Bar app buttons ─────────────────────────────────────────────────
+   The preview reuses the live rail's classes and variables, so the geometry can
+   only be wrong in both places at once. Only the containing stage is new. */
+.bar-buttons { display: grid; gap: 16px; }
+.bar-buttons__head { display: grid; gap: 4px; }
+.bar-buttons__label { color: var(--text-strong); font-size: 0.95rem; font-weight: 500; line-height: 1.5; }
+.bar-buttons__hint { margin: 0; color: var(--text-muted); font-size: 0.85rem; line-height: 1.5; }
+/* A neutral field for the replica to sit on, at real scale. The rail is absolutely
+   positioned against it exactly as it is against its native host. */
+.bar-buttons__stage { position: relative; height: 40px; border-radius: var(--radius-default); background: var(--bg-subtle); }
+.bar-buttons__rail { pointer-events: none; }
+/* The stage is not the native host, so the replica centres on the stage instead
+   of reserving the host's transparent gutters. */
+.bar-buttons__rail[data-preview="true"] { --rail-host-w: var(--rail-collapsed-w); --shell-left: 0px; height: var(--rail-h); }
+.bar-buttons__status { position: absolute; top: 0; left: 0; width: calc(var(--status-action-w) - var(--rail-edge)); height: calc(var(--rail-h) - var(--rail-edge) * 2); padding: 0 8px; display: flex; align-items: center; gap: 8px; }
+.bar-buttons__status-icon { flex: none; width: 24px; height: 24px; display: grid; place-items: center; border-radius: var(--radius-sm); color: var(--color-primary-active); background: var(--color-primary-light); }
+.bar-buttons__status-copy { min-width: 0; display: grid; line-height: 1.2; }
+.bar-buttons__status-copy strong { color: var(--text-primary); font-size: 0.95rem; font-weight: 600; }
+.bar-buttons__status-copy > span { color: var(--text-muted); font-size: 0.85rem; font-weight: 500; }
+.status-rail__nowly[data-preview="true"] { cursor: default; }
+/* The settings preview reserves all three 48px lanes so empty add controls are
+   part of the continuous Bar surface instead of floating below it. */
+.bar-buttons__slots { position: absolute; z-index: 4; top: -1px; left: calc(var(--status-action-w) - var(--rail-edge) + var(--nowly-w)); height: var(--rail-h); margin: 0; padding: 0; list-style: none; display: flex; pointer-events: auto; }
+.bar-buttons__slot { position: relative; box-sizing: border-box; width: var(--nowly-w); height: var(--rail-h); display: grid; place-items: center; }
+.bar-buttons__slot::before { content: ""; position: absolute; top: 9px; left: 0; width: 1px; height: 22px; background: var(--border-subtle); pointer-events: none; }
+.bar-buttons__slot-control { position: relative; width: 28px; height: 28px; }
+/* §10.1's Bar app visual, matching what the live Bar renders. */
+.bar-buttons__slot-button { box-sizing: border-box; width: 28px; height: 28px; padding: 0; border: 1px dashed var(--border-default); border-radius: var(--radius-sm); display: grid; place-items: center; color: var(--text-muted); background: transparent; box-shadow: none; cursor: pointer; }
+.bar-buttons__slot-button svg { width: 24px; height: 24px; }
+.bar-buttons__slot-button[data-filled="true"] { border-color: transparent; border-style: solid; color: var(--text-secondary); }
+.bar-buttons__slot-button:hover { color: var(--color-primary); background: var(--bg-secondary); }
+.bar-buttons__slot-button:focus-visible { box-shadow: var(--shadow-focus); }
+.bar-buttons__menu { position: fixed; z-index: 110; box-sizing: border-box; width: 200px; padding: 8px; border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-surface); box-shadow: var(--shadow-dropdown); display: grid; gap: 2px; }
+.bar-buttons__menu-item { box-sizing: border-box; width: 100%; min-height: 36px; padding: 4px 12px; border: 0; border-radius: var(--radius-sm); display: flex; align-items: center; gap: 8px; color: var(--text-secondary); background: transparent; font-size: 0.95rem; font-weight: 500; text-align: left; cursor: pointer; }
+.bar-buttons__menu-item:hover { color: var(--color-primary-active); background: var(--bg-subtle); }
+.bar-buttons__menu-item[aria-checked="true"] { color: var(--color-primary); background: var(--color-primary-light); }
+.bar-buttons__menu-item[data-destructive="true"] { color: var(--color-danger); }
+.bar-buttons__menu-item[data-destructive="true"]:hover { color: var(--color-danger-active); background: var(--color-danger-light); }
+.bar-buttons__menu-item:focus-visible { box-shadow: var(--shadow-focus); }
+.bar-buttons__menu-app-icon { width: 20px; height: 20px; }
+.bar-buttons__menu-current { margin-left: auto; color: var(--text-muted); font-size: 0.85rem; }
 
 @media (max-width: 900px) {
   .event-dialog { width: min(680px, calc(100vw - 32px)); }
