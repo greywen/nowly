@@ -246,6 +246,20 @@ fn main() {
 
     tauri::Builder::default()
         .manage(assistant::commands::Requests::default())
+        .manage(screen_capture::ActiveCapture::default())
+        .manage(screen_capture::FrameStore::default())
+        .manage(screen_capture::OverlayStaging::default())
+        .manage(screen_capture::PreviewStore::default())
+        .register_asynchronous_uri_scheme_protocol(
+            screen_capture::FRAME_URI_SCHEME,
+            |context, request, responder| {
+                let app = context.app_handle().clone();
+                let caller_label = context.webview_label().to_owned();
+                std::thread::spawn(move || {
+                    responder.respond(screen_capture::serve_frame(&app, &caller_label, request));
+                });
+            },
+        )
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             show_main_window(app)
         }))
@@ -527,6 +541,15 @@ fn main() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            // A capture window can also go away by Alt+F4, the taskbar or a
+            // front-end crash. Without this the session would stay active and the
+            // bar would stay hidden, so Rust ends the session itself.
+            if screen_capture::is_capture_window(window.label()) {
+                if matches!(event, tauri::WindowEvent::Destroyed) {
+                    screen_capture::abandon_session(window.app_handle(), window.label());
+                }
+                return;
+            }
             if window.label() == "quick-panel-handle" {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     if should_prevent_close(window.label()) {
@@ -700,6 +723,15 @@ fn main() {
             quick_panel::drag_status_island,
             quick_panel::end_status_island_drag,
             screen_capture::start_screen_capture,
+            screen_capture::cancel_screen_capture,
+            screen_capture::describe_capture_frame,
+            screen_capture::capture_window_ready,
+            screen_capture::capture_window_failed,
+            screen_capture::stage_capture_overlay,
+            screen_capture::copy_capture_to_clipboard,
+            screen_capture::save_capture_to_file,
+            screen_capture::render_mosaic_preview,
+            screen_capture::copy_capture_color,
             status_island::get_status_island_snapshot,
             status_island::acknowledge_status_island_reminder,
             status_island::set_status_island_visibility,

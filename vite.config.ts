@@ -34,6 +34,20 @@ export default defineConfig(({ mode }) => ({
     // Raised rather than worked around: the tests are genuinely heavier now.
     testTimeout: 20000
   },
+  build: {
+    rollupOptions: {
+      // Capture windows get their own document and bundle. They are built
+      // during a user-visible startup budget and nothing is shown until every
+      // one of them has acked readiness, so they must not load the dashboard,
+      // its data layer or the editor stack (katex, quill, highlight.js).
+      // Paths are relative to the Vite root, so no node:path import is needed
+      // (this project has no @types/node and `tsc` type-checks this file).
+      input: {
+        main: 'index.html',
+        screenshot: 'screenshot.html'
+      }
+    }
+  },
   server: {
     port: 1420,
     strictPort: true

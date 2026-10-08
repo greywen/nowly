@@ -154,10 +154,7 @@ pub fn write_app_settings(
             "quick_panel_shortcut",
             serde_json::to_string(&settings.quick_panel_shortcut),
         ),
-        (
-            "bar_buttons",
-            serde_json::to_string(&settings.bar_buttons),
-        ),
+        ("bar_buttons", serde_json::to_string(&settings.bar_buttons)),
         (
             "recent_colors",
             serde_json::to_string(&settings.recent_colors),

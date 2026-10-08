@@ -373,6 +373,14 @@ struct PanelState {
     bar_button_count: usize,
     /// `Some` *is* "a drag is in progress".
     drag: Option<Drag>,
+    capture_suppression_generation: u64,
+    capture_suppressed: bool,
+    restore_visible: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CaptureSuppression {
+    generation: u64,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -388,7 +396,7 @@ impl PanelState {
     /// A drag in progress refuses to open the sheet: the sheet *is* the rail
     /// grown, and growing it mid-drag would resize the window under the pointer.
     fn allows_details(&self) -> bool {
-        self.enabled && self.drag.is_none()
+        self.enabled && !self.capture_suppressed && self.drag.is_none()
     }
 }
 
@@ -406,6 +414,9 @@ impl Default for PanelController {
                 offset_x: 0.0,
                 bar_button_count: 0,
                 drag: None,
+                capture_suppression_generation: 0,
+                capture_suppressed: false,
+                restore_visible: false,
             }),
             positioning: Mutex::new(()),
             visibility: Mutex::new(()),
@@ -584,19 +595,83 @@ impl PanelController {
         self.state.lock().unwrap().visibility_generation
     }
 
-    pub fn mark_visible(&self) {
-        self.state.lock().unwrap().visibility_generation += 1;
-    }
-
-    pub fn show_serialized<T>(&self, show: impl FnOnce() -> T) -> T {
+    pub fn show_serialized<T>(&self, show: impl FnOnce() -> T) -> Option<T> {
         let _visibility = self.visibility.lock().unwrap();
-        self.mark_visible();
-        show()
+        let mut state = self.state.lock().unwrap();
+        state.visibility_generation += 1;
+        if state.capture_suppressed {
+            state.restore_visible = state.enabled;
+            return None;
+        }
+        drop(state);
+        Some(show())
     }
 
     pub fn hide_serialized<T>(&self, hide: impl FnOnce() -> T) -> T {
         let _visibility = self.visibility.lock().unwrap();
+        let mut state = self.state.lock().unwrap();
+        if state.capture_suppressed {
+            state.restore_visible = false;
+        }
+        drop(state);
         hide()
+    }
+
+    pub fn begin_capture_suppression<T>(
+        &self,
+        current_visibility: impl FnOnce() -> bool,
+        close_details: impl FnOnce(u64),
+        hide: impl FnOnce() -> T,
+    ) -> (CaptureSuppression, T) {
+        let _visibility = self.visibility.lock().unwrap();
+        let was_visible = current_visibility();
+        let mut state = self.state.lock().unwrap();
+        state.capture_suppression_generation += 1;
+        state.capture_suppressed = true;
+        state.restore_visible = was_visible;
+        state.details_generation += 1;
+        state.details_source = None;
+        state.hover_source = None;
+        state.drag = None;
+        let details_generation = state.details_generation;
+        let suppression = CaptureSuppression {
+            generation: state.capture_suppression_generation,
+        };
+        drop(state);
+        close_details(details_generation);
+        (suppression, hide())
+    }
+
+    pub fn end_capture_suppression<T>(
+        &self,
+        suppression: CaptureSuppression,
+        restore: impl FnOnce() -> T,
+    ) -> Option<T> {
+        let _visibility = self.visibility.lock().unwrap();
+        let mut state = self.state.lock().unwrap();
+        if !state.capture_suppressed
+            || state.capture_suppression_generation != suppression.generation
+        {
+            return None;
+        }
+        state.capture_suppressed = false;
+        if !state.restore_visible {
+            return None;
+        }
+        state.visibility_generation += 1;
+        drop(state);
+        Some(restore())
+    }
+
+    fn run_if_details_current<T>(&self, generation: u64, action: impl FnOnce() -> T) -> Option<T> {
+        let _positioning = self.positioning.lock().unwrap();
+        let _visibility = self.visibility.lock().unwrap();
+        let state = self.state.lock().unwrap();
+        if state.capture_suppressed || state.details_generation != generation {
+            return None;
+        }
+        drop(state);
+        Some(action())
     }
 
     pub fn hide_if_current<T>(
@@ -620,6 +695,9 @@ impl PanelController {
     pub fn set_enabled(&self, enabled: bool) {
         let mut state = self.state.lock().unwrap();
         state.enabled = enabled;
+        if state.capture_suppressed && !enabled {
+            state.restore_visible = false;
+        }
         state.details_generation += 1;
         state.hover_source = None;
         if !enabled {
@@ -639,10 +717,13 @@ pub fn initialize<R: Runtime>(app: &AppHandle<R>, notification_mode: &str) -> Re
             .map_err(|error| format!("failed to configure transparent WebView: {error}"))?;
         reposition_handle(app)
             .map_err(|error| format!("failed to position native Bar surface: {error}"))?;
+        let controller = app.state::<PanelController>();
         if starts_visible(notification_mode) {
-            handle.show()
+            controller
+                .show_serialized(|| handle.show())
+                .unwrap_or(Ok(()))
         } else {
-            handle.hide()
+            controller.hide_serialized(|| handle.hide())
         }
         .map_err(|error| error.to_string())
     })();
@@ -1056,14 +1137,16 @@ pub fn set_enabled<R: Runtime>(
     let handle = app.get_webview_window("quick-panel-handle");
     let result = (|| {
         if let Some(handle) = &handle {
-            handle.hide().map_err(|error| error.to_string())?;
+            controller
+                .hide_serialized(|| handle.hide())
+                .map_err(|error| error.to_string())?;
         }
         Ok(())
     })();
     if let Err(error) = result {
         controller.set_enabled(true);
         if let Some(handle) = &handle {
-            let _ = handle.show();
+            let _ = controller.show_serialized(|| handle.show());
         }
         return Err(error);
     }
@@ -1097,34 +1180,34 @@ fn show_details<R: Runtime>(
         .get_webview_window("quick-panel-handle")
         .ok_or_else(|| "quick-panel-handle window not found".to_owned())?;
     reconcile_positions(app)?;
-    // Re-check after positioning: a close may have landed while we were laying
-    // the window out, and a stale show must not resurrect a collapsed sheet.
-    if !controller.is_details_current(generation) {
-        return Ok(());
-    }
-    // The island sheet is opened *for* one reminder. Sending that identity lets
-    // the view pin itself to it, so a later queue head change cannot swap the
-    // sheet's content — and its action buttons' target — under the user. The
-    handle
-        .emit(
-            "status-island-details-open",
-            DetailsOpen {
-                generation,
-                source,
-                identity: identity.clone(),
-                hovered: !focus,
-            },
-        )
-        .map_err(|error| error.to_string())?;
-    if let Some(identity) = acknowledgement_identity(source, focus, identity.clone()) {
-        // Only an explicit click/keyboard open of one concrete reminder counts
-        // as seen. Hover is a preview, and an aggregate has no single reminder.
+    let acknowledged_identity = controller
+        .run_if_details_current(generation, || {
+            // The island sheet is opened *for* one reminder. Sending that identity lets
+            // the view pin itself to it, so a later queue head change cannot swap the
+            // sheet's content — and its action buttons' target — under the user.
+            handle
+                .emit(
+                    "status-island-details-open",
+                    DetailsOpen {
+                        generation,
+                        source,
+                        identity: identity.clone(),
+                        hovered: !focus,
+                    },
+                )
+                .map_err(|error| error.to_string())?;
+            if focus {
+                // Active click/keyboard opens receive Escape; passive hover must not
+                // steal focus from whichever application the user is working in.
+                handle.set_focus().map_err(|error| error.to_string())?;
+            }
+            Ok::<Option<String>, String>(acknowledgement_identity(source, focus, identity))
+        })
+        .unwrap_or(Ok(None))?;
+    if let Some(identity) = acknowledged_identity {
+        // Database access stays outside the visibility lock. The guarded event
+        // above already established that this explicit open won the race.
         crate::status_island::acknowledge_identity(app, &identity);
-    }
-    if focus {
-        // Active click/keyboard opens receive Escape; passive hover must not
-        // steal focus from whichever application the user is working in.
-        handle.set_focus().map_err(|error| error.to_string())?;
     }
     Ok(())
 }
@@ -1488,7 +1571,11 @@ fn drag_anchor<R: Runtime>(app: &AppHandle<R>) -> Result<DragAnchor, String> {
     let monitor = target_monitor(&handle)?;
     let work_area = monitor_work_area(&monitor)?;
     let scale = monitor.scale_factor();
-    let (width, _) = top_surface_size(None, app.state::<PanelController>().bar_button_count(), scale);
+    let (width, _) = top_surface_size(
+        None,
+        app.state::<PanelController>().bar_button_count(),
+        scale,
+    );
     let top = screen_top(monitor.position().y, work_area.y);
     Ok(DragAnchor {
         work_area,
@@ -1540,6 +1627,59 @@ pub fn end_status_island_drag(app: AppHandle) -> Result<(), crate::error::Comman
     let settled = settle_offset(&app).map_err(crate::error::CommandError::system)?;
     save_offset_x(&app, settled);
     reposition_handle(&app).map_err(crate::error::CommandError::system)
+}
+
+/// Hides the bar for a capture session and takes its suppression token.
+///
+/// The token blocks reminders, auto-repositioning and focus-loss logic from
+/// showing the bar again mid-capture. Reminder data, timers and AI requests keep
+/// running as normal business; only the window is held down.
+pub fn suppress_for_capture<R: Runtime>(app: &AppHandle<R>) -> CaptureSuppression {
+    let handle = app.get_webview_window("quick-panel-handle");
+    let controller = app.state::<PanelController>();
+    let (suppression, ()) = controller.begin_capture_suppression(
+        || {
+            handle
+                .as_ref()
+                .and_then(|handle| handle.is_visible().ok())
+                .unwrap_or(false)
+        },
+        |generation| {
+            if let Some(handle) = handle.as_ref() {
+                let _ = handle.emit("status-island-details-closed", DetailsClosed { generation });
+            }
+        },
+        || {
+            if let Some(handle) = handle.as_ref() {
+                if let Err(error) = handle.hide() {
+                    eprintln!("failed to hide the bar for a capture session: {error}");
+                }
+            }
+        },
+    );
+    suppression
+}
+
+/// Releases a capture suppression and restores the bar by *current* business
+/// state, rather than replaying a stale snapshot.
+pub fn restore_after_capture<R: Runtime>(app: &AppHandle<R>, suppression: CaptureSuppression) {
+    let handle = app.get_webview_window("quick-panel-handle");
+    let restored = app
+        .state::<PanelController>()
+        .end_capture_suppression(suppression, || {
+            if let Some(handle) = handle.as_ref() {
+                if let Err(error) = handle.show() {
+                    eprintln!("failed to restore the bar after a capture session: {error}");
+                }
+            }
+        });
+    if restored.is_some() {
+        // Geometry may have changed while the bar was hidden (monitor changes,
+        // DPI, saved offset), so settle it rather than trusting the old rect.
+        if let Err(error) = reposition_handle(app) {
+            eprintln!("failed to reposition the bar after a capture session: {error}");
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1732,6 +1872,155 @@ mod tests {
     }
 
     #[test]
+    fn capture_suppression_blocks_show_and_restores_current_visibility_intent() {
+        let controller = PanelController::default();
+        let mut hide_calls = 0;
+        let mut close_calls = 0;
+        let (suppression, ()) = controller.begin_capture_suppression(
+            || true,
+            |_| {
+                close_calls += 1;
+            },
+            || {
+                hide_calls += 1;
+            },
+        );
+        let mut show_calls = 0;
+
+        assert_eq!(close_calls, 1);
+        assert_eq!(hide_calls, 1);
+
+        let result = controller.show_serialized(|| {
+            show_calls += 1;
+        });
+
+        assert!(result.is_none());
+        assert_eq!(show_calls, 0);
+        assert_eq!(
+            controller.end_capture_suppression(suppression, || {
+                show_calls += 1;
+            }),
+            Some(())
+        );
+        assert_eq!(show_calls, 1);
+        assert_eq!(
+            controller.end_capture_suppression(suppression, || {
+                show_calls += 1;
+            }),
+            None
+        );
+    }
+
+    #[test]
+    fn hide_during_capture_changes_the_restore_intent() {
+        let controller = PanelController::default();
+        let (suppression, ()) = controller.begin_capture_suppression(|| true, |_| (), || ());
+
+        controller.hide_serialized(|| ());
+
+        assert_eq!(
+            controller.end_capture_suppression(suppression, || panic!("must stay hidden")),
+            None
+        );
+    }
+
+    #[test]
+    fn disabling_the_bar_during_capture_prevents_restoration() {
+        let controller = PanelController::default();
+        let (suppression, ()) = controller.begin_capture_suppression(|| true, |_| (), || ());
+
+        controller.set_enabled(false);
+        assert!(controller
+            .show_serialized(|| panic!("must remain suppressed"))
+            .is_none());
+
+        assert_eq!(
+            controller.end_capture_suppression(suppression, || panic!("must stay disabled")),
+            None
+        );
+    }
+
+    #[test]
+    fn capture_suppression_blocks_detail_opening() {
+        let controller = PanelController::default();
+        controller.begin_capture_suppression(|| true, |_| (), || ());
+
+        let transition = controller.toggle_details(PanelSource::Island);
+
+        assert_eq!(transition.source, None);
+        assert!(!controller.are_details_open());
+    }
+
+    #[test]
+    fn visibility_changes_wait_for_capture_restoration() {
+        use std::sync::{mpsc, Arc, Mutex};
+
+        let controller = Arc::new(PanelController::default());
+        let (suppression, ()) = controller.begin_capture_suppression(|| true, |_| (), || ());
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let (restore_started_tx, restore_started_rx) = mpsc::channel();
+        let (release_restore_tx, release_restore_rx) = mpsc::channel();
+        let (hide_finished_tx, hide_finished_rx) = mpsc::channel();
+
+        let restoring = Arc::clone(&controller);
+        let restore_events = Arc::clone(&events);
+        let restore_thread = std::thread::spawn(move || {
+            restoring.end_capture_suppression(suppression, || {
+                restore_events.lock().unwrap().push("restore");
+                restore_started_tx.send(()).unwrap();
+                release_restore_rx.recv().unwrap();
+            })
+        });
+        restore_started_rx.recv().unwrap();
+
+        let hiding = Arc::clone(&controller);
+        let hide_events = Arc::clone(&events);
+        let hide_thread = std::thread::spawn(move || {
+            hiding.hide_serialized(|| hide_events.lock().unwrap().push("hide"));
+            hide_finished_tx.send(()).unwrap();
+        });
+
+        assert!(hide_finished_rx.try_recv().is_err());
+        release_restore_tx.send(()).unwrap();
+        restore_thread.join().unwrap();
+        hide_thread.join().unwrap();
+        hide_finished_rx.recv().unwrap();
+        assert_eq!(*events.lock().unwrap(), vec!["restore", "hide"]);
+    }
+
+    #[test]
+    fn capture_suppression_waits_for_an_in_flight_detail_effect() {
+        use std::sync::{mpsc, Arc};
+
+        let controller = Arc::new(PanelController::default());
+        let transition = controller.toggle_details(PanelSource::Island);
+        let (effect_started_tx, effect_started_rx) = mpsc::channel();
+        let (release_effect_tx, release_effect_rx) = mpsc::channel();
+        let (suppression_finished_tx, suppression_finished_rx) = mpsc::channel();
+
+        let showing = Arc::clone(&controller);
+        let show_thread = std::thread::spawn(move || {
+            showing.run_if_details_current(transition.generation, || {
+                effect_started_tx.send(()).unwrap();
+                release_effect_rx.recv().unwrap();
+            })
+        });
+        effect_started_rx.recv().unwrap();
+
+        let suppressing = Arc::clone(&controller);
+        let suppression_thread = std::thread::spawn(move || {
+            let result = suppressing.begin_capture_suppression(|| true, |_| (), || ());
+            suppression_finished_tx.send(result).unwrap();
+        });
+
+        assert!(suppression_finished_rx.try_recv().is_err());
+        release_effect_tx.send(()).unwrap();
+        show_thread.join().unwrap();
+        suppression_thread.join().unwrap();
+        assert!(suppression_finished_rx.recv().is_ok());
+    }
+
+    #[test]
     fn visibility_operations_serialize_the_generation_check_with_hide() {
         use std::sync::{mpsc, Arc};
 
@@ -1881,7 +2170,8 @@ mod tests {
         for scale in [1.0, 1.25, 1.5, 1.75, 2.0] {
             for count in 0..=super::BAR_BUTTON_SLOTS {
                 let collapsed = super::surface_region(None, count, scale).bounds();
-                let status = super::surface_region(Some(PanelSource::Island), count, scale).bounds();
+                let status =
+                    super::surface_region(Some(PanelSource::Island), count, scale).bounds();
                 assert_eq!(collapsed.left, status.left);
             }
         }

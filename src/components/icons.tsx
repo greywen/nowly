@@ -38,19 +38,20 @@ function createIcon(name: IconName) {
   };
 }
 
-export const AlertTriangle=createIcon('AlertTriangle'), BarChart3=createIcon('BarChart3'),
+export const AlertTriangle=createIcon('AlertTriangle'), ArrowRightUp=createIcon('ArrowRightUp'), BarChart3=createIcon('BarChart3'),
   Bell=createIcon('Bell'), CalendarDays=createIcon('CalendarDays'), CalendarRange=createIcon('CalendarRange'),
   Check=createIcon('Check'), ChevronDown=createIcon('ChevronDown'), ChevronLeft=createIcon('ChevronLeft'),
   ChevronRight=createIcon('ChevronRight'), ChevronUp=createIcon('ChevronUp'),
-  CircleAlert=createIcon('CircleAlert'), Clock3=createIcon('Clock3'), Crop=createIcon('Crop'), Download=createIcon('Download'),
-  Droplets=createIcon('Droplets'), FileText=createIcon('FileText'), GripVertical=createIcon('GripVertical'), History=createIcon('History'),
+  CircleAlert=createIcon('CircleAlert'), Clock3=createIcon('Clock3'), Crop=createIcon('Crop'), Cursor=createIcon('Cursor'), Download=createIcon('Download'),
+  Droplets=createIcon('Droplets'), FileText=createIcon('FileText'), GalleryCircle=createIcon('GalleryCircle'), GripVertical=createIcon('GripVertical'), History=createIcon('History'),
   Layers=createIcon('Layers'), LayoutGrid=createIcon('LayoutGrid'), List=createIcon('List'),
   Mail=createIcon('Mail'), MessageCircle=createIcon('MessageCircle'), Mic=createIcon('Mic'), Minus=createIcon('Minus'),
   MonitorDown=createIcon('MonitorDown'), Paperclip=createIcon('Paperclip'), Pause=createIcon('Pause'), Pencil=createIcon('Pencil'), Pin=createIcon('Pin'),
-  Play=createIcon('Play'), Plug=createIcon('Plug'), Plus=createIcon('Plus'), RefreshCw=createIcon('RefreshCw'),
+  Play=createIcon('Play'), Plug=createIcon('Plug'), Plus=createIcon('Plus'), RadialBlur=createIcon('RadialBlur'), RefreshCw=createIcon('RefreshCw'),
   Repeat=createIcon('Repeat'), RotateCcw=createIcon('RotateCcw'), Search=createIcon('Search'), Send=createIcon('Send'),
-  Settings=createIcon('Settings'), Sparkles=createIcon('Sparkles'), Square=createIcon('Square'),
+  Settings=createIcon('Settings'), Sparkles=createIcon('Sparkles'), Square=createIcon('Square'), Stop=createIcon('Stop'),
   SquareKanban=createIcon('SquareKanban'), Timer=createIcon('Timer'), Trash2=createIcon('Trash2'),
+  UndoLeft=createIcon('UndoLeft'), UndoRight=createIcon('UndoRight'),
   Unplug=createIcon('Unplug'), X=createIcon('X');
 
 export type AppIcon = (props: IconProps) => ReactElement;

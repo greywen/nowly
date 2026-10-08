@@ -372,6 +372,9 @@ button:disabled { cursor: default; opacity: .65; }
 /* Natively clipped surface, so §11 asks for the inset ring rather than the ring shadow. */
 .status-rail__app-button:focus-visible { box-shadow: inset 0 0 0 2px var(--color-primary); }
 .status-rail__app-button[data-error="true"] { color: var(--color-danger); }
+.status-rail__app-button[data-error="true"]::after { box-sizing: border-box; border: 1px solid var(--color-danger); }
+.status-rail__app-retry { position: relative; z-index: 1; font-size: 0.8rem; font-weight: 600; line-height: 1.3; color: var(--color-danger-active); }
+.status-rail__app-button:disabled { opacity: 0.65; pointer-events: none; }
 /* Fades out with the logo whenever a panel takes the shell over, and is cut from
    the tab order at the same moment. */
 .status-rail__app-button[data-available="false"],
@@ -1961,3 +1964,118 @@ body:has(.screen-status-island-root),
 .subscription-picker__row { display: flex; align-items: center; gap: 8px; }
 .subscription-picker__row .form-check-label { display: inline-flex; align-items: center; gap: 8px; }
 .subscription-picker__taken { margin-left: auto; color: var(--text-muted); font-size: 0.85rem; }
+
+/* Capture surfaces. Per docs/superpowers/specs/2026-09-25-nowly-screenshot-design.md
+   §2.3 the captured content is data, not an app surface: no 15.2px radius on
+   capture pixels, no decorative blur, and status is static text — never a toast,
+   banner or spinner. The overlay root stays transparent because the frozen base
+   image is not wired up yet; an opaque fill here would hide the real desktop. */
+.screenshot-session { min-height: 100vh; display: grid; place-items: center; padding: 16px; background: var(--bg-surface); }
+.screenshot-session__note { margin: 0; color: var(--text-strong); font-size: 0.95rem; line-height: 1.5; }
+/* The cursor is set inline from `cursor.ts`: it depends on what is under the
+   pointer, which only the surface can hit test, so there is no class to express it.
+   The crosshair here is the pre-interaction default for a frame that has not
+   decoded yet. */
+.screenshot-overlay { position: relative; min-height: 100vh; display: grid; place-items: center; background: transparent; cursor: crosshair; }
+/* The frame is a frozen copy of the desktop, so while aiming the overlay would be
+   indistinguishable from the live screen. §4.2 masks the non-selection area, and
+   before the first drag that is the whole frame. The selection layer takes the mask
+   over once a rectangle exists, so they never stack. */
+.screenshot-overlay__aim-dim { position: absolute; inset: 0; background: var(--bg-overlay); pointer-events: none; }
+/* The window already covers the display's physical rectangle, so the frame fills
+   it rather than using its own pixel dimensions: the image is in physical pixels
+   while CSS is in logical ones, and on a scaled display the natural size would
+   overflow. Selection coordinates come from the ratio between naturalWidth and
+   the rendered box, not from this fill. */
+.screenshot-overlay__frame { width: 100%; height: 100%; display: block; object-fit: fill; image-rendering: pixelated; image-rendering: crisp-edges; }
+.screenshot-overlay__note { margin: 0; padding: 8px 12px; border: 1px solid var(--border-default); color: var(--text-strong); background: var(--bg-surface); box-shadow: var(--shadow-sm); font-size: 0.95rem; line-height: 1.5; }
+
+/* Selection layer. §2.2 fixes the mask and border tokens; the 8px handle size is
+   our own choice, since the spec fixes only the colour. The handles are visual
+   only: keyboard resizing goes through Alt+arrow, so they are not focus targets. */
+.screenshot-overlay--editing { display: block; position: relative; overflow: hidden; }
+.screenshot-selection { position: absolute; inset: 0; pointer-events: none; }
+.screenshot-selection__dim { position: absolute; background: var(--bg-overlay); }
+.screenshot-selection__frame { position: absolute; border: 1px solid var(--color-primary); }
+.screenshot-selection__handle { position: absolute; width: 8px; height: 8px; background: var(--color-primary); pointer-events: auto; }
+.screenshot-selection__handle--nw { top: -4px; left: -4px; cursor: nwse-resize; }
+.screenshot-selection__handle--n { top: -4px; left: calc(50% - 4px); cursor: ns-resize; }
+.screenshot-selection__handle--ne { top: -4px; right: -4px; cursor: nesw-resize; }
+.screenshot-selection__handle--w { top: calc(50% - 4px); left: -4px; cursor: ew-resize; }
+.screenshot-selection__handle--e { top: calc(50% - 4px); right: -4px; cursor: ew-resize; }
+.screenshot-selection__handle--sw { bottom: -4px; left: -4px; cursor: nesw-resize; }
+.screenshot-selection__handle--s { bottom: -4px; left: calc(50% - 4px); cursor: ns-resize; }
+.screenshot-selection__handle--se { bottom: -4px; right: -4px; cursor: nwse-resize; }
+/* Physical pixel readout, kept outside the selection so it never covers content. */
+.screenshot-selection__size { position: absolute; padding: 2px 6px; border: 1px solid var(--border-default); background: var(--bg-surface); color: var(--text-strong); font-size: 0.8rem; line-height: 1.5; font-variant-numeric: tabular-nums; }
+
+/* Editing toolbar. design.md §14: standard 40×40 icon buttons with 18px icons;
+   §2.2: 8px padding, 8px button gap, 1px group divider, white surface, default
+   border and radius, --shadow-sm. */
+.screenshot-toolbar { position: absolute; display: flex; align-items: center; gap: 8px; padding: 8px; background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); }
+.screenshot-toolbar__group { display: flex; align-items: center; gap: 8px; }
+.screenshot-toolbar__group + .screenshot-toolbar__group { padding-left: 8px; border-left: 1px solid var(--border-default); }
+.screenshot-toolbar__button { display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--text-strong); cursor: pointer; }
+.screenshot-toolbar__button:hover:not(:disabled) { background: var(--bg-subtle); }
+.screenshot-toolbar__button[aria-pressed='true'] { background: var(--color-primary-light); border-color: var(--color-primary-border-subtle); color: var(--color-primary-active); }
+.screenshot-toolbar__button:disabled { color: var(--text-disabled); cursor: not-allowed; }
+.screenshot-toolbar__button:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 1px; }
+.screenshot-toolbar__glyph { font-size: 18px; line-height: 1; }
+/* Positioning wrapper, so the toolbar's own layout stays independent of placement.
+   `cursor: default` resets the surface's inline cursor: the anchor is a child of the
+   capture surface, so without this the crosshair or the move cursor would leak onto
+   the controls and the panel's own padding. */
+.screenshot-toolbar-anchor { position: absolute; cursor: default; }
+.screenshot-toolbar-anchor > .screenshot-toolbar { position: static; flex-wrap: wrap; }
+
+/* Aiming magnifier. design.md §14: 192px wide, 12px padding, 21×21 source pixels
+   at 8× nearest-neighbour. The grid is image data, so it gets no radius or blur. */
+.screenshot-magnifier { position: absolute; display: grid; gap: 8px; padding: 12px; background: var(--bg-surface); border: 1px solid var(--border-default); box-shadow: var(--shadow-sm); pointer-events: none; }
+.screenshot-magnifier__grid { display: block; image-rendering: pixelated; background: var(--bg-subtle); }
+.screenshot-magnifier__line { margin: 0; font-size: 0.95rem; line-height: 1.5; color: var(--text-strong); font-variant-numeric: tabular-nums; }
+.screenshot-magnifier__hex { font-family: var(--font-mono, monospace); }
+.screenshot-magnifier__hint { color: var(--text-tertiary); }
+
+/* Annotation layer. The shapes are image content, so they carry no radius, shadow
+   or transition; the mosaic outline is interaction chrome and never exported. */
+.screenshot-annotations { position: absolute; overflow: visible; pointer-events: none; }
+/* Editor chrome around the selected object. A dashed stroke rather than an outline,
+   because `outline` does not render on an SVG shape; `rasterize.ts` removes it, so it
+   never reaches the exported file. */
+.screenshot-annotation--selected { fill: none; stroke: var(--color-primary); stroke-width: 1; stroke-dasharray: 4 4; }
+/* The resize grips. A white fill with the primary stroke so they stay visible over
+   both a dark and a light screenshot, which is the whole problem with drawing editor
+   chrome on top of arbitrary pixels. They take no pointer events: the capture
+   surface owns one pointer stream and hit tests them geometrically, so a grip that
+   swallowed a press would break dragging the shape underneath it. */
+.screenshot-annotation__handle { fill: var(--color-surface, #ffffff); stroke: var(--color-primary); stroke-width: 1; pointer-events: none; }
+.screenshot-annotation--mosaic { stroke: var(--color-primary); stroke-width: 1; stroke-dasharray: 4 4; }
+
+/* Annotation text editor. It shows the exported size, so its font scales with the
+   frame; it is image data being authored, hence no radius or shadow. */
+.screenshot-text-editor { position: absolute; min-width: 120px; min-height: 1.4em; margin: 0; padding: 0; border: 1px dashed var(--color-primary); background: transparent; font-family: inherit; resize: none; overflow: hidden; white-space: pre; cursor: text; }
+.screenshot-text-editor:focus { outline: none; }
+/* Export status. §2.3 rules out a toast, banner or spinner here, so it is a static
+   line beside the toolbar. */
+.screenshot-export-status { margin: 8px 0 0; padding: 8px 12px; border: 0; border-radius: var(--radius-default); background: var(--bg-subtle); color: var(--text-secondary); font-size: 0.85rem; font-weight: 500; line-height: 1.5; }
+.screenshot-export-status--failed { background: var(--color-danger-light); color: var(--color-danger-active); }
+/* The mosaicked preview, rendered by mosaic.rs and laid over the frozen frame at the
+   selection's position. §5.3 requires real pixels here, not a placeholder outline. */
+.screenshot-overlay__mosaic { position: absolute; pointer-events: none; }
+/* §5.2's fixed value sets as discrete choices: no free colour picker or slider, because
+   intermediate values do not exist. One horizontal strip under the toolbar:
+   sizes, fill, a divider, then the palette. */
+.screenshot-properties { display: flex; align-items: center; gap: 4px; width: fit-content; margin-top: 8px; padding: 6px 8px; border: 1px solid var(--border-default); border-radius: var(--radius-md); background: var(--bg-surface); box-shadow: var(--shadow-sm); }
+.screenshot-properties__group { display: flex; align-items: center; gap: 2px; }
+.screenshot-properties__divider { width: 1px; height: 20px; margin: 0 6px; background: var(--border-default); }
+.screenshot-properties__size, .screenshot-properties__fill, .screenshot-properties__swatch { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--text-tertiary); cursor: pointer; }
+.screenshot-properties__size:hover, .screenshot-properties__fill:hover, .screenshot-properties__swatch:hover { background: var(--bg-subtle); }
+.screenshot-properties__size:focus-visible, .screenshot-properties__fill:focus-visible, .screenshot-properties__swatch:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 1px; }
+.screenshot-properties__size--text { font-size: 15px; line-height: 1; }
+.screenshot-properties__size[aria-checked='true'] { color: var(--color-primary-active); }
+.screenshot-properties__dot { display: block; border-radius: 50%; background: currentColor; }
+.screenshot-properties__fill-glyph { display: block; width: 16px; height: 16px; border: 2px solid currentColor; border-radius: 2px; }
+.screenshot-properties__fill[aria-pressed='true'] { color: var(--color-primary-active); }
+.screenshot-properties__fill[aria-pressed='true'] .screenshot-properties__fill-glyph { background: currentColor; box-shadow: inset 0 0 0 2px var(--bg-surface); }
+.screenshot-properties__swatch-chip { display: block; width: 20px; height: 20px; border: 1px solid var(--border-default); border-radius: 2px; }
+.screenshot-properties__swatch[aria-checked='true'] { background: var(--bg-secondary); border-color: var(--border-default); }

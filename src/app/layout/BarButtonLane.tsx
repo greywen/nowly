@@ -52,6 +52,7 @@ export function BarButtonLane({
   buttons,
   available,
   errors,
+  pending,
   onActivate
 }: {
   buttons: readonly BarAppId[];
@@ -62,6 +63,7 @@ export function BarButtonLane({
    * than as a toast, per design.md §11's Error state.
    */
   errors?: Partial<Record<BarAppId, string>>;
+  pending?: Partial<Record<BarAppId, boolean>>;
   onActivate: (id: BarAppId) => void;
 }) {
   return (
@@ -70,6 +72,7 @@ export function BarButtonLane({
         const Icon = barAppIcon(id);
         const label = barAppLabel(id);
         const error = errors?.[id];
+        const busy = pending?.[id] === true;
         return (
           <button
             key={id}
@@ -84,10 +87,16 @@ export function BarButtonLane({
             {...(error ? { 'data-error': true } : {})}
             aria-label={error ? `${label}：${error}` : label}
             title={error ? `${label}：${error}` : label}
+            disabled={busy}
+            aria-busy={busy}
             {...(!available ? { 'aria-hidden': true, tabIndex: -1 } : {})}
             onClick={() => onActivate(id)}
           >
-            <Icon aria-hidden="true" size={24} />
+            {error ? (
+              <span className="status-rail__app-retry" aria-hidden="true">{t('common.retry')}</span>
+            ) : (
+              <Icon aria-hidden="true" size={24} />
+            )}
           </button>
         );
       })}

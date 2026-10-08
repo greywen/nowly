@@ -136,10 +136,13 @@ pub fn update_app_settings(
         if let Some(window) = app.get_webview_window("quick-panel-handle") {
             match visibility {
                 StatusIslandVisibilityChange::Show => {
-                    app.state::<crate::quick_panel::PanelController>()
+                    if let Some(result) = app
+                        .state::<crate::quick_panel::PanelController>()
                         .show_serialized(|| window.show())
-                        .map_err(CommandError::system)?;
-                    crate::quick_panel::request_position_reconcile(app.clone());
+                    {
+                        result.map_err(CommandError::system)?;
+                        crate::quick_panel::request_position_reconcile(app.clone());
+                    }
                 }
             }
         }

@@ -118,6 +118,56 @@ describe('screen status island windows', () => {
     expect(invocations('toggle_status_island_details')).toHaveLength(0);
   });
 
+  it('starts one screenshot request while startup is pending and allows retry after failure', async () => {
+    let rejectStartup!: (reason: unknown) => void;
+    const startup = new Promise<void>((_resolve, reject) => { rejectStartup = reject; });
+    invokeMock.mockImplementation((command: string) => {
+      if (command === 'get_status_island_snapshot') {
+        return Promise.resolve(snapshotWith({ barButtons: ['screenshot'] }));
+      }
+      if (command === 'start_screen_capture') return startup;
+      return Promise.resolve(null);
+    });
+    render(<StatusIslandApp />);
+    const button = await screen.findByRole('button', { name: '截屏' });
+
+    fireEvent.click(button);
+    fireEvent.click(button);
+    expect(invocations('start_screen_capture')).toHaveLength(1);
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute('aria-busy', 'true');
+    expect(invocations('toggle_nowly_panel')).toHaveLength(0);
+    expect(invocations('toggle_status_island_details')).toHaveLength(0);
+
+    await act(async () => rejectStartup({ message: '截图启动超时。' }));
+    expect(button).not.toBeDisabled();
+    expect(button).toHaveTextContent('重试');
+    expect(button).toHaveAttribute('title', '截屏：截图启动超时。');
+    fireEvent.click(button);
+    expect(invocations('start_screen_capture')).toHaveLength(2);
+    await act(async () => { await Promise.resolve(); });
+  });
+
+  it('clears screenshot pending state when startup succeeds', async () => {
+    let finishStartup!: () => void;
+    const startup = new Promise<void>(resolve => { finishStartup = resolve; });
+    invokeMock.mockImplementation((command: string) => {
+      if (command === 'get_status_island_snapshot') {
+        return Promise.resolve(snapshotWith({ barButtons: ['screenshot'] }));
+      }
+      if (command === 'start_screen_capture') return startup;
+      return Promise.resolve(null);
+    });
+    render(<StatusIslandApp />);
+    const button = await screen.findByRole('button', { name: '截屏' });
+    fireEvent.click(button);
+    expect(button).toBeDisabled();
+    await act(async () => finishStartup());
+    expect(button).not.toBeDisabled();
+    expect(button).not.toHaveAttribute('aria-busy', 'true');
+    expect(button).not.toHaveTextContent('重试');
+  });
+
   it('shows the summary in the island when state exists but nothing is unseen', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-12T14:18:00'));

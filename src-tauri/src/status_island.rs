@@ -457,16 +457,20 @@ pub fn set_status_island_visibility(app: AppHandle, visible: bool) -> Result<(),
     }
     if let Some(controller) = app.try_state::<crate::quick_panel::PanelController>() {
         if visible {
-            controller.show_serialized(|| window.show())
+            if let Some(result) = controller.show_serialized(|| window.show()) {
+                result.map_err(CommandError::system)?;
+            }
+            Ok(())
         } else {
-            controller.hide_serialized(|| window.hide())
+            controller
+                .hide_serialized(|| window.hide())
+                .map_err(CommandError::system)
         }
     } else if visible {
-        window.show()
+        window.show().map_err(CommandError::system)
     } else {
-        window.hide()
+        window.hide().map_err(CommandError::system)
     }
-    .map_err(CommandError::system)
 }
 
 fn should_apply_visibility(enabled: bool, visible: bool) -> bool {

@@ -61,6 +61,19 @@ describe('the bar button lane', () => {
     expect(button).toHaveAttribute('title', '截屏：截图功能尚未可用。');
   });
 
+  it('shows a visible retry command after a failure, without relying on a tooltip', async () => {
+    const onActivateBarButton = vi.fn();
+    renderRail({
+      barButtons: ['screenshot'],
+      barButtonErrors: { screenshot: '截图启动超时。' },
+      onActivateBarButton
+    });
+    const button = screen.getByRole('button', { name: '截屏：截图启动超时。' });
+    expect(button).toHaveTextContent('重试');
+    await userEvent.setup().click(button);
+    expect(onActivateBarButton).toHaveBeenCalledWith('screenshot');
+  });
+
   it('leaves the tab order while a panel owns the shell', () => {
     // Same rule as the Nowly logo: the lane is fading out, so it must not be
     // focusable behind the open panel.

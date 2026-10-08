@@ -505,6 +505,7 @@ export function StatusIslandSummaryView({
   assistant,
   barButtons = [],
   barButtonErrors,
+  barButtonPending,
   onActivateBarButton,
   onActivateNowly,
   onCollapse,
@@ -522,6 +523,7 @@ export function StatusIslandSummaryView({
   /** Configured app buttons, left to right, already normalized. */
   barButtons?: readonly BarAppId[];
   barButtonErrors?: Partial<Record<BarAppId, string>>;
+  barButtonPending?: Partial<Record<BarAppId, boolean>>;
   onActivateBarButton?: (id: BarAppId) => void;
   onActivateNowly: () => void;
   onCollapse: () => void;
@@ -592,6 +594,7 @@ export function StatusIslandSummaryView({
           buttons={barButtons}
           available={nowlyAvailable}
           errors={barButtonErrors}
+          pending={barButtonPending}
           onActivate={id => onActivateBarButton?.(id)}
         />
       </div>

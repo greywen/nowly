@@ -17,9 +17,7 @@ import { t } from '../i18n';
 import type { BarAppId } from '../app/bar-buttons';
 import { AssistantDock } from '../assistant/AssistantDock';
 
-// Which command each app button invokes. The screenshot session is specified in
-// docs/superpowers/specs/2026-09-25-nowly-screenshot-design.md; until it lands
-// the command rejects, and the button reports that in place.
+// Startup stays pending until the native capture surfaces are ready.
 const BAR_BUTTON_COMMANDS: Record<BarAppId, string> = {
   screenshot: 'start_screen_capture'
 };
@@ -288,8 +286,12 @@ export function StatusIslandApp() {
   // Each app button calls its own command. A rejection is reported on the button
   // that failed, not as a toast, and clears on the next attempt.
   const [barButtonErrors, setBarButtonErrors] = useState<Partial<Record<BarAppId, string>>>({});
+  const pendingBarButtons = useRef(new Set<BarAppId>());
+  const [barButtonPending, setBarButtonPending] = useState<Partial<Record<BarAppId, boolean>>>({});
   const activateBarButton = useCallback((id: BarAppId) => {
-    if (drag.consumedClick()) return;
+    if (drag.consumedClick() || pendingBarButtons.current.has(id)) return;
+    pendingBarButtons.current.add(id);
+    setBarButtonPending(current => ({ ...current, [id]: true }));
     setBarButtonErrors(current => {
       if (!(id in current)) return current;
       const next = { ...current };
@@ -298,6 +300,9 @@ export function StatusIslandApp() {
     });
     void invoke(BAR_BUTTON_COMMANDS[id]).catch((reason: unknown) => {
       setBarButtonErrors(current => ({ ...current, [id]: barButtonErrorMessage(reason) }));
+    }).finally(() => {
+      pendingBarButtons.current.delete(id);
+      setBarButtonPending(current => ({ ...current, [id]: false }));
     });
   }, [drag]);
 
@@ -382,15 +387,14 @@ export function StatusIslandApp() {
         mode={displayedSurface.mode}
         barButtons={barButtons}
         barButtonErrors={barButtonErrors}
+        barButtonPending={barButtonPending}
         onActivateBarButton={activateBarButton}
         onCollapse={collapse}
         onActivateNowly={activateNowly}
         assistant={(
           <AssistantDock
             active={assistantSurface !== null}
-            autoFocus={assistantSurface === 'assistant'}
             onRefresh={refresh}
-            onRequestClose={closeAssistant}
           />
         )}
         panel={(

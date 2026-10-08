@@ -7,6 +7,7 @@ import { installBrowserTauriBackend } from './data/browser-tauri-shim';
 import { FocusTimerProvider } from './focus/FocusTimerContext';
 import './app/styles.css';
 import { StatusIslandApp } from './quick-panel/StatusIslandApp';
+import { routeForLabel } from './screenshot/window-route';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
 // Outside the Tauri desktop shell (e.g. the plain Vite page in a browser) there
@@ -39,12 +40,25 @@ function currentWindowLabel(): string {
 
 // `quick-panel-handle` is a compatibility label: it now hosts the whole top
 // rail — status capsule, Nowly entry and the sheet they open into — not the
-// removed AI quick panel.
-const windowLabel = currentWindowLabel();
+// removed AI quick panel. Screenshot surfaces load screenshot.html, not this
+// entry, so the screenshot-* routes now fall through to main.
+const route = routeForLabel(currentWindowLabel());
+
+function surface() {
+  switch (route) {
+    case 'status-island':
+      return <StatusIslandApp />;
+    default:
+      return (
+        <RepositoryProvider repository={tauriNowlyRepository}>
+          <FocusTimerProvider>
+            <App />
+          </FocusTimerProvider>
+        </RepositoryProvider>
+      );
+  }
+}
+
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
-  <React.StrictMode>
-    {windowLabel === 'quick-panel-handle' ? <StatusIslandApp /> : <RepositoryProvider repository={tauriNowlyRepository}>
-      <FocusTimerProvider><App /></FocusTimerProvider>
-    </RepositoryProvider>}
-  </React.StrictMode>
+  <React.StrictMode>{surface()}</React.StrictMode>
 );

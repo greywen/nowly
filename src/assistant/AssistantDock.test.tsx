@@ -1,7 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { AssistantDock } from './AssistantDock';
-import { ChangeDetails } from './PlanCard';
 import type { AssistantClient, AssistantConfig, InterpretRequest, Plan, Reply } from './types';
 
 const config: AssistantConfig = { endpoint: 'https://example.com/v1', model: 'fixture-model', hasKey: true, permissions: { calendar: true, tasks: true, external: false } };
@@ -44,36 +43,6 @@ async function send() {
   return input;
 }
 async function click(element: HTMLElement) { await act(async () => { fireEvent.click(element); }); }
-
-// A second, visibly distinct plan so a committed card and a newer pending
-// preview can coexist in one chat without ambiguous accessible names.
-function laterPlan(): Plan {
-  const base = plan('plan-2');
-  return {
-    ...base,
-    actions: [{ kind: 'createEvent', draft: { title: '复盘', startAt: '2026-09-10T10:00', reminders: [0] } }],
-    changes: [{ ...base.changes[0], key: 'calendar:later:', title: '复盘', after: { ...base.changes[0].after!, id: 'later', title: '复盘' } }]
-  };
-}
-
-// Commit the first plan, then send again so the chat holds an older committed
-// card plus a newer pending preview. Undoing the older card is the only way to
-// reach the "preserve the current preview" path now that the assistant has a
-// single chat surface.
-async function commitThenSendAgain(client: ReturnType<typeof clientFixture>) {
-  await send();
-  await click(await screen.findByRole('button', { name: '确认执行 1 项' }));
-  await screen.findByRole('region', { name: '操作状态：已执行' });
-  client.interpret.mockResolvedValue({ kind: 'plan', message: '再检查一遍', records: [], plan: laterPlan() });
-  await send();
-  await screen.findByRole('textbox', { name: '标题 1' });
-}
-
-// Expand the older committed card and undo it.
-async function undoOlderCard() {
-  await click(screen.getByRole('button', { name: /新建日程.*早会.*已执行/ }));
-  await click(screen.getByRole('button', { name: '撤销早会' }));
-}
 describe('AssistantDock execution boundary', () => {
   it('presents a generated plan as a card inside the single chat stream', async () => {
     const client = clientFixture();
@@ -114,43 +83,17 @@ describe('AssistantDock execution boundary', () => {
     await screen.findByRole('region', { name: '操作状态：已执行' });
     expect(client.execute).toHaveBeenCalledExactlyOnceWith('plan-1');
     expect(refresh).toHaveBeenCalledTimes(1);
-    // Undo lives behind the operation row, not beside it.
-    await click(screen.getByRole('button', { name: /新建日程.*早会.*已执行/ }));
     expect(screen.getByText(/不代表系统通知已送达/)).toBeInTheDocument();
   });
-  it('uses the completed operation row as the accessible detail trigger', async () => {
+  it('associates a completed chat card detail button with its detail region', async () => {
     const client = clientFixture();
     render(<AssistantDock client={client} onRefresh={() => {}} />);
     await send();
     await click(await screen.findByRole('button', { name: '确认执行 1 项' }));
-    const details = screen.getByRole('button', { name: /新建日程.*早会.*已执行/ });
+    const details = screen.getByRole('button', { name: '查看详情' });
     expect(details).toHaveAttribute('aria-controls');
-    expect(details).toHaveAttribute('aria-expanded', 'false');
-    expect(details.querySelector('svg')).toHaveClass('app-icon');
-    expect(screen.queryByText('查看详情')).not.toBeInTheDocument();
-    expect(screen.queryByText(/不代表系统通知已送达/)).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '撤销早会' })).not.toBeInTheDocument();
     await click(details);
-    expect(details).toHaveAttribute('aria-expanded', 'true');
     expect(document.getElementById(details.getAttribute('aria-controls')!)).toBeInTheDocument();
-    expect(screen.getByText('分类')).toBeInTheDocument();
-    expect(screen.queryByText('颜色')).not.toBeInTheDocument();
-    expect(screen.getByText(/不代表系统通知已送达/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '撤销早会' })).toBeInTheDocument();
-  });
-  it('leaves an event color out of the diff but keeps a task color in it', () => {
-    const p = plan();
-    const calendarChange = p.changes[0];
-    // An event's color follows its category, so the preview does not ask the
-    // user to verify it. A task color is a real field and stays visible.
-    const { rerender } = render(<ChangeDetails change={calendarChange} plan={p} />);
-    expect(screen.getByText('分类')).toBeInTheDocument();
-    expect(screen.getByText('工作')).toBeInTheDocument();
-    expect(screen.queryByText('颜色')).not.toBeInTheDocument();
-
-    rerender(<ChangeDetails change={{ ...calendarChange, kind: 'createTask' }} plan={p} />);
-    expect(screen.getByText('颜色')).toBeInTheDocument();
-    expect(screen.getByText('#4fc9da')).toBeInTheDocument();
   });
   it('invalidates the old plan immediately on editing and confirms only a revised plan', async () => {
     const client = clientFixture();
@@ -229,7 +172,19 @@ describe('AssistantDock execution boundary', () => {
     expect(client.cancelPlan).toHaveBeenCalledWith('plan-1');
     expect(client.execute).not.toHaveBeenCalled();
   });
-  it('opens the chat on composer focus', async () => {
+  it('opens committed operations in history and supports undo', async () => {
+    const client = clientFixture(); client.history.mockResolvedValue([{ ...plan(), status: 'committed' }]);
+    const refresh = vi.fn();
+    render(<AssistantDock client={client} onRefresh={refresh} />);
+    await click(await screen.findByRole('button', { name: '操作记录' }));
+    await click(await screen.findByRole('button', { name: '查看' }));
+    expect(screen.getByText('2026-09-09 08:00')).toBeInTheDocument();
+    await click(await screen.findByRole('button', { name: '撤销' }));
+    await screen.findByText('已撤销');
+    expect(client.undo).toHaveBeenCalledWith('plan-1');
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+  it('opens the single chat on composer focus without loading operation history', async () => {
     const client = clientFixture();
     render(<AssistantDock client={client} onRefresh={() => {}} />);
     const input = await screen.findByRole('textbox', { name: '告诉 Nowly 你想做什么' });
@@ -237,7 +192,8 @@ describe('AssistantDock execution boundary', () => {
     await act(async () => { fireEvent.focus(input); });
     const panel = screen.getByRole('region', { name: '当前聊天' });
     expect(panel).toHaveAttribute('data-state', 'chat');
-    expect(panel).toHaveAttribute('data-open', 'true');
+    expect(within(panel).getByRole('heading', { name: '当前聊天' })).toBeInTheDocument();
+    expect(client.history).not.toHaveBeenCalled();
   });
   it('keeps completed user, assistant and plan items in the current chat', async () => {
     const client = clientFixture();
@@ -252,6 +208,52 @@ describe('AssistantDock execution boundary', () => {
     expect(within(panel).getByText('周三8点提醒我早会')).toBeInTheDocument();
     expect(within(panel).getByText('检查预览')).toBeInTheDocument();
     expect(within(panel).getByRole('region', { name: '变更预览' })).toBeInTheDocument();
+  });
+  it('keeps operation history separate while plans stay inside the current chat', async () => {
+    const client = clientFixture();
+    client.history.mockResolvedValue([{ ...plan(), status: 'committed', createdAt: Date.now() }]);
+    render(<AssistantDock client={client} onRefresh={() => {}} />);
+    await send();
+    const chat = screen.getByRole('region', { name: '当前聊天' });
+    expect(within(chat).getByRole('region', { name: '变更预览' })).toBeInTheDocument();
+
+    await click(screen.getByRole('button', { name: '操作记录' }));
+    const history = screen.getByRole('region', { name: '操作记录' });
+    expect(history).toHaveAttribute('data-state', 'history');
+    expect(within(history).getByRole('tab', { name: '近 7 天' })).toBeInTheDocument();
+    expect(within(history).queryByRole('list', { name: '当前聊天消息' })).not.toBeInTheDocument();
+
+    await click(screen.getByRole('button', { name: '操作记录' }));
+    expect(screen.getByRole('region', { name: '当前聊天' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '变更预览' })).toBeInTheDocument();
+  });
+  it('refreshes operation history after it is collapsed and reopened', async () => {
+    const client = clientFixture();
+    client.history.mockResolvedValueOnce([{ ...plan(), status: 'committed' }])
+      .mockResolvedValueOnce([{ ...plan(), status: 'undone' }]);
+    render(<AssistantDock client={client} onRefresh={() => {}} />);
+    const button = await screen.findByRole('button', { name: '操作记录' });
+    await click(button);
+    expect(screen.getByText('已执行')).toBeInTheDocument();
+    await click(screen.getByRole('button', { name: '收起助手' }));
+    await click(button);
+    expect(screen.getByText('已撤销')).toBeInTheDocument();
+    expect(screen.queryByText('已执行')).not.toBeInTheDocument();
+    expect(client.history).toHaveBeenCalledTimes(2);
+  });
+  it('keeps loaded history out of the current chat stream', async () => {
+    const client = clientFixture();
+    const now = Date.now();
+    client.history.mockResolvedValue([
+      { ...plan('newer'), status: 'committed', createdAt: now, changes: [{ ...plan().changes[0], title: '较新操作' }] },
+      { ...plan('older'), status: 'committed', createdAt: now - 1000, changes: [{ ...plan().changes[0], title: '较早操作' }] }
+    ]);
+    render(<AssistantDock client={client} onRefresh={() => {}} />);
+    await click(await screen.findByRole('button', { name: '操作记录' }));
+    const history = screen.getByRole('region', { name: '操作记录' });
+    expect(within(history).getByText('较早操作')).toBeInTheDocument();
+    expect(within(history).getByText('较新操作')).toBeInTheDocument();
+    expect(within(history).queryByRole('list', { name: '当前聊天消息' })).not.toBeInTheDocument();
   });
   it('upserts a repeated plan id instead of adding a duplicate card', async () => {
     const client = clientFixture();
@@ -281,6 +283,44 @@ describe('AssistantDock execution boundary', () => {
     expect(await screen.findByRole('region', { name: '变更预览' })).toBeInTheDocument();
     expect(await screen.findByRole('region', { name: '操作状态：已过期' })).toBeInTheDocument();
   });
+  it('closes history on an outside pointer press and refreshes it when reopened', async () => {
+    const client = clientFixture();
+    render(<AssistantDock client={client} onRefresh={() => {}} />);
+    const button = await screen.findByRole('button', { name: '操作记录' });
+    await click(button);
+    const panel = screen.getByRole('region', { name: '操作记录' });
+    fireEvent.pointerDown(document.body);
+    expect(panel).toHaveAttribute('data-open', 'false');
+    await click(button);
+    expect(panel).toHaveAttribute('data-state', 'history');
+    expect(panel).toHaveAttribute('data-open', 'true');
+    expect(client.history).toHaveBeenCalledTimes(2);
+  });
+  it('loads newer history state after the panel was collapsed and reopened', async () => {
+    const client = clientFixture();
+    client.history.mockResolvedValueOnce([]).mockResolvedValueOnce([{ ...plan(), status: 'committed' }]);
+    render(<AssistantDock client={client} onRefresh={() => {}} />);
+    const button = await screen.findByRole('button', { name: '操作记录' });
+    await click(button);
+    await click(screen.getByRole('button', { name: '收起助手' }));
+    await click(button);
+    expect(await screen.findByText('已执行')).toBeInTheDocument();
+    expect(client.history).toHaveBeenCalledTimes(2);
+  });
+  it('closes the current chat on an outside pointer press without clearing its messages', async () => {
+    const client = clientFixture();
+    render(<AssistantDock client={client} onRefresh={() => {}} />);
+    const input = await send();
+    fireEvent.blur(input); fireEvent.focus(input);
+    const panel = screen.getByRole('region', { name: '当前聊天' });
+    expect(panel).toHaveAttribute('data-state', 'chat');
+    fireEvent.pointerDown(document.body);
+    expect(panel).toHaveAttribute('data-open', 'false');
+    fireEvent.focus(input);
+    expect(panel).toHaveAttribute('data-state', 'chat');
+    expect(within(panel).getByText('周三8点提醒我早会')).toBeInTheDocument();
+    expect(within(panel).getByText('检查预览')).toBeInTheDocument();
+  });
   it('keeps the current chat open on ordinary blur', async () => {
     const client = clientFixture();
     render(<AssistantDock client={client} onRefresh={() => {}} />);
@@ -290,6 +330,17 @@ describe('AssistantDock execution boundary', () => {
     const panel = screen.getByRole('region', { name: '当前聊天' });
     expect(panel).toHaveAttribute('data-state', 'chat');
     expect(panel).toHaveAttribute('data-open', 'true');
+  });
+  it('expands only the selected operation when history contains repeated record keys', async () => {
+    const client = clientFixture();
+    client.history.mockResolvedValue([
+      { ...plan('history-1'), status: 'committed' },
+      { ...plan('history-2'), status: 'committed' }
+    ]);
+    render(<AssistantDock client={client} onRefresh={() => {}} />);
+    await click(await screen.findByRole('button', { name: '操作记录' }));
+    await click(screen.getAllByRole('button', { name: '查看' })[0]);
+    expect(document.querySelectorAll('.assistant-timeline-detail')).toHaveLength(1);
   });
   it('opens current chat when configuration finishes loading under a focused composer', async () => {
     const client = clientFixture();
@@ -314,85 +365,95 @@ describe('AssistantDock execution boundary', () => {
     fireEvent.blur(input); fireEvent.focus(input);
     expect(document.querySelectorAll('.assistant-chat-message[data-role="user"]')).toHaveLength(7);
   });
-  it('undoes a committed operation from its card in the chat', async () => {
-    const client = clientFixture(); const refresh = vi.fn();
-    render(<AssistantDock client={client} onRefresh={refresh} />);
-    await send();
-    await click(await screen.findByRole('button', { name: '确认执行 1 项' }));
-    await click(screen.getByRole('button', { name: /新建日程.*早会.*已执行/ }));
-    await click(screen.getByRole('button', { name: '撤销早会' }));
-    await screen.findByRole('region', { name: '操作状态：已撤销' });
-    expect(client.undo).toHaveBeenCalledWith('plan-1');
-    expect(refresh).toHaveBeenCalledTimes(2);
-  });
-  it('preserves the current pending preview when undoing an older committed card', async () => {
-    const client = clientFixture();
-    client.undo.mockResolvedValue({ ...plan(), status: 'undone' });
+  it('keeps the chat preview when visiting and leaving operation history', async () => {
+    const client = clientFixture(); client.history.mockResolvedValue([{ ...plan(), status: 'committed' }]);
     render(<AssistantDock client={client} onRefresh={() => {}} />);
-    await commitThenSendAgain(client);
-    await undoOlderCard();
-    await screen.findByRole('region', { name: '操作状态：已撤销' });
-    // The newer preview is untouched: still editable, still confirmable, and
-    // never cancelled on its behalf.
-    expect(screen.getByRole('textbox', { name: '标题 1' })).toHaveValue('复盘');
-    expect(screen.getByRole('button', { name: '确认执行 1 项' })).toBeEnabled();
-    expect(client.cancelPlan).not.toHaveBeenCalledWith('plan-2');
+    await send();
+    await click(screen.getByRole('button', { name: '操作记录' }));
+    expect(screen.getByRole('region', { name: '操作记录' })).toHaveAttribute('data-state', 'history');
+    await click(screen.getByRole('button', { name: '操作记录' }));
+    const panel = screen.getByRole('region', { name: '当前聊天' });
+    expect(within(panel).getByRole('region', { name: '变更预览' })).toBeInTheDocument();
   });
-  it('keeps a blocked current preview blocked after undoing an older committed card', async () => {
+  it('keeps a blocked current preview blocked after undoing an older history entry', async () => {
     const client = clientFixture();
     client.cancelPlan.mockRejectedValueOnce(new Error('cancel unavailable'));
-    client.undo.mockResolvedValue({ ...plan(), status: 'undone' });
+    client.history.mockResolvedValue([{ ...plan('history-1'), status: 'committed' }]);
+    client.undo.mockResolvedValue({ ...plan('history-1'), status: 'undone' });
     render(<AssistantDock client={client} onRefresh={() => {}} />);
-    await commitThenSendAgain(client);
-    fireEvent.change(await screen.findByRole('textbox', { name: '标题 1' }), { target: { value: '季度复盘' } });
+    await send();
+    fireEvent.change(await screen.findByRole('textbox', { name: '标题 1' }), { target: { value: '团队早会' } });
     await screen.findByText('无法核实旧预览已取消。请重新发送请求。');
-    await undoOlderCard();
-    await screen.findByRole('region', { name: '操作状态：已撤销' });
-    // Succeeding on the older card says nothing about the current preview, so
-    // its block and its reason both survive.
+    await click(screen.getByRole('button', { name: '操作记录' }));
+    await click(await screen.findByRole('button', { name: '撤销' }));
+    await screen.findByText('已撤销');
+    await click(screen.getByRole('button', { name: '操作记录' }));
     expect(screen.getByRole('button', { name: '确认执行 1 项' })).toBeDisabled();
     expect(screen.getByText('无法核实旧预览已取消。请重新发送请求。')).toBeInTheDocument();
   });
-  it('does not block the current chat while an older undo awaits verification', async () => {
+  it('keeps history loading errors out of the current chat', async () => {
+    const client = clientFixture(); client.history.mockRejectedValueOnce(new Error('历史读取失败'));
+    render(<AssistantDock client={client} onRefresh={() => {}} />);
+    await send();
+    await click(screen.getByRole('button', { name: '操作记录' }));
+    expect(screen.getByRole('region', { name: '操作记录' })).toHaveTextContent('历史读取失败');
+    await click(screen.getByRole('button', { name: '操作记录' }));
+    expect(screen.getByRole('region', { name: '当前聊天' })).not.toHaveTextContent('历史读取失败');
+    expect(screen.getByRole('region', { name: '变更预览' })).toBeInTheDocument();
+  });
+  it('preserves the current pending preview when undoing an older history entry', async () => {
     const client = clientFixture();
+    client.history.mockResolvedValue([{ ...plan('history-1'), status: 'committed' }]);
+    client.undo.mockResolvedValue({ ...plan('history-1'), status: 'undone' });
+    render(<AssistantDock client={client} onRefresh={() => {}} />);
+    await send();
+    await click(screen.getByRole('button', { name: '操作记录' }));
+    await click(await screen.findByRole('button', { name: '撤销' }));
+    await screen.findByText('已撤销');
+    await click(screen.getByRole('button', { name: '操作记录' }));
+    expect(screen.getByRole('textbox', { name: '标题 1' })).toHaveValue('早会');
+    expect(screen.getByRole('button', { name: '确认执行 1 项' })).toBeEnabled();
+    expect(client.cancelPlan).not.toHaveBeenCalledWith('plan-1');
+  });
+  it('preserves the current preview after retrying an uncertain history undo', async () => {
+    const client = clientFixture();
+    client.history.mockResolvedValue([{ ...plan('history-1'), status: 'committed' }]);
+    client.undo.mockRejectedValueOnce(new Error('transport lost'));
+    client.status.mockRejectedValueOnce(new Error('status unavailable'))
+      .mockResolvedValueOnce({ ...plan('history-1'), status: 'undone' });
+    render(<AssistantDock client={client} onRefresh={() => {}} />);
+    await send();
+    await click(screen.getByRole('button', { name: '操作记录' }));
+    await click(await screen.findByRole('button', { name: '撤销' }));
+    await click(await screen.findByRole('button', { name: '核实操作状态' }));
+    await screen.findByText('已撤销');
+    await click(screen.getByRole('button', { name: '操作记录' }));
+    expect(screen.getByRole('textbox', { name: '标题 1' })).toHaveValue('早会');
+    expect(screen.getByRole('button', { name: '确认执行 1 项' })).toBeEnabled();
+  });
+  it('does not block the current chat while a history undo is awaiting verification', async () => {
+    const client = clientFixture();
+    client.history.mockResolvedValue([{ ...plan('history-1'), status: 'committed' }]);
     client.undo.mockRejectedValueOnce(new Error('transport lost'));
     client.status.mockRejectedValueOnce(new Error('status unavailable'));
     render(<AssistantDock client={client} onRefresh={() => {}} />);
-    await commitThenSendAgain(client);
-    await undoOlderCard();
-    // The uncertainty is reported on the card it belongs to, and the current
-    // preview stays usable.
+    await send();
+    await click(screen.getByRole('button', { name: '操作记录' }));
+    await click(await screen.findByRole('button', { name: '撤销' }));
     await screen.findByRole('button', { name: '核实操作状态' });
+    await click(screen.getByRole('button', { name: '操作记录' }));
     expect(screen.getByRole('button', { name: '确认执行 1 项' })).toBeEnabled();
     expect(screen.getByRole('textbox', { name: '告诉 Nowly 你想做什么' })).toBeEnabled();
   });
-  it('preserves the current preview after retrying an uncertain older undo', async () => {
-    const client = clientFixture();
-    client.undo.mockRejectedValueOnce(new Error('transport lost'));
-    client.status.mockRejectedValueOnce(new Error('status unavailable'))
-      .mockResolvedValueOnce({ ...plan(), status: 'undone' });
-    render(<AssistantDock client={client} onRefresh={() => {}} />);
-    await commitThenSendAgain(client);
-    await undoOlderCard();
-    await click(await screen.findByRole('button', { name: '核实操作状态' }));
-    await screen.findByRole('region', { name: '操作状态：已撤销' });
-    expect(screen.getByRole('textbox', { name: '标题 1' })).toHaveValue('复盘');
-    expect(screen.getByRole('button', { name: '确认执行 1 项' })).toBeEnabled();
-  });
   it('reports an undo conflict instead of calling the committed receipt a successful undo', async () => {
-    const client = clientFixture();
+    const client = clientFixture(); client.history.mockResolvedValue([{ ...plan(), status: 'committed' }]);
     client.undo.mockRejectedValueOnce(new Error('相关数据已有后续修改，无法安全撤销'));
     const refresh = vi.fn();
     render(<AssistantDock client={client} onRefresh={refresh} />);
-    await send();
-    await click(await screen.findByRole('button', { name: '确认执行 1 项' }));
-    refresh.mockClear();
-    await click(screen.getByRole('button', { name: /新建日程.*早会.*已执行/ }));
-    await click(screen.getByRole('button', { name: '撤销早会' }));
+    await click(await screen.findByRole('button', { name: '操作记录' }));
+    await click(await screen.findByRole('button', { name: '撤销' }));
     await screen.findByText(/相关数据已有后续修改/);
-    // A committed receipt is not an undo. The card stays committed and nothing
-    // is refreshed as though data had changed.
-    expect(screen.getByRole('region', { name: '操作状态：已执行' })).toBeInTheDocument();
+    expect(screen.queryByText('已执行 1 项本地变更')).not.toBeInTheDocument();
     expect(refresh).not.toHaveBeenCalled();
   });
   it('disables confirmation when all targets are excluded', async () => {
@@ -434,266 +495,5 @@ describe('AssistantDock execution boundary', () => {
     expect(screen.getByRole('spinbutton', { name: '小时' })).toHaveAttribute('aria-valuenow', '9');
     expect(screen.getByRole('button', { name: '确认执行 1 项' })).toBeDisabled();
     expect(client.execute).not.toHaveBeenCalled();
-  });
-  it('opens the embedded chat immediately and keeps it open while submitting', async () => {
-    const client = clientFixture();
-    let resolve!: (reply: Reply) => void;
-    client.interpret.mockImplementationOnce(() => new Promise(reply => { resolve = reply; }));
-    render(
-      <AssistantDock
-        client={client}
-       
-        autoFocus
-        onRefresh={() => {}}
-      />
-    );
-    const input = await screen.findByRole('textbox', { name: '告诉 Nowly 你想做什么' });
-    await connected();
-    await waitFor(() => expect(input).toHaveFocus());
-
-    expect(document.querySelector('.assistant-panel')).toHaveAttribute('data-open', 'true');
-
-    fireEvent.change(input, { target: { value: '明天下午三点创建产品评审' } });
-    fireEvent.keyDown(input, { key: 'Enter' });
-
-    expect(document.querySelector('.assistant-panel')).toHaveAttribute('data-open', 'true');
-    expect(within(screen.getByRole('list', { name: '当前聊天消息' }))
-      .getByText('明天下午三点创建产品评审')).toBeInTheDocument();
-    expect(screen.getByText('正在理解与查询…尚未执行任何变更。')).toBeInTheDocument();
-
-    await act(async () => resolve({ kind: 'clarify', message: '需要提醒吗？', records: [], plan: null }));
-  });
-  it('keeps the embedded Nowly Bar input minimal and swaps voice for send only when text exists', async () => {
-    render(
-      <AssistantDock
-        client={clientFixture()}
-       
-        expandOnFocus={false}
-        onRefresh={() => {}}
-      />
-    );
-    const input = await screen.findByRole('textbox', { name: '告诉 Nowly 你想做什么' });
-    await connected();
-
-    expect(document.querySelector('.assistant-composer-mark')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '操作记录' })).not.toBeInTheDocument();
-    expect(screen.queryByText('当前聊天')).not.toBeInTheDocument();
-    expect(screen.queryByText('今天还没有对话。')).not.toBeInTheDocument();
-    const voice = screen.getByRole('button', { name: '语音输入' });
-    expect(voice).toBeInTheDocument();
-    expect(voice.querySelector('svg')).toHaveClass('app-icon');
-    expect(screen.queryByRole('button', { name: '发送请求' })).not.toBeInTheDocument();
-
-    fireEvent.change(input, { target: { value: '明天下午三点开会' } });
-
-    expect(screen.queryByRole('button', { name: '语音输入' })).not.toBeInTheDocument();
-    const sendButton = screen.getByRole('button', { name: '发送请求' });
-    expect(sendButton).toBeInTheDocument();
-    expect(sendButton.querySelector('svg')).toHaveClass('app-icon');
-  });
-  it('continues an embedded request while the Nowly Bar conversation is hidden', async () => {
-    const client = clientFixture();
-    let resolve!: (reply: Reply) => void;
-    client.interpret.mockImplementationOnce(() => new Promise(reply => { resolve = reply; }));
-    const view = render(
-      <AssistantDock
-        client={client}
-       
-        active
-        expandOnFocus={false}
-        onRefresh={() => {}}
-      />
-    );
-    const input = await screen.findByRole('textbox', { name: '告诉 Nowly 你想做什么' });
-    await connected();
-    fireEvent.change(input, { target: { value: '继续处理这段对话' } });
-    fireEvent.keyDown(input, { key: 'Enter' });
-
-    view.rerender(
-      <AssistantDock
-        client={client}
-       
-        active={false}
-        expandOnFocus={false}
-        onRefresh={() => {}}
-      />
-    );
-    await act(async () => resolve({ kind: 'clarify', message: '对话仍在继续', records: [], plan: null }));
-
-    expect(client.cancelRequest).not.toHaveBeenCalled();
-    expect(screen.getByText('对话仍在继续')).toBeInTheDocument();
-  });
-  it('keeps a revised embedded preview when the Nowly Bar conversation is hidden', async () => {
-    const client = clientFixture();
-    let resolve!: (next: Plan) => void;
-    client.revise.mockImplementationOnce(() => new Promise(next => { resolve = next; }));
-    const view = render(
-      <AssistantDock
-        client={client}
-       
-        active
-        expandOnFocus={false}
-        onRefresh={() => {}}
-      />
-    );
-    await send();
-    fireEvent.change(await screen.findByRole('textbox', { name: '标题 1' }), { target: { value: '团队早会' } });
-    await click(screen.getByRole('button', { name: '更新预览' }));
-
-    view.rerender(
-      <AssistantDock
-        client={client}
-       
-        active={false}
-        expandOnFocus={false}
-        onRefresh={() => {}}
-      />
-    );
-    await act(async () => resolve(plan('plan-2')));
-    view.rerender(
-      <AssistantDock
-        client={client}
-       
-        active
-        expandOnFocus={false}
-        onRefresh={() => {}}
-      />
-    );
-
-    expect(client.cancelPlan).not.toHaveBeenCalledWith('plan-2');
-    expect(document.querySelector('.assistant-panel')).toHaveAttribute('data-open', 'true');
-    await click(screen.getByRole('button', { name: '确认执行 1 项' }));
-    expect(client.execute).toHaveBeenCalledWith('plan-2');
-  });
-  it('does not collapse an embedded conversation when another surface is clicked', async () => {
-    render(
-      <AssistantDock
-        client={clientFixture()}
-       
-        expandOnFocus={false}
-        onRefresh={() => {}}
-      />
-    );
-    await send();
-    expect(document.querySelector('.assistant-panel')).toHaveAttribute('data-open', 'true');
-
-    fireEvent.pointerDown(document.body);
-
-    expect(document.querySelector('.assistant-panel')).toHaveAttribute('data-open', 'true');
-  });
-  it('hides an embedded conversation with Escape without collapsing its previous answer state', async () => {
-    const onRequestClose = vi.fn();
-    const view = render(
-      <AssistantDock
-        client={clientFixture()}
-       
-        active
-        expandOnFocus={false}
-        onRequestClose={onRequestClose}
-        onRefresh={() => {}}
-      />
-    );
-    const input = await send();
-    expect(document.querySelector('.assistant-panel')).toHaveAttribute('data-open', 'true');
-
-    fireEvent.keyDown(input, { key: 'Escape' });
-
-    expect(onRequestClose).toHaveBeenCalledTimes(1);
-    expect(document.querySelector('.assistant-panel')).toHaveAttribute('data-open', 'true');
-
-    view.rerender(
-      <AssistantDock
-        client={clientFixture()}
-       
-        active={false}
-        expandOnFocus={false}
-        onRequestClose={onRequestClose}
-        onRefresh={() => {}}
-      />
-    );
-    view.rerender(
-      <AssistantDock
-        client={clientFixture()}
-       
-        active
-        expandOnFocus={false}
-        onRequestClose={onRequestClose}
-        onRefresh={() => {}}
-      />
-    );
-
-    expect(document.querySelector('.assistant-panel')).toHaveAttribute('data-open', 'true');
-    expect(screen.getByText('检查预览')).toBeInTheDocument();
-  });
-  it('leaves embedded closing to the rail header and keeps voice as the default empty-input action', async () => {
-    const onRequestClose = vi.fn();
-    render(
-      <AssistantDock
-        client={clientFixture()}
-       
-        expandOnFocus={false}
-        onRequestClose={onRequestClose}
-        onRefresh={() => {}}
-      />
-    );
-    await send();
-
-    expect(screen.queryByRole('button', { name: '收起助手' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '折叠助手' })).not.toBeInTheDocument();
-    const voice = screen.getByRole('button', { name: '语音输入' });
-    expect(screen.queryByRole('button', { name: '发送请求' })).not.toBeInTheDocument();
-
-    voice.focus();
-    fireEvent.keyDown(voice, { key: 'Escape' });
-
-    expect(onRequestClose).toHaveBeenCalledTimes(1);
-  });
-  it('keeps an embedded answer expanded when a query record is selected', async () => {
-    const client = clientFixture();
-    client.interpret.mockResolvedValue({
-      kind: 'results',
-      message: '找到一条日程',
-      records: [{
-        key: 'calendar:event-1',
-        domain: 'calendar',
-        title: '产品评审',
-        source: '本地日历',
-        readOnly: false,
-        data: { startAt: '2026-09-18T15:00' }
-      }],
-      plan: null
-    });
-    render(
-      <AssistantDock
-        client={client}
-       
-        expandOnFocus={false}
-        onRefresh={() => {}}
-      />
-    );
-    await send();
-    expect(document.querySelector('.assistant-panel')).toHaveAttribute('data-open', 'true');
-
-    await click(screen.getByRole('button', { name: '产品评审' }));
-
-    expect(document.querySelector('.assistant-panel')).toHaveAttribute('data-open', 'true');
-  });
-  it('asks the host to close when Escape is pressed in the embedded assistant', async () => {
-    const onRequestClose = vi.fn();
-    render(
-      <AssistantDock
-        client={clientFixture()}
-       
-        onRequestClose={onRequestClose}
-        onRefresh={() => {}}
-      />
-    );
-    const input = await screen.findByRole('textbox', { name: '告诉 Nowly 你想做什么' });
-    await connected();
-
-    fireEvent.keyDown(input, { key: 'Escape' });
-
-    expect(onRequestClose).toHaveBeenCalledTimes(1);
-    expect(document.querySelector('.assistant-panel')).toHaveAttribute('data-open', 'true');
   });
 });

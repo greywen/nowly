@@ -1,20 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
-import { Mic, Send, Square } from '../components/icons';
+import { ChevronDown, History, MessageCircle, Mic, Send, Sparkles, Square } from 'lucide-react';
 import { assistantClient, assistantError } from './client';
 import { AssistantChat } from './AssistantChat';
+import { AssistantHistory, historyCount, type HistoryRange } from './AssistantHistory';
 import type { Action, AssistantClient, AssistantConfig, AssistantRecord, ChatItem, Fields, HistoryMessage, Plan } from './types';
 import { connectionReady } from './types';
 import './assistant.css';
-// The assistant chat lives in the Nowly Bar: a composer docked to the bottom of
-// the rail with the conversation filling the sheet above it. There is no in-app
-// floating dock any more, so the dock is always embedded.
 export type AssistantDockProps = {
   client?: AssistantClient;
   active?: boolean;
-  autoFocus?: boolean;
-  expandOnFocus?: boolean;
   onRefresh: () => void | Promise<unknown>;
-  onRequestClose?: () => void;
   onOpenSettings?: () => void;
   onOpenRecord?: (record: AssistantRecord, trigger: HTMLElement) => void | Promise<void>;
 };
@@ -34,17 +29,8 @@ function upsertPlanItem(items: ChatItem[], next: Plan): ChatItem[] {
   if (existing < 0) return [...items, { id: `plan:${next.id}`, kind: 'plan', plan: next }];
   return items.map((item, index) => index === existing && item.kind === 'plan' ? { ...item, plan: next } : item);
 }
-type PanelSurface = 'chat';
-export function AssistantDock({
-  client = assistantClient,
-  active = true,
-  autoFocus = false,
-  expandOnFocus = true,
-  onRefresh,
-  onRequestClose,
-  onOpenSettings,
-  onOpenRecord
-}: AssistantDockProps) {
+type PanelSurface = 'chat' | 'history';
+export function AssistantDock({ client = assistantClient, active = true, onRefresh, onOpenSettings, onOpenRecord }: AssistantDockProps) {
   const [config, setConfig] = useState<AssistantConfig | null>(null);
   const [connectionError, setConnectionError] = useState('');
   const dockRef = useRef<HTMLDivElement>(null);
@@ -59,9 +45,14 @@ export function AssistantDock({
   const busyRef = useRef(false); const [reading, setReading] = useState(false);
   const requestRef = useRef<string | null>(null); const generation = useRef(0);
   const [error, setError] = useState('');
+  const [historyError, setHistoryError] = useState('');
+  const [history, setHistory] = useState<Plan[] | null>(null);
+  const [historyRange, setHistoryRange] = useState<HistoryRange>('7');
   const [openChange, setOpenChange] = useState<string | null>(null);
   const historyMessages = useRef<HistoryMessage[]>([]);
   const [chatItems, setChatItems] = useState<ChatItem[]>([]);
+  const [surface, setSurface] = useState<PanelSurface>('chat');
+  const historyReturnExpanded = useRef(false);
   const [uncertain, setUncertain] = useState<{ id: string; undo: boolean; preserveCurrent: boolean } | null>(null);
   const [listening, setListening] = useState(false); const recognitionRef = useRef<Recognition | null>(null);
   const activeRef = useRef(active); activeRef.current = active;
@@ -83,14 +74,6 @@ export function AssistantDock({
     return () => { alive = false; };
   }, [client, active]);
   useEffect(() => {
-    if (!active || !autoFocus) return;
-    const timer = window.setTimeout(() => inputRef.current?.focus(), 0);
-    return () => window.clearTimeout(timer);
-  }, [active, autoFocus]);
-  useEffect(() => {
-    if (active) setExpanded(true);
-  }, [active]);
-  useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false; generation.current++;
@@ -101,8 +84,8 @@ export function AssistantDock({
   }, [client]);
   useEffect(() => {
     if (active) return;
-    // Hiding the rail must not discard the typed draft, so only dictation stops.
-    recognitionRef.current?.stop();
+    stop(false); setExpanded(false); recognitionRef.current?.stop();
+    // Hiding for wallpaper/layout/modal must not discard the typed draft.
   }, [active]);
   useEffect(() => {
     if (!plan || plan.status !== 'pending') return;
@@ -115,6 +98,16 @@ export function AssistantDock({
     }, delay);
     return () => window.clearTimeout(timer);
   }, [plan]);
+  useEffect(() => {
+    if (!expanded) return;
+    function closeOnOutsidePointer(event: PointerEvent) {
+      if (event.target instanceof Node && dockRef.current?.contains(event.target)) return;
+      inputFocusedRef.current = false; inputRef.current?.blur();
+      setExpanded(false);
+    }
+    document.addEventListener('pointerdown', closeOnOutsidePointer);
+    return () => document.removeEventListener('pointerdown', closeOnOutsidePointer);
+  }, [expanded]);
 
   function adopt(next: Plan | null, replacedId?: string) {
     planRef.current = next; setPlan(next); setDirty(false); dirtyRef.current = false; setBlocked(false);
@@ -137,8 +130,8 @@ export function AssistantDock({
   }
   async function send() {
     if (!activeRef.current || requestRef.current || busyRef.current || (uncertain && !uncertain.preserveCurrent) || !draft.trim()) return;
-    const message = draft.trim(); const requestId = crypto.randomUUID();
     if (!connectionReady(config)) { setExpanded(true); return; }
+    const message = draft.trim(); const requestId = crypto.randomUUID();
     const turn = ++generation.current; requestRef.current = requestId;
     const previous = planRef.current;
     setReading(true); setExpanded(true); setError('');
@@ -152,7 +145,7 @@ export function AssistantDock({
       if (turn !== generation.current) return;
       const response = await client.interpret({ requestId, message, history: historyMessages.current.slice(-12),
         previousPlanId: previous?.status === 'pending' || previous?.status === 'cancelled' ? previous.id : null });
-      if (turn !== generation.current || !mounted.current) {
+      if (turn !== generation.current || !mounted.current || !activeRef.current) {
         if (response.plan) void client.cancelPlan(response.plan.id).catch(() => {});
         return;
       }
@@ -198,30 +191,27 @@ export function AssistantDock({
     const turn = generation.current;
     try {
       const next = await client.revise(planRef.current.id, actions.filter((_, i) => selected[i]));
-      if (!mounted.current || turn !== generation.current) {
-        void client.cancelPlan(next.id).catch(() => {});
-        return;
-      }
+      if (!mounted.current || turn !== generation.current || !activeRef.current) { void client.cancelPlan(next.id).catch(() => {}); return; }
       adopt(next, planRef.current.id);
     } catch (e) { setError(assistantError(e)); }
     finally { if (mounted.current) lock(false); }
   }
-  // `preserveCurrent` marks an undo of an older card in the conversation: the
-  // receipt updates that card without replacing the plan currently previewed,
-  // and a failure there must not block that preview either.
   async function acceptReceipt(next: Plan, undo: boolean, preserveCurrent = false) {
     if (!preserveCurrent) adopt(next); else syncPlan(next);
+    setHistory(items => items?.map(item => item.id === next.id ? next : item) ?? null);
     if (next.status === 'committed' || next.status === 'undone') {
       setUncertain(null);
-      // Success on an older card must not clear a message owned by the current
-      // preview (a failed cancel still blocks it), so only a non-preserving
-      // receipt resets the error and the block.
-      if (!preserveCurrent) { setBlocked(false); setError(''); }
+      if (preserveCurrent) setHistoryError('');
+      else { setBlocked(false); setError(''); }
       try { await onRefresh(); }
-      catch { setError('操作已保存，但界面刷新失败，请重新打开相关模块。'); }
+      catch {
+        const message = '操作已保存，但界面刷新失败，请重新打开相关模块。';
+        if (preserveCurrent) setHistoryError(message); else setError(message);
+      }
     } else {
-      setError(undo ? '尚未确认撤销成功，请重新核实操作状态。' : '未确认执行成功，请重新生成预览。');
-      if (!preserveCurrent) setBlocked(true);
+      const message = undo ? '尚未确认撤销成功，请检查操作记录。' : '未确认执行成功，请重新生成预览。';
+      if (preserveCurrent) setHistoryError(message);
+      else { setBlocked(true); setError(message); }
       setUncertain(null);
     }
   }
@@ -229,21 +219,18 @@ export function AssistantDock({
     try {
       const receipt = await client.status(id);
       if (undo && receipt.status === 'committed') {
+        const message = cause ? assistantError(cause) : '尚未撤销；记录仍为已执行。请检查数据是否已有后续修改。';
         setUncertain(null);
-        setError(cause ? assistantError(cause) : '尚未撤销；该操作仍为已执行。请检查数据是否已有后续修改。');
+        if (preserveCurrent) setHistoryError(message); else setError(message);
         return;
       }
       await acceptReceipt(receipt, undo, preserveCurrent);
     }
     catch {
-      // The card itself carries the "not verified" banner (see `uncertainPlanId`),
-      // so an older card's uncertainty needs no second message in the stream —
-      // and must not overwrite one that belongs to the current preview.
+      const message = `执行状态尚未核实，请勿重复操作。${cause ? ` ${assistantError(cause)}` : ''}`;
       setUncertain({ id, undo, preserveCurrent });
-      if (!preserveCurrent) {
-        setError(`执行状态尚未核实，请勿重复操作。${cause ? ` ${assistantError(cause)}` : ''}`);
-        setBlocked(true);
-      }
+      if (preserveCurrent) setHistoryError(message);
+      else { setBlocked(true); setError(message); }
     }
   }
   async function execute(undo = false, target = planRef.current) {
@@ -251,7 +238,7 @@ export function AssistantDock({
     if (!undo && (dirtyRef.current || blocked || target.status !== 'pending' || target.expiresAt <= Date.now())) return;
     const preserveCurrent = undo && target.id !== planRef.current?.id;
     lock(true);
-    if (!preserveCurrent) setError('');
+    if (preserveCurrent) setHistoryError(''); else setError('');
     try {
       let next: Plan;
       try { next = await (undo ? client.undo(target.id) : client.execute(target.id)); }
@@ -270,17 +257,33 @@ export function AssistantDock({
     catch (e) { setError(assistantError(e)); setBlocked(true); }
     finally { lock(false); }
   }
+  async function refreshHistory() {
+    lock(true);
+    try {
+      setHistory(await client.history()); setHistoryError(''); return true;
+    } catch (cause) { setHistoryError(assistantError(cause)); return false; }
+    finally { lock(false); }
+  }
+  async function toggleHistory() {
+    if (busyRef.current || requestRef.current) return;
+    if (surface === 'history') {
+      if (!expanded) {
+        setExpanded(true);
+        await refreshHistory();
+        return;
+      }
+      setSurface('chat'); setExpanded(historyReturnExpanded.current);
+      return;
+    }
+    historyReturnExpanded.current = expanded;
+    setSurface('history'); setExpanded(true); setHistoryRange('7'); setOpenChange(null);
+    await refreshHistory();
+  }
   function showChat() {
-    setExpanded(true);
+    setSurface('chat'); setExpanded(true);
   }
   function closePanel() {
-    onRequestClose?.();
-  }
-  function hideFromEscape() {
-    inputFocusedRef.current = false;
-    inputRef.current?.blur();
-    if (expanded) closePanel();
-    else onRequestClose?.();
+    setExpanded(false);
   }
   function dictate() {
     if (listening) { recognitionRef.current?.stop(); return; }
@@ -299,58 +302,59 @@ export function AssistantDock({
   }
   const visibleItems: ChatItem[] = [...chatItems,
     ...(reading ? [{ id: 'status:reading', kind: 'status' as const, content: '正在理解与查询…尚未执行任何变更。' }] : []),
-    ...(error && (!uncertain || uncertain.preserveCurrent) ? [{ id: 'status:error', kind: 'status' as const, content: error, tone: 'error' as const }] : [])];
-  return <div ref={dockRef} className="assistant-dock assistant-dock--embedded" hidden={!active} aria-label="Nowly AI 助手"
-    onKeyDown={event => {
-      if (event.key !== 'Escape') return;
-      event.stopPropagation();
-      hideFromEscape();
-    }}>
-    <section className="assistant-panel" aria-label="当前聊天" data-state="chat" data-open={expanded} aria-hidden={!expanded}>
+    ...(error && (!uncertain || uncertain.preserveCurrent) && surface === 'chat' ? [{ id: 'status:error', kind: 'status' as const, content: error, tone: 'error' as const }] : [])];
+  const panelTitle = surface === 'history' ? '操作记录' : '当前聊天';
+  const panelBadge = surface === 'history' ? `${historyCount(history ?? [], historyRange)} 条` : `${visibleItems.length} 条`;
+  const PanelIcon = surface === 'history' ? History : MessageCircle;
+  return <div ref={dockRef} className="assistant-dock" hidden={!active} aria-label="Nowly AI 助手">
+    <section className="assistant-panel" aria-label={panelTitle} data-state={surface} data-open={expanded} aria-hidden={!expanded}>
+      <header className="assistant-panel-header"><div className="assistant-panel-title">
+        <span className="assistant-state-icon" aria-hidden="true"><PanelIcon size={18} /></span>
+        <h2>{panelTitle}</h2><span className="assistant-state-badge">{panelBadge}</span>
+      </div>
+        <button className="btn btn-icon" aria-label="收起助手" onClick={closePanel}><ChevronDown size={18} /></button></header>
       <div className="assistant-panel-body" aria-live="polite">
-        {(connectionError || !connectionReady(config)) && <div className="assistant-system-card">
+        {surface === 'history' ? <>
+          {historyError && <p role="alert" className="assistant-error">{historyError}</p>}
+          {uncertain && <button className="btn" disabled={busy} onClick={() => void (async () => { lock(true); try { await recover(uncertain.id, uncertain.undo, undefined, uncertain.preserveCurrent); } finally { lock(false); } })()}>核实操作状态</button>}
+          <AssistantHistory plans={history ?? []} range={historyRange} openChange={openChange} busy={busy} uncertain={Boolean(uncertain)}
+            onRangeChange={setHistoryRange} onOpenChange={setOpenChange} onUndo={target => void execute(true, target)} />
+        </> : <>{(connectionError || !connectionReady(config)) && <div className="assistant-system-card">
           <p role={connectionError ? 'alert' : 'status'}>{connectionError || '先在设置的“模型设置”里连接你的 AI 服务，并选择允许访问的数据范围。'}</p>
           {!connectionError && onOpenSettings && <button className="btn btn-primary" onClick={onOpenSettings}>打开模型设置</button>}
         </div>}
-        {visibleItems.length > 0 ? <AssistantChat items={visibleItems} currentPlanId={plan?.id ?? null} actions={actions} edits={edits} selected={selected}
+        <AssistantChat items={visibleItems} currentPlanId={plan?.id ?? null} actions={actions} edits={edits} selected={selected}
           dirty={dirty} busy={busy} blocked={blocked || Boolean(uncertain && !uncertain.preserveCurrent)}
-          uncertainPlanId={uncertain?.id ?? null} openChange={openChange} onEdit={edit}
+          uncertainPlanId={uncertain && !uncertain.preserveCurrent ? uncertain.id : null} openChange={openChange} onEdit={edit}
           onSelect={(i, checked) => { invalidate(); setSelected(current => current.map((value, index) => index === i ? checked : value)); }}
           onRevise={() => void revise()} onConfirm={() => void execute()} onCancel={() => void cancelPlan()}
           onUndo={target => void execute(true, target)} onRecover={() => { if (uncertain) void (async () => { lock(true); try { await recover(uncertain.id, uncertain.undo, undefined, uncertain.preserveCurrent); } finally { lock(false); } })(); }} onOpenChange={setOpenChange}
-          onOpenRecord={async (record, trigger) => {
-            try {
-              await onOpenRecord?.(record, inputRef.current ?? trigger);
-            } catch (cause) { setError(assistantError(cause)); }
-          }} /> : null}
+          onOpenRecord={async (record, trigger) => { try { await onOpenRecord?.(record, inputRef.current ?? trigger); setExpanded(false); } catch (cause) { setError(assistantError(cause)); } }} />
+        </>}
       </div>
     </section>
     <div className="assistant-composer" data-busy={reading || busy}>
+      <span className="assistant-composer-mark" aria-hidden="true"><Sparkles size={18} /></span>
       <textarea ref={inputRef} aria-label="告诉 Nowly 你想做什么" rows={1} maxLength={4000}
         placeholder="告诉 Nowly 你想做什么…" value={draft} disabled={busy || Boolean(uncertain && !uncertain.preserveCurrent)}
         onFocus={() => {
           inputFocusedRef.current = true;
-          if (!connectionReady(config)) {
-            if (expandOnFocus) setExpanded(true);
-            return;
-          }
-          if (expandOnFocus) showChat();
+          if (!connectionReady(config)) { setExpanded(true); return; }
+          showChat();
         }}
         onBlur={() => { inputFocusedRef.current = false; }}
         onChange={e => setDraft(e.target.value)}
         onKeyDown={e => {
-          if (e.key === 'Escape') {
-            e.stopPropagation();
-            hideFromEscape();
-            return;
-          }
+          if (e.key === 'Escape') { e.currentTarget.blur(); closePanel(); return; }
           if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) { e.preventDefault(); void send(); }
         }} />
       <div className="assistant-composer-tools">
-        {reading ? <button className="btn btn-icon assistant-stop" aria-label="停止处理" onClick={() => stop()}><Square size={16} fill="currentColor" /></button>
-          : draft.trim() ? <button className="btn btn-icon btn-primary" aria-label="发送请求" disabled={busy || Boolean(uncertain && !uncertain.preserveCurrent)} onClick={() => void send()}><Send size={16} /></button>
+        <button className={`btn btn-icon${surface === 'history' && expanded ? ' is-active' : ''}`} aria-label="操作记录"
+          aria-pressed={surface === 'history' && expanded} disabled={busy || reading} onClick={() => void toggleHistory()}><History size={18} /></button>
+        {reading ? <button className="btn btn-icon assistant-stop" aria-label="停止处理" onClick={() => stop()}><Square size={14} fill="currentColor" /></button>
+          : draft.trim() ? <button className="btn btn-icon btn-primary" aria-label="发送请求" disabled={busy || Boolean(uncertain && !uncertain.preserveCurrent)} onClick={() => void send()}><Send size={18} /></button>
             : <button className={`btn btn-icon${listening ? ' assistant-listening' : ''}`} aria-label="语音输入" aria-pressed={listening}
-              disabled={busy || Boolean(uncertain && !uncertain.preserveCurrent)} onClick={dictate}><Mic size={16} /></button>}
+              disabled={busy || Boolean(uncertain && !uncertain.preserveCurrent)} onClick={dictate}><Mic size={18} /></button>}
       </div>
     </div>
   </div>;
