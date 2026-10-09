@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { translate } from '../i18n';
 import { ScreenshotOverlayApp, ScreenshotSessionApp } from './ScreenshotApp';
@@ -9,6 +10,10 @@ import { CONTROL_LABEL_KEYS } from './toolbar-model';
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
   convertFileSrc: vi.fn((path: string, protocol?: string) => `${protocol}://localhost/${path}`)
+}));
+
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: vi.fn(() => Promise.resolve(() => {}))
 }));
 
 // jsdom performs no layout, so the frame's rendered box has to be stubbed. These
@@ -20,6 +25,10 @@ let originalRect: typeof HTMLElement.prototype.getBoundingClientRect;
 let originalDecode: typeof HTMLImageElement.prototype.decode | undefined;
 
 beforeEach(() => {
+  vi.stubGlobal('ResizeObserver', class {
+    observe() {}
+    disconnect() {}
+  });
   vi.mocked(invoke).mockResolvedValue({
     path: '7/1',
     width: FRAME.width,
@@ -65,6 +74,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   HTMLElement.prototype.getBoundingClientRect = originalRect;
   if (originalDecode) HTMLImageElement.prototype.decode = originalDecode;
   else delete (HTMLImageElement.prototype as { decode?: typeof HTMLImageElement.prototype.decode }).decode;
@@ -73,8 +83,8 @@ afterEach(() => {
 
 async function mountOverlay() {
   render(<ScreenshotOverlayApp />);
-  // The frame plan arrives asynchronously, but its pixels are not usable until
-  // the image's load event and explicit decode have both completed.
+  // The frame plan arrives asynchronously. The overlay is usable from then on;
+  // its pixels, which only feed the magnifier, load and decode afterwards.
   await waitFor(() => expect(document.querySelector('.screenshot-overlay__frame')).not.toBeNull());
   return {
     overlay: document.querySelector('.screenshot-overlay') as HTMLElement,
@@ -102,7 +112,20 @@ function pointerEvent(type: string, x: number, y: number) {
 }
 
 describe('the overlay end to end', () => {
-  it('does not report ready or accept a selection before the frame decodes', async () => {
+  it('reports ready and accepts a selection before the frame pixels decode', async () => {
+    // The frozen desktop is painted natively beneath this transparent overlay, so
+    // waiting for the WebView's own copy would only delay the first interaction.
+    const { overlay, frame } = await mountOverlay();
+    vi.mocked(frame.decode).mockReturnValue(new Promise<void>(() => {}));
+
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('capture_window_ready'));
+    overlay.dispatchEvent(pointerEvent('pointerdown', 100, 100));
+    overlay.dispatchEvent(pointerEvent('pointermove', 300, 200));
+
+    await waitFor(() => expect(document.querySelector('.screenshot-selection')).not.toBeNull());
+  });
+
+  it('shows the magnifier only once the frame pixels have decoded', async () => {
     let finishDecode: (() => void) | undefined;
     const { overlay, frame } = await mountOverlay();
     vi.mocked(frame.decode).mockReturnValue(
@@ -110,19 +133,20 @@ describe('the overlay end to end', () => {
         finishDecode = resolve;
       })
     );
-
-    overlay.dispatchEvent(pointerEvent('pointerdown', 100, 100));
-    overlay.dispatchEvent(pointerEvent('pointermove', 300, 200));
     fireEvent.load(frame);
+    overlay.dispatchEvent(pointerEvent('pointermove', 200, 200));
 
-    expect(invoke).not.toHaveBeenCalledWith('capture_window_ready');
-    expect(document.querySelector('.screenshot-selection')).toBeNull();
+    // No flash of the "unavailable" readout while the pixels are still on their way.
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('capture_window_ready'));
+    expect(document.querySelector('.screenshot-magnifier')).toBeNull();
 
     finishDecode?.();
-    await waitFor(() => expect(invoke).toHaveBeenCalledWith('capture_window_ready'));
+    await waitFor(() =>
+      expect(document.querySelector('.screenshot-magnifier__hex')?.textContent).toBe('#4FC9DA')
+    );
   });
 
-  it('shows the frozen frame at its physical size', async () => {
+  it('loads the frame pixels at their physical size without painting them', async () => {
     await renderOverlay();
 
     const frame = document.querySelector('.screenshot-overlay__frame') as HTMLImageElement;
@@ -133,14 +157,17 @@ describe('the overlay end to end', () => {
     expect(frame.crossOrigin).toBe('anonymous');
   });
 
-  it('reports a frame that fails to load instead of leaving a blank overlay', async () => {
-    // The window is transparent and the frame carries no alt text, so a broken
-    // image renders as nothing at all: the desktop looks untouched while the bar
-    // stays hidden, and the session appears to have done nothing. design.md §11's
-    // Error state requires the failure to be stated in place, with Esc still the
-    // way out.
-    const { frame } = await mountOverlay();
-    fireEvent.error(frame);
+  it('states a failed frame description in place', async () => {
+    // The window is transparent, so a silent failure would look like the session
+    // did nothing. design.md §11's Error state requires the failure to be stated
+    // in place, with Esc still the way out.
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.mocked(invoke).mockImplementation((command: string) =>
+      command === 'describe_capture_frame'
+        ? Promise.reject(new Error('截图会话已结束。'))
+        : Promise.resolve(undefined)
+    );
+    render(<ScreenshotOverlayApp />);
 
     await waitFor(() =>
       expect(document.querySelector('.screenshot-overlay__note')?.textContent).toBe(
@@ -149,19 +176,42 @@ describe('the overlay end to end', () => {
     );
     expect(invoke).toHaveBeenCalledWith('capture_window_failed');
     expect(invoke).not.toHaveBeenCalledWith('capture_window_ready');
+    logged.mockRestore();
   });
 
-  it('rejects a decoded frame whose natural size differs from the plan', async () => {
-    const { frame } = await mountOverlay();
+  it('keeps the session when the frame pixels fail to load, reporting an unreadable colour', async () => {
+    // §4.3: an unreadable pixel says so rather than guessing. The frozen desktop is
+    // already on screen and exports read Rust's own copy, so the session stays.
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { overlay, frame } = await mountOverlay();
+    fireEvent.error(frame);
+    overlay.dispatchEvent(pointerEvent('pointermove', 200, 200));
+
+    await waitFor(() =>
+      expect(document.querySelector('.screenshot-magnifier__hex')?.textContent).toBe(
+        translate('screenshot.magnifier.unavailable')
+      )
+    );
+    expect(invoke).not.toHaveBeenCalledWith('capture_window_failed');
+    expect(document.querySelector('.screenshot-overlay__note')).toBeNull();
+    logged.mockRestore();
+  });
+
+  it('does not sample pixels whose natural size differs from the plan', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { overlay, frame } = await mountOverlay();
     Object.defineProperty(frame, 'naturalWidth', { configurable: true, value: FRAME.width - 1 });
 
     fireEvent.load(frame);
+    overlay.dispatchEvent(pointerEvent('pointermove', 200, 200));
 
-    await waitFor(() => expect(invoke).toHaveBeenCalledWith('capture_window_failed'));
-    expect(invoke).not.toHaveBeenCalledWith('capture_window_ready');
-    expect(document.querySelector('.screenshot-overlay__note')?.textContent).toBe(
-      translate('screenshot.overlayFailed')
+    await waitFor(() =>
+      expect(document.querySelector('.screenshot-magnifier__hex')?.textContent).toBe(
+        translate('screenshot.magnifier.unavailable')
+      )
     );
+    expect(invoke).not.toHaveBeenCalledWith('capture_window_failed');
+    logged.mockRestore();
   });
 
   it('dims the whole frame while aiming, before any drag', async () => {
@@ -283,6 +333,52 @@ describe('the overlay end to end', () => {
 
     await waitFor(() => expect(screen.queryByRole('toolbar')).not.toBeInTheDocument());
     expect(document.querySelector('.screenshot-selection')).toBeNull();
+  });
+
+  it('repositions the toolbar when selecting a tool opens its property panel', async () => {
+    const user = userEvent.setup();
+    let notifyResize: (() => void) | undefined;
+    const observe = vi.fn();
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(callback: ResizeObserverCallback) {
+        notifyResize = () => callback([], this as ResizeObserver);
+      }
+      observe = observe;
+      unobserve = vi.fn();
+      disconnect = vi.fn();
+    });
+    HTMLElement.prototype.getBoundingClientRect = function rect(this: HTMLElement) {
+      const isToolbar = this.classList.contains('screenshot-toolbar-anchor');
+      const size = isToolbar
+        ? { width: 592, height: this.querySelector('.screenshot-properties') ? 120 : 56 }
+        : RENDERED;
+      return {
+        ...size,
+        left: 0,
+        top: 0,
+        right: size.width,
+        bottom: size.height,
+        x: 0,
+        y: 0,
+        toJSON: () => ({})
+      } as DOMRect;
+    };
+
+    const overlay = await renderOverlay();
+    overlay.dispatchEvent(pointerEvent('pointerdown', 100, 100));
+    overlay.dispatchEvent(pointerEvent('pointermove', 600, 850));
+    overlay.dispatchEvent(pointerEvent('pointerup', 600, 850));
+    await waitFor(() => expect(screen.getByRole('toolbar')).toBeInTheDocument());
+    const anchor = document.querySelector('.screenshot-toolbar-anchor') as HTMLElement;
+    await waitFor(() => expect(Number.parseFloat(anchor.style.top)).toBeCloseTo(858));
+
+    await user.click(screen.getByRole('button', { name: '矩形' }));
+    expect(document.querySelector('.screenshot-properties')).toBeInTheDocument();
+    expect(observe).toHaveBeenCalledWith(anchor);
+    notifyResize?.();
+
+    await waitFor(() => expect(Number.parseFloat(anchor.style.top)).toBeLessThan(858));
+    expect(Number.parseFloat(anchor.style.top) + 120).toBeLessThanOrEqual(RENDERED.height - 8);
   });
 
   it('keeps the toolbar inside the display', async () => {
@@ -621,8 +717,12 @@ describe('the overlay keyboard', () => {
     return overlay;
   }
 
-  it('cancels the session on Esc before the frame has loaded', async () => {
-    await mountOverlay();
+  it('cancels the session on Esc before the frame is described', async () => {
+    vi.mocked(invoke).mockImplementation((command: string) =>
+      command === 'describe_capture_frame' ? new Promise(() => {}) : Promise.resolve(undefined)
+    );
+    render(<ScreenshotOverlayApp />);
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('describe_capture_frame'));
 
     key({ key: 'Escape' });
 
@@ -719,6 +819,26 @@ describe('the overlay keyboard', () => {
 });
 
 describe('the capture session placeholder', () => {
+  it('acknowledges again when its prewarmed session begins', async () => {
+    // Rust ignores the load-time acknowledgement of a window built before its
+    // session existed, so the begin event must produce a fresh one.
+    let begin: (() => void) | undefined;
+    vi.mocked(listen).mockImplementationOnce((_event, handler) => {
+      begin = handler as unknown as () => void;
+      return Promise.resolve(() => {});
+    });
+    render(<ScreenshotSessionApp />);
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('capture_window_ready'));
+    expect(vi.mocked(listen)).toHaveBeenCalledWith('screenshot-capture-begin', expect.any(Function));
+
+    begin?.();
+
+    await waitFor(() =>
+      expect(vi.mocked(invoke).mock.calls.filter(([command]) => command === 'capture_window_ready'))
+        .toHaveLength(2)
+    );
+  });
+
   it('reports ready after its static privacy surface mounts', async () => {
     render(<ScreenshotSessionApp />);
 
@@ -869,7 +989,7 @@ describe('copying the capture', () => {
     expect(screen.getByRole('button', { name: translate(CONTROL_LABEL_KEYS.save) })).toBeDisabled();
     expect(screen.getByRole('button', { name: translate(CONTROL_LABEL_KEYS.cancel) })).toBeEnabled();
     // The static status, not a spinner.
-    expect(document.querySelector('.screenshot-export-status')?.textContent).toBe('正在复制…');
+    expect(document.querySelector('.screenshot-export-status')?.textContent).toBe('正在处理…');
 
     settle?.();
   });
