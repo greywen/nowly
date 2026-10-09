@@ -10,9 +10,8 @@ import { framePixelToCss, type FrameBox } from './frame-geometry';
 // browser scale it: one transform instead of converting every coordinate, which
 // keeps the preview and the exporter working from identical numbers.
 //
-// Mosaics are not drawn here. They are computed in Rust
-// (src-tauri/src/screen_capture/mosaic.rs) so the preview and the file cannot
-// disagree; this layer shows the outline of each painted block only.
+// MosaicLayer paints live mosaic pixels separately; this SVG contains only
+// ordinary annotations and selection chrome, never temporary mosaic outlines.
 
 export type AnnotationLayerProps = {
   objects: readonly Annotation[];
@@ -217,22 +216,7 @@ function AnnotationShape({
         </text>
       );
     case 'mosaic':
-      // Outline only, one per painted cell: the pixels come from Rust, so nothing
-      // here can disagree with the exported file. The object's own bounding box is
-      // not drawn, because the brush may have left parts of it untouched.
-      return (
-        <g {...common} className={`${common.className} screenshot-annotation--mosaic`} fill="none">
-          {object.blocks.map((block, index) => (
-            <rect
-              key={index}
-              x={block.x - origin.x}
-              y={block.y - origin.y}
-              width={block.width}
-              height={block.height}
-            />
-          ))}
-        </g>
-      );
+      return null;
   }
 }
 

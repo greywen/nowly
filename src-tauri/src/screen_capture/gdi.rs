@@ -27,7 +27,7 @@ pub(crate) fn bgra_to_rgba(buffer: &mut [u8]) {
 // build is expected rather than a sign the re-export is wrong.
 #[cfg(target_os = "windows")]
 #[allow(unused_imports)]
-pub(crate) use windows_impl::GdiSource;
+pub(crate) use windows_impl::{DibFrame, GdiSource};
 
 #[cfg(target_os = "windows")]
 mod windows_impl {
@@ -35,8 +35,8 @@ mod windows_impl {
     use windows::Win32::Foundation::{HWND, LPARAM, RECT};
     use windows::Win32::Graphics::Gdi::{
         BitBlt, CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, EnumDisplayMonitors,
-        GetDC, GetMonitorInfoW, ReleaseDC, SelectObject, BITMAPINFO, BITMAPINFOHEADER, BI_RGB,
-        CAPTUREBLT, DIB_RGB_COLORS, HBITMAP, HDC, HGDIOBJ, HMONITOR, MONITORINFO, SRCCOPY,
+        GdiFlush, GetDC, GetMonitorInfoW, ReleaseDC, SelectObject, BITMAPINFO, BITMAPINFOHEADER,
+        BI_RGB, CAPTUREBLT, DIB_RGB_COLORS, HBITMAP, HDC, HGDIOBJ, HMONITOR, MONITORINFO, SRCCOPY,
     };
     use windows::Win32::UI::HiDpi::{
         AreDpiAwarenessContextsEqual, GetDpiAwarenessContextForProcess, GetDpiForMonitor,
@@ -89,12 +89,72 @@ mod windows_impl {
         }
     }
 
-    struct Dib(HBITMAP);
+    /// One display's pixels, left in the DIB section `BitBlt` wrote them into.
+    ///
+    /// Shared rather than copied: the freeze layer paints this bitmap on the main
+    /// thread while the capture worker reads its bits to build the RGBA frame.
+    /// Both only read, and the section is deleted when the last owner drops it.
+    pub(crate) struct DibFrame {
+        bitmap: HBITMAP,
+        bits: *const u8,
+        len: usize,
+        pub width: i32,
+        pub height: i32,
+    }
 
-    impl Drop for Dib {
+    // SAFETY: the bitmap handle is process-wide and is never selected into a DC
+    // outside one main-thread paint call; the bits are only read after GdiFlush.
+    unsafe impl Send for DibFrame {}
+    unsafe impl Sync for DibFrame {}
+
+    impl DibFrame {
+        pub(crate) fn bitmap(&self) -> HBITMAP {
+            self.bitmap
+        }
+
+        fn bgra(&self) -> &[u8] {
+            unsafe { std::slice::from_raw_parts(self.bits, self.len) }
+        }
+
+        /// A section filled with one BGRA value, for exercising the native path
+        /// without reading the desktop.
+        #[cfg(test)]
+        pub(crate) fn synthetic(width: i32, height: i32, bgra: [u8; 4]) -> std::sync::Arc<Self> {
+            let info = BITMAPINFO {
+                bmiHeader: BITMAPINFOHEADER {
+                    biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+                    biWidth: width,
+                    biHeight: -height,
+                    biPlanes: 1,
+                    biBitCount: 32,
+                    biCompression: BI_RGB.0,
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+            let mut bits: *mut core::ffi::c_void = std::ptr::null_mut();
+            let bitmap =
+                unsafe { CreateDIBSection(None, &info, DIB_RGB_COLORS, &mut bits, None, 0) }
+                    .expect("a small DIB section");
+            let len = (width * height * 4) as usize;
+            let pixels = unsafe { std::slice::from_raw_parts_mut(bits as *mut u8, len) };
+            for pixel in pixels.chunks_exact_mut(4) {
+                pixel.copy_from_slice(&bgra);
+            }
+            std::sync::Arc::new(Self {
+                bitmap,
+                bits: bits as *const u8,
+                len,
+                width,
+                height,
+            })
+        }
+    }
+
+    impl Drop for DibFrame {
         fn drop(&mut self) {
             unsafe {
-                let _ = DeleteObject(HGDIOBJ(self.0 .0));
+                let _ = DeleteObject(HGDIOBJ(self.bitmap.0));
             }
         }
     }
@@ -159,6 +219,7 @@ mod windows_impl {
 
     impl CaptureSource for GdiSource {
         type Display = DisplayInfo;
+        type Native = std::sync::Arc<DibFrame>;
 
         fn displays(&self) -> Result<Vec<Self::Display>, CaptureBackendError> {
             require_physical_pixels()?;
@@ -191,7 +252,16 @@ mod windows_impl {
             Ok(display.clone())
         }
 
-        fn capture_rgba(&self, display: &Self::Display) -> Result<Vec<u8>, CaptureBackendError> {
+        fn native_rgba(&self, native: &Self::Native) -> Result<Vec<u8>, CaptureBackendError> {
+            let mut rgba = native.bgra().to_vec();
+            bgra_to_rgba(&mut rgba);
+            Ok(rgba)
+        }
+
+        fn capture_native(
+            &self,
+            display: &Self::Display,
+        ) -> Result<Self::Native, CaptureBackendError> {
             require_physical_pixels()?;
 
             let width =
@@ -243,9 +313,26 @@ mod windows_impl {
                 }
                 return Err(CaptureBackendError::CaptureFailed);
             }
-            let bitmap = Dib(bitmap);
+            // 32bpp rows are inherently DWORD-aligned, so the stride is exactly
+            // `width * 4` and the section is one contiguous buffer.
+            let len = (display.width as usize)
+                .checked_mul(display.height as usize)
+                .and_then(|pixels| pixels.checked_mul(4))
+                .ok_or_else(|| {
+                    unsafe {
+                        let _ = DeleteObject(HGDIOBJ(bitmap.0));
+                    }
+                    CaptureBackendError::ArithmeticOverflow
+                })?;
+            let frame = DibFrame {
+                bitmap,
+                bits: bits as *const u8,
+                len,
+                width,
+                height,
+            };
 
-            let previous = unsafe { SelectObject(memory.0, HGDIOBJ(bitmap.0 .0)) };
+            let previous = unsafe { SelectObject(memory.0, HGDIOBJ(frame.bitmap.0)) };
             if previous.is_invalid() {
                 eprintln!("screen capture: SelectObject failed");
                 return Err(CaptureBackendError::CaptureFailed);
@@ -278,17 +365,9 @@ mod windows_impl {
                     CaptureBackendError::CaptureFailed
                 }
             })?;
-
-            // 32bpp rows are inherently DWORD-aligned, so the stride is exactly
-            // `width * 4` and the buffer can be copied in one go.
-            let len = (display.width as usize)
-                .checked_mul(display.height as usize)
-                .and_then(|pixels| pixels.checked_mul(4))
-                .ok_or(CaptureBackendError::ArithmeticOverflow)?;
-            let mut rgba = vec![0u8; len];
-            unsafe { std::ptr::copy_nonoverlapping(bits as *const u8, rgba.as_mut_ptr(), len) };
-            bgra_to_rgba(&mut rgba);
-            Ok(rgba)
+            // The section's bits are read directly, so batched GDI work must land.
+            let _ = unsafe { GdiFlush() };
+            Ok(std::sync::Arc::new(frame))
         }
     }
 }

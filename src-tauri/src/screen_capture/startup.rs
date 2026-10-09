@@ -9,6 +9,7 @@ struct Progress {
     expected: HashSet<String>,
     ready: HashSet<String>,
     created: bool,
+    frames_available: bool,
     failure: Option<StartFailure>,
 }
 
@@ -50,6 +51,27 @@ impl Startup {
         self.progress.lock().unwrap().failure.is_some()
     }
 
+    pub fn frames_available(&self) {
+        self.progress.lock().unwrap().frames_available = true;
+        self.changed.notify_all();
+    }
+
+    /// Whether this session's frames can be described yet. Never blocks: a
+    /// surface that asks early is told again by the begin event.
+    pub fn frames_ready(&self) -> Result<bool, StartFailure> {
+        let progress = self.progress.lock().unwrap();
+        match &progress.failure {
+            Some(failure) => Err(failure.clone()),
+            None => Ok(progress.frames_available),
+        }
+    }
+
+    pub fn expected_labels(&self) -> Vec<String> {
+        let mut labels: Vec<_> = self.progress.lock().unwrap().expected.iter().cloned().collect();
+        labels.sort();
+        labels
+    }
+
     pub fn wait(&self, deadline: Instant) -> Result<(), StartFailure> {
         let mut progress = self.progress.lock().unwrap();
         loop {
@@ -58,6 +80,7 @@ impl Startup {
             }
             let Some(remaining) = deadline.checked_duration_since(Instant::now()) else {
                 progress.failure = Some(StartFailure::TimedOut);
+                self.changed.notify_all();
                 return Err(StartFailure::TimedOut);
             };
             if progress.created
@@ -77,6 +100,42 @@ mod tests {
     use super::*;
     use std::sync::{mpsc, Arc};
     use std::time::Duration;
+
+    #[test]
+    fn frames_become_ready_without_window_acknowledgements() {
+        let startup = Startup::default();
+        startup.expect(["screenshot-overlay-1-0".into()]);
+        assert_eq!(startup.frames_ready(), Ok(false));
+        startup.frames_available();
+        assert_eq!(startup.frames_ready(), Ok(true));
+        assert_eq!(startup.wait(Instant::now()), Err(StartFailure::TimedOut));
+    }
+
+    #[test]
+    fn a_failed_startup_reports_its_failure_to_frame_requests() {
+        let startup = Startup::default();
+        startup.frames_available();
+        startup.fail(StartFailure::Cancelled);
+        assert_eq!(startup.frames_ready(), Err(StartFailure::Cancelled));
+    }
+
+    #[test]
+    fn expected_labels_are_reported_in_a_stable_order() {
+        let startup = Startup::default();
+        startup.expect([
+            "screenshot-session-4".into(),
+            "screenshot-overlay-4-1".into(),
+            "screenshot-overlay-4-0".into(),
+        ]);
+        assert_eq!(
+            startup.expected_labels(),
+            [
+                "screenshot-overlay-4-0",
+                "screenshot-overlay-4-1",
+                "screenshot-session-4"
+            ]
+        );
+    }
 
     #[test]
     fn one_missing_window_ack_hits_the_deadline() {

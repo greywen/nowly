@@ -3,15 +3,16 @@
 //!
 //! §9 forbids pushing pixels through huge Base64/JSON invokes and forbids
 //! re-capturing the screen on every pointer move. Instead each display's frozen
-//! frame is encoded once, lazily, and served over a local URI scheme so the
-//! WebView decodes it natively and caches it.
+//! frame is served over a local URI scheme as an uncompressed bitmap, so the
+//! WebView decodes it natively for the magnifier and colour readout. The desktop
+//! the user sees comes from the native freeze layer, so this transfer is off the
+//! path to the first visible frame.
 //!
 //! The URL carries the session id as well as the display id, so a request that
 //! belongs to a finished session is rejected rather than answered with a newer
 //! session's desktop.
 
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 use super::backend::CapturedDisplay;
 use super::candidates::{clip_to_display, WindowBounds};
@@ -34,8 +35,6 @@ struct SessionFrames {
     session_id: u64,
     frames: Vec<CapturedDisplay>,
     candidates: Vec<WindowBounds>,
-    /// PNG bytes per display, encoded on first request.
-    encoded: HashMap<u32, Arc<Vec<u8>>>,
 }
 
 #[derive(Debug, Default)]
@@ -57,7 +56,7 @@ impl FrameStore {
     }
 
     /// The owner check happens after acquiring the frame lock, without holding
-    /// ActiveCapture's mutex while a previous PNG encoding finishes.
+    /// ActiveCapture's mutex while a previous frame request finishes copying.
     pub(crate) fn store_if_current(
         &self,
         session_id: u64,
@@ -72,7 +71,6 @@ impl FrameStore {
             session_id,
             frames,
             candidates,
-            encoded: HashMap::new(),
         });
         true
     }
@@ -83,7 +81,6 @@ impl FrameStore {
             session_id,
             frames,
             candidates: Vec::new(),
-            encoded: HashMap::new(),
         });
     }
 
@@ -157,57 +154,72 @@ impl FrameStore {
         })
     }
 
-    /// PNG bytes for one display of one session, encoding on first use.
+    /// Bitmap bytes for one display of one session.
     ///
     /// Returns `None` for an unknown display or a session that is no longer the
-    /// active one, so a late request cannot read a different desktop.
-    pub(crate) fn png(&self, session_id: u64, display_id: u32) -> Option<Arc<Vec<u8>>> {
-        let mut held = self.0.lock().unwrap();
-        let held = held.as_mut()?;
+    /// active one, so a late request cannot read a different desktop. Built per
+    /// request rather than cached: the response needs its own buffer anyway, and
+    /// a cache would hold a second full copy of the desktop for the session.
+    pub(crate) fn bitmap(&self, session_id: u64, display_id: u32) -> Option<Vec<u8>> {
+        let held = self.0.lock().unwrap();
+        let held = held.as_ref()?;
         if held.session_id != session_id {
             return None;
         }
-        if let Some(cached) = held.encoded.get(&display_id) {
-            return Some(cached.clone());
-        }
-
         let frame = held
             .frames
             .iter()
             .find(|frame| frame.display.id == display_id)?;
-        let encoded = Arc::new(encode_png(frame)?);
-        held.encoded.insert(display_id, encoded.clone());
-        Some(encoded)
+        encode_bitmap(frame)
     }
 }
 
-fn encode_png(frame: &CapturedDisplay) -> Option<Vec<u8>> {
-    use image::codecs::png::{CompressionType, FilterType, PngEncoder};
-    use image::ImageEncoder;
-    
-    let image = image::RgbaImage::from_raw(
-        frame.display.width,
-        frame.display.height,
-        frame.rgba.clone(),
-    )?;
-    let mut bytes = Vec::new();
-    
-    // Use fast compression for quick decoding: the frame must decode before the
-    // startup timeout expires, and a larger file that decodes instantly is better
-    // than a smaller file that takes too long.
-    let encoder = PngEncoder::new_with_quality(
-        std::io::Cursor::new(&mut bytes),
-        CompressionType::Fast,
-        FilterType::NoFilter,
-    );
-    encoder
-        .write_image(
-            image.as_raw(),
-            frame.display.width,
-            frame.display.height,
-            image::ExtendedColorType::Rgba8,
-        )
-        .ok()?;
+const FILE_HEADER_LEN: usize = 14;
+const V4_HEADER_LEN: usize = 108;
+
+/// A top-down 32-bit `BITMAPV4HEADER` bitmap whose bitfield masks describe the
+/// stored RGBA byte order, so the pixels are copied without any per-pixel work.
+fn encode_bitmap(frame: &CapturedDisplay) -> Option<Vec<u8>> {
+    let width = i32::try_from(frame.display.width).ok()?;
+    let height = i32::try_from(frame.display.height).ok()?;
+    let image_len = u32::try_from(frame.rgba.len()).ok()?;
+    if u64::from(image_len) != u64::from(frame.display.width) * u64::from(frame.display.height) * 4
+    {
+        return None;
+    }
+    let offset = (FILE_HEADER_LEN + V4_HEADER_LEN) as u32;
+    let file_len = offset.checked_add(image_len)?;
+
+    let mut bytes = Vec::with_capacity(file_len as usize);
+    bytes.extend_from_slice(b"BM");
+    bytes.extend_from_slice(&file_len.to_le_bytes());
+    bytes.extend_from_slice(&[0; 4]);
+    bytes.extend_from_slice(&offset.to_le_bytes());
+
+    bytes.extend_from_slice(&(V4_HEADER_LEN as u32).to_le_bytes());
+    bytes.extend_from_slice(&width.to_le_bytes());
+    // Negative height: row 0 is the top row, matching the stored frame.
+    bytes.extend_from_slice(&(-height).to_le_bytes());
+    bytes.extend_from_slice(&1u16.to_le_bytes());
+    bytes.extend_from_slice(&32u16.to_le_bytes());
+    const BI_BITFIELDS: u32 = 3;
+    bytes.extend_from_slice(&BI_BITFIELDS.to_le_bytes());
+    bytes.extend_from_slice(&image_len.to_le_bytes());
+    // 72 DPI; informational only.
+    bytes.extend_from_slice(&2835u32.to_le_bytes());
+    bytes.extend_from_slice(&2835u32.to_le_bytes());
+    bytes.extend_from_slice(&[0; 8]);
+    // Masks over a little-endian pixel whose bytes are R, G, B, A.
+    for mask in [0x0000_00FFu32, 0x0000_FF00, 0x00FF_0000, 0xFF00_0000] {
+        bytes.extend_from_slice(&mask.to_le_bytes());
+    }
+    const LCS_SRGB: u32 = 0x7352_4742;
+    bytes.extend_from_slice(&LCS_SRGB.to_le_bytes());
+    // Endpoints and gamma are ignored for sRGB.
+    bytes.extend_from_slice(&[0; 48]);
+    debug_assert_eq!(bytes.len(), offset as usize);
+
+    bytes.extend_from_slice(&frame.rgba);
     Some(bytes)
 }
 
@@ -241,7 +253,7 @@ mod tests {
                 scale_factor: 1.5,
                 is_primary: id == 0,
             },
-            // Opaque so the PNG round-trip is checkable.
+            // Opaque, like every captured desktop.
             rgba: vec![255; (width * height * 4) as usize],
         }
     }
@@ -267,26 +279,76 @@ mod tests {
     }
 
     #[test]
-    fn serves_a_png_for_a_stored_display() {
+    fn serves_a_top_down_rgba_bitmap_for_a_stored_display() {
         let store = FrameStore::default();
-        store.store(1, vec![frame(0, 4, 2)]);
+        let mut captured = frame(0, 3, 2);
+        for (index, byte) in captured.rgba.iter_mut().enumerate() {
+            *byte = index as u8;
+        }
+        store.store(1, vec![captured.clone()]);
 
-        let png = store.png(1, 0).expect("the frame should be served");
+        let bitmap = store.bitmap(1, 0).expect("the frame should be served");
 
-        // PNG signature, so this really is an encoded image rather than raw bytes.
-        assert_eq!(&png[..8], b"\x89PNG\r\n\x1a\n");
+        let u32_at = |at: usize| u32::from_le_bytes(bitmap[at..at + 4].try_into().unwrap());
+        let i32_at = |at: usize| i32::from_le_bytes(bitmap[at..at + 4].try_into().unwrap());
+        assert_eq!(&bitmap[..2], b"BM");
+        assert_eq!(u32_at(2) as usize, bitmap.len());
+        assert_eq!(u32_at(10), 122, "pixels follow the file and V4 headers");
+        assert_eq!(u32_at(14), 108, "BITMAPV4HEADER");
+        assert_eq!(i32_at(18), 3);
+        assert_eq!(i32_at(22), -2, "negative height means top-down rows");
+        assert_eq!(u16::from_le_bytes([bitmap[26], bitmap[27]]), 1);
+        assert_eq!(u16::from_le_bytes([bitmap[28], bitmap[29]]), 32);
+        assert_eq!(u32_at(30), 3, "BI_BITFIELDS");
+        assert_eq!(u32_at(34) as usize, captured.rgba.len());
+        assert_eq!(
+            [u32_at(54), u32_at(58), u32_at(62), u32_at(66)],
+            [0x0000_00FF, 0x0000_FF00, 0x00FF_0000, 0xFF00_0000],
+            "masks name R, G, B, A in stored byte order"
+        );
+        assert_eq!(&bitmap[122..], &captured.rgba[..]);
+    }
+
+    /// Writes a known pattern for a real-browser decode check; see the startup
+    /// plan document for the check itself.
+    #[test]
+    #[ignore = "writes a fixture for a manual browser decode check"]
+    fn writes_a_browser_decode_fixture() {
+        let Ok(path) = std::env::var("NOWLY_BMP_FIXTURE") else {
+            return;
+        };
+        let mut captured = frame(0, 3, 2);
+        captured.rgba = vec![
+            255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, //
+            1, 2, 3, 255, 250, 128, 7, 255, 79, 201, 218, 255,
+        ];
+        let store = FrameStore::default();
+        store.store(1, vec![captured]);
+        std::fs::write(path, store.bitmap(1, 0).unwrap()).unwrap();
     }
 
     #[test]
-    fn encodes_once_and_reuses_the_result() {
+    #[ignore = "manual startup performance check; run with --ignored --nocapture"]
+    fn full_resolution_bitmap_is_built_within_startup_budget() {
         let store = FrameStore::default();
-        store.store(1, vec![frame(0, 4, 2)]);
+        store.store(1, vec![frame(0, 3840, 2160)]);
+        let started = std::time::Instant::now();
+        let bitmap = store.bitmap(1, 0).unwrap();
+        let elapsed = started.elapsed();
+        eprintln!("4K frozen frame: {elapsed:?}, {} bytes", bitmap.len());
+        assert!(
+            elapsed < std::time::Duration::from_millis(100),
+            "frame transport took {elapsed:?}"
+        );
+    }
 
-        let first = store.png(1, 0).expect("first request should encode");
-        let second = store.png(1, 0).expect("second request should be cached");
-
-        // Same allocation, so a pointer move cannot re-encode the frame.
-        assert!(std::sync::Arc::ptr_eq(&first, &second));
+    #[test]
+    fn refuses_a_frame_whose_buffer_does_not_match_its_size() {
+        let store = FrameStore::default();
+        let mut captured = frame(0, 4, 2);
+        captured.rgba.pop();
+        store.store(1, vec![captured]);
+        assert!(store.bitmap(1, 0).is_none());
     }
 
     #[test]
@@ -295,8 +357,8 @@ mod tests {
         store.store(2, vec![frame(0, 4, 2)]);
 
         // The id of an older session must not be answered with this desktop.
-        assert!(store.png(1, 0).is_none());
-        assert!(store.png(2, 0).is_some());
+        assert!(store.bitmap(1, 0).is_none());
+        assert!(store.bitmap(2, 0).is_some());
     }
 
     #[test]
@@ -304,7 +366,7 @@ mod tests {
         let store = FrameStore::default();
         store.store(1, vec![frame(0, 4, 2)]);
 
-        assert!(store.png(1, 9).is_none());
+        assert!(store.bitmap(1, 9).is_none());
         assert!(store.descriptor(9).is_none());
     }
 
@@ -330,13 +392,13 @@ mod tests {
     fn clearing_releases_every_frame() {
         let store = FrameStore::default();
         store.store(1, vec![frame(0, 4, 2)]);
-        store.png(1, 0).expect("frame should encode");
+        store.bitmap(1, 0).expect("frame should be served");
 
         store.clear();
 
         // §8.3: the session's base images and caches go when the session does.
         assert_eq!(store.session_id(), None);
-        assert!(store.png(1, 0).is_none());
+        assert!(store.bitmap(1, 0).is_none());
         assert!(store.descriptor(0).is_none());
     }
 
@@ -348,7 +410,7 @@ mod tests {
         store.store(2, vec![frame(0, 8, 4)]);
 
         assert_eq!(store.session_id(), Some(2));
-        assert!(store.png(1, 0).is_none());
+        assert!(store.bitmap(1, 0).is_none());
         assert_eq!(store.descriptor(0).map(|frame| frame.width), Some(8));
     }
 
@@ -422,7 +484,7 @@ mod tests {
     }
 
     #[test]
-    fn retirement_does_not_wait_for_a_busy_frame_encoder() {
+    fn retirement_does_not_wait_for_a_busy_frame_request() {
         use std::sync::{mpsc, Arc};
         use std::time::Duration;
         let store = Arc::new(FrameStore::default());
@@ -437,7 +499,7 @@ mod tests {
         let result = receiver.recv_timeout(Duration::from_secs(1));
         drop(held_frames);
         worker.join().unwrap();
-        result.expect("retiring the owner must not wait for the PNG encoding mutex");
+        result.expect("retiring the owner must not wait for the frame mutex");
         assert!(!store.store_if_current(1, vec![frame(0, 2, 2)], Vec::new()));
     }
 }

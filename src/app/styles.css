@@ -1968,26 +1968,31 @@ body:has(.screen-status-island-root),
 /* Capture surfaces. Per docs/superpowers/specs/2026-09-25-nowly-screenshot-design.md
    §2.3 the captured content is data, not an app surface: no 15.2px radius on
    capture pixels, no decorative blur, and status is static text — never a toast,
-   banner or spinner. The overlay root stays transparent because the frozen base
-   image is not wired up yet; an opaque fill here would hide the real desktop. */
+   banner or spinner. The frozen desktop is painted by a native window directly
+   beneath each overlay, so the overlay document must stay transparent: an opaque
+   page fill would cover the frozen frame. */
+:root:has(.screenshot-overlay),
+body:has(.screenshot-overlay),
+#root:has(.screenshot-overlay) { background: transparent !important; }
 .screenshot-session { min-height: 100vh; display: grid; place-items: center; padding: 16px; background: var(--bg-surface); }
 .screenshot-session__note { margin: 0; color: var(--text-strong); font-size: 0.95rem; line-height: 1.5; }
 /* The cursor is set inline from `cursor.ts`: it depends on what is under the
    pointer, which only the surface can hit test, so there is no class to express it.
-   The crosshair here is the pre-interaction default for a frame that has not
-   decoded yet. */
+   The crosshair here is the pre-interaction default, matching the native freeze
+   window beneath. */
 .screenshot-overlay { position: relative; min-height: 100vh; display: grid; place-items: center; background: transparent; cursor: crosshair; }
 /* The frame is a frozen copy of the desktop, so while aiming the overlay would be
    indistinguishable from the live screen. §4.2 masks the non-selection area, and
    before the first drag that is the whole frame. The selection layer takes the mask
    over once a rectangle exists, so they never stack. */
 .screenshot-overlay__aim-dim { position: absolute; inset: 0; background: var(--bg-overlay); pointer-events: none; }
-/* The window already covers the display's physical rectangle, so the frame fills
-   it rather than using its own pixel dimensions: the image is in physical pixels
-   while CSS is in logical ones, and on a scaled display the natural size would
-   overflow. Selection coordinates come from the ratio between naturalWidth and
-   the rendered box, not from this fill. */
-.screenshot-overlay__frame { width: 100%; height: 100%; display: block; object-fit: fill; image-rendering: pixelated; image-rendering: crisp-edges; }
+/* The frame element fills the window so pointer geometry has a box before its
+   pixels load, but it is never painted: the native freeze window shows the
+   frozen desktop pixel for pixel, and a second, colour-managed copy on top could
+   differ from it. Once decoded it is the magnifier's sampling source only.
+   Selection coordinates come from the ratio between the planned physical size
+   and this rendered box. */
+.screenshot-overlay__frame { width: 100%; height: 100%; display: block; visibility: hidden; }
 .screenshot-overlay__note { margin: 0; padding: 8px 12px; border: 1px solid var(--border-default); color: var(--text-strong); background: var(--bg-surface); box-shadow: var(--shadow-sm); font-size: 0.95rem; line-height: 1.5; }
 
 /* Selection layer. §2.2 fixes the mask and border tokens; the 8px handle size is
@@ -1998,6 +2003,9 @@ body:has(.screen-status-island-root),
 .screenshot-selection__dim { position: absolute; background: var(--bg-overlay); }
 .screenshot-selection__frame { position: absolute; border: 1px solid var(--color-primary); }
 .screenshot-selection__handle { position: absolute; width: 8px; height: 8px; background: var(--color-primary); pointer-events: auto; }
+/* design.md §14: the mark stays 8×8; the transparent pad is 24×24 so an edge
+   that sits on the screen border is still grabbable after the outer half is clipped. */
+.screenshot-selection__handle::before { content: ''; position: absolute; width: 24px; height: 24px; left: -8px; top: -8px; }
 .screenshot-selection__handle--nw { top: -4px; left: -4px; cursor: nwse-resize; }
 .screenshot-selection__handle--n { top: -4px; left: calc(50% - 4px); cursor: ns-resize; }
 .screenshot-selection__handle--ne { top: -4px; right: -4px; cursor: nesw-resize; }

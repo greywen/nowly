@@ -41,10 +41,62 @@ pub(crate) enum CaptureBackendError {
 
 pub(crate) trait CaptureSource {
     type Display;
+    type Native;
+
+    fn capture_native(&self, display: &Self::Display) -> Result<Self::Native, CaptureBackendError>;
+    fn native_rgba(&self, native: &Self::Native) -> Result<Vec<u8>, CaptureBackendError>;
+    fn capture_rgba(&self, display: &Self::Display) -> Result<Vec<u8>, CaptureBackendError> {
+        self.native_rgba(&self.capture_native(display)?)
+    }
 
     fn displays(&self) -> Result<Vec<Self::Display>, CaptureBackendError>;
     fn descriptor(&self, display: &Self::Display) -> Result<DisplayInfo, CaptureBackendError>;
-    fn capture_rgba(&self, display: &Self::Display) -> Result<Vec<u8>, CaptureBackendError>;
+}
+
+pub(crate) struct NativeCapture<N> {
+    pub display: DisplayInfo,
+    pub native: N,
+}
+
+pub(crate) fn capture_native<S: CaptureSource>(
+    source: &S,
+) -> Result<Vec<NativeCapture<S::Native>>, CaptureBackendError> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let displays = source.displays()?;
+        if displays.is_empty() {
+            return Err(CaptureBackendError::NoDisplays);
+        }
+        let mut descriptors = Vec::with_capacity(displays.len());
+        let mut bytes = 0u64;
+        for display in &displays {
+            let descriptor = source.descriptor(display)?;
+            bytes = bytes.checked_add(rgba_len(&descriptor)?)
+                .ok_or(CaptureBackendError::ArithmeticOverflow)?;
+            descriptors.push(descriptor);
+        }
+        if bytes.checked_mul(CAPTURE_PEAK_COPIES)
+            .ok_or(CaptureBackendError::ArithmeticOverflow)? > MAX_SESSION_BYTES {
+            return Err(CaptureBackendError::SessionBudgetExceeded);
+        }
+        displays.iter().zip(descriptors).map(|(display, descriptor)| {
+            Ok(NativeCapture { display: descriptor, native: source.capture_native(display)? })
+        }).collect()
+    })).unwrap_or(Err(CaptureBackendError::CaptureFailed))
+}
+
+pub(crate) fn to_frames<S: CaptureSource>(
+    source: &S,
+    captures: &[NativeCapture<S::Native>],
+) -> Result<Vec<CapturedDisplay>, CaptureBackendError> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        captures.iter().map(|capture| {
+            let rgba = source.native_rgba(&capture.native)?;
+            if rgba.len() != rgba_len(&capture.display)? as usize {
+                return Err(CaptureBackendError::InvalidFrame);
+            }
+            Ok(CapturedDisplay { display: capture.display.clone(), rgba })
+        }).collect()
+    })).unwrap_or(Err(CaptureBackendError::CaptureFailed))
 }
 
 pub(crate) fn capture_all<S: CaptureSource>(
@@ -115,6 +167,15 @@ mod tests {
 
     impl CaptureSource for FakeSource {
         type Display = DisplayInfo;
+        type Native = Vec<u8>;
+
+        fn capture_native(&self, display: &Self::Display) -> Result<Self::Native, CaptureBackendError> {
+            self.capture_rgba(display)
+        }
+
+        fn native_rgba(&self, native: &Self::Native) -> Result<Vec<u8>, CaptureBackendError> {
+            Ok(native.clone())
+        }
 
         fn displays(&self) -> Result<Vec<Self::Display>, CaptureBackendError> {
             Ok(self.displays.clone())
@@ -148,6 +209,22 @@ mod tests {
     }
 
     #[test]
+    fn native_capture_converts_to_valid_frames_without_recapturing() {
+        let source = FakeSource {
+            displays: vec![display(1, 0, 2, 2), display(2, -2, 2, 2)],
+            fail_on: None,
+        };
+        let natives = super::capture_native(&source).unwrap();
+        let frames = super::to_frames(&source, &natives).unwrap();
+        assert_eq!(frames, capture_all(&source).unwrap());
+        let invalid = vec![super::NativeCapture {
+            display: display(1, 0, 2, 2),
+            native: vec![0; 15],
+        }];
+        assert_eq!(super::to_frames(&source, &invalid), Err(CaptureBackendError::InvalidFrame));
+    }
+
+    #[test]
     fn captures_every_display_with_physical_coordinates() {
         let frames = capture_all(&FakeSource {
             displays: vec![display(1, 0, 2, 2), display(2, -2, 2, 2)],
@@ -177,6 +254,15 @@ mod tests {
 
         impl CaptureSource for InvalidSource {
             type Display = DisplayInfo;
+        type Native = Vec<u8>;
+
+        fn capture_native(&self, display: &Self::Display) -> Result<Self::Native, CaptureBackendError> {
+            self.capture_rgba(display)
+        }
+
+        fn native_rgba(&self, native: &Self::Native) -> Result<Vec<u8>, CaptureBackendError> {
+            Ok(native.clone())
+        }
 
             fn displays(&self) -> Result<Vec<Self::Display>, CaptureBackendError> {
                 Ok(vec![display(1, 0, 2, 2)])
@@ -220,6 +306,15 @@ mod tests {
 
         impl CaptureSource for BudgetSource {
             type Display = DisplayInfo;
+        type Native = Vec<u8>;
+
+        fn capture_native(&self, display: &Self::Display) -> Result<Self::Native, CaptureBackendError> {
+            self.capture_rgba(display)
+        }
+
+        fn native_rgba(&self, native: &Self::Native) -> Result<Vec<u8>, CaptureBackendError> {
+            Ok(native.clone())
+        }
 
             fn displays(&self) -> Result<Vec<Self::Display>, CaptureBackendError> {
                 Ok(vec![display(1, 0, 8_192, 5_120)])
@@ -252,6 +347,15 @@ mod tests {
 
         impl CaptureSource for PanickingSource {
             type Display = DisplayInfo;
+        type Native = Vec<u8>;
+
+        fn capture_native(&self, display: &Self::Display) -> Result<Self::Native, CaptureBackendError> {
+            self.capture_rgba(display)
+        }
+
+        fn native_rgba(&self, native: &Self::Native) -> Result<Vec<u8>, CaptureBackendError> {
+            Ok(native.clone())
+        }
 
             fn displays(&self) -> Result<Vec<Self::Display>, CaptureBackendError> {
                 Ok(vec![display(1, 0, 2, 2)])

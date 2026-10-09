@@ -1,25 +1,23 @@
 //! Capture work runs independently of its bounded startup supervisor.
-//! Native window creation is queued by Tauri from the worker; only decoded
-//! frontend acknowledgements establish that every session surface is usable.
+//! The frozen desktop is presented natively as soon as pixels exist; frontend
+//! acknowledgements then establish that every interactive surface is usable.
 
 use std::sync::Arc;
 use std::time::Instant;
 
 use super::backend::CaptureBackendError;
 use super::startup::Startup;
-use super::window::{overlay_plan, session_label, OverlayPlan};
+use super::window::{overlay_plan, session_label};
 use super::SessionToken;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
-/// The document every capture surface loads.
-///
-/// Deliberately not `WebviewUrl::default()` (`index.html`): that entry pulls the
-/// dashboard, its data layer and the editor stack onto the startup critical
-/// path, and §3.2.7 shows nothing until every surface has acked readiness.
-/// `screenshot.html` imports only the capture surfaces.
-fn capture_surface_url() -> tauri::WebviewUrl {
-    tauri::WebviewUrl::App("screenshot.html".into())
-}
+/// Tells already-loaded capture surfaces that their session's frames exist.
+pub(crate) const BEGIN_EVENT: &str = "screenshot-capture-begin";
+
+/// Lets the restored Bar and desktop settle before building the next windows.
+const PREWARM_AFTER_SESSION: std::time::Duration = std::time::Duration::from_millis(400);
+/// Keeps prewarming out of the application's own launch.
+pub(crate) const PREWARM_AFTER_LAUNCH: std::time::Duration = std::time::Duration::from_secs(2);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum StartFailure {
@@ -28,6 +26,12 @@ pub(crate) enum StartFailure {
     Capture(CaptureBackendError),
     Window(String),
     TimedOut,
+}
+
+impl From<CaptureBackendError> for StartFailure {
+    fn from(error: CaptureBackendError) -> Self {
+        Self::Capture(error)
+    }
 }
 
 fn bounded_dispatch(
@@ -179,13 +183,19 @@ impl<R: tauri::Runtime> TauriEffects<R> {
         self.check_current()?;
         self.trace("capture-start");
         #[cfg(target_os = "windows")]
-        let frames =
-            super::backend::capture_all(&super::gdi::GdiSource).map_err(StartFailure::Capture)?;
+        let frames = {
+            let source = super::gdi::GdiSource;
+            let natives = super::backend::capture_native(&source).map_err(StartFailure::Capture)?;
+            self.check_current()?;
+            self.trace("capture-complete");
+            self.present_freeze(&natives)?;
+            self.trace("frozen-visible");
+            super::backend::to_frames(&source, &natives).map_err(StartFailure::Capture)?
+        };
         #[cfg(not(target_os = "windows"))]
         let frames: Vec<super::backend::CapturedDisplay> =
             return Err(StartFailure::Capture(CaptureBackendError::NoDisplays));
         self.check_current()?;
-        self.trace("capture-complete");
         let displays: Vec<_> = frames.iter().map(|frame| frame.display.clone()).collect();
         let plan = overlay_plan(self.session_id, &displays);
         if plan.is_empty() {
@@ -203,52 +213,69 @@ impl<R: tauri::Runtime> TauriEffects<R> {
             return Err(StartFailure::Cancelled);
         }
         self.check_current()?;
+        // Prewarmed surfaces are already listening; ones built below ask on load.
+        self.startup.frames_available();
+        let _ = self.app.emit(BEGIN_EVENT, self.session_id);
         self.trace("frames-stored");
-        self.build_windows(&plan)?;
-        self.trace("windows-created-awaiting-ready");
+        let guard = || self.check_current();
+        let reused = super::pool::reconcile(&self.app, self.session_id, &plan, &guard)?;
+        self.trace(&format!("windows-ready-awaiting-ack reused={reused}/{}", plan.len()));
         Ok(())
     }
 
-    fn build_windows(&self, plan: &[OverlayPlan]) -> Result<(), StartFailure> {
-        use tauri::WebviewWindowBuilder;
-        self.check_current()?;
-        let window = WebviewWindowBuilder::new(
-            &self.app,
-            session_label(self.session_id),
-            capture_surface_url(),
+    /// Creates and shows one freeze window per display on the main thread.
+    ///
+    /// Ownership is recorded there too, and only while the session is still
+    /// current: teardown also runs on the main thread, so a cancelled session
+    /// either finds the windows to destroy or this destroys them itself.
+    #[cfg(target_os = "windows")]
+    fn present_freeze(
+        &self,
+        natives: &[super::backend::NativeCapture<Arc<super::gdi::DibFrame>>],
+    ) -> Result<(), StartFailure> {
+        use super::freeze::native;
+        let surfaces: Vec<_> = natives
+            .iter()
+            .map(|capture| (capture.display.clone(), capture.native.clone()))
+            .collect();
+        let effects = self.clone();
+        let deadline = Instant::now() + super::window::STARTUP_TIMEOUT;
+        bounded_dispatch(
+            deadline,
+            |work| {
+                self.app
+                    .run_on_main_thread(work)
+                    .map_err(|error| error.to_string())
+            },
+            move || {
+                effects.check_current()?;
+                let mut created = Vec::with_capacity(surfaces.len());
+                for (display, frame) in surfaces {
+                    match native::create(&display, frame) {
+                        Ok(window) => created.push((display.id, window)),
+                        Err(error) => {
+                            created.into_iter().for_each(|(_, window)| native::destroy(window));
+                            return Err(StartFailure::Window(error));
+                        }
+                    }
+                }
+                let windows: Vec<isize> = created.iter().map(|(_, window)| *window).collect();
+                let layer = effects.app.state::<super::freeze::FreezeLayer>();
+                let adopted = effects
+                    .app
+                    .state::<super::ActiveCapture>()
+                    .with_current(effects.session_id, || {
+                        layer.adopt(effects.session_id, created)
+                    });
+                let Some(stale) = adopted else {
+                    windows.into_iter().for_each(native::destroy);
+                    return Err(StartFailure::Cancelled);
+                };
+                stale.into_iter().for_each(native::destroy);
+                windows.into_iter().for_each(native::show);
+                Ok(())
+            },
         )
-        .title("Nowly")
-        .inner_size(480.0, 320.0)
-        .resizable(false)
-        .maximizable(false)
-        .visible(false)
-        .skip_taskbar(false)
-        .build()
-        .map_err(|error| StartFailure::Window(format!("session window: {error}")))?;
-        self.check_built_window(&window)?;
-        for overlay in plan {
-            self.check_current()?;
-            let window =
-                WebviewWindowBuilder::new(&self.app, &overlay.label, capture_surface_url())
-                    .title("Nowly")
-                    .decorations(false)
-                    .shadow(false)
-                    .transparent(true)
-                    .always_on_top(true)
-                    .skip_taskbar(true)
-                    .visible(false)
-                    .build()
-                    .map_err(|error| StartFailure::Window(format!("overlay window: {error}")))?;
-            self.check_built_window(&window)?;
-            window
-                .set_position(tauri::PhysicalPosition::new(overlay.x, overlay.y))
-                .map_err(|error| StartFailure::Window(error.to_string()))?;
-            window
-                .set_size(tauri::PhysicalSize::new(overlay.width, overlay.height))
-                .map_err(|error| StartFailure::Window(error.to_string()))?;
-            self.check_built_window(&window)?;
-        }
-        Ok(())
     }
 
     fn check_built_window(&self, window: &tauri::WebviewWindow<R>) -> Result<(), StartFailure> {
@@ -263,11 +290,21 @@ impl<R: tauri::Runtime> TauriEffects<R> {
     fn show_windows(&self, deadline: Instant) -> Result<(), StartFailure> {
         let (sender, receiver) = std::sync::mpsc::channel();
         let effects = self.clone();
+        let labels = self.startup.expected_labels();
         self.app
             .run_on_main_thread(move || {
                 let result = (|| {
                     effects.check_current()?;
-                    let mut windows = session_windows(&effects.app, effects.session_id);
+                    // Only this session's planned surfaces: a prewarmed overlay for
+                    // a display that has since gone stays hidden until teardown.
+                    let mut windows = labels
+                        .iter()
+                        .map(|label| {
+                            effects.app.get_webview_window(label).ok_or_else(|| {
+                                StartFailure::Window(format!("missing capture window {label}"))
+                            })
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
                     windows.sort_by_key(|window| {
                         (
                             super::window::presentation_priority(window.label()),
@@ -276,10 +313,24 @@ impl<R: tauri::Runtime> TauriEffects<R> {
                     });
                     for window in &windows {
                         effects.check_built_window(window)?;
-                        if super::window::overlay_display_id(window.label()).is_some() {
+                        if let Some(display_id) = super::window::overlay_display_id(window.label())
+                        {
                             window
                                 .show()
                                 .map_err(|error| StartFailure::Window(error.to_string()))?;
+                            #[cfg(target_os = "windows")]
+                            {
+                                let overlay = window
+                                    .hwnd()
+                                    .map_err(|error| StartFailure::Window(error.to_string()))?;
+                                let freeze = effects
+                                    .app
+                                    .state::<super::freeze::FreezeLayer>()
+                                    .window_for(effects.session_id, display_id);
+                                super::freeze::native::stack_under(freeze, overlay);
+                            }
+                            #[cfg(not(target_os = "windows"))]
+                            let _ = display_id;
                         } else {
                             show_session_without_activation(window)?;
                         }
@@ -337,12 +388,22 @@ pub(crate) fn teardown<R: tauri::Runtime>(
     // Restore before buffer cleanup, which can wait for an in-flight encoder.
     let restore_app = app.clone();
     if let Err(error) = app.run_on_main_thread(move || {
+        // After the overlays' destroy requests, which were queued first, so the
+        // interactive layer never sits over a live desktop.
+        #[cfg(target_os = "windows")]
+        for window in restore_app
+            .state::<super::freeze::FreezeLayer>()
+            .take_if_session(session_id)
+        {
+            super::freeze::native::destroy(window);
+        }
         if let Some(suppression) = suppression {
             crate::quick_panel::restore_after_capture(&restore_app, suppression);
         }
         restore_app
             .state::<super::ActiveCapture>()
             .finish_retirement(session_id);
+        super::pool::schedule_prewarm(restore_app.clone(), PREWARM_AFTER_SESSION);
     }) {
         eprintln!("capture session={session_id} phase=restore-dispatch-failed reason={error}");
         // A stopped event loop cannot restore a native window; do not leave the

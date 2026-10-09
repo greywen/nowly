@@ -9,7 +9,9 @@ mod dib;
 mod encode;
 mod export;
 mod frames;
+mod freeze;
 mod gdi;
+mod pool;
 mod mosaic;
 mod output;
 mod preview;
@@ -167,6 +169,24 @@ pub struct ActiveCapture {
 }
 
 impl ActiveCapture {
+    pub(crate) fn prewarm_target(&self) -> Option<u64> {
+        let session = self.session.lock().unwrap();
+        if session.active.is_some() || session.retiring.is_some() {
+            None
+        } else {
+            Some(session.next_session_id)
+        }
+    }
+
+    pub(crate) fn may_build_for(&self, session_id: u64) -> bool {
+        let session = self.session.lock().unwrap();
+        session.retiring.is_none()
+            && match session.active {
+                Some(token) => token.session_id == session_id,
+                None => session.next_session_id == session_id,
+            }
+    }
+
     fn begin(&self) -> Result<(SessionToken, std::sync::Arc<startup::Startup>), SessionError> {
         let mut session = self.session.lock().unwrap();
         let token = session.begin()?;
@@ -268,6 +288,11 @@ impl ActiveCapture {
 
 pub use export::OverlayStaging;
 pub use frames::FrameStore;
+pub use freeze::FreezeLayer;
+
+pub fn prewarm_after_launch<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    pool::schedule_prewarm(app.clone(), session::PREWARM_AFTER_LAUNCH);
+}
 pub use preview::PreviewStore;
 
 /// The local scheme the overlays load their frozen frame from.
@@ -393,11 +418,16 @@ pub fn serve_frame<R: tauri::Runtime>(
     {
         return deny(tauri::http::StatusCode::FORBIDDEN);
     }
-    let Some(png) = app.state::<FrameStore>().png(session_id, display_id) else {
+    let Some(bitmap) = app.state::<FrameStore>().bitmap(session_id, display_id) else {
         return deny(tauri::http::StatusCode::NOT_FOUND);
     };
 
-    frame_png_response(png.as_ref().clone(), allowed_origin)
+    let mut response = frame_png_response(bitmap, allowed_origin);
+    response.headers_mut().insert(
+        tauri::http::header::CONTENT_TYPE,
+        tauri::http::HeaderValue::from_static("image/bmp"),
+    );
+    response
 }
 
 /// What this overlay should render: its display, that display's pixel size and
@@ -408,27 +438,35 @@ pub fn serve_frame<R: tauri::Runtime>(
 pub fn describe_capture_frame(
     app: tauri::AppHandle,
     window: tauri::Window,
-) -> Result<FramePlan, CommandError> {
+) -> Result<Option<FramePlan>, CommandError> {
     let Some(display_id) = window::overlay_display_id(window.label()) else {
         return Err(CommandError::system("该窗口不是截图覆盖层。"));
     };
+    let session_id = window::window_session_id(window.label())
+        .ok_or_else(|| CommandError::system("该窗口不能操作截图会话。"))?;
+    let state = app.state::<ActiveCapture>();
+    let Some(startup) = state.startup_for(session_id) else {
+        return Ok(None);
+    };
+    if !startup
+        .frames_ready()
+        .map_err(|failure| CommandError::reported(start_failure_message(&failure)))?
+    {
+        return Ok(None);
+    }
     let store = app.state::<FrameStore>();
-    let session_id = app
-        .state::<ActiveCapture>()
-        .caller_token(window.label())?
-        .session_id;
     let Some(frame) = store.descriptor_for(session_id, display_id) else {
         return Err(CommandError::system("找不到该屏幕的截图帧。"));
     };
 
-    Ok(FramePlan {
+    Ok(Some(FramePlan {
         path: format!("{session_id}/{display_id}"),
         width: frame.width,
         height: frame.height,
         origin_x: frame.origin_x,
         origin_y: frame.origin_y,
         window_candidates: frame.window_candidates,
-    })
+    }))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]

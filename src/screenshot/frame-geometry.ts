@@ -6,9 +6,9 @@
 // has to be converted through the rendered box, not assumed to be 1:1.
 //
 // The overlay window covers exactly one display's physical rectangle, and the
-// frame `<img>` fills the window, so the ratio is `frame.width / renderedWidth`.
+// frame element fills the window, so the ratio is `frame.width / renderedWidth`.
 // Reading it from the rendered box rather than from a scale factor means a
-// rounded window size cannot drift from the image.
+// rounded window size cannot drift from the frame.
 
 export type FrameBox = {
   /// The frame's intrinsic size, in physical pixels.
@@ -36,6 +36,7 @@ export function pointerToFramePixel(
   box: FrameBox
 ): { x: number; y: number } | null {
   if (box.renderedWidth <= 0 || box.renderedHeight <= 0) return null;
+  if (box.frameWidth <= 0 || box.frameHeight <= 0) return null;
 
   const localX = pointer.x - box.offsetX;
   const localY = pointer.y - box.offsetY;
@@ -83,12 +84,23 @@ export function toVirtualDesktop(
   return { x: origin.x + pixel.x, y: origin.y + pixel.y };
 }
 
-/// Reads the frame box from a rendered image element.
-export function frameBoxFromElement(image: HTMLImageElement): FrameBox {
-  const rect = image.getBoundingClientRect();
+/// Reads the frame box from the rendered frame element.
+///
+/// `frame` is the planned physical size. It is passed explicitly because the
+/// frame's pixels load after the overlay is already usable, so the element's own
+/// natural size can still be zero when the first pointer event arrives.
+export function frameBoxFromElement(
+  element: HTMLElement,
+  frame?: { width: number; height: number }
+): FrameBox {
+  const rect = element.getBoundingClientRect();
+  const size = frame ?? {
+    width: (element as HTMLImageElement).naturalWidth,
+    height: (element as HTMLImageElement).naturalHeight
+  };
   return {
-    frameWidth: image.naturalWidth,
-    frameHeight: image.naturalHeight,
+    frameWidth: size.width,
+    frameHeight: size.height,
     renderedWidth: rect.width,
     renderedHeight: rect.height,
     offsetX: rect.left,

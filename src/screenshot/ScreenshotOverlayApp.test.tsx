@@ -68,6 +68,7 @@ beforeEach(() => {
   HTMLCanvasElement.prototype.getContext = vi.fn(() => ({
     imageSmoothingEnabled: false,
     clearRect: vi.fn(),
+    fillRect: vi.fn(),
     drawImage: vi.fn(),
     getImageData: () => ({ data: Uint8ClampedArray.from([79, 201, 218, 255]) })
   })) as unknown as typeof HTMLCanvasElement.prototype.getContext;
@@ -1125,52 +1126,35 @@ describe('the mosaic preview', () => {
     return overlay;
   }
 
-  it('asks Rust to render the mosaicked selection', async () => {
-    // §5.3: the preview must show real mosaic pixels, and mosaic.rs is the only
-    // implementation, so the preview has to come from Rust.
-    await withMosaic();
-
-    await waitFor(() => {
-      const calls = vi.mocked(invoke).mock.calls.filter(
-        (call) => call[0] === 'render_mosaic_preview'
-      );
-      expect(calls.length).toBeGreaterThan(0);
-      const lastCall = calls[calls.length - 1];
-      expect(lastCall[0]).toBe('render_mosaic_preview');
-      const geometry = (lastCall[1] as any).geometry;
-      expect(geometry.x).toBe(150);
-      expect(geometry.y).toBe(150);
-      expect(geometry.width).toBe(750);
-      expect(geometry.height).toBe(600);
-      expect(geometry.version).toBe(1);
-      expect(geometry.hasOverlay).toBe(false);
-      // The brush converts the 200,200 → 300,260 CSS drag into many 16×16 block
-      // regions. Each block is selection-local and sent individually.
-      expect(geometry.mosaics).toBeInstanceOf(Array);
-      expect(geometry.mosaics.length).toBeGreaterThan(0);
-      expect(geometry.mosaics.every((m: any) => m.blockSize === 16)).toBe(true);
-      expect(geometry.mosaics.every((m: any) => m.width === 16 && m.height === 16)).toBe(true);
+  it('paints on pointer down and retains the canvas through release', async () => {
+    const overlay = await renderOverlay();
+    overlay.dispatchEvent(pointerEvent('pointerdown', 100, 100));
+    overlay.dispatchEvent(pointerEvent('pointermove', 600, 500));
+    overlay.dispatchEvent(pointerEvent('pointerup', 600, 500));
+    await waitFor(() => expect(screen.getByRole('toolbar')).toBeInTheDocument());
+    await userEvent.setup().click(screen.getByRole('button', { name: translate(CONTROL_LABEL_KEYS.mosaic) }));
+    overlay.dispatchEvent(pointerEvent('pointerdown', 200, 200));
+    const preview = await waitFor(() => {
+      const canvas = document.querySelector('canvas.screenshot-overlay__mosaic');
+      expect(canvas).not.toBeNull();
+      return canvas as HTMLCanvasElement;
     });
+    expect(document.querySelector('[data-kind="mosaic"]')).toBeNull();
+    overlay.dispatchEvent(pointerEvent('pointermove', 300, 260));
+    overlay.dispatchEvent(pointerEvent('pointerup', 300, 260));
+    await waitFor(() => expect(document.querySelector('canvas.screenshot-overlay__mosaic')).toBe(preview));
+    expect(invoke).not.toHaveBeenCalledWith('render_mosaic_preview', expect.anything());
   });
 
-  it('shows the rendered image over the selection', async () => {
-    vi.mocked(invoke).mockImplementation((command: string) => {
-      if (command === 'render_mosaic_preview') {
-        return Promise.resolve({ path: 'preview/7/1', width: 750, height: 600 });
-      }
-      return Promise.resolve({ path: '7/1', width: FRAME.width, height: FRAME.height });
-    });
+  it('positions the live pixels over the physical selection', async () => {
     await withMosaic();
-
     const preview = await waitFor(() => {
-      const found = document.querySelector('.screenshot-overlay__mosaic');
+      const found = document.querySelector('canvas.screenshot-overlay__mosaic');
       expect(found).not.toBeNull();
-      return found as HTMLImageElement;
+      return found as HTMLCanvasElement;
     });
-    expect(preview.getAttribute('src')).toBe('nowly-frame://localhost/preview/7/1');
-    // Positioned at the selection in CSS pixels: 150 physical / 1.5 = 100. The ratio
-    // is derived from the rendered box, so it carries float noise; a tolerance keeps
-    // the assertion about placement rather than about float representation.
+    expect(preview.width).toBe(750);
+    expect(preview.height).toBe(600);
     expect(parseFloat(preview.style.left)).toBeCloseTo(100, 6);
     expect(parseFloat(preview.style.top)).toBeCloseTo(100, 6);
     expect(parseFloat(preview.style.width)).toBeCloseTo(500, 6);
@@ -1188,20 +1172,7 @@ describe('the mosaic preview', () => {
     expect(document.querySelector('.screenshot-overlay__mosaic')).toBeNull();
   });
 
-  it('shows no preview rather than a stale one when the render fails', async () => {
-    // A stale preview would tell the user something is covered when the export would
-    // not cover it.
-    vi.mocked(invoke).mockImplementation((command: string) => {
-      if (command === 'render_mosaic_preview') return Promise.reject(new Error('nope'));
-      return Promise.resolve({ path: '7/1', width: FRAME.width, height: FRAME.height });
-    });
-    await withMosaic();
 
-    await waitFor(() =>
-      expect(invoke).toHaveBeenCalledWith('render_mosaic_preview', expect.anything())
-    );
-    expect(document.querySelector('.screenshot-overlay__mosaic')).toBeNull();
-  });
 });
 
 

@@ -248,6 +248,7 @@ fn main() {
         .manage(assistant::commands::Requests::default())
         .manage(screen_capture::ActiveCapture::default())
         .manage(screen_capture::FrameStore::default())
+        .manage(screen_capture::FreezeLayer::default())
         .manage(screen_capture::OverlayStaging::default())
         .manage(screen_capture::PreviewStore::default())
         .register_asynchronous_uri_scheme_protocol(
@@ -538,6 +539,7 @@ fn main() {
                 }
             }
 
+            screen_capture::prewarm_after_launch(app.handle());
             Ok(())
         })
         .on_window_event(|window, event| {

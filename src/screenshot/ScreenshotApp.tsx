@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from '../i18n';
 import { AnnotationLayer } from './AnnotationLayer';
@@ -39,10 +40,10 @@ import {
 import { useAnnotationDrawing } from './useAnnotationDrawing';
 import { useAnnotationEditing } from './useAnnotationEditing';
 import { useCancelOnEscape } from './useCancelOnEscape';
-import { useCaptureFrame } from './useCaptureFrame';
+import { CAPTURE_BEGIN_EVENT, useCaptureFrame } from './useCaptureFrame';
 import { useCaptureKeyboard } from './useCaptureKeyboard';
 import { useExport } from './useExport';
-import { useMosaicPreview } from './useMosaicPreview';
+import { MosaicLayer } from './MosaicLayer';
 import { useSelection } from './useSelection';
 
 
@@ -64,11 +65,29 @@ export function ScreenshotSessionApp() {
   useCancelOnEscape();
   useEffect(() => {
     let active = true;
-    void invoke('capture_window_ready').catch((error: unknown) => {
-      if (active) console.error('failed to report the capture session window readiness', error);
-    });
+    const acknowledge = () => {
+      void invoke('capture_window_ready').catch((error: unknown) => {
+        if (active) console.error('failed to report the capture session window readiness', error);
+      });
+    };
+    // A prewarmed window loads before its session exists, so Rust ignores the
+    // load-time acknowledgement and the begin event asks for it again. Listening
+    // first means neither moment can be missed.
+    let unlisten: (() => void) | undefined;
+    listen(CAPTURE_BEGIN_EVENT, acknowledge)
+      .then((stop) => {
+        if (active) unlisten = stop;
+        else stop();
+      })
+      .catch((error: unknown) => {
+        console.error('failed to listen for the capture start', error);
+      })
+      .finally(() => {
+        if (active) acknowledge();
+      });
     return () => {
       active = false;
+      unlisten?.();
     };
   }, []);
   return (
@@ -85,12 +104,16 @@ export function ScreenshotSessionApp() {
 export function ScreenshotOverlayApp() {
   const { t } = useTranslation();
   const frame = useCaptureFrame();
-  const framePlan = frame.status === 'decoding' || frame.status === 'ready' ? frame.frame : null;
+  const framePlan = frame.status === 'ready' ? frame.frame : null;
   const displayOrigin: DisplayOrigin = framePlan
     ? { x: framePlan.originX, y: framePlan.originY }
     : { x: 0, y: 0 };
   const frameRef = useRef<HTMLImageElement | null>(null);
-  const selection = useSelection(frameRef, framePlan?.windowCandidates ?? []);
+  const selection = useSelection(
+    frameRef,
+    framePlan?.windowCandidates ?? [],
+    framePlan ? { width: framePlan.width, height: framePlan.height } : null
+  );
   const {
     state,
     pointerPixelRef,
@@ -124,14 +147,22 @@ export function ScreenshotOverlayApp() {
   // Measured rather than assumed: §5.1 line 103 lets the fixed groups wrap to fit
   // the available width, so the toolbar's size is not a constant.
   const [toolbarBox, setToolbarBox] = useState({ width: 0, height: 0 });
+  const toolbarObserver = useRef<ResizeObserver | null>(null);
   const measureToolbar = useCallback((node: HTMLDivElement | null) => {
+    toolbarObserver.current?.disconnect();
+    toolbarObserver.current = null;
     if (!node) return;
-    const rect = node.getBoundingClientRect();
-    setToolbarBox((current) =>
-      current.width === rect.width && current.height === rect.height
-        ? current
-        : { width: rect.width, height: rect.height }
-    );
+    const updateSize = () => {
+      const rect = node.getBoundingClientRect();
+      setToolbarBox((current) =>
+        current.width === rect.width && current.height === rect.height
+          ? current
+          : { width: rect.width, height: rect.height }
+      );
+    };
+    updateSize();
+    toolbarObserver.current = new ResizeObserver(updateSize);
+    toolbarObserver.current.observe(node);
   }, []);
 
   // The rectangle on screen: the live drag while dragging, the committed one after.
@@ -236,12 +267,6 @@ export function ScreenshotOverlayApp() {
     if (drawing.state.draft) next = [...next, drawing.state.draft];
     return next;
   })();
-  const mosaicPreview = useMosaicPreview(
-    doc.objects,
-    state.selection,
-    doc.past.length,
-    displayOrigin
-  );
   const pixelOf = useCallback(
     (event: React.PointerEvent) =>
       box ? pointerToFramePixel({ x: event.clientX, y: event.clientY }, box) : null,
@@ -643,7 +668,11 @@ export function ScreenshotOverlayApp() {
       onContextMenu={handleContextMenu}
       onDoubleClick={handleDoubleClick}
     >
-      {frame.status === 'decoding' || frame.status === 'ready' ? (
+      {frame.status === 'ready' ? (
+        // Invisible: the frozen desktop on screen is painted natively beneath
+        // this transparent window. The element still fills the window, so it
+        // anchors the pointer geometry, and once decoded it is the magnifier's
+        // pixel source.
         <img
           ref={frameRef}
           className="screenshot-overlay__frame"
@@ -675,20 +704,12 @@ export function ScreenshotOverlayApp() {
       {frame.status === 'ready' && !rect ? (
         <div className="screenshot-overlay__aim-dim" aria-hidden="true" />
       ) : null}
-      {/* §5.3: real mosaic pixels, rendered by the same `mosaic.rs` that renders the
-          export, laid over the frozen frame at the selection's position. It sits
-          below the annotation layer so shapes drawn after a mosaic stay visible, and
-          below the selection border so the border is not covered. */}
-      {mosaicPreview.url && box && state.selection ? (
-        <img
-          className="screenshot-overlay__mosaic"
-          src={mosaicPreview.url}
-          style={(() => {
-            const css = framePixelToCss(state.selection, box);
-            return { left: css.left, top: css.top, width: css.width, height: css.height };
-          })()}
-          alt=""
-          draggable={false}
+      {box && state.selection && visibleObjects.some(object => object.kind === 'mosaic') ? (
+        <MosaicLayer
+          objects={visibleObjects}
+          selection={state.selection}
+          box={box}
+          frameRef={frameRef}
         />
       ) : null}
       {rect && box ? (
@@ -736,13 +757,15 @@ export function ScreenshotOverlayApp() {
         />
       ) : null}
       {/* §4.2 line 166: the magnifier shows while aiming and dragging, and is
-          hidden once the selection is committed and the toolbar appears. */}
-      {box && state.phase !== 'editing' ? (
+          hidden once the selection is committed and the toolbar appears. It waits
+          for the frame's pixels, which load just after the overlay appears, rather
+          than flashing the unavailable readout. */}
+      {box && state.phase !== 'editing' && frame.pixels !== 'loading' ? (
         <Magnifier
           pixel={state.pointerPixel}
           pointer={pointerCss}
           box={box}
-          image={frameRef.current}
+          image={frame.pixels === 'ready' ? frameRef.current : null}
           copyState={copyState}
         />
       ) : null}

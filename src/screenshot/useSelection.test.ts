@@ -1,6 +1,6 @@
 import { createElement, StrictMode, type ReactNode } from 'react';
 import { act, renderHook } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type React from 'react';
 import { useSelection } from './useSelection';
 
@@ -23,6 +23,20 @@ function frameRef(): React.RefObject<HTMLImageElement | null> {
 function pointer(x: number, y: number, button = 0): React.PointerEvent {
   return { clientX: x, clientY: y, button } as React.PointerEvent;
 }
+
+beforeEach(() => {
+  // Production coalesces pointer samples onto animation frames. Existing cases
+  // assert the state after `act`, so the frame has to run before `act` returns.
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+    callback(0);
+    return 1;
+  });
+  vi.stubGlobal('cancelAnimationFrame', () => {});
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe('the aiming drag', () => {
   const candidates = [
@@ -254,6 +268,55 @@ describe('the aiming drag', () => {
     act(() => result.current.onPointerDown(pointer(100, 100)));
 
     expect(result.current.state.phase).toBe('aiming');
+  });
+
+  it('does not republish a selection on every pointer sample in one frame', () => {
+    // A display-sized drag reports far faster than the screen paints. Publishing
+    // each sample forces a layout and a transparent-window repaint on the UI
+    // thread, which is what makes resizing and moving the region hitch or hang.
+    const queued: FrameRequestCallback[] = [];
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      queued.push(callback);
+      return queued.length;
+    });
+    vi.stubGlobal('cancelAnimationFrame', () => {});
+    let reads = 0;
+    const image = {
+      naturalWidth: 2240,
+      naturalHeight: 1400,
+      getBoundingClientRect: () => {
+        reads += 1;
+        return { width: 1493.3333333333333, height: 933.3333333333334, left: 0, top: 0 };
+      }
+    } as unknown as HTMLImageElement;
+    let renders = 0;
+    const { result } = renderHook(() => {
+      renders += 1;
+      return useSelection({ current: image });
+    });
+    const renderedAtStart = renders;
+
+    act(() => {
+      result.current.onPointerDown(pointer(100, 100));
+      for (let step = 0; step < 40; step += 1) {
+        result.current.onPointerMove(pointer(110 + step, 110 + step));
+      }
+    });
+
+    expect(queued.length).toBe(1);
+    expect(reads).toBe(1);
+    expect(renders - renderedAtStart).toBeLessThanOrEqual(1);
+
+    act(() => {
+      queued[0](0);
+    });
+
+    expect(result.current.state.draft).toEqual({
+      x: 150,
+      y: 150,
+      width: 73,
+      height: 73
+    });
   });
 });
 

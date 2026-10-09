@@ -4,7 +4,7 @@
 // must come from the frozen base image's original pixels, not from the scaled
 // canvas, the mask or the crosshair. Drawing the one pixel 1:1 with smoothing
 // disabled and reading it back gives exactly those bytes, because the frame is
-// delivered as lossless PNG.
+// delivered as an uncompressed bitmap.
 //
 // This value is for display. The HEX that Ctrl+C puts on the clipboard comes from
 // Rust's own sample of the same buffer, because §5.3 requires the authoritative

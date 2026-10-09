@@ -163,7 +163,7 @@ describe('the annotation layer', () => {
     expect(spans[1].textContent).toBe('second');
   });
 
-  it('draws a mosaic as an outline only', () => {
+  it('does not draw placeholder outlines over mosaic pixels', () => {
     // §5.3: the pixels come from Rust, so nothing drawn here can disagree with
     // the exported file.
     const svg = renderLayer([
@@ -180,9 +180,7 @@ describe('the annotation layer', () => {
       }
     ]);
 
-    const rect = svg.querySelector('[data-kind="mosaic"]')!;
-    expect(rect.getAttribute('fill')).toBe('none');
-    expect(rect.classList.contains('screenshot-annotation--mosaic')).toBe(true);
+    expect(svg.querySelector('[data-kind="mosaic"]')).toBeNull();
   });
 
   it('paints in creation order', () => {

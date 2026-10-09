@@ -26,6 +26,37 @@ pub(crate) const OVERLAY_LABEL_PREFIX: &str = "screenshot-overlay-";
 /// goal: exceeding it fails the startup instead of showing a partial desktop.
 pub(crate) const STARTUP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
+/// Window-manager chrome for a per-display overlay.
+///
+/// Kept as data so the freeze bug stays testable without creating a window:
+/// Tao defaults `resizable` to true, and an undecorated resizable window still
+/// has a native resize border. The overlay is exactly the display, so that
+/// border is the screen edge. A full-screen selection's handles sit on it, and
+/// dragging them enters the modal size loop of a transparent always-on-top
+/// window. The UI thread then stops answering.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct OverlayChrome {
+    pub decorations: bool,
+    pub shadow: bool,
+    pub transparent: bool,
+    pub always_on_top: bool,
+    pub resizable: bool,
+    pub maximizable: bool,
+    pub skip_taskbar: bool,
+}
+
+pub(crate) fn overlay_chrome() -> OverlayChrome {
+    OverlayChrome {
+        decorations: false,
+        shadow: false,
+        transparent: true,
+        always_on_top: true,
+        resizable: false,
+        maximizable: false,
+        skip_taskbar: true,
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct OverlayPlan {
     pub label: String,
@@ -250,5 +281,21 @@ mod tests {
     #[test]
     fn the_startup_ceiling_is_the_documented_five_seconds() {
         assert_eq!(STARTUP_TIMEOUT.as_secs(), 5);
+    }
+
+    #[test]
+    fn an_overlay_is_not_a_resizable_window() {
+        // The overlay is sized to the display. Tao's default `resizable: true`
+        // gives an undecorated window a native resize border (WS_SIZEBOX plus
+        // WM_NCHITTEST). A full-screen selection's edge handles sit on that
+        // border, so dragging them enters the modal size loop of a transparent
+        // always-on-top window and the UI thread stops answering.
+        let chrome = super::overlay_chrome();
+        assert!(!chrome.resizable);
+        assert!(!chrome.maximizable);
+        assert!(!chrome.decorations);
+        assert!(!chrome.shadow);
+        assert!(chrome.transparent);
+        assert!(chrome.always_on_top);
     }
 }
