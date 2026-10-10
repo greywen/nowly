@@ -57,6 +57,18 @@ focusing. All data stays on your machine in a local SQLite database.
 - **Exit Nowly** in the tray menu is the only action that terminates the
   process.
 
+### Screenshots and history
+
+Add the screenshot button under **Settings → Notifications → Nowly Bar app buttons**. Clicking it starts a screenshot directly, without opening a menu. Global shortcuts default to **Ctrl+Alt+A** for screenshots and **Ctrl+Alt+H** for screenshot history; change them under **Settings → Shortcuts**. Conflicts are reported without preventing app startup.
+
+**Save** writes directly to the system **Pictures\Nowly\Screenshots** folder instead of opening a Save As dialog. **Copy image and finish** archives the same final PNG before writing the image clipboard. Only cropped, annotated and redacted output is retained; cancelling creates no history. Redirected system Pictures folders are respected.
+
+Screenshot history expands directly from the top-edge Nowly Bar into an animated panel, without a separate window. Enable Nowly Bar to use the history shortcut. Press **Esc**, use the close button, or click outside to collapse it. The panel shows thumbnails with image-copy and confirmed-delete actions, plus **Open folder**. Images remain until deleted; confirmation removes the archived PNG and its thumbnail cache. SQLite stores metadata, not image bytes. Thumbnail caches can be regenerated.
+
+An archive failure preserves the editor and does not copy. If archiving succeeds but the clipboard fails, retrying the same final image reuses its history entry. Copying from history never creates another entry. Raw desktop frames are retained only for the active capture session.
+
+Browser development mode can validate the UI but cannot manage real screenshot files or global shortcuts. Full functionality requires the Windows desktop app.
+
 ## Tech Stack
 
 - **Frontend** — React + TypeScript, built with Vite and styled with

@@ -224,6 +224,8 @@ button:disabled { cursor: default; opacity: .65; }
 .status-rail[data-lane-anim="shrink"] { --lane-dur: var(--rail-shrink); }
 .status-rail[data-surface="assistant"] { --rail-frame-w: var(--assistant-panel-w); --rail-w: 408px; --sheet-h: 440px; }
 .status-rail[data-assistant-closing="true"] { --rail-w: 408px; --sheet-h: 440px; }
+.status-rail[data-surface="history"], .status-rail[data-source="history"] { --rail-w: 408px; --sheet-h: 560px; }
+.status-rail[data-surface="history"] { --rail-frame-w: var(--assistant-panel-w); }
 /* The AI frame is the only thing that changes width during the AI morph. It
    centres in the host, so the assistant's right edge lands on the collapsed
    shell's right edge when collapsed and on the panel's edge when open. It is a
@@ -399,6 +401,13 @@ button:disabled { cursor: default; opacity: .65; }
 .status-rail:not([data-surface="status"]) .status-rail__assistant > .assistant-dock--embedded { opacity: 1; transition: opacity var(--logo-in) var(--rail-ease) var(--logo-in-delay) !important; }
 /* Retain the visual content during exit; inert on the shell disables it. */
 .status-rail__assistant[data-anim="shrink"] > .assistant-dock--embedded[hidden] { display: block; }
+.status-rail__history { box-sizing: border-box; position: absolute; top: 0; right: 0; width: var(--rail-collapsed-w); height: var(--rail-h); overflow: hidden; border: 1px solid var(--border-default); border-radius: calc(var(--rail-h) / 2); background: var(--bg-surface); box-shadow: var(--shadow-none); opacity: 0; visibility: hidden; pointer-events: none; }
+.status-rail__history[data-anim] { transition: width var(--rail-grow) var(--rail-ease), height var(--rail-grow) var(--rail-ease), border-radius var(--rail-grow) var(--rail-ease), opacity 0s var(--rail-shrink), visibility 0s var(--rail-shrink) !important; }
+.status-rail__history[data-anim="shrink"] { transition-duration: var(--rail-shrink), var(--rail-shrink), var(--rail-shrink), 0s, 0s !important; }
+.status-rail[data-surface="history"] .status-rail__history { width: var(--assistant-panel-w); height: 560px; border-radius: var(--radius-default); opacity: 1; visibility: visible; pointer-events: auto; transition-delay: 0s !important; }
+.status-rail__history-content { position: absolute; top: 0; right: 0; width: 406px; height: 558px; opacity: 0; transition: opacity var(--rail-out) var(--rail-ease) !important; }
+.status-rail[data-surface="history"] .status-rail__history-content { opacity: 1; transition: opacity var(--rail-in) var(--rail-ease) var(--rail-in-delay) !important; }
+.status-island__dismiss[data-owner="history"][aria-hidden="false"] { opacity: 1; pointer-events: auto; transition: opacity var(--rail-in) var(--rail-ease) var(--rail-in-delay) !important; }
 .status-rail__assistant::after { content: ""; position: absolute; top: 9px; right: 13px; width: 22px; height: 22px; background: url('/logo.png') center / contain no-repeat; pointer-events: none; opacity: 1; transition: opacity var(--rail-peer-in) var(--rail-ease) !important; }
 .status-rail:not([data-surface="status"]) .status-rail__assistant::after { opacity: 0; transition-delay: 0s !important; }
 

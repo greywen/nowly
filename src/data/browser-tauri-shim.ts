@@ -58,6 +58,8 @@ const defaultSettings: Dict = {
   hideTopbarInWallpaper: true,
   quickPanelEnabled: true,
   quickPanelShortcut: 'Ctrl+Space',
+  screenshotShortcut: 'Ctrl+Alt+A',
+  screenshotHistoryShortcut: 'Ctrl+Alt+H',
   recentColors: []
 };
 
@@ -995,6 +997,27 @@ export function installBrowserTauriBackend() {
       }));
       persist();
     },
+
+    list_screenshot_history: () => ({ items: [], nextCursor: null }),
+    screenshot_shortcut_status: () => ({
+      screenshot: {
+        shortcut: store.settings.screenshotShortcut,
+        registered: false,
+        error: 'Global shortcuts are available only in the desktop application.'
+      },
+      history: {
+        shortcut: store.settings.screenshotHistoryShortcut,
+        registered: false,
+        error: 'Global shortcuts are available only in the desktop application.'
+      }
+    }),
+    screenshot_shortcut_recording: () => undefined,
+    copy_screenshot_history: () => { throw new Error('Image clipboard requires the desktop application.'); },
+    delete_screenshot_history: () => { throw new Error('Screenshot files require the desktop application.'); },
+    open_screenshot_folder: () => { throw new Error('Screenshot folder requires the desktop application.'); },
+    open_screenshot_history: () => { window.open('?surface=screenshot-history', '_blank', 'noopener,noreferrer'); },
+    toggle_screenshot_menu: () => { window.open('?surface=screenshot-menu', '_blank', 'noopener,noreferrer,width=320,height=136'); },
+    close_screenshot_menu: () => undefined,
 
     // Window mode & shell — no desktop window to switch in the browser.
     enter_wallpaper_mode: () => 'ok',

@@ -72,7 +72,7 @@ fn visible_width(source: Option<PanelSource>, button_count: usize) -> f64 {
         // The status panel keeps its own constant width and shares the collapsed
         // shell's left edge.
         Some(PanelSource::Island) => RAIL_WIDTH,
-        Some(PanelSource::Nowly) => ASSISTANT_WIDTH,
+        Some(PanelSource::Nowly | PanelSource::History) => ASSISTANT_WIDTH,
         None => collapsed_width(button_count),
     }
 }
@@ -103,6 +103,8 @@ pub enum PanelSource {
     Island,
     /// The Nowly logo entry and AI assistant.
     Nowly,
+    /// Screenshot history, hosted by the same Bar window.
+    History,
 }
 
 /// Every details show/hide carries the generation it was requested with, so a
@@ -149,6 +151,7 @@ pub fn top_surface_size(
     let height = match source {
         Some(PanelSource::Island) => STATUS_HEIGHT,
         Some(PanelSource::Nowly) => ASSISTANT_HEIGHT,
+        Some(PanelSource::History) => 560.0,
         None => RAIL_HEIGHT,
     };
     (
@@ -171,7 +174,7 @@ fn surface_region(source: Option<PanelSource>, button_count: usize, scale: f64) 
     // edge so status content lands on the same pixel in both forms. Only the AI
     // panel centres on its own width.
     let left = match source {
-        Some(PanelSource::Nowly) => ((host_px - width) / 2) as i32,
+        Some(PanelSource::Nowly | PanelSource::History) => ((host_px - width) / 2) as i32,
         _ => physical_pixels(shell_left(button_count), scale),
     };
     SurfaceRegion {
@@ -346,7 +349,7 @@ pub fn outside_click_action(notification_mode: &str) -> OutsideClickAction {
 }
 
 pub fn outside_click_closes_source(source: Option<PanelSource>) -> bool {
-    source == Some(PanelSource::Island)
+    matches!(source, Some(PanelSource::Island | PanelSource::History))
 }
 
 #[derive(Debug)]
@@ -1292,12 +1295,13 @@ fn current_notification_mode<R: Runtime>(app: &AppHandle<R>) -> String {
 
 pub fn close_details_after_outside_click<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
     let controller = app.state::<PanelController>();
-    if !outside_click_closes_source(controller.details_source()) {
+    let source = controller.details_source();
+    if !outside_click_closes_source(source) {
         return Ok(());
     }
     let action = outside_click_action(&current_notification_mode(app));
     let transition = controller.close_details();
-    hide_details_with_action(app, transition.generation, action, true)
+    hide_details_with_action(app, transition.generation, action, source == Some(PanelSource::Island))
 }
 
 #[tauri::command]
@@ -1306,6 +1310,28 @@ pub fn toggle_status_island_details(
     identity: Option<String>,
 ) -> Result<(), crate::error::CommandError> {
     toggle_panel(app, PanelSource::Island, identity)
+}
+
+pub fn open_history_panel<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+    let controller = app.state::<PanelController>();
+    if !controller.is_enabled() {
+        return Err("请先启用 Nowly Bar。".to_owned());
+    }
+    let handle = app.get_webview_window("quick-panel-handle")
+        .ok_or_else(|| "quick-panel-handle window not found".to_owned())?;
+    controller.show_serialized(|| handle.show()).unwrap_or(Ok(()))
+        .map_err(|error| error.to_string())?;
+    if controller.details_source() != Some(PanelSource::History) {
+        let transition = controller.toggle_details(PanelSource::History);
+        if transition.source != Some(PanelSource::History) {
+            return Err("截图历史暂时无法展开。".to_owned());
+        }
+        show_details(app, transition.generation, PanelSource::History, true, None)?;
+    } else {
+        handle.set_focus().map_err(|error| error.to_string())?;
+    }
+    let _ = handle.emit("screenshot-history-changed", ());
+    Ok(())
 }
 
 #[tauri::command]
@@ -1635,6 +1661,7 @@ pub fn end_status_island_drag(app: AppHandle) -> Result<(), crate::error::Comman
 /// showing the bar again mid-capture. Reminder data, timers and AI requests keep
 /// running as normal business; only the window is held down.
 pub fn suppress_for_capture<R: Runtime>(app: &AppHandle<R>) -> CaptureSuppression {
+    crate::screenshot_windows::suppress_for_capture(app);
     let handle = app.get_webview_window("quick-panel-handle");
     let controller = app.state::<PanelController>();
     let (suppression, ()) = controller.begin_capture_suppression(
@@ -1674,6 +1701,7 @@ pub fn restore_after_capture<R: Runtime>(app: &AppHandle<R>, suppression: Captur
             }
         });
     if restored.is_some() {
+        crate::screenshot_windows::restore_after_capture(app);
         // Geometry may have changed while the bar was hidden (monitor changes,
         // DPI, saved offset), so settle it rather than trusting the old rect.
         if let Err(error) = reposition_handle(app) {
@@ -1847,6 +1875,25 @@ mod tests {
             outside_click_action("notification"),
             OutsideClickAction::CollapseThenHide
         );
+    }
+
+    #[test]
+    fn history_uses_the_bar_host_and_its_own_hit_region_without_acknowledgement() {
+        for count in 0..=3 {
+            for scale in [1.0, 1.25, 1.5, 2.0] {
+                let (width, height) = top_surface_size(Some(PanelSource::History), count, scale);
+                assert_eq!(width, top_surface_size(None, count, scale).0);
+                assert_eq!(height, (560.0_f64 * scale).round() as u32);
+                let region = super::surface_region(Some(PanelSource::History), count, scale);
+                assert_eq!(region.right - region.left, (408.0_f64 * scale).round() as i32);
+                assert_eq!(region.left, ((width - (408.0_f64 * scale).round() as u32) / 2) as i32);
+            }
+        }
+        assert!(outside_click_closes_source(Some(PanelSource::History)));
+        assert_eq!(acknowledgement_identity(PanelSource::History, true, Some("event:a".into())), None);
+        let controller = PanelController::default();
+        controller.toggle_details(PanelSource::Nowly);
+        assert_eq!(controller.toggle_details(PanelSource::History).source, Some(PanelSource::History));
     }
 
     #[test]

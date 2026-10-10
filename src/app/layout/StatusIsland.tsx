@@ -503,6 +503,7 @@ export function StatusIslandSummaryView({
   mode,
   panel,
   assistant,
+  history,
   barButtons = [],
   barButtonErrors,
   barButtonPending,
@@ -512,14 +513,15 @@ export function StatusIslandSummaryView({
   children
 }: {
   open: boolean;
-  source: 'island' | 'nowly';
-  surface: 'status' | 'assistant';
+  source: 'island' | 'nowly' | 'history';
+  surface: 'status' | 'assistant' | 'history';
   assistantClosing: boolean;
   statusAnim: 'grow' | 'shrink' | null;
   assistantAnim: 'grow' | 'shrink' | null;
   mode: 'idle' | 'detail' | 'summary';
   panel: React.ReactNode;
   assistant: React.ReactNode;
+  history?: React.ReactNode;
   /** Configured app buttons, left to right, already normalized. */
   barButtons?: readonly BarAppId[];
   barButtonErrors?: Partial<Record<BarAppId, string>>;
@@ -599,7 +601,7 @@ export function StatusIslandSummaryView({
         />
       </div>
       <div className="status-rail__assistant-frame">
-        <div className="status-rail__assistant" aria-hidden={surface === 'status'} inert={surface === 'status'}
+        <div className="status-rail__assistant" aria-hidden={surface !== 'assistant'} inert={surface !== 'assistant'}
           {...(assistantAnim ? { 'data-anim': assistantAnim } : {})}>
           {assistant}
           <button
@@ -612,6 +614,15 @@ export function StatusIslandSummaryView({
             aria-label={t('statusIsland.collapse')}
             onClick={onCollapse}
           >
+            <X aria-hidden="true" />
+          </button>
+        </div>
+        <div className="status-rail__history" aria-hidden={surface !== 'history'} inert={surface !== 'history'}
+          {...(source === 'history' && assistantAnim ? { 'data-anim': assistantAnim } : {})}>
+          <div className="status-rail__history-content">{history}</div>
+          <button type="button" className="status-island__dismiss status-rail__panel-close"
+            data-at="expanded" data-owner="history" aria-hidden={surface !== 'history'}
+            tabIndex={surface === 'history' ? 0 : -1} aria-label={t('statusIsland.collapse')} onClick={onCollapse}>
             <X aria-hidden="true" />
           </button>
         </div>

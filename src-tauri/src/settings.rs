@@ -57,12 +57,19 @@ pub fn read_app_settings(connection: &Connection) -> Result<AppSettings, rusqlit
             "quick_panel_shortcut",
             "Ctrl+Space".to_owned(),
         )?,
+        screenshot_shortcut: read_value_or(connection, "screenshot_shortcut", crate::models::default_screenshot_shortcut())?,
+        screenshot_history_shortcut: read_value_or(connection, "screenshot_history_shortcut", crate::models::default_screenshot_history_shortcut())?,
         bar_buttons: read_value_or(connection, "bar_buttons", Vec::new())?,
         recent_colors: read_value_or(connection, "recent_colors", Vec::new())?,
     })
 }
 
 pub(crate) fn validate(settings: &AppSettings) -> Result<(), rusqlite::Error> {
+    let screenshot = crate::screenshot_shortcuts::normalize(&settings.screenshot_shortcut)
+        .map_err(|_| rusqlite::Error::InvalidParameterName("screenshotShortcut".into()))?;
+    let history = crate::screenshot_shortcuts::normalize(&settings.screenshot_history_shortcut)
+        .map_err(|_| rusqlite::Error::InvalidParameterName("screenshotHistoryShortcut".into()))?;
+    if screenshot == history { return Err(rusqlite::Error::InvalidParameterName("screenshotHistoryShortcut".into())); }
     if !matches!(
         settings.density.as_str(),
         "compact" | "balanced" | "comfortable"
@@ -154,6 +161,8 @@ pub fn write_app_settings(
             "quick_panel_shortcut",
             serde_json::to_string(&settings.quick_panel_shortcut),
         ),
+        ("screenshot_shortcut", serde_json::to_string(&settings.screenshot_shortcut)),
+        ("screenshot_history_shortcut", serde_json::to_string(&settings.screenshot_history_shortcut)),
         ("bar_buttons", serde_json::to_string(&settings.bar_buttons)),
         (
             "recent_colors",
@@ -177,8 +186,9 @@ pub fn write_app_settings(
         "DELETE FROM settings WHERE key = 'notification_display'",
         [],
     )?;
+    let saved = read_app_settings(&transaction)?;
     transaction.commit()?;
-    read_app_settings(connection)
+    Ok(saved)
 }
 
 #[cfg(test)]
@@ -194,6 +204,8 @@ mod tests {
 
         let settings = read_app_settings(&connection).unwrap();
 
+        assert_eq!(settings.screenshot_shortcut, "Ctrl+Alt+A");
+        assert_eq!(settings.screenshot_history_shortcut, "Ctrl+Alt+H");
         assert!(!settings.wallpaper_enabled);
         assert!(!settings.launch_at_login);
         assert_eq!(settings.target_monitor_id, None);
@@ -273,6 +285,8 @@ mod tests {
             // never written.
             quick_panel_enabled: false,
             quick_panel_shortcut: "Ctrl+Shift+K".into(),
+            screenshot_shortcut: "Ctrl+Shift+A".into(),
+            screenshot_history_shortcut: "Ctrl+Shift+H".into(),
             bar_buttons: vec!["screenshot".into()],
             recent_colors: vec![],
         };

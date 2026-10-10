@@ -295,6 +295,12 @@ fn default_quick_panel_enabled() -> bool {
 pub(crate) fn default_notification_mode() -> String {
     "persistent".to_owned()
 }
+pub(crate) fn default_screenshot_shortcut() -> String {
+    "Ctrl+Alt+A".to_owned()
+}
+pub(crate) fn default_screenshot_history_shortcut() -> String {
+    "Ctrl+Alt+H".to_owned()
+}
 fn default_quick_panel_shortcut() -> String {
     "Ctrl+Space".to_owned()
 }
@@ -324,6 +330,10 @@ pub struct AppSettings {
     pub quick_panel_enabled: bool,
     #[serde(default = "default_quick_panel_shortcut")]
     pub quick_panel_shortcut: String,
+    #[serde(default = "default_screenshot_shortcut")]
+    pub screenshot_shortcut: String,
+    #[serde(default = "default_screenshot_history_shortcut")]
+    pub screenshot_history_shortcut: String,
     /// Ordered app ids occupying the Nowly Bar's button slots, left to right.
     /// Capped at `BAR_BUTTON_SLOTS`; see `quick_panel::bar_buttons`.
     #[serde(default)]

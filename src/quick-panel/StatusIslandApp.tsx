@@ -16,8 +16,8 @@ import { useTranslation } from '../i18n';
 import { t } from '../i18n';
 import type { BarAppId } from '../app/bar-buttons';
 import { AssistantDock } from '../assistant/AssistantDock';
+import { ScreenshotHistoryApp } from '../screenshot-history/ScreenshotHistoryApp';
 
-// Startup stays pending until the native capture surfaces are ready.
 const BAR_BUTTON_COMMANDS: Record<BarAppId, string> = {
   screenshot: 'start_screen_capture'
 };
@@ -31,8 +31,8 @@ function barButtonErrorMessage(reason: unknown): string {
   return t('barButtons.unavailable');
 }
 
-type PanelSource = 'island' | 'nowly';
-type RailSurface = 'status' | 'assistant';
+type PanelSource = 'island' | 'nowly' | 'history';
+type RailSurface = 'status' | 'assistant' | 'history';
 
 // One native window hosts two independent sibling panels. The native source
 // selects which panel is open; each panel owns its own animation state.
@@ -177,7 +177,7 @@ export function StatusIslandApp() {
         && reopenSummaryRef.current;
       setPinnedIdentity(nextSource === 'island' && !reopenSummary ? event.payload?.identity ?? null : null);
       setStatusAnim(nextSource === 'island' ? 'grow' : null);
-      setAssistantAnim(nextSource === 'nowly' ? 'grow' : null);
+      setAssistantAnim(nextSource !== 'island' ? 'grow' : null);
       setOpen(true);
     }).then(keep);
     void listen<{ generation?: number; hideAfterCollapse?: boolean; collapseToSummary?: boolean } | null>('status-island-details-close', event => {
@@ -187,7 +187,7 @@ export function StatusIslandApp() {
         transitionGeneration.current = generation;
       }
       closingGeneration.current = generation ?? null;
-      const closingAssistant = nativeSource.current === 'nowly';
+      const closingAssistant = nativeSource.current !== 'island';
       setAssistantClosing(closingAssistant && assistantSurfaceRef.current === 'assistant');
       setNativeHidePending(event?.payload?.hideAfterCollapse === true);
       if (!closingAssistant) {
@@ -220,7 +220,7 @@ export function StatusIslandApp() {
   useEffect(() => {
     if (!open) return;
     function dismissOnEscape(event: KeyboardEvent) {
-      if (event.key !== 'Escape') return;
+      if (event.key !== 'Escape' || document.querySelector('[aria-modal="true"]')) return;
       const active = document.activeElement;
       if (
         lastStatusActivationSource.current === 'pointer'
@@ -239,13 +239,13 @@ export function StatusIslandApp() {
   const hoverStart = useCallback(() => {
     // A drag is a move, not a hover: the sheet is the rail grown, so it must not
     // open while the rail is being moved out from under the pointer.
-    if (drag.dragging || assistantSheetRequested.current || assistantSurface !== null || assistantClosing) return;
+    if (drag.dragging || assistantSheetRequested.current || assistantSurface !== null || assistantClosing || (open && source === 'history')) return;
     lastPresence.current = true;
     reportPresence('island', true);
     // Native waits 300ms before opening, so a quick pass neither opens the sheet
     // nor acknowledges anything.
     void invoke('hover_status_island_details');
-  }, [assistantClosing, assistantSurface, drag.dragging]);
+  }, [assistantClosing, assistantSurface, drag.dragging, open, source]);
 
   const hoverEnd = useCallback(() => {
     lastPresence.current = false;
@@ -279,9 +279,13 @@ export function StatusIslandApp() {
     });
   }, [assistantSurface, collapse, drag, open, source]);
 
-  const closeAssistant = useCallback(() => {
-    collapse();
-  }, [collapse]);
+  useEffect(() => {
+    if (open && source === 'nowly') {
+      document.querySelector<HTMLTextAreaElement>('.status-rail__assistant textarea')?.focus();
+    } else if (open && source === 'history') {
+      document.querySelector<HTMLButtonElement>('.screenshot-history__folder')?.focus();
+    }
+  }, [open, source]);
 
   // Each app button calls its own command. A rejection is reported on the button
   // that failed, not as a toast, and clears on the next attempt.
@@ -321,7 +325,7 @@ export function StatusIslandApp() {
     expanded: open && source === 'island'
   };
   const retry = status === 'error' ? { onRetryStatus: () => void refresh() } : {};
-  const railSurface: RailSurface = assistantSurface ?? 'status';
+  const railSurface: RailSurface = open && source === 'history' ? 'history' : assistantSurface ?? 'status';
 
   const context = useMemo(() => {
     if (displayedSurface.mode === 'summary') {
@@ -391,6 +395,7 @@ export function StatusIslandApp() {
         onActivateBarButton={activateBarButton}
         onCollapse={collapse}
         onActivateNowly={activateNowly}
+        history={source === 'history' && (open || assistantAnim !== null) ? <ScreenshotHistoryApp compact /> : null}
         assistant={(
           <AssistantDock
             active={assistantSurface !== null}

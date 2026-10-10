@@ -2,18 +2,20 @@
 
 mod backend;
 mod candidates;
-mod clipboard;
+pub(crate) mod clipboard;
 mod composite;
-mod dialog;
 mod dib;
-mod encode;
+pub(crate) mod encode;
 mod export;
 mod frames;
 mod freeze;
 mod gdi;
 mod pool;
 mod mosaic;
-mod output;
+pub(crate) mod output;
+#[path = "screenshot_history/mod.rs"]
+pub mod history;
+#[cfg(test)] mod archive_tests;
 mod preview;
 mod renderer;
 mod save;
@@ -158,6 +160,10 @@ pub fn is_available() -> bool {
     cfg!(target_os = "windows")
 }
 
+pub fn is_active<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> bool {
+    app.state::<ActiveCapture>().is_active()
+}
+
 /// One active session, with short state locks and separately owned startup and
 /// suppression records. A retiring session blocks a new suppression until the
 /// main thread has restored the Bar's current visibility intent.
@@ -166,9 +172,14 @@ pub struct ActiveCapture {
     session: std::sync::Mutex<CaptureSession>,
     suppression: std::sync::Mutex<Option<(u64, crate::quick_panel::CaptureSuppression)>>,
     startup: std::sync::Mutex<Option<(u64, std::sync::Arc<startup::Startup>)>>,
+    export_operation: std::sync::Mutex<()>,
 }
 
 impl ActiveCapture {
+    pub fn is_active(&self) -> bool {
+        let session = self.session.lock().unwrap();
+        session.active.is_some() || session.retiring.is_some()
+    }
     pub(crate) fn prewarm_target(&self) -> Option<u64> {
         let session = self.session.lock().unwrap();
         if session.active.is_some() || session.retiring.is_some() {
@@ -496,6 +507,9 @@ pub fn abandon_session(app: &tauri::AppHandle, label: &str) {
 fn finish_capture<R: tauri::Runtime>(app: &tauri::AppHandle<R>, session_id: u64) {
     let state = app.state::<ActiveCapture>();
     if state.end_session(session_id) {
+        if let Some(history) = app.try_state::<history::HistoryState>() {
+            history.0.clear_session(session_id);
+        }
         app.state::<FrameStore>().retire(session_id);
         session::teardown(app, session_id, state.take_suppression(session_id));
     }
@@ -724,13 +738,7 @@ pub struct ExportMosaic {
     pub block_size: u32,
 }
 
-/// Composites this version and copies it to the Windows clipboard.
-///
-/// On success the session ends, per §8.1. On failure it stays open with the
-/// selection and every annotation intact, so the user can retry or save instead.
-///
-/// Off the main thread: success tears the session down, which destroys windows and
-/// takes the session lock.
+/// Archives the final image before copying; failures preserve the live editor.
 #[tauri::command(async)]
 pub fn copy_capture_to_clipboard(
     app: tauri::AppHandle,
@@ -738,36 +746,36 @@ pub fn copy_capture_to_clipboard(
     geometry: ExportGeometry,
 ) -> Result<(), CommandError> {
     if !window::is_screenshot_label(window.label()) {
-        return Err(CommandError::system("该窗口不能操作截图会话。"));
+        return Err(CommandError::reported("该窗口不能操作截图会话。"));
     }
-
     let state = app.state::<ActiveCapture>();
+    let _operation = state.export_operation.try_lock()
+        .map_err(|_| CommandError::reported("截图正在完成，请稍候。"))?;
     let token = state.caller_token(window.label())?;
-
     let request = build_export_request(&app, token.session_id, &geometry)?;
-
-    let live = output::ExportToken {
-        session_id: token.session_id,
-        version: geometry.version,
-    };
-    let owner = window
-        .hwnd()
-        .map_err(|_| CommandError::system("无法定位截图窗口。"))?;
-    let mut clipboard =
-        clipboard::WindowsClipboard::guarded(owner, || state.is_current(token.session_id));
-    let mut sink = output::SessionSink::new(&mut clipboard, || state.is_current(token.session_id));
-    export::copy_to_clipboard(&app.state::<FrameStore>(), &mut sink, &request, live)
+    let image = export::render_request(&app.state::<FrameStore>(), &request)
         .map_err(export_error_message)?;
-
-    // §8.1: the session closes only after the write actually succeeded.
+    let encoded = encode::encode_export(image).map_err(export_error_message)?;
+    state.with_current(token.session_id, || {
+        history::archive(&app, token.session_id, geometry.version, &encoded)
+    }).ok_or_else(|| CommandError::reported("截图会话已结束。"))??;
+    let owner = window.hwnd()
+        .map_err(|_| archived_copy_error())?;
+    let mut clipboard = clipboard::WindowsClipboard::guarded(owner, || state.is_current(token.session_id));
+    let mut sink = output::SessionSink::new(&mut clipboard, || state.is_current(token.session_id));
+    let mut transaction = output::ExportTransaction::new(output::ExportKind::Clipboard, request.token);
+    let start = std::time::Instant::now();
+    transaction.run_clipboard(&mut sink, &encoded, request.token, std::thread::sleep, || start.elapsed())
+        .map_err(|_| archived_copy_error())?;
     finish_capture(&app, token.session_id);
     Ok(())
 }
 
-/// Composites this version and saves it as a PNG through the system dialog.
-///
-/// The dialog blocks, so this runs on its own thread: holding the main thread would
-/// freeze the overlay the dialog is modal to. On success the session ends, per §8.1.
+fn archived_copy_error() -> CommandError {
+    CommandError { code: "archived_copy_failed".into(), message: "图片已保存，但复制失败，请重试。".into(), field: None }
+}
+
+/// Saves directly to the system Pictures archive. True means the PNG is ready.
 #[tauri::command(async)]
 pub fn save_capture_to_file(
     app: tauri::AppHandle,
@@ -775,50 +783,22 @@ pub fn save_capture_to_file(
     geometry: ExportGeometry,
 ) -> Result<bool, CommandError> {
     if !window::is_screenshot_label(window.label()) {
-        return Err(CommandError::system("该窗口不能操作截图会话。"));
+        return Err(CommandError::reported("该窗口不能操作截图会话。"));
     }
-
     let state = app.state::<ActiveCapture>();
+    let _operation = state.export_operation.try_lock()
+        .map_err(|_| CommandError::reported("截图正在完成，请稍候。"))?;
     let token = state.caller_token(window.label())?;
-
     let request = build_export_request(&app, token.session_id, &geometry)?;
-
-    // The image is built before the dialog opens, so a render failure is reported
-    // without making the user choose a location first.
     let image = export::render_request(&app.state::<FrameStore>(), &request)
         .map_err(export_error_message)?;
     let encoded = encode::encode_export(image).map_err(export_error_message)?;
-
-    #[cfg(windows)]
-    let chosen = {
-        let owner = window
-            .hwnd()
-            .map_err(|_| CommandError::system("无法定位截图窗口。"))?;
-        let name = save::default_file_name(chrono::Local::now());
-        dialog::choose_png_path(owner, &name).map_err(|_| {
-            // §8.3: a category, never a path.
-            CommandError::system("无法打开保存对话框。")
-        })?
-    };
-    #[cfg(not(windows))]
-    let chosen: Option<std::path::PathBuf> = None;
-
-    // A cancelled dialog is a normal outcome: the session stays exactly as it was.
-    let Some(path) = chosen else {
-        return Ok(false);
-    };
-
-    let mut file = save::SafeFileSink::new(path);
-    let mut sink = output::SessionSink::new(&mut file, || state.is_current(token.session_id));
-    let mut transaction = output::ExportTransaction::new(output::ExportKind::File, request.token);
-    transaction
-        .run_file(&mut sink, &encoded.png, request.token)
-        .map_err(export_error_message)?;
-
+    state.with_current(token.session_id, || {
+        history::archive(&app, token.session_id, geometry.version, &encoded)
+    }).ok_or_else(|| CommandError::reported("截图会话已结束。"))??;
     finish_capture(&app, token.session_id);
     Ok(true)
 }
-
 /// Shared by both exports, so the clipboard and the file are built from the same
 /// geometry and the same staged overlay rules.
 fn build_export_request(
@@ -1010,6 +990,22 @@ mod tests {
         validate_output_dimensions, CapacityError, CapturePhase, CaptureSession, SessionError,
         MAX_OUTPUT_DIMENSION, MAX_OUTPUT_PIXELS,
     };
+
+    #[test]
+    fn idle_prewarm_target_does_not_activate_or_block_first_capture() {
+        let state = super::ActiveCapture::default();
+        let target = state.prewarm_target().unwrap();
+        assert!(state.may_build_for(target));
+        assert!(!state.is_active());
+        let (token, _) = state.begin().unwrap();
+        assert_eq!(token.session_id, target);
+        assert!(state.is_active());
+        assert!(state.end_session(token.session_id));
+        assert!(state.is_active());
+        state.finish_retirement(token.session_id);
+        assert!(!state.is_active());
+        assert!(state.begin().is_ok());
+    }
 
     #[test]
     fn the_seam_reports_platform_capability() {
@@ -1258,7 +1254,7 @@ mod failure_message_tests {
         // user can retry, so it must not read as a generic failure.
         assert_eq!(
             start_failure_message(&StartFailure::Capture(CaptureBackendError::AccessDenied)),
-            "\u{7cfb}\u{7edf}\u{6682}\u{65f6}\u{4e0d}\u{5141}\u{8bb8}\u{8bfb}\u{53d6}\u{5c4f}\u{5e55}\u{ff0c}\u{8bf7}\u{89e3}\u{9501}\u{684c}\u{9762}\u{540e}\u{91cd}\u{8bd5}\u{3002}"
+            "系统暂时不允许读取屏幕，请解锁桌面后重试。"
         );
     }
 

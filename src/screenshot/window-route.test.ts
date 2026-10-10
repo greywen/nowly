@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { routeForLabel } from './window-route';
 
 describe('routeForLabel', () => {
+  it('routes independent screenshot history and menu windows', () => {
+    expect(routeForLabel('screenshot-history')).toBe('screenshot-history');
+    expect(routeForLabel('screenshot-menu')).toBe('screenshot-menu');
+  });
+
   it('routes the status rail by its compatibility label', () => {
     expect(routeForLabel('quick-panel-handle')).toBe('status-island');
   });

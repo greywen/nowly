@@ -95,6 +95,24 @@ describe('screen status island windows', () => {
     respondWith(snapshot);
   });
 
+  it('opens screenshot history inside the Bar without opening or acknowledging status details', async () => {
+    invokeMock.mockImplementation((command: string) => Promise.resolve(
+      command === 'get_status_island_snapshot' ? snapshot
+        : command === 'list_screenshot_history' ? { items: [], nextCursor: null } : null
+    ));
+    render(<StatusIslandApp />);
+    await emitPanelEvent('status-island-details-open', { generation: 1, source: 'history', identity: null });
+    expect(await screen.findByRole('heading', { name: '截图历史' })).toBeVisible();
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-surface', 'history');
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-status-open', 'false');
+    expect(invocations('acknowledge_status_island_reminder')).toHaveLength(0);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(invocations('close_status_island_details')).toHaveLength(1);
+    await emitPanelEvent('status-island-details-close', { generation: 2 });
+    expect(screen.queryByRole('heading', { name: '截图历史' })).not.toBeInTheDocument();
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-frame-anim', 'shrink');
+  });
+
   it('keeps the capsule and says the day is empty when there is no business state', async () => {
     render(<StatusIslandApp />);
     await act(async () => { await Promise.resolve(); });
@@ -118,7 +136,7 @@ describe('screen status island windows', () => {
     expect(invocations('toggle_status_island_details')).toHaveLength(0);
   });
 
-  it('starts one screenshot request while startup is pending and allows retry after failure', async () => {
+  it('starts capture directly without a menu, prevents duplicate requests and allows retry after failure', async () => {
     let rejectStartup!: (reason: unknown) => void;
     const startup = new Promise<void>((_resolve, reject) => { rejectStartup = reject; });
     invokeMock.mockImplementation((command: string) => {
@@ -134,6 +152,8 @@ describe('screen status island windows', () => {
     fireEvent.click(button);
     fireEvent.click(button);
     expect(invocations('start_screen_capture')).toHaveLength(1);
+    expect(invocations('start_screen_capture')[0]).toEqual(['start_screen_capture']);
+    expect(invocations('toggle_screenshot_menu')).toHaveLength(0);
     expect(button).toBeDisabled();
     expect(button).toHaveAttribute('aria-busy', 'true');
     expect(invocations('toggle_nowly_panel')).toHaveLength(0);
@@ -145,6 +165,7 @@ describe('screen status island windows', () => {
     expect(button).toHaveAttribute('title', '截屏：截图启动超时。');
     fireEvent.click(button);
     expect(invocations('start_screen_capture')).toHaveLength(2);
+    expect(invocations('toggle_screenshot_menu')).toHaveLength(0);
     await act(async () => { await Promise.resolve(); });
   });
 

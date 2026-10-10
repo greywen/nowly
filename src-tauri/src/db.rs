@@ -35,6 +35,7 @@ const MIGRATIONS: &[(i64, Migration)] = &[
     (26, migration_26_status_island_reminders),
     (27, migration_27_drop_calendar_task_view),
     (28, migration_28_categories),
+    (29, crate::screen_capture::history::migrate),
 ];
 
 // Calendar categories become first-class, user-defined records. A category owns

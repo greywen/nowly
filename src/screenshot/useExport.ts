@@ -35,6 +35,9 @@ function describeFailure(
   error: unknown,
   fallbackKey: string
 ): { message: string | null; fallbackKey: string | null } {
+  if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'archived_copy_failed') {
+    return { message: null, fallbackKey: 'screenshot.export.savedCopyFailed' };
+  }
   if (
     typeof error === 'object' &&
     error !== null &&
@@ -104,8 +107,7 @@ export function useExport(
       busyRef.current = true;
       setState({ status: kind });
 
-      // The version this export is for. Every committed transaction lengthens the
-      // undo stack, so its depth identifies the document state.
+      // IPC staging revision, not a persistent identity for archive deduplication.
       const version = doc.past.length;
       const mosaics = mosaicRegions(doc.objects, selection);
       const needsOverlay = hasDrawnAnnotations(doc.objects);
@@ -134,9 +136,7 @@ export function useExport(
           version,
           hasOverlay: needsOverlay
         });
-        // On success the Rust side closes the session, so this window is going away.
-        // A cancelled save dialog returns without closing it, and the state below
-        // returns to idle so the controls come back.
+        // Both operations archive the final image; success closes the native session.
         setState({ status: 'idle' });
       } catch (error) {
         setState({

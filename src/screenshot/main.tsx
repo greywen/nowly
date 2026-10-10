@@ -12,6 +12,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { ScreenshotOverlayApp, ScreenshotSessionApp } from './ScreenshotApp';
+import { SurfaceIconProvider } from '../screenshot-history/SurfaceIconProvider';
 import { routeForLabel } from './window-route';
 import '../app/styles.css';
 
@@ -38,5 +39,9 @@ function surface() {
 }
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
-  <React.StrictMode>{surface()}</React.StrictMode>
+  <React.StrictMode>
+    <SurfaceIconProvider>
+      {surface()}
+    </SurfaceIconProvider>
+  </React.StrictMode>
 );

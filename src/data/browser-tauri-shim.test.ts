@@ -15,6 +15,20 @@ afterEach(() => {
   localStorage.clear();
 });
 
+describe('browser screenshot history fallback', () => {
+  it('returns empty history and exposes shortcut defaults without pretending native output works', async () => {
+    installBrowserTauriBackend();
+    expect(await invoke()('list_screenshot_history', { cursor: null })).toEqual({ items: [], nextCursor: null });
+    const status = await invoke()('screenshot_shortcut_status') as Record<string, unknown>;
+    expect(status).toEqual({
+      screenshot: { shortcut: 'Ctrl+Alt+A', registered: false, error: expect.any(String) },
+      history: { shortcut: 'Ctrl+Alt+H', registered: false, error: expect.any(String) }
+    });
+    await expect(invoke()('copy_screenshot_history', { id: 'missing' })).rejects.toThrow();
+    await expect(invoke()('open_screenshot_folder')).rejects.toThrow();
+  });
+});
+
 describe('browser Tauri task linking compatibility', () => {
   it('durably repairs legacy false linking and coordinates every eligible view', async () => {
     localStorage.setItem(storageKey, JSON.stringify({

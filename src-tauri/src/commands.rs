@@ -48,12 +48,20 @@ pub fn get_app_settings(db: State<'_, AppDb>) -> Result<AppSettings, CommandErro
 }
 
 #[tauri::command]
-pub fn update_app_settings(
+pub async fn update_app_settings(
     app: tauri::AppHandle,
-    db: State<'_, AppDb>,
     settings: AppSettings,
 ) -> Result<AppSettings, CommandError> {
-    let settings = normalize_status_island_settings(settings);
+    tauri::async_runtime::spawn_blocking(move || update_settings_blocking(app, settings))
+        .await.map_err(CommandError::system)?
+}
+
+fn update_settings_blocking(app: tauri::AppHandle, settings: AppSettings) -> Result<AppSettings, CommandError> {
+    let db = app.state::<AppDb>();
+    let mut settings = normalize_status_island_settings(settings);
+    settings.screenshot_shortcut = crate::screenshot_shortcuts::normalize(&settings.screenshot_shortcut)?;
+    settings.screenshot_history_shortcut = crate::screenshot_shortcuts::normalize(&settings.screenshot_history_shortcut)
+        .map_err(|mut error| { error.field = Some("screenshotHistoryShortcut".into()); error })?;
     crate::settings::validate(&settings).map_err(|error| match error {
         rusqlite::Error::InvalidParameterName(field) => {
             CommandError::validation(&field, "设置值无效。")
@@ -97,7 +105,9 @@ pub fn update_app_settings(
             return Err(CommandError::system(error));
         }
     }
-    let saved = match write_app_settings(&mut connection, &settings) {
+    let saved = match crate::screenshot_shortcuts::save_with_registration(&app, &settings, ||
+        write_app_settings(&mut connection, &settings).map_err(CommandError::database)
+    ) {
         Ok(saved) => saved,
         Err(error) => {
             let _ = crate::quick_panel::set_enabled(
@@ -115,12 +125,7 @@ pub fn update_app_settings(
                     eprintln!("failed to restore autostart setting: {rollback_error}");
                 }
             }
-            return Err(match error {
-                rusqlite::Error::InvalidParameterName(field) => {
-                    CommandError::validation(&field, "设置值无效。")
-                }
-                other => CommandError::database(other),
-            });
+            return Err(error);
         }
     };
     if saved.quick_panel_enabled && saved.target_monitor_id != previous_settings.target_monitor_id {
@@ -186,6 +191,8 @@ mod tests {
             notification_mode: "persistent".into(),
             quick_panel_enabled: false,
             quick_panel_shortcut: "Ctrl+Space".into(),
+            screenshot_shortcut: crate::models::default_screenshot_shortcut(),
+            screenshot_history_shortcut: crate::models::default_screenshot_history_shortcut(),
             bar_buttons: Vec::new(),
             recent_colors: Vec::new(),
         }

@@ -29,6 +29,8 @@ mod remote_events;
 mod rrule_bridge;
 mod rrule_engine;
 mod screen_capture;
+mod screenshot_windows;
+mod screenshot_shortcuts;
 mod settings;
 mod shell;
 mod status_island;
@@ -251,6 +253,7 @@ fn main() {
         .manage(screen_capture::FreezeLayer::default())
         .manage(screen_capture::OverlayStaging::default())
         .manage(screen_capture::PreviewStore::default())
+        .manage(screenshot_windows::ScreenshotWindows::default())
         .register_asynchronous_uri_scheme_protocol(
             screen_capture::FRAME_URI_SCHEME,
             |context, request, responder| {
@@ -261,9 +264,21 @@ fn main() {
                 });
             },
         )
+        .register_asynchronous_uri_scheme_protocol(
+            "screenshot-history",
+            |context, request, responder| {
+                screen_capture::history::protocol::respond(
+                    context.app_handle().clone(),
+                    context.webview_label().to_owned(),
+                    request,
+                    responder,
+                );
+            },
+        )
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             show_main_window(app)
         }))
+        .plugin(screenshot_shortcuts::plugin())
         .plugin(tauri_plugin_notification::init())
         .plugin(
             tauri_plugin_autostart::Builder::new()
@@ -296,11 +311,14 @@ fn main() {
                 eprintln!("attachment garbage collection failed: {}", error.message);
             }
             app.manage(AppDb(Mutex::new(connection)));
+            if let Err(error) = screen_capture::history::setup(app.handle()) {
+                eprintln!("screenshot history recovery failed: {}", error.message);
+            }
             status_island::initialize(app.handle().clone());
             let quick_settings = settings::read_app_settings(&app.state::<AppDb>().0.lock().unwrap()).unwrap_or_else(|_| crate::models::AppSettings {
                 wallpaper_enabled: false, launch_at_login: false, target_monitor_id: None, density: "balanced".into(),
                 week_start: "monday".into(), date_format: "localized".into(), show_weekends: true, icon_style: "duotone".into(),
-                hide_topbar_in_wallpaper: true, notification_mode: crate::models::default_notification_mode(), quick_panel_enabled: true, quick_panel_shortcut: "Ctrl+Space".into(), bar_buttons: vec![], recent_colors: vec![]
+                hide_topbar_in_wallpaper: true, notification_mode: crate::models::default_notification_mode(), quick_panel_enabled: true, quick_panel_shortcut: "Ctrl+Space".into(), screenshot_shortcut: crate::models::default_screenshot_shortcut(), screenshot_history_shortcut: crate::models::default_screenshot_history_shortcut(), bar_buttons: vec![], recent_colors: vec![]
             });
             let quick_panel_controller = quick_panel::PanelController::default();
             quick_panel_controller.set_enabled(true);
@@ -540,6 +558,17 @@ fn main() {
             }
 
             screen_capture::prewarm_after_launch(app.handle());
+            screenshot_shortcuts::setup(
+                app.handle(),
+                |handle| {
+                    if screen_capture::is_active(handle) { return Ok(()); }
+                    screen_capture::start_screen_capture(handle.clone())
+                },
+                |handle| {
+                    if screen_capture::is_active(handle) { return Ok(()); }
+                    screenshot_windows::open_history(handle)
+                },
+            );
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -549,6 +578,19 @@ fn main() {
             if screen_capture::is_capture_window(window.label()) {
                 if matches!(event, tauri::WindowEvent::Destroyed) {
                     screen_capture::abandon_session(window.app_handle(), window.label());
+                }
+                return;
+            }
+            if window.label() == screenshot_windows::MENU_LABEL {
+                if matches!(event, tauri::WindowEvent::Focused(false)) {
+                    let _ = screenshot_windows::close_menu(window.app_handle());
+                }
+                return;
+            }
+            if window.label() == screenshot_windows::HISTORY_LABEL {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = window.hide();
                 }
                 return;
             }
@@ -724,6 +766,15 @@ fn main() {
             quick_panel::begin_status_island_drag,
             quick_panel::drag_status_island,
             quick_panel::end_status_island_drag,
+            screenshot_shortcuts::screenshot_shortcut_status,
+            screenshot_shortcuts::screenshot_shortcut_recording,
+            screen_capture::history::commands::list_screenshot_history,
+            screen_capture::history::commands::copy_screenshot_history,
+            screen_capture::history::commands::delete_screenshot_history,
+            screen_capture::history::commands::open_screenshot_folder,
+            screenshot_windows::toggle_screenshot_menu,
+            screenshot_windows::close_screenshot_menu,
+            screenshot_windows::open_screenshot_history,
             screen_capture::start_screen_capture,
             screen_capture::cancel_screen_capture,
             screen_capture::describe_capture_frame,

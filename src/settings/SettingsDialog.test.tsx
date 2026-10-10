@@ -3,10 +3,31 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { AppSettings } from '../data/nowly-repository';
 import { SettingsDialog } from './SettingsDialog';
+import { invoke } from '@tauri-apps/api/core';
+
+vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn().mockRejectedValue(new Error('unsupported')) }));
 
 const settings:AppSettings={wallpaperEnabled:false,launchAtLogin:false,targetMonitorId:null,density:'balanced',weekStart:'monday',dateFormat:'localized',showWeekends:true,iconStyle:'duotone',hideTopbarInWallpaper:true};
 
 describe('SettingsDialog',()=>{
+  it('provides default screenshot recorders and saves both shortcuts', async () => {
+    const save = vi.fn(async value => value);
+    render(<SettingsDialog settings={settings} onClose={vi.fn()} onSave={save}/>);
+    fireEvent.click(screen.getByRole('tab', { name: '快捷键' }));
+    const capture = screen.getByRole('textbox', { name: '截图快捷键' });
+    expect(capture).toHaveValue('Ctrl+Alt+A');
+    expect(screen.getByRole('textbox', { name: '截图历史快捷键' })).toHaveValue('Ctrl+Alt+H');
+    fireEvent.keyDown(capture, { key: 'k', code: 'KeyK', ctrlKey: true, shiftKey: true });
+    fireEvent.click(screen.getByRole('button', { name: '保存设置' }));
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ screenshotShortcut:'Ctrl+Shift+K', screenshotHistoryShortcut:'Ctrl+Alt+H' }));
+  });
+  it('displays native registration failures rather than claiming configured bindings work', async () => {
+    vi.mocked(invoke).mockResolvedValueOnce({screenshot:{shortcut:'Ctrl+Alt+A',registered:false,error:'conflict'},history:{shortcut:'Ctrl+Alt+H',registered:true,error:null}});
+    render(<SettingsDialog settings={settings} onClose={vi.fn()} onSave={vi.fn()}/>);
+    fireEvent.click(screen.getByRole('tab', { name:'快捷键' }));
+    expect(await screen.findByText(/截图快捷键: Ctrl\+Alt\+A — 全局快捷键不可用/)).toBeInTheDocument();
+    expect(screen.getByText(/截图历史快捷键: Ctrl\+Alt\+H — 已注册全局快捷键/)).toBeInTheDocument();
+  });
   it('does not expose a separate Nowly Bar enable switch or shortcut field', async () => {
     const save = vi.fn(async value => value);
     render(<SettingsDialog settings={settings} onClose={vi.fn()} onSave={save}/>);

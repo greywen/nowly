@@ -27,7 +27,7 @@ describe('icons', () => {
   });
 
   it.each(ICON_STYLES)('renders every icon in the %s style', (style) => {
-    expect(iconComponents.length).toBe(46);
+    expect(iconComponents.length).toBe(53);
 
     for (const Icon of iconComponents) {
       const { container, unmount } = render(

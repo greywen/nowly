@@ -8,6 +8,8 @@ import { FocusTimerProvider } from './focus/FocusTimerContext';
 import './app/styles.css';
 import { StatusIslandApp } from './quick-panel/StatusIslandApp';
 import { routeForLabel } from './screenshot/window-route';
+import { ScreenshotHistoryApp } from './screenshot-history/ScreenshotHistoryApp';
+import { ScreenshotMenuApp } from './screenshot-history/ScreenshotMenuApp';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
 // Outside the Tauri desktop shell (e.g. the plain Vite page in a browser) there
@@ -16,7 +18,8 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 // localStorage-backed in-memory backend so the UI runs for local development.
 // When real Tauri IPC (or a test-injected one) is already present we leave it
 // untouched.
-if (!('__TAURI_INTERNALS__' in window)) {
+const browserOnly = !('__TAURI_INTERNALS__' in window);
+if (browserOnly) {
   installBrowserTauriBackend();
 }
 
@@ -30,7 +33,10 @@ if (!('__TAURI_INTERNALS__' in window)) {
 // to the main app is the right answer either way: the status surfaces are the
 // special case, so anything we cannot identify should be the app.
 function currentWindowLabel(): string {
-  if (!('__TAURI_INTERNALS__' in window)) return 'main';
+  if (browserOnly) {
+    const surface = new URLSearchParams(window.location.search).get('surface');
+    return surface === 'screenshot-history' || surface === 'screenshot-menu' ? surface : 'main';
+  }
   try {
     return getCurrentWindow().label;
   } catch {
@@ -41,13 +47,17 @@ function currentWindowLabel(): string {
 // `quick-panel-handle` is a compatibility label: it now hosts the whole top
 // rail — status capsule, Nowly entry and the sheet they open into — not the
 // removed AI quick panel. Screenshot surfaces load screenshot.html, not this
-// entry, so the screenshot-* routes now fall through to main.
+// entry. The history and menu surfaces use this ordinary application entry.
 const route = routeForLabel(currentWindowLabel());
 
 function surface() {
   switch (route) {
     case 'status-island':
       return <StatusIslandApp />;
+    case 'screenshot-history':
+      return <ScreenshotHistoryApp />;
+    case 'screenshot-menu':
+      return <ScreenshotMenuApp />;
     default:
       return (
         <RepositoryProvider repository={tauriNowlyRepository}>

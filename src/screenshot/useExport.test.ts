@@ -91,16 +91,26 @@ describe('useExport', () => {
     expect(doc.objects).toEqual([mosaic]);
   });
 
-  it('returns to editing after a cancelled save without discarding annotations', async () => {
+  it('preserves editing after an archive failure and allows save retry', async () => {
     const doc = addAnnotation(emptyDocument(), mosaic);
-    vi.mocked(invoke).mockResolvedValue(false);
+    vi.mocked(invoke).mockRejectedValueOnce({ code: 'archive_failed', message: 'Archive unavailable' });
     const { result } = renderHook(() => useExport(doc, selection, () => null));
     await act(async () => { await result.current.save(); });
-    expect(result.current.state.status).toBe('idle');
+    expect(result.current.state).toEqual({ status: 'failed', message: 'Archive unavailable', fallbackKey: null });
     expect(invoke).not.toHaveBeenCalledWith('cancel_screen_capture');
     expect(doc.objects).toEqual([mosaic]);
-    await act(async () => { await result.current.copy(); });
+    await act(async () => { await result.current.save(); });
+    expect(result.current.state.status).toBe('idle');
     expect(invoke).toHaveBeenCalledTimes(2);
+  });
+
+  it('reports a saved archive when clipboard output fails, and keeps retryable editing', async () => {
+    vi.mocked(invoke).mockRejectedValueOnce({ code: 'archived_copy_failed', message: 'low level clipboard error' });
+    const { result } = renderHook(() => useExport(emptyDocument(), selection, () => null));
+    await act(async () => { await result.current.copy(); });
+    expect(result.current.state).toEqual({ status: 'failed', message: null, fallbackKey: 'screenshot.export.savedCopyFailed' });
+    await act(async () => { await result.current.save(); });
+    expect(result.current.state.status).toBe('idle');
   });
 
   it('does not output without a committed selection', async () => {

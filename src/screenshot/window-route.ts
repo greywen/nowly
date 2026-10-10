@@ -10,7 +10,9 @@ export type WindowRoute =
   | 'main'
   | 'status-island'
   | 'screenshot-session'
-  | 'screenshot-overlay';
+  | 'screenshot-overlay'
+  | 'screenshot-history'
+  | 'screenshot-menu';
 
 const STATUS_ISLAND_LABEL = 'quick-panel-handle';
 const SCREENSHOT_SESSION_PATTERN = /^screenshot-session-\d+$/;
@@ -20,6 +22,8 @@ const SCREENSHOT_OVERLAY_PATTERN = /^screenshot-overlay-\d+-\d+$/;
 
 export function routeForLabel(label: string): WindowRoute {
   if (label === STATUS_ISLAND_LABEL) return 'status-island';
+  if (label === 'screenshot-history') return 'screenshot-history';
+  if (label === 'screenshot-menu') return 'screenshot-menu';
   if (SCREENSHOT_SESSION_PATTERN.test(label)) return 'screenshot-session';
   if (SCREENSHOT_OVERLAY_PATTERN.test(label)) return 'screenshot-overlay';
   return 'main';
