@@ -26,13 +26,14 @@ import {
   type EventSegment
 } from './calendar-view';
 import {
-  eventCategoryLabel,
+  categoryNameOf,
   isEventWritable,
   type CalendarDay,
   type CalendarEvent,
   type CalendarView,
+  type Category,
 } from './calendar-model';
-import { colorStyle } from '../lib/color';
+import { colorStyle, isHexColor } from '../lib/color';
 import { occurrenceKey } from '../lib/recurrence';
 import { t } from '../i18n';
 
@@ -100,6 +101,7 @@ type CalendarWidgetProps = {
   monthIndex: number;
   todayIso: string;
   events: CalendarEvent[];
+  categories?: Category[];
   status: LoadStatus;
   errorMessage?: string;
   view?: CalendarView;
@@ -136,9 +138,18 @@ function dateLabel(isoDate: string) {
   return t('calendar.dayLabel', { year, month, day });
 }
 
-function eventLabel(event: CalendarEvent) {
+function eventLabel(event: CalendarEvent, categories: readonly Category[]) {
   const time = event.allDay ? t('calendar.allDay') : event.startAt.slice(11, 16);
-  return t('calendar.eventLabel', { time, title: event.title, category: eventCategoryLabel(event.category) });
+  return t('calendar.eventLabel', { time, title: event.title, category: categoryNameOf(event.category, categories) });
+}
+
+// Uncategorized events (empty color) render as the plain, uncolored base chip;
+// only a valid hex color adds the colored treatment.
+function coloredClass(event: CalendarEvent) {
+  return isHexColor(event.color) ? ' event--colored' : '';
+}
+function coloredStyle(event: CalendarEvent) {
+  return isHexColor(event.color) ? colorStyle(event.color) : undefined;
 }
 
 // Marks an instance of a repeating series. Purely a badge: it carries no
@@ -153,6 +164,7 @@ export function CalendarWidget({
   monthIndex,
   todayIso,
   events,
+  categories = [],
   status,
   errorMessage,
   view = 'month',
@@ -254,18 +266,29 @@ export function CalendarWidget({
 
   const DRAG_THRESHOLD_PX = 4;
 
-  const dayIsoFromPoint = useCallback((clientX: number, clientY: number) => {
+  const hitElementsFromPoint = useCallback((clientX: number, clientY: number) => {
+    if (typeof document.elementsFromPoint === 'function') {
+      return document.elementsFromPoint(clientX, clientY);
+    }
     const element = document.elementFromPoint(clientX, clientY);
-    const cell = element?.closest('[data-iso-date]') as HTMLElement | null;
-    return cell?.dataset.isoDate ?? null;
+    return element ? [element] : [];
   }, []);
 
+  const dayIsoFromPoint = useCallback((clientX: number, clientY: number) => {
+    for (const element of hitElementsFromPoint(clientX, clientY)) {
+      const cell = element.closest('[data-iso-date]') as HTMLElement | null;
+      if (cell?.dataset.isoDate) return cell.dataset.isoDate;
+    }
+    return null;
+  }, [hitElementsFromPoint]);
+
   const hourFromPoint = useCallback((clientX: number, clientY: number) => {
-    const element = document.elementFromPoint(clientX, clientY);
-    const slot = element?.closest('[data-hour]') as HTMLElement | null;
-    if (!slot?.dataset.hour) return null;
-    return Number(slot.dataset.hour);
-  }, []);
+    for (const element of hitElementsFromPoint(clientX, clientY)) {
+      const slot = element.closest('[data-hour]') as HTMLElement | null;
+      if (slot?.dataset.hour) return Number(slot.dataset.hour);
+    }
+    return null;
+  }, [hitElementsFromPoint]);
 
   const handleGesturePointerMove = useCallback(
     (moveEvent: PointerEvent) => {
@@ -514,17 +537,17 @@ export function CalendarWidget({
         type="button"
         key={occurrenceKey(event)}
         draggable={false}
-        aria-label={eventLabel(event)}
+        aria-label={eventLabel(event, categories)}
         onPointerDown={barMovable ? (pointerEvent) => handleMovePointerDown(pointerEvent, event) : undefined}
         onClick={() => handleBarClick(event)}
         style={{
-          ...colorStyle(event.color),
+          ...coloredStyle(event),
           left: `calc(${left}% + 4px)`,
           width: `calc(${width}% - 8px)`,
           top: `${lane * LANE_HEIGHT_PX}px`
         }}
         className={
-          'event event-bar event--spanning event--colored' +
+          'event event-bar event--spanning' + coloredClass(event) +
           `${barMovable ? ' event--movable' : ''}` +
           `${continuesBefore ? ' event-bar--open-start' : ''}` +
           `${continuesAfter ? ' event-bar--open-end' : ''}`
@@ -556,12 +579,12 @@ export function CalendarWidget({
         type="button"
         key={occurrenceKey(event)}
         draggable={false}
-        aria-label={eventLabel(event)}
+        aria-label={eventLabel(event, categories)}
         onPointerDown={cellMovable ? (pointerEvent) => handleMovePointerDown(pointerEvent, event) : undefined}
         onClick={() => handleBarClick(event)}
-        style={colorStyle(event.color)}
+        style={coloredStyle(event)}
         className={
-          'event event-cell event--colored' +
+          'event event-cell' + coloredClass(event) +
           `${cellMovable ? ' event--movable' : ''}`
         }
       >
@@ -646,7 +669,7 @@ export function CalendarWidget({
                     {overflowByCol[col].map((event) => (
                       <span
                         key={occurrenceKey(event)}
-                        className="event-overflow-dot" style={colorStyle(event.color)}
+                        className="event-overflow-dot" style={coloredStyle(event)}
                         aria-hidden="true"
                       />
                     ))}
@@ -769,9 +792,9 @@ export function CalendarWidget({
               <button
                 type="button"
                 key={occurrenceKey(event)}
-                aria-label={eventLabel(event)}
+                aria-label={eventLabel(event, categories)}
                 onClick={() => onOpenEvent(event)}
-                className="event event--colored" style={colorStyle(event.color)}
+                className={'event' + coloredClass(event)} style={coloredStyle(event)}
               >
                 {repeatMark(event)}{event.title}
               </button>
@@ -794,10 +817,10 @@ export function CalendarWidget({
                       type="button"
                       key={occurrenceKey(event)}
                       draggable={false}
-                      aria-label={eventLabel(event)}
+                      aria-label={eventLabel(event, categories)}
                       onPointerDown={hourDropEnabled ? (pointerEvent) => handleHourMovePointerDown(pointerEvent, event, iso) : undefined}
                       onClick={() => handleBarClick(event)}
-                      className={`day-grid__event event--colored${hourDropEnabled ? ' event--movable' : ''}`} style={colorStyle(event.color)}
+                      className={`day-grid__event${coloredClass(event)}${hourDropEnabled ? ' event--movable' : ''}`} style={coloredStyle(event)}
                     >
                       <span className="day-grid__event-time">
                         {event.startAt.slice(11, 16)} – {event.endAt.slice(11, 16)}
@@ -833,7 +856,7 @@ export function CalendarWidget({
                     <li key={occurrenceKey(event)}>
                       <button
                         type="button"
-                        aria-label={eventLabel(event)}
+                        aria-label={eventLabel(event, categories)}
                         onClick={() => onOpenEvent(event)}
                         className="calendar-list-item"
                       >
@@ -841,9 +864,18 @@ export function CalendarWidget({
                           {event.allDay ? t('calendar.allDay') : event.startAt.slice(11, 16)}
                         </span>
                         <span className="calendar-list-item__title">{repeatMark(event)}{event.title}</span>
-                        <span className={`calendar-list-item__category date-detail-dialog__category--${event.category}`}>
-                          {eventCategoryLabel(event.category)}
-                        </span>
+                        {(() => {
+                          const name = categoryNameOf(event.category, categories);
+                          if (!name) return null;
+                          return (
+                            <span
+                              className="calendar-list-item__category"
+                              style={isHexColor(event.color) ? colorStyle(event.color) : undefined}
+                            >
+                              {name}
+                            </span>
+                          );
+                        })()}
                       </button>
                     </li>
                   ))}

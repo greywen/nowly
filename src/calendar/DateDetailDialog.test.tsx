@@ -41,11 +41,19 @@ const events = [
   event({ id: 'timed-a', title: '同刻前项', startAt: '2026-07-23T14:00', endAt: '2026-07-23T15:00' })
 ];
 
+const testCategories = [
+  { id: 'work', name: '工作', color: '#4F55DA', position: 0, createdAt: '', updatedAt: '' },
+  { id: 'important', name: '重要', color: '#F06445', position: 1, createdAt: '', updatedAt: '' },
+  { id: 'personal', name: '个人', color: '#4FC9DA', position: 2, createdAt: '', updatedAt: '' },
+  { id: 'learning', name: '学习', color: '#B8D935', position: 3, createdAt: '', updatedAt: '' }
+];
+
 describe('DateDetailDialog', () => {
   it('shows the full local date, weekday, count, and both creation entries', () => {
     render(
       <DateDetailDialog
         isoDate="2026-07-23"
+        categories={testCategories}
         events={events}
         isTopLayer
         onClose={vi.fn()}
@@ -64,6 +72,7 @@ describe('DateDetailDialog', () => {
     render(
       <DateDetailDialog
         isoDate="2026-07-23"
+        categories={testCategories}
         events={events}
         isTopLayer
         onClose={vi.fn()}
@@ -88,6 +97,7 @@ describe('DateDetailDialog', () => {
     render(
       <DateDetailDialog
         isoDate="2026-07-23"
+        categories={testCategories}
         events={[event({ id: 'tz', title: '跨时区会议', startAt: '2026-07-23T10:00', endAt: '2026-07-23T11:00', startTz: 'Asia/Shanghai', endTz: 'Asia/Shanghai' })]}
         isTopLayer
         onClose={vi.fn()}
@@ -102,6 +112,7 @@ describe('DateDetailDialog', () => {
     render(
       <DateDetailDialog
         isoDate="2026-07-23"
+        categories={testCategories}
         events={[event({ id: 'floating', title: '浮动会议', startAt: '2026-07-23T10:00', endAt: '2026-07-23T11:00', startTz: null, endTz: null })]}
         isTopLayer
         onClose={vi.fn()}
@@ -132,6 +143,7 @@ describe('DateDetailDialog', () => {
     render(
       <DateDetailDialog
         isoDate="2026-07-23"
+        categories={testCategories}
         events={seriesEvents}
         isTopLayer
         onClose={vi.fn()}
@@ -154,6 +166,7 @@ describe('DateDetailDialog', () => {
     render(
       <DateDetailDialog
         isoDate="2026-07-23"
+        categories={testCategories}
         events={[]}
         isTopLayer
         onClose={vi.fn()}
@@ -172,6 +185,7 @@ describe('DateDetailDialog', () => {
     render(
       <DateDetailDialog
         isoDate="2026-07-23"
+        categories={testCategories}
         events={[events[2]]}
         isTopLayer
         onClose={vi.fn()}
@@ -192,12 +206,12 @@ describe('DateDetailDialog', () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
     const { rerender } = render(
-      <DateDetailDialog isoDate="2026-07-23" events={[]} isTopLayer onClose={onClose} onCreateEvent={vi.fn()} onEditEvent={vi.fn()} />
+      <DateDetailDialog isoDate="2026-07-23" categories={testCategories} events={[]} isTopLayer onClose={onClose} onCreateEvent={vi.fn()} onEditEvent={vi.fn()} />
     );
     await user.keyboard('{Escape}');
     expect(onClose).toHaveBeenCalledOnce();
     rerender(
-      <DateDetailDialog isoDate="2026-07-23" events={[]} isTopLayer={false} onClose={onClose} onCreateEvent={vi.fn()} onEditEvent={vi.fn()} />
+      <DateDetailDialog isoDate="2026-07-23" categories={testCategories} events={[]} isTopLayer={false} onClose={onClose} onCreateEvent={vi.fn()} onEditEvent={vi.fn()} />
     );
     await user.keyboard('{Escape}');
     expect(onClose).toHaveBeenCalledOnce();
@@ -215,6 +229,7 @@ describe('DateDetailDialog', () => {
       return open ? (
         <DateDetailDialog
           isoDate="2026-07-23"
+          categories={testCategories}
           events={[]}
           isTopLayer
           restoreFocusRef={restoreFocusRef}

@@ -32,6 +32,7 @@ test.beforeEach(async ({ page }) => {
         category: 'work',
         color: 'blue',
         linkedTaskId: null,
+        subscriptionId: null,
         note: '',
         createdAt: now,
         updatedAt: now
@@ -45,6 +46,35 @@ test.beforeEach(async ({ page }) => {
         category: 'work',
         color: 'blue',
         linkedTaskId: null,
+        subscriptionId: null,
+        note: '',
+        createdAt: now,
+        updatedAt: now
+      },
+      {
+        id: 'ev-two-day',
+        title: '短期计划',
+        startAt: '2026-07-20T00:00',
+        endAt: '2026-07-21T23:59',
+        allDay: true,
+        category: 'work',
+        color: 'blue',
+        linkedTaskId: null,
+        subscriptionId: null,
+        note: '',
+        createdAt: now,
+        updatedAt: now
+      },
+      {
+        id: 'ev-cross-week',
+        title: 'test',
+        startAt: '2026-09-13T23:00',
+        endAt: '2026-09-14T00:00',
+        allDay: false,
+        category: 'work',
+        color: 'blue',
+        linkedTaskId: null,
+        subscriptionId: null,
         note: '',
         createdAt: now,
         updatedAt: now
@@ -56,6 +86,9 @@ test.beforeEach(async ({ page }) => {
       showWeekends: true, calendarEnabled: true, matrixEnabled: true, notesEnabled: true
     };
     (window as any).__RESIZE_CALLS__ = [];
+    Object.defineProperty(window, '__TAURI_EVENT_PLUGIN_INTERNALS__', {
+      value: { unregisterListener: () => undefined }
+    });
     Object.defineProperty(window, '__TAURI_INTERNALS__', {
       value: {
         invoke: async (command: string, args: any = {}) => {
@@ -73,6 +106,17 @@ test.beforeEach(async ({ page }) => {
           if (command === 'list_tasks') return [];
           if (command === 'list_notes') return [];
           if (command === 'list_extensions') return [];
+          if (command === 'list_external_events_in_range') return [];
+          if (command === 'list_calendar_subscriptions') return [];
+          if (command === 'list_oauth_accounts') return [];
+          if (command === 'list_focus_sessions') return [];
+          if (command === 'get_task_workspace_snapshot') {
+            return {
+              tasks: [], lanes: [], tags: [], collaborators: [],
+              linkingEnabled: true, defaultLaneId: null, completionLaneId: null,
+              viewPreferences: {}
+            };
+          }
           if (command === 'get_app_settings') return settings;
           // Reject the layout query so the app falls back to its default
           // layout (which includes the calendar module the drag tests need).
@@ -113,6 +157,48 @@ test('stretches a multi-day event to a later day via the resize handle', async (
       page.evaluate(() => (window as any).__RESIZE_CALLS__?.map((c: any) => c.draft.endAt as string))
     )
     .toContainEqual(expect.stringContaining('2026-07-14'));
+});
+
+test('shrinks a two-day all-day event to one day with a quick drag', async ({ page }) => {
+  const bar = page.getByRole('button', { name: /短期计划/ });
+  await expect(bar).toBeVisible();
+  const box = (await bar.boundingBox())!;
+  const target = page.locator('[data-iso-date="2026-07-20"]');
+  const targetBox = (await target.boundingBox())!;
+
+  await page.mouse.move(box.x + box.width - 5, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + 10);
+  await page.mouse.up();
+
+  await expect
+    .poll(async () =>
+      page.evaluate(() => (window as any).__RESIZE_CALLS__?.map((c: any) => c.draft.endAt as string))
+    )
+    .toContain('2026-07-20T23:59');
+});
+
+test('shrinks a Sunday-to-Monday cross-midnight event back to Sunday', async ({ page }) => {
+  await page.getByRole('button', { name: '下一个月' }).click();
+  await page.getByRole('button', { name: '下一个月' }).click();
+  await expect(page.getByRole('heading', { name: '2026年9月' })).toBeVisible();
+
+  const tailBar = page.getByRole('button', { name: /23:00 test/ }).last();
+  await expect(tailBar).toBeVisible();
+  const box = (await tailBar.boundingBox())!;
+  const target = page.locator('[data-iso-date="2026-09-13"]');
+  const targetBox = (await target.boundingBox())!;
+
+  await page.mouse.move(box.x + box.width - 5, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + 10);
+  await page.mouse.up();
+
+  await expect
+    .poll(async () =>
+      page.evaluate(() => (window as any).__RESIZE_CALLS__?.map((c: any) => c.draft.endAt as string))
+    )
+    .toContain('2026-09-13T23:59');
 });
 
 test('moves a multi-day event to a later day by dragging its body', async ({ page }) => {

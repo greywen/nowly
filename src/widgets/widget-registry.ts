@@ -1,12 +1,10 @@
-import type { SandboxExtension } from '../data/nowly-repository';
 import { t } from '../i18n';
 
-// Built-in module identifiers plus the free-form `sandbox:<uuid>` ids created by
-// user-uploaded modules. Kept as a string so user modules flow through the same
-// layout machinery as built-in modules.
+// Module identifiers. Kept as a string so the layout machinery stays independent
+// of the concrete set of built-in modules.
 export type WidgetId = string;
 
-export type WidgetCategory = 'builtin' | 'extension' | 'sandbox';
+export type WidgetCategory = 'builtin' | 'extension';
 
 // --- Free-form tiling layout -------------------------------------------------
 
@@ -24,8 +22,6 @@ export type WidgetDefinition = {
   minW: number;
   minH: number;
   default: Rect;
-  // Present only for user modules so the host can run their source.
-  extension?: SandboxExtension;
 };
 
 export type ModuleLayout = { id: WidgetId } & Rect;
@@ -89,59 +85,10 @@ export const extensionDefinitions: WidgetDefinition[] = [
   }
 ];
 
-// The developer module is a built-in, but dev-only: it is a host container that
-// lets an author pick a draft from `dev-modules/` and preview it live on the
-// real dashboard grid (at whatever size it is resized to). It is placed from the
-// picker, never part of the default layout, and only offered in development
-// builds (see `buildDefinitions` / the picker's dev gate) so installed users
-// never see it. Its minimum size guarantees room for the draft selector plus a
-// usable preview area; the grid (12x8) is the natural maximum.
-export const devModuleDefinition: WidgetDefinition = {
-  id: 'devModule',
-  get name() { return t('widget.devModule.name'); },
-  get description() { return t('widget.devModule.desc'); },
-  category: 'builtin',
-  minW: 3,
-  minH: 3,
-  default: { x: 0, y: 0, w: 5, h: 5 }
-};
-
-export const SANDBOX_ID_PREFIX = 'sandbox:';
-
-export function isSandboxWidgetId(id: WidgetId): boolean {
-  return id.startsWith(SANDBOX_ID_PREFIX);
-}
-
-// Turn an installed user module into a placeable widget definition.
-export function sandboxExtensionToDefinition(extension: SandboxExtension): WidgetDefinition {
-  return {
-    id: `${SANDBOX_ID_PREFIX}${extension.id}`,
-    name: extension.name,
-    description: extension.description,
-    category: 'sandbox',
-    minW: extension.minW,
-    minH: extension.minH,
-    default: { x: 0, y: 0, w: extension.defaultW, h: extension.defaultH },
-    extension
-  };
-}
-
-// The full set of placeable modules: built-ins, extensions, and installed user
-// modules. The developer module is appended only in development builds
-// (`includeDevModule` defaults to Vite's `import.meta.env.DEV`, which is true
-// under `tauri dev` and false under `tauri build`), matching the backend's
-// `cfg!(debug_assertions)` dev/prod split so it never ships to installed users.
-export function buildDefinitions(
-  sandboxExtensions: SandboxExtension[] = [],
-  includeDevModule: boolean = import.meta.env.DEV
-): WidgetDefinition[] {
-  return [
-    ...builtinDefinitions,
-    kanbanDefinition,
-    ...extensionDefinitions,
-    ...(includeDevModule ? [devModuleDefinition] : []),
-    ...sandboxExtensions.map(sandboxExtensionToDefinition)
-  ];
+// The full set of placeable modules: the built-ins plus the optional extension
+// modules. Every module Nowly offers is built in, so this set is static.
+export function buildDefinitions(): WidgetDefinition[] {
+  return [...builtinDefinitions, kanbanDefinition, ...extensionDefinitions];
 }
 
 // The default layout the app ships with (built-in modules tiling the grid).

@@ -1,5 +1,18 @@
 .assistant-dock { position: absolute; z-index: 5; left: 0; right: 0; bottom: 16px; width: min(860px, calc(100% - 32px)); margin: 0 auto; }
 .assistant-dock[hidden] { display: none; }
+.assistant-dock--embedded { box-sizing: border-box; margin: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto; }
+.assistant-dock--embedded .assistant-panel { position: relative; inset: auto; min-height: 0; max-height: none; border: 0; border-radius: 0; background: var(--bg-surface); box-shadow: var(--shadow-none); }
+.assistant-dock--embedded .assistant-panel-header { box-sizing: border-box; min-height: 40px; padding: 0 var(--space-4); padding-right: var(--space-12); }
+.assistant-dock--embedded .assistant-panel-title { gap: var(--space-2); }
+.assistant-dock--embedded .assistant-panel-title h2 { font-size: 1.25rem; }
+.assistant-dock--embedded .assistant-state-icon { width: 24px; height: 24px; }
+.assistant-dock--embedded .assistant-panel-body { padding: var(--space-4); }
+.assistant-dock--embedded .assistant-composer { border: 0; border-top: 1px dashed var(--border-default); border-radius: 0; box-shadow: var(--shadow-none); gap: var(--space-2); }
+.assistant-dock--embedded .assistant-composer-mark { display: none; }
+.assistant-dock--embedded .assistant-composer-tools { gap: var(--space-2); }
+.assistant-dock--embedded .assistant-composer-tools .btn-icon { width: 28px; min-width: 28px; height: 28px; min-height: 28px; border-radius: var(--radius-sm); }
+.assistant-dock--embedded .assistant-composer-tools svg { width: 16px; height: 16px; }
+.assistant-dock--embedded .assistant-composer-tools .btn-icon:focus-visible { outline: 0; box-shadow: inset 0 0 0 2px var(--color-primary); }
 .assistant-composer { position: relative; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 8px 16px; border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-surface); box-shadow: var(--shadow-sm); }
 .assistant-composer-tools { display: flex; align-items: center; flex: none; gap: 8px; }
 .assistant-composer-mark { width: 36px; height: 36px; display: grid; place-items: center; flex: none; border-radius: var(--radius-md); color: var(--color-primary-active); background: var(--color-primary-light); }

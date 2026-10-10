@@ -177,6 +177,12 @@ describe('resizeEventEndToDate', () => {
     expect(draft.endAt).toBe('2026-07-26T10:00');
   });
 
+  it('uses the end of the start day when shrinking a cross-midnight event to one day', () => {
+    const draft = resizeEventEndToDate(event('e', '2026-09-13T23:00', '2026-09-14T00:00'), '2026-09-13');
+    expect(draft.startAt).toBe('2026-09-13T23:00');
+    expect(draft.endAt).toBe('2026-09-13T23:59');
+  });
+
   it('clamps an end date that lands before the start back to the start day', () => {
     const draft = resizeEventEndToDate(event('e', '2026-07-23T09:30:00', '2026-07-25T10:00:00'), '2026-07-20');
     expect(draft.startAt).toBe('2026-07-23T09:30');

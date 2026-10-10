@@ -5,9 +5,9 @@ import type { CalendarEvent } from '../calendar/calendar-model';
 import { externalToCalendarEvent, type ExternalEvent } from '../calendar/subscription-model';
 import type { FocusStatus } from '../focus/focus-model';
 import type { Task } from '../tasks/task-model';
+import { normalizeBarMenu, type BarMenuItem } from '../app/bar-menu';
 import {
   deriveStatusIslandModel,
-  type StatusIslandDisplayMode,
   type StatusIslandModel,
   type StatusIslandReminderState
 } from '../app/status-island-model';
@@ -29,11 +29,8 @@ export type NativeStatusIslandSnapshot = {
   // Reminder lifecycle comes from the native coordinator, which owns the store
   // file and is the single source of truth across the two windows.
   reminders?: StatusIslandReminderState[];
-  // The user's notification setting, forwarded so the island window does not have
-  // to read the database itself. Absent on an older backend, which the model
-  // treats as `detail`.
-  notificationDisplay?: StatusIslandDisplayMode;
   notificationMode?: 'persistent' | 'notification';
+  barMenu?: BarMenuItem[];
 };
 
 type SnapshotResource =
@@ -65,6 +62,7 @@ export function useStatusIslandSnapshot(): {
   error: string;
   refresh: () => Promise<void>;
   notificationMode: 'persistent' | 'notification';
+  barMenu: BarMenuItem[];
 } {
   const [resource, setResource] = useState<SnapshotResource>({ status: 'loading', data: null, error: '' });
   const [now, setNow] = useState(() => new Date());
@@ -130,10 +128,14 @@ export function useStatusIslandSnapshot(): {
           : resource.data.focus.status,
         remainingSeconds
       },
-      reminderStates: resource.data.reminders ?? [],
-      displayMode: resource.data.notificationDisplay ?? 'detail'
+      reminderStates: resource.data.reminders ?? []
     });
   }, [now, resource.data, resource.status]);
 
-  return { model, status: resource.status, error: resource.error, refresh, notificationMode: resource.data?.notificationMode ?? 'persistent' };
+  const barMenu = useMemo(
+    () => normalizeBarMenu(resource.data?.barMenu),
+    [resource.data?.barMenu]
+  );
+
+  return { model, status: resource.status, error: resource.error, refresh, notificationMode: resource.data?.notificationMode ?? 'persistent', barMenu };
 }

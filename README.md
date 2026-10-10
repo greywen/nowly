@@ -40,8 +40,6 @@ focusing. All data stays on your machine in a local SQLite database.
   positioning, or run it as a regular window.
 - **Flexible layout** — arrange every module on a 12x8 grid; toggle modules on
   or off and resize them freely.
-- **Custom modules** — install sandboxed `.js` extensions from a local file or
-  the built-in module market, each running in an isolated iframe.
 - **Personalization** — Gaussian blur, a global color picker, calendar
   formatting, density controls, and login-on-startup.
 - **Localization** — English and Simplified Chinese, following your system
@@ -59,10 +57,23 @@ focusing. All data stays on your machine in a local SQLite database.
 - **Exit Nowly** in the tray menu is the only action that terminates the
   process.
 
+### Screenshots and history
+
+Click the **Nowly Bar Logo** to open the function menu, then choose **Screenshot**, **Screenshot history**, or **AI assistant**. Configure visibility and order under **Settings → Notifications → Nowly Bar → Function menu**. All three functions are visible by default, including after upgrading from the old app-button settings. Hiding a function only removes its menu entry; shortcuts continue to work. You may hide every function; the menu then explains how to enable them again. Global shortcuts default to **Ctrl+Alt+A** for screenshots and **Ctrl+Alt+H** for screenshot history; change them under **Settings → Shortcuts**. Conflicts are reported without preventing app startup.
+
+**Save** writes directly to the system **Pictures\Nowly\Screenshots** folder instead of opening a Save As dialog. **Copy image and finish** archives the same final PNG before writing the image clipboard. Only cropped, annotated and redacted output is retained; cancelling creates no history. Redirected system Pictures folders are respected.
+
+Screenshot history expands directly from the top-edge Nowly Bar into an animated panel, without a separate window. The collapsed Bar is **288 × 40px**, with only the status area and Logo entry; reminders, the function menu, AI, and history all expand to **432px** wide. Enable Nowly Bar to use the history shortcut. Press **Esc**, use the close button, or click outside to collapse it; Esc first cancels an open deletion confirmation. Click the Logo again to return to the function menu. The panel shows thumbnails with image-copy and confirmed-delete actions, plus **Open folder**. Images remain until deleted; confirmation removes the archived PNG and its thumbnail cache. SQLite stores metadata, not image bytes. Thumbnail caches can be regenerated.
+
+An archive failure preserves the editor and does not copy. If archiving succeeds but the clipboard fails, retrying the same final image reuses its history entry. Copying from history never creates another entry. Raw desktop frames are retained only for the active capture session.
+
+Browser development mode can validate the UI but cannot manage real screenshot files or global shortcuts. Full functionality requires the Windows desktop app.
+
 ## Tech Stack
 
 - **Frontend** — React + TypeScript, built with Vite and styled with
-  Tailwind CSS.
+  hand-authored CSS against the tokens in `design.md`. No utility-class or
+  CSS-in-JS framework.
 - **Desktop shell** — Tauri 2 with a Rust backend.
 - **Storage** — local SQLite via `rusqlite` (bundled).
 - **Icons** — the [Solar icon set](https://www.figma.com/community/file/1166831539721848736)
@@ -97,21 +108,10 @@ src/                 React frontend
   kanban/            Kanban board
   notes/             Notes
   focus/             Focus timer and statistics
-  widgets/           Extension/custom-module system and sandbox
+  widgets/           Module registry, picker, and grid layout
   components/        Shared UI (Dialog, Select, DatePicker, ...)
   data/              Repository interface and Tauri implementation
   i18n/              Localization (en/zh)
 src-tauri/           Rust backend (Tauri commands, SQLite, wallpaper, tray)
-registry/            Custom-module registry and examples
 docs/                Design specs and implementation plans
 ```
-
-## Custom Modules
-
-Custom modules are self-describing `.js` files that run in an isolated iframe
-sandbox (`allow-scripts`, null origin, strict CSP). They cannot import packages,
-touch the parent DOM, or reach the network directly — the host exposes a small
-`host` API (`state`, `today`, and a permissioned `host.fetch`) plus a `root`
-element to render into. Once installed, a module becomes a freely placed widget
-on the 12x8 grid alongside the built-in modules. See
-`docs/custom-modules/SKILL.md` for the full module format and runtime contract.

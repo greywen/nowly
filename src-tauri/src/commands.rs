@@ -9,7 +9,11 @@ use tauri_plugin_autostart::ManagerExt;
 #[derive(Debug, PartialEq, Eq)]
 enum StatusIslandVisibilityChange {
     Show,
-    Hide,
+}
+
+fn normalize_status_island_settings(mut settings: AppSettings) -> AppSettings {
+    settings.quick_panel_enabled = true;
+    settings
 }
 
 fn status_island_visibility_change(
@@ -22,7 +26,10 @@ fn status_island_visibility_change(
     }
     match next_mode {
         "persistent" => Some(StatusIslandVisibilityChange::Show),
-        "notification" => Some(StatusIslandVisibilityChange::Hide),
+        // The WebView owns the unseen queue. It will keep an existing unseen
+        // reminder visible or hide an empty surface after the invalidated
+        // snapshot arrives; native must not guess and swallow a reminder.
+        "notification" => None,
         _ => None,
     }
 }
@@ -37,15 +44,24 @@ fn with_connection<T>(
 
 #[tauri::command]
 pub fn get_app_settings(db: State<'_, AppDb>) -> Result<AppSettings, CommandError> {
-    with_connection(db, read_app_settings)
+    with_connection(db, read_app_settings).map(normalize_status_island_settings)
 }
 
 #[tauri::command]
-pub fn update_app_settings(
+pub async fn update_app_settings(
     app: tauri::AppHandle,
-    db: State<'_, AppDb>,
     settings: AppSettings,
 ) -> Result<AppSettings, CommandError> {
+    tauri::async_runtime::spawn_blocking(move || update_settings_blocking(app, settings))
+        .await.map_err(CommandError::system)?
+}
+
+fn update_settings_blocking(app: tauri::AppHandle, settings: AppSettings) -> Result<AppSettings, CommandError> {
+    let db = app.state::<AppDb>();
+    let mut settings = normalize_status_island_settings(settings);
+    settings.screenshot_shortcut = crate::screenshot_shortcuts::normalize(&settings.screenshot_shortcut)?;
+    settings.screenshot_history_shortcut = crate::screenshot_shortcuts::normalize(&settings.screenshot_history_shortcut)
+        .map_err(|mut error| { error.field = Some("screenshotHistoryShortcut".into()); error })?;
     crate::settings::validate(&settings).map_err(|error| match error {
         rusqlite::Error::InvalidParameterName(field) => {
             CommandError::validation(&field, "设置值无效。")
@@ -53,7 +69,9 @@ pub fn update_app_settings(
         other => CommandError::database(other),
     })?;
     let mut connection = db.0.lock().map_err(CommandError::database)?;
-    let previous_settings = read_app_settings(&connection).map_err(CommandError::database)?;
+    let previous_settings = normalize_status_island_settings(
+        read_app_settings(&connection).map_err(CommandError::database)?,
+    );
     let previous_launch_at_login = previous_settings.launch_at_login;
     // The AI quick panel and its global shortcut are removed for now, so
     // `quickPanelShortcut` is still persisted but never registered.
@@ -65,8 +83,12 @@ pub fn update_app_settings(
             app.state::<crate::quick_panel::PanelController>()
                 .set_target_monitor_id(settings.target_monitor_id.clone());
         }
-        crate::quick_panel::set_enabled(&app, settings.quick_panel_enabled)
-            .map_err(CommandError::system)?;
+        crate::quick_panel::set_enabled(
+            &app,
+            settings.quick_panel_enabled,
+            &settings.notification_mode,
+        )
+        .map_err(CommandError::system)?;
     }
     if settings.launch_at_login != previous_launch_at_login {
         let autostart_result = if settings.launch_at_login {
@@ -75,14 +97,24 @@ pub fn update_app_settings(
             app.autolaunch().disable()
         };
         if let Err(error) = autostart_result {
-            let _ = crate::quick_panel::set_enabled(&app, previous_settings.quick_panel_enabled);
+            let _ = crate::quick_panel::set_enabled(
+                &app,
+                previous_settings.quick_panel_enabled,
+                &previous_settings.notification_mode,
+            );
             return Err(CommandError::system(error));
         }
     }
-    let saved = match write_app_settings(&mut connection, &settings) {
+    let saved = match crate::screenshot_shortcuts::save_with_registration(&app, &settings, ||
+        write_app_settings(&mut connection, &settings).map_err(CommandError::database)
+    ) {
         Ok(saved) => saved,
         Err(error) => {
-            let _ = crate::quick_panel::set_enabled(&app, previous_settings.quick_panel_enabled);
+            let _ = crate::quick_panel::set_enabled(
+                &app,
+                previous_settings.quick_panel_enabled,
+                &previous_settings.notification_mode,
+            );
             if settings.launch_at_login != previous_launch_at_login {
                 let rollback = if previous_launch_at_login {
                     app.autolaunch().enable()
@@ -93,12 +125,7 @@ pub fn update_app_settings(
                     eprintln!("failed to restore autostart setting: {rollback_error}");
                 }
             }
-            return Err(match error {
-                rusqlite::Error::InvalidParameterName(field) => {
-                    CommandError::validation(&field, "设置值无效。")
-                }
-                other => CommandError::database(other),
-            });
+            return Err(error);
         }
     };
     if saved.quick_panel_enabled && saved.target_monitor_id != previous_settings.target_monitor_id {
@@ -114,11 +141,13 @@ pub fn update_app_settings(
         if let Some(window) = app.get_webview_window("quick-panel-handle") {
             match visibility {
                 StatusIslandVisibilityChange::Show => {
-                    window.show().map_err(CommandError::system)?;
-                    crate::quick_panel::request_position_reconcile(app.clone());
-                }
-                StatusIslandVisibilityChange::Hide => {
-                    window.hide().map_err(CommandError::system)?;
+                    if let Some(result) = app
+                        .state::<crate::quick_panel::PanelController>()
+                        .show_serialized(|| window.show())
+                    {
+                        result.map_err(CommandError::system)?;
+                        crate::quick_panel::request_position_reconcile(app.clone());
+                    }
                 }
             }
         }
@@ -126,12 +155,47 @@ pub fn update_app_settings(
     if saved.notification_mode != previous_settings.notification_mode {
         crate::status_island::invalidate(&app)?;
     }
+    if saved.bar_menu != previous_settings.bar_menu {
+        crate::status_island::invalidate(&app)?;
+    }
     Ok(saved)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{status_island_visibility_change, StatusIslandVisibilityChange};
+    use super::{
+        normalize_status_island_settings, status_island_visibility_change,
+        StatusIslandVisibilityChange,
+    };
+    use crate::models::AppSettings;
+
+    fn settings() -> AppSettings {
+        AppSettings {
+            wallpaper_enabled: false,
+            launch_at_login: false,
+            target_monitor_id: None,
+            density: "balanced".into(),
+            week_start: "monday".into(),
+            date_format: "localized".into(),
+            show_weekends: true,
+            icon_style: "duotone".into(),
+            hide_topbar_in_wallpaper: true,
+            notification_mode: "persistent".into(),
+            quick_panel_enabled: false,
+            quick_panel_shortcut: "Ctrl+Space".into(),
+            screenshot_shortcut: crate::models::default_screenshot_shortcut(),
+            screenshot_history_shortcut: crate::models::default_screenshot_history_shortcut(),
+            bar_menu: crate::models::default_bar_menu(),
+            recent_colors: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn saving_settings_always_enables_the_status_island() {
+        let normalized = normalize_status_island_settings(settings());
+
+        assert!(normalized.quick_panel_enabled);
+    }
 
     #[test]
     fn notification_mode_changes_update_the_island_immediately() {
@@ -141,7 +205,7 @@ mod tests {
         );
         assert_eq!(
             status_island_visibility_change("persistent", "notification", true),
-            Some(StatusIslandVisibilityChange::Hide)
+            None
         );
     }
 

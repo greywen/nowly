@@ -23,9 +23,8 @@ import type {
   StatusIslandSummary
 } from '../status-island-model';
 
-// The top rail is one object in two sizes. Collapsed it splits into two halves:
-// the 240x40 status capsule and the 40px Nowly entry dot, with an 8px gap. Opened
-// it merges into one 288x288 sheet — the capsule grown, not a second popup.
+// Status and Logo share a 288x40 shell. Every expanded surface uses the same
+// 432px host; feature panels never consume the reminder lifecycle.
 //
 // The capsule carries exactly one of three things, always on the same slots and
 // at the same size, so switching content never moves or resizes anything:
@@ -33,10 +32,9 @@ import type {
 //   detail  — one reminder, in full;
 //   summary — today's aggregate.
 //
-// Which of detail and summary is shown is the user's choice: the notification
-// setting picks the starting mode, and closing a detail downgrades that one
-// reminder to the summary for the rest of the local day. Nothing switches on a
-// timer.
+// An unseen reminder always starts in detail. Closing that detail downgrades
+// only that reminder to the summary for the rest of the local day. Nothing
+// switches on a timer.
 //
 // The only motion in here is the rail growing and collapsing, which design.md
 // §10 admits as a named exception. Everything else updates immediately;
@@ -95,7 +93,7 @@ function MarkerIcon({ kind }: { kind: StatusIslandMarker['kind'] }) {
 }
 
 type SurfaceProps = {
-  onActivate?: () => void;
+  onActivate?: (source: 'pointer' | 'keyboard') => void;
   onHoverStart?: () => void;
   onHoverEnd?: () => void;
   onFocusEnter?: () => void;
@@ -111,7 +109,7 @@ type SurfaceProps = {
 
 function surfaceHandlers({ onActivate, onHoverStart, onHoverEnd, onFocusEnter, onFocusLeave, onGrab, onNudge }: SurfaceProps) {
   return {
-    onClick: onActivate,
+    onClick: (event: React.MouseEvent) => onActivate?.(event.detail === 0 ? 'keyboard' : 'pointer'),
     onMouseEnter: onHoverStart,
     onMouseLeave: onHoverEnd,
     onFocus: onFocusEnter,
@@ -127,7 +125,7 @@ function surfaceHandlers({ onActivate, onHoverStart, onHoverEnd, onFocusEnter, o
       }
       if (event.key !== 'Enter' && event.key !== ' ') return;
       event.preventDefault();
-      onActivate?.();
+      onActivate?.('keyboard');
     }
   };
 }
@@ -185,9 +183,10 @@ function ReminderIcon({ reminder }: { reminder: StatusIslandReminder }) {
 }
 
 /**
- * The island. It exists only while a reminder is unseen, or inside the 15s hold
- * after the user acknowledged it. `onDismiss` closes this surface only: it is
- * not acknowledgement and not business consumption.
+ * The island head. Unseen reminders use detail; acknowledged or dismissed
+ * reminders leave the attention queue and the model falls back to summary.
+ * `onDismiss` closes this reminder stage only: it is not acknowledgement and
+ * not business consumption.
  */
 // Marker kinds are finer-grained than the island's icon styling, which only
 // distinguishes four families. Normalising here lets both modes share one set of
@@ -223,7 +222,7 @@ type IslandShellProps = {
  * The capsule's head. All three modes render through it, so the icon, title and
  * meta land on identical pixels whatever the capsule is carrying — and, because
  * the head is laid out at its *expanded* width and clipped by the sheet, on
- * identical pixels in both sizes of the rail too (design.md §10).
+ * identical pixels in both sizes of the rail too (design.md §12.3).
  *
  * The hit area is a sibling overlay rather than a button wrapped around the text:
  * the sheet owns the border and background now, and the two dismiss buttons have
@@ -306,13 +305,11 @@ function IslandShell({
  * there is no smaller shape any more — it just goes quiet, and stays the thing
  * the user clicks to open the rail.
  */
-export function StatusIslandIdleView({ onRetryStatus, dragHintVisible = true, onAcknowledgeDragHint, ...surface }: { onRetryStatus?: () => void; dragHintVisible?: boolean; onAcknowledgeDragHint?: () => void } & SurfaceProps) {
+export function StatusIslandIdleView({ onRetryStatus, ...surface }: { onRetryStatus?: () => void } & SurfaceProps) {
   const { t } = useTranslation();
   const title = t('statusIsland.idleTitle');
   const meta = t('statusIsland.idleMeta');
   return (
-    <>
-    {dragHintVisible ? <div className="status-island__drag-hint" role="status"><strong>{t('statusIsland.dragHintTitle')}</strong><span>{t('statusIsland.dragHint')}</span><button type="button" onClick={onAcknowledgeDragHint}>{t('statusIsland.dragHintAcknowledge')}</button></div> : null}
     <IslandShell
       family="event"
       mode="idle"
@@ -324,7 +321,6 @@ export function StatusIslandIdleView({ onRetryStatus, dragHintVisible = true, on
       {...(onRetryStatus ? { onRetryStatus } : {})}
       {...surface}
     />
-    </>
   );
 }
 
@@ -468,7 +464,10 @@ export function StatusIslandSummaryView({
     : t('statusIsland.todayClear');
   // Every marker is named in the accessible name, not just the three that fit in
   // the signals row, so colour and count badges are never the only carrier.
-  const label = [content.title, meta, ...summary.markers.map(marker => markerText(marker, t))].join(' · ');
+  const spokenTitle = typeof content.titleAria?.['aria-valuetext'] === 'string'
+    ? content.titleAria['aria-valuetext']
+    : content.title;
+  const label = [spokenTitle, meta, ...summary.markers.map(marker => markerText(marker, t))].join(' · ');
   return (
     <IslandShell
       family={content.family}
@@ -487,95 +486,133 @@ export function StatusIslandSummaryView({
 }
 
 /**
- * The rail: one sheet, two halves and two sizes.
- *
- * The sheet is the only surface. Collapsed it is the 240x40 capsule; open it is
- * the whole 288x288. Its content is laid out at the open size and simply gets
- * uncovered as the sheet grows, so nothing inside reflows or moves (design.md
- * §10). The Nowly dot is a sibling rather than sheet content precisely because it
- * has to stay visible outside the collapsed sheet, and it fades once the sheet
- * has grown over it.
- *
- * `anim` is null until the first transition, so the rail does not animate itself
- * into existence on mount.
- */
-export function TopRail({
+ * One native host, two sibling panels. Each panel owns its content, close
+ * control and animation. AI transitions must never animate the status sheet.
+ */export function TopRail({
   open,
   source,
-  anim,
+  surface,
+  assistantClosing,
+  statusAnim,
+  assistantAnim,
   mode,
   panel,
-  nowly,
+  assistant,
+  history,
+  menu,
+  onActivateNowly,
   onCollapse,
   children
 }: {
   open: boolean;
-  source: 'island' | 'nowly';
-  anim: 'grow' | 'shrink' | null;
+  source: 'island' | 'nowly' | 'history' | 'menu';
+  surface: 'status' | 'assistant' | 'history' | 'menu';
+  assistantClosing: boolean;
+  statusAnim: 'grow' | 'shrink' | null;
+  assistantAnim: 'grow' | 'shrink' | null;
   mode: 'idle' | 'detail' | 'summary';
   panel: React.ReactNode;
-  nowly: SurfaceProps;
+  assistant: React.ReactNode;
+  history?: React.ReactNode;
+  menu?: React.ReactNode;
+  onActivateNowly: () => void;
   onCollapse: () => void;
   children: React.ReactNode;
 }) {
   const { t } = useTranslation();
+  const statusHidden = surface !== 'status' || assistantClosing;
+  const statusOpen = open && source === 'island' && !statusHidden;
+  const assistantOpen = open && source === 'nowly' && surface === 'assistant';
+  const nowlyAvailable = surface === 'status'
+    && !statusOpen
+    && statusAnim !== 'shrink'
+    && !assistantClosing;
   return (
     <div
       className="status-rail"
       data-open={open}
       data-source={source}
+      data-surface={surface}
+      data-assistant-closing={assistantClosing}
+      data-status-open={statusOpen}
+      data-status-hidden={statusHidden}
       data-mode={mode}
-      data-dragging={nowly.dragging ?? false}
-      {...(anim ? { 'data-anim': anim } : {})}
+      {...(assistantAnim ? { 'data-frame-anim': assistantAnim } : {})}
     >
-      <div className="status-rail__sheet">
-        <div className="status-rail__content">
-          <div className="status-rail__header">
-            {children}
-            <div className="status-rail__nowly-head" data-for="nowly" aria-hidden={!(open && source === 'nowly')}>
-              <span className="status-island__icon"><img src="/logo.png" alt="" /></span>
-              <span className="status-island__copy">
-                <strong>{t('statusIsland.nowly')}</strong>
-                <span>{t('statusIsland.nowlyMeta')}</span>
-              </span>
+      <div
+        className="status-rail__status-presence"
+        {...(statusAnim ? { 'data-anim': statusAnim } : {})}
+      >
+        <div className="status-rail__sheet" aria-hidden={statusHidden} inert={statusHidden}>
+          <div className="status-rail__content">
+            <div className="status-rail__header">
+              {children}
             </div>
+            <div className="status-rail__panel" aria-hidden={!statusOpen} inert={!statusOpen}>{panel}</div>
           </div>
-          <div className="status-rail__panel">{panel}</div>
+          <button
+            type="button"
+            className="status-island__dismiss status-rail__panel-close"
+            data-at="expanded"
+            data-owner="status"
+            aria-hidden={!statusOpen}
+            tabIndex={statusOpen ? 0 : -1}
+            aria-label={t('statusIsland.collapse')}
+            onClick={onCollapse}
+          >
+            <X aria-hidden="true" />
+          </button>
+        </div>
+        <button
+          type="button"
+          className="status-rail__nowly"
+          data-available={nowlyAvailable}
+          aria-label={t('statusIsland.nowly')}
+          aria-haspopup="dialog"
+          aria-expanded={surface !== 'status'}
+          {...(!nowlyAvailable ? { 'aria-hidden': true, tabIndex: -1 } : {})}
+          onClick={onActivateNowly}
+        >
+          <img src="/logo.png" alt="" />
+        </button>
+      </div>
+      <div className="status-rail__assistant-frame">
+        <div className="status-rail__assistant" aria-hidden={surface !== 'assistant'} inert={surface !== 'assistant'}
+          {...(assistantAnim ? { 'data-anim': assistantAnim } : {})}>
+          {assistant}
+          <button
+            type="button"
+            className="status-island__dismiss status-rail__panel-close"
+            data-at="expanded"
+            data-owner="assistant"
+            aria-hidden={!assistantOpen}
+            tabIndex={assistantOpen ? 0 : -1}
+            aria-label={t('statusIsland.collapse')}
+            onClick={onCollapse}
+          >
+            <X aria-hidden="true" />
+          </button>
         </div>
       </div>
-      <button
-        type="button"
-        className="status-island__dismiss"
-        data-at="expanded"
-        aria-label={t('statusIsland.collapse')}
-        onClick={onCollapse}
-      >
-        <X aria-hidden="true" />
-      </button>
-      <button
-        type="button"
-        className="status-rail__nowly"
-        aria-label={t('statusIsland.nowly')}
-        aria-haspopup="dialog"
-        aria-expanded={nowly.expanded ?? false}
-        {...(nowly.onNudge ? { 'aria-keyshortcuts': 'ArrowLeft ArrowRight' } : {})}
-        {...surfaceHandlers(nowly)}
-      >
-        <img src="/logo.png" alt="" />
-      </button>
-    </div>
-  );
-}
-
-/** The Nowly sheet's body. Deliberately a placeholder until its content is decided. */
-export function NowlyPanel() {
-  const { t } = useTranslation();
-  return (
-    <section className="status-island__details" data-panel="nowly" data-compact="true" aria-label={t('statusIsland.nowly')}>
-      <div className="status-island__panel-body">
-        <p className="status-island__empty">{t('statusIsland.nowlyPlaceholder')}</p>
+      <div className="status-rail__menu status-rail__feature-panel" aria-hidden={surface !== 'menu'} inert={surface !== 'menu'}
+        {...(source === 'menu' && assistantAnim ? { 'data-anim': assistantAnim } : {})}>
+        <div className="status-rail__menu-content status-rail__feature-content">{menu}</div>
+        <button type="button" className="status-island__dismiss status-rail__panel-close"
+          data-at="expanded" data-owner="menu" aria-hidden={surface !== 'menu'}
+          tabIndex={surface === 'menu' ? 0 : -1} aria-label={t('statusIsland.collapse')} onClick={onCollapse}>
+          <X aria-hidden="true" />
+        </button>
       </div>
-    </section>
+      <div className="status-rail__history status-rail__feature-panel" aria-hidden={surface !== 'history'} inert={surface !== 'history'}
+        {...(source === 'history' && assistantAnim ? { 'data-anim': assistantAnim } : {})}>
+        <div className="status-rail__history-content status-rail__feature-content">{history}</div>
+        <button type="button" className="status-island__dismiss status-rail__panel-close"
+          data-at="expanded" data-owner="history" aria-hidden={surface !== 'history'}
+          tabIndex={surface === 'history' ? 0 : -1} aria-label={t('statusIsland.collapse')} onClick={onCollapse}>
+          <X aria-hidden="true" />
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -695,6 +732,7 @@ export function StatusIslandPanel({
       )}
       <div className="status-island__panel-body">{panelBody(context, actions, t)}</div>
       <div className={`status-island__footer${onRetryStatus ? ' has-retry' : ''}`}>
+        <p className="status-island__movement-note">{t('statusIsland.dragHint')}</p>
         {onRetryStatus ? (
           <button type="button" className="status-island__retry" aria-label={t('statusIsland.retry')} onClick={onRetryStatus}>
             <RefreshCw aria-hidden="true" />

@@ -32,7 +32,118 @@ const MIGRATIONS: &[(i64, Migration)] = &[
     (23, migration_23_assistant),
     (24, migration_24_assistant_watch_scope),
     (25, migration_25_attachments),
+    (26, migration_26_status_island_reminders),
+    (27, migration_27_drop_calendar_task_view),
+    (28, migration_28_categories),
+    (29, crate::screen_capture::history::migrate),
+    (30, migration_30_bar_menu),
 ];
+
+fn migration_30_bar_menu(transaction: &Transaction<'_>) -> Result<()> {
+    let defaults = serde_json::to_string(&crate::models::default_bar_menu())
+        .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
+    transaction.execute(
+        "INSERT OR IGNORE INTO settings(key,value,updated_at)
+         VALUES ('bar_menu',?1,strftime('%Y-%m-%dT%H:%M:%fZ','now'))",
+        [defaults],
+    )?;
+    transaction.execute("DELETE FROM settings WHERE key = 'bar_buttons'", [])?;
+    Ok(())
+}
+
+// Calendar categories become first-class, user-defined records. A category owns
+// a name and a color, and choosing a category is the single act that colors an
+// event or a subscription. There are no default categories: the table starts
+// empty and users create their own. Events keep storing the chosen category id
+// in `events.category` and a color snapshot in `events.color`; deleting a
+// category clears both (the event falls back to "no category, no color").
+// Subscriptions gain a nullable `category_id` alongside their color snapshot.
+//
+// Existing rows predate the concept: their `category` held one of the old fixed
+// strings ('work'/'important'/...), which no longer resolve to any category id.
+// Rather than leave dangling references, the old category/color values are
+// cleared so pre-existing events render as uncategorized, matching the fresh
+// "no defaults" model. This is a pre-release, non-reversible data reset.
+fn migration_28_categories(transaction: &Transaction<'_>) -> Result<()> {
+    transaction.execute_batch(
+        "CREATE TABLE categories (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            color TEXT NOT NULL,
+            position INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+         );
+         CREATE INDEX idx_categories_position ON categories(position);",
+    )?;
+    if !column_exists(transaction, "calendar_subscriptions", "category_id")? {
+        transaction
+            .execute_batch("ALTER TABLE calendar_subscriptions ADD COLUMN category_id TEXT;")?;
+    }
+    // Old fixed-string categories can no longer resolve to a category id; clear
+    // them (and their color snapshot) so legacy rows read as uncategorized.
+    transaction.execute_batch("UPDATE events SET category='', color='';")?;
+    transaction.execute_batch(
+        "UPDATE event_exceptions SET category=NULL, color=NULL
+            WHERE category IS NOT NULL OR color IS NOT NULL;",
+    )?;
+    Ok(())
+}
+
+// Calendar is now fully independent from the kanban/matrix task views. Tasks no
+// longer join a "calendar" view when they get a due date, so drop any existing
+// 'calendar' memberships and tighten the CHECK constraint to the two remaining
+// views. Due dates stay on the task; they simply no longer project onto the
+// calendar. Manually created calendar events and subscriptions are untouched.
+//
+// Rebuilding the table drops both its index and the assistant revision
+// triggers SQLite attached to it, so we recreate the index and reinstall the
+// full assistant trigger set (idempotent, same call migration 24 uses) before
+// finishing. `defer_foreign_keys` postpones the CASCADE checks to commit time
+// so the rename/rebuild does not trip on the tasks reference mid-transaction.
+fn migration_27_drop_calendar_task_view(transaction: &Transaction<'_>) -> Result<()> {
+    transaction.execute_batch(
+        "PRAGMA defer_foreign_keys = ON;
+         DELETE FROM task_view_memberships WHERE view='calendar';
+         DROP INDEX IF EXISTS idx_task_view_memberships;
+
+         ALTER TABLE task_view_memberships RENAME TO task_view_memberships_v26;
+         CREATE TABLE task_view_memberships (
+            task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+            view TEXT NOT NULL CHECK (view IN ('kanban','matrix')),
+            position INTEGER,
+            created_at TEXT NOT NULL,
+            PRIMARY KEY (task_id, view)
+         );
+         INSERT INTO task_view_memberships(task_id,view,position,created_at)
+            SELECT task_id,view,position,created_at FROM task_view_memberships_v26;
+         DROP TABLE task_view_memberships_v26;
+
+         CREATE INDEX idx_task_view_memberships
+            ON task_view_memberships(view, position, task_id);",
+    )?;
+    // Renaming then dropping the old table also dropped the assistant revision
+    // triggers that were attached to it; reinstall the current set so change
+    // tracking for this table keeps working.
+    crate::assistant::store::install_triggers(transaction)
+}
+
+fn migration_26_status_island_reminders(transaction: &Transaction<'_>) -> Result<()> {
+    transaction.execute_batch(
+        "CREATE TABLE status_island_reminders (
+            local_date TEXT NOT NULL,
+            identity TEXT NOT NULL,
+            acknowledged_at TEXT,
+            hidden INTEGER NOT NULL DEFAULT 0 CHECK (hidden IN (0, 1)),
+            dismissed INTEGER NOT NULL DEFAULT 0 CHECK (dismissed IN (0, 1)),
+            consumed INTEGER NOT NULL DEFAULT 0 CHECK (consumed IN (0, 1)),
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (local_date, identity)
+         );
+         CREATE INDEX idx_status_island_reminders_date
+            ON status_island_reminders(local_date);",
+    )
+}
 
 fn migration_25_attachments(transaction: &Transaction<'_>) -> Result<()> {
     crate::attachments::migrate(transaction)
@@ -131,6 +242,11 @@ pub fn migrate(connection: &mut Connection) -> Result<()> {
         )?;
         transaction.commit()?;
     }
+    // Repair partially restored settings even after version 30 was recorded;
+    // INSERT OR IGNORE never resets an existing menu's visibility or order.
+    let transaction = connection.transaction()?;
+    migration_30_bar_menu(&transaction)?;
+    transaction.commit()?;
     Ok(())
 }
 
@@ -1322,6 +1438,50 @@ mod tests {
         MIGRATIONS.iter().map(|(version, _)| *version).collect()
     }
 
+    #[test]
+    fn migration_30_upgrades_legacy_buttons_to_the_same_defaults_as_fresh_install() {
+        for old_buttons in ["[]", "[\"screenshot\"]"] {
+            let mut connection = Connection::open_in_memory().unwrap();
+            migrate_through(&mut connection, 29).unwrap();
+            connection.execute(
+                "INSERT INTO settings(key,value,updated_at) VALUES ('bar_buttons',?1,'old')",
+                [old_buttons],
+            ).unwrap();
+
+            migrate(&mut connection).unwrap();
+
+            let value: String = connection.query_row(
+                "SELECT value FROM settings WHERE key='bar_menu'", [], |row| row.get(0),
+            ).unwrap();
+            assert_eq!(
+                serde_json::from_str::<Vec<crate::models::BarMenuItem>>(&value).unwrap(),
+                crate::models::default_bar_menu(),
+            );
+            let old_rows: i64 = connection.query_row(
+                "SELECT COUNT(*) FROM settings WHERE key='bar_buttons'", [], |row| row.get(0),
+            ).unwrap();
+            assert_eq!(old_rows, 0);
+        }
+    }
+
+    #[test]
+    fn migration_26_creates_status_island_reminder_storage() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        migrate(&mut connection).unwrap();
+
+        let exists: bool = connection
+            .query_row(
+                "SELECT EXISTS(
+                    SELECT 1 FROM sqlite_master
+                    WHERE type='table' AND name='status_island_reminders'
+                 )",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(exists);
+    }
+
     fn migrate_through(connection: &mut Connection, max_version: i64) -> Result<()> {
         connection.execute_batch(
             "CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -2142,14 +2302,113 @@ mod tests {
                 .collect::<Result<Vec<String>, _>>()
                 .unwrap()
         };
-        // m1: classified + dated -> all three views.
-        assert_eq!(views("m1"), vec!["calendar", "kanban", "matrix"]);
+        // Calendar is fully independent now (migration 27 removed the calendar
+        // task view), so only kanban/matrix memberships survive.
+        // m1: classified + dated -> kanban + matrix (no calendar).
+        assert_eq!(views("m1"), vec!["kanban", "matrix"]);
         // m2: classified, no date -> kanban + matrix.
         assert_eq!(views("m2"), vec!["kanban", "matrix"]);
-        // c1: dated, priority via tag only (priority NULL) -> kanban + calendar.
-        assert_eq!(views("c1"), vec!["calendar", "kanban"]);
+        // c1: dated, priority via tag only (priority NULL) -> kanban only.
+        assert_eq!(views("c1"), vec!["kanban"]);
         // c2: no date, mapped priority -> kanban + matrix.
         assert_eq!(views("c2"), vec!["kanban", "matrix"]);
+    }
+
+    #[test]
+    fn migration_27_drops_calendar_task_view_and_tightens_constraint() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        // Stop one version before this migration so we can seed a legacy
+        // 'calendar' membership the old CHECK constraint still allowed.
+        migrate_through(&mut connection, 26).unwrap();
+        connection
+            .execute_batch(
+                "INSERT INTO task_lanes(id,name,color,position,created_at,updated_at)
+                   VALUES ('lane-todo','待处理','#4FC9DA',0,'t','t');
+                 INSERT INTO tasks(id,title,description,priority,due_date,completed,lane_id,board_position,created_at,updated_at)
+                   VALUES ('t1','发布','','important_urgent','2026-08-26',0,'lane-todo',0,'t','t');
+                 INSERT INTO task_view_memberships(task_id,view,position,created_at)
+                   VALUES ('t1','kanban',NULL,'t'),('t1','matrix',NULL,'t'),('t1','calendar',NULL,'t');",
+            )
+            .unwrap();
+
+        migrate(&mut connection).unwrap();
+
+        // The legacy calendar membership is gone; kanban/matrix survive.
+        let views: Vec<String> = connection
+            .prepare("SELECT view FROM task_view_memberships WHERE task_id='t1' ORDER BY view")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<Vec<String>, _>>()
+            .unwrap();
+        assert_eq!(views, vec!["kanban", "matrix"]);
+
+        // The tightened CHECK constraint now rejects a 'calendar' membership.
+        let rejected = connection.execute(
+            "INSERT INTO task_view_memberships(task_id,view,position,created_at)
+             VALUES ('t1','calendar',NULL,'t')",
+            [],
+        );
+        assert!(rejected.is_err());
+
+        // Rebuilding the table must not silently drop its index...
+        let has_index: bool = connection
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM sqlite_master
+                 WHERE type='index' AND name='idx_task_view_memberships')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(
+            has_index,
+            "idx_task_view_memberships must survive the rebuild"
+        );
+
+        // ...nor the assistant revision triggers attached to it. Change
+        // tracking for this table would break silently otherwise.
+        let triggers: Vec<String> = connection
+            .prepare(
+                "SELECT name FROM sqlite_master
+                 WHERE type='trigger' AND tbl_name='task_view_memberships' ORDER BY name",
+            )
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<Vec<String>, _>>()
+            .unwrap();
+        assert_eq!(
+            triggers,
+            vec![
+                "assistant_task_view_memberships_DELETE",
+                "assistant_task_view_memberships_INSERT",
+                "assistant_task_view_memberships_UPDATE",
+            ]
+        );
+
+        // A real write still bumps the assistant revision clock through the
+        // reinstalled triggers.
+        let before: i64 = connection
+            .query_row(
+                "SELECT revision FROM assistant_clock WHERE id=1",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        connection
+            .execute(
+                "DELETE FROM task_view_memberships WHERE task_id='t1' AND view='matrix'",
+                [],
+            )
+            .unwrap();
+        let after: i64 = connection
+            .query_row(
+                "SELECT revision FROM assistant_clock WHERE id=1",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(after > before, "trigger must bump the revision clock");
     }
 
     #[test]

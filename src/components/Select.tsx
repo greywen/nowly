@@ -5,6 +5,10 @@ import { t } from '../i18n';
 export type SelectOption = {
   value: string;
   label: string;
+  // Optional swatch color. When present the option and the trigger render a
+  // small dot before the label, merging a category/color choice into one
+  // control.
+  color?: string;
 };
 
 type SelectProps = {
@@ -137,7 +141,7 @@ export function Select({ id, name, label, options, value, onChange, placeholder,
 
   return (
     <div ref={rootRef} className="select-field">
-      <label className={hideLabel ? 'select-label select-label--hidden' : 'select-label'} id={`${id}-label`} htmlFor={id}>{label}</label>
+      <label className={hideLabel ? 'select-label visually-hidden' : 'select-label'} id={`${id}-label`} htmlFor={id}>{label}</label>
       {name ? <input type="hidden" name={name} value={value} /> : null}
       <button
         ref={triggerRef}
@@ -155,7 +159,7 @@ export function Select({ id, name, label, options, value, onChange, placeholder,
         onClick={() => open ? close(false) : openList()}
         onKeyDown={handleKeyDown}
       >
-        <span>{selected?.label ?? resolvedPlaceholder}</span>
+        <span className="select-value">{selected?.color ? <span className="select-dot" style={{ background: selected.color }} aria-hidden="true" /> : null}{selected?.label ?? resolvedPlaceholder}</span>
         <ChevronDown aria-hidden="true" />
       </button>
       {open ? (
@@ -202,7 +206,7 @@ export function Select({ id, name, label, options, value, onChange, placeholder,
                 onMouseEnter={() => setActiveIndex(index)}
                 onClick={() => choose(option)}
               >
-                <span>{option.label}</span>
+                <span className="select-value">{option.color ? <span className="select-dot" style={{ background: option.color }} aria-hidden="true" /> : null}{option.label}</span>
                 {option.value === value ? <Check aria-hidden="true" /> : null}
               </button>
             ))}

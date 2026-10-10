@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "screenshot-history",
+  "description": "Events for the local screenshot history window; native commands enforce callers",
+  "windows": ["screenshot-history"],
+  "permissions": ["core:event:default", "core:window:allow-hide"]
+}

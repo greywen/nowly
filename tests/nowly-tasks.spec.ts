@@ -25,11 +25,11 @@ test.beforeEach(async ({ page }) => {
     let tasks: any[] = [{
       id:'t1', title:'发布 Nowly', description:'', priority:'important_urgent', dueDate:'2026-07-23',
       completed:false, laneId:'lane-todo', boardPosition:0, tagIds:[], collaboratorIds:[],
-      linkedEventId:null, views:['kanban','matrix','calendar'], createdAt:now, updatedAt:now
+      linkedEventId:null, views:['kanban','matrix'], createdAt:now, updatedAt:now
     }];
     const coordinateViews = (task: any) => ({
       ...task,
-      views:['kanban', ...(task.priority ? ['matrix'] : []), ...(task.dueDate ? ['calendar'] : [])]
+      views:['kanban', ...(task.priority ? ['matrix'] : [])]
     });
     const snapshot = () => ({
       tasks, lanes, tags:[], collaborators:[], linkingEnabled:true,

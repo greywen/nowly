@@ -332,10 +332,10 @@ describe('status island attention queue', () => {
     ]);
   });
 
-  it('keeps an acknowledged reminder in the queue until the user closes it', () => {
-    // The reported defect. This used to collapse 15s after acknowledgement, so the
-    // island swapped the detail for the summary while the user was doing nothing,
-    // which is what made the surface look like two unrelated designs taking turns.
+  it('removes an acknowledged reminder from the attention queue', () => {
+    // Explicitly clicking a concrete reminder means the user saw it. The
+    // reminder remains resolvable for an already-open pinned sheet, but it must
+    // leave the queue so the next unseen reminder can take its turn.
     const events = [reminded('产品评审', '2026-09-12T14:30', '2026-09-12T15:30', [15])];
     const identity = 'event:产品评审:2026-09-12T14:30:reminder:15';
     const acknowledged: StatusIslandReminderState = {
@@ -352,8 +352,9 @@ describe('status island attention queue', () => {
         reminderStates: [acknowledged]
       });
 
-      expect(model.attentionQueue[0]).toMatchObject({ identity, lifecycle: 'acknowledged' });
-      expect(model.surface).toMatchObject({ mode: 'detail' });
+      expect(model.attentionQueue).toEqual([]);
+      expect(model.reminders[0]).toMatchObject({ identity, lifecycle: 'acknowledged' });
+      expect(model.surface).toMatchObject({ mode: 'summary' });
     }
   });
 
@@ -379,18 +380,13 @@ describe('status island attention queue', () => {
     expect(closed.surface).toMatchObject({ mode: 'summary' });
   });
 
-  it('starts in the summary when the user set the notification display to summary', () => {
+  it('always starts an unseen notification in detail', () => {
     const events = [reminded('产品评审', '2026-09-12T14:30', '2026-09-12T15:30', [15])];
 
-    const detail = deriveStatusIslandModel({ ...input({ events }), displayMode: 'detail' });
-    const summary = deriveStatusIslandModel({ ...input({ events }), displayMode: 'summary' });
+    const model = deriveStatusIslandModel(input({ events }));
 
-    // The same unseen reminder either way: the setting chooses the content, not
-    // whether the notification exists.
-    expect(detail.attentionQueue).toHaveLength(1);
-    expect(summary.attentionQueue).toHaveLength(1);
-    expect(detail.surface).toMatchObject({ mode: 'detail' });
-    expect(summary.surface).toMatchObject({ mode: 'summary' });
+    expect(model.attentionQueue).toHaveLength(1);
+    expect(model.surface).toMatchObject({ mode: 'detail' });
   });
 
   it('keeps a closed reminder out of the queue and lets the next one take over', () => {
@@ -419,6 +415,25 @@ describe('status island attention queue', () => {
       .toMatchObject({ lifecycle: 'dismissed' });
     // The next notification still gets its own turn in full detail.
     expect(model.surface).toMatchObject({ mode: 'detail' });
+  });
+
+  it('does not replay a task after it is completed and then reactivated the same day', () => {
+    const taskBefore = task('文件测试', 'important_urgent', null);
+    const taskAfter = { ...taskBefore, updatedAt: '2026-09-12T14:20:00Z' };
+    const oldIdentity = `task:${taskBefore.id}:${taskBefore.updatedAt}:2026-09-12`;
+
+    const model = deriveStatusIslandModel({
+      ...input({ tasks: [taskAfter] }),
+      reminderStates: [{
+        identity: oldIdentity,
+        acknowledgedAt: localIsoWithOffset(new Date(2026, 8, 12, 14, 0, 0)),
+        dismissed: true,
+        consumed: false
+      }]
+    });
+
+    expect(model.attentionQueue).toEqual([]);
+    expect(model.surface).toMatchObject({ mode: 'summary' });
   });
 
   it('treats a hidden flag written by an older build as terminal for the day', () => {
@@ -467,7 +482,7 @@ describe('status island attention queue', () => {
     }).attentionQueue.map(reminder => reminder.identity)).toEqual(['event:产品评审:2026-09-12T14:30:reminder:5']);
   });
 
-  it('auto-acknowledges a user-initiated focus stage and keeps it on the island', () => {
+  it('auto-acknowledges a user-initiated focus stage and keeps it in the summary', () => {
     const focusInput = {
       ...input({ focusStatus: 'running' as FocusStatus, remainingSeconds: 1500 }),
       focus: {
@@ -481,17 +496,18 @@ describe('status island attention queue', () => {
     };
 
     const shown = deriveStatusIslandModel({ ...focusInput, now: new Date(2026, 8, 12, 14, 18, 5) });
-    expect(shown.attentionQueue[0]).toMatchObject({
+    expect(shown.attentionQueue).toEqual([]);
+    expect(shown.reminders[0]).toMatchObject({
       identity: 'focus:session-1:running:1',
       reminderClass: 'active',
       // The user started this themselves, so it counts as seen immediately.
       lifecycle: 'acknowledged'
     });
 
-    // A running session has no dismiss button, and nothing collapses on a timer,
-    // so it stays on the island for as long as it runs.
+    // It remains visible as persistent business state, not as an unseen alert.
     const later = deriveStatusIslandModel({ ...focusInput, now: new Date(2026, 8, 12, 14, 18, 20) });
-    expect(later.attentionQueue[0]).toMatchObject({ identity: 'focus:session-1:running:1' });
+    expect(later.attentionQueue).toEqual([]);
+    expect(later.surface).toMatchObject({ mode: 'summary' });
     expect(later.indicatorState.focus).toMatchObject({ status: 'running', remainingSeconds: 1500 });
   });
 
@@ -681,16 +697,21 @@ describe('status island summary content', () => {
     expect(overview.groups[0].tasks.map(item => item.id).sort()).toEqual(['周报', '复盘', '阅读'].sort());
   });
 
-  it('routes a click in summary mode to the whole aggregate, not the queue head', () => {
+  it('routes a click after dismissal to the whole aggregate', () => {
     const events = [reminded('产品评审', '2026-09-12T14:30', '2026-09-12T15:30', [15])];
+    const identity = 'event:产品评审:2026-09-12T14:30:reminder:15';
 
-    const detail = deriveStatusIslandModel({ ...input({ events }), displayMode: 'detail' });
-    const summary = deriveStatusIslandModel({ ...input({ events }), displayMode: 'summary' });
+    const summary = deriveStatusIslandModel({
+      ...input({ events }),
+      reminderStates: [{
+        identity,
+        acknowledgedAt: localIsoWithOffset(new Date(2026, 8, 12, 14, 18, 0)),
+        dismissed: true,
+        consumed: false
+      }]
+    });
 
-    // Same unseen reminder at the head either way. In detail mode the panel acts
-    // on it; in summary mode the user clicked an aggregate, so the panel has to
-    // show that aggregate instead.
-    expect(detail.panelContext).toMatchObject({ kind: 'eventReminder' });
+    expect(summary.surface).toMatchObject({ mode: 'summary' });
     expect(summary.panelContext).toMatchObject({ kind: 'overview' });
   });
 });
@@ -862,7 +883,10 @@ describe('status island panel pinning', () => {
       },
       now: new Date(2026, 8, 12, 14, 18, 5)
     });
-    expect(reminderPanelContext(focusModel.attentionQueue[0], focusModel.indicatorState.focus))
+    expect(reminderPanelContext(
+      focusModel.reminders.find(reminder => reminder.subject.kind === 'focus'),
+      focusModel.indicatorState.focus
+    ))
       .toMatchObject({ kind: 'focus' });
   });
 });

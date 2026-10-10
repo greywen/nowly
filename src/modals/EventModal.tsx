@@ -1,17 +1,17 @@
-import { X } from '../components/icons';
+import { Plus, X } from '../components/icons';
 import { type RefObject, useId, useMemo, useState } from 'react';
-import { eventColorPresets, type CalendarEvent, type EditScope, type EventCategory, type EventDraft, type Recurrence, type RecurrenceEnd, type RecurrenceFreq, type Weekday } from '../calendar/calendar-model';
+import { type CalendarEvent, type Category, type CategoryDraft, type EditScope, type EventCategory, type EventDraft, type Recurrence, type RecurrenceEnd, type RecurrenceFreq, type Weekday } from '../calendar/calendar-model';
 import { t } from '../i18n';
-import { ColorPicker } from '../components/ColorPicker';
 import type { HexColor } from '../lib/color';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { CategorySelect } from '../components/CategorySelect';
 import { DatePicker } from '../components/DatePicker';
 import { Dialog } from '../components/Dialog';
 import { RichEditor } from '../components/rich-text/RichEditor';
 import { Select } from '../components/Select';
 import { TimePicker } from '../components/TimePicker';
 import type { RepositoryError } from '../data/nowly-repository';
-import { createEventDraft, eventToForm, isEventFormDirty, MAX_REMINDERS, toEventDraft, validateEventForm, type EventFieldErrors, type EventFormDraft } from '../lib/event-draft';
+import { applyCategory, applyStartTime, createEventDraft, eventToForm, isEventFormDirty, MAX_REMINDERS, toEventDraft, validateEventForm, type EventFieldErrors, type EventFormDraft } from '../lib/event-draft';
 import { presetToRecurrence, recurrenceToPreset, weekdayOf, WEEKDAYS, type RecurrencePreset } from '../lib/recurrence';
 import { RecurrenceScopeDialog } from './RecurrenceScopeDialog';
 import type { CalendarSubscription } from '../calendar/subscription-model';
@@ -29,9 +29,11 @@ type EventModalProps = {
   recentColors?: HexColor[];
   onRememberCustomColor?: (color: HexColor) => Promise<void> | void;
   subscriptions?: CalendarSubscription[];
+  categories?: Category[];
+  onCreateCategory: (draft: CategoryDraft) => Promise<Category>;
+  onUpdateCategory: (id: string, draft: CategoryDraft) => Promise<Category>;
+  onDeleteCategory: (id: string) => Promise<void>;
 };
-
-const categoryOptions = () => [{value:'work',label:t('category.work')},{value:'important',label:t('category.important')},{value:'personal',label:t('category.personal')},{value:'learning',label:t('category.learning')}];
 
 // Reminder offsets are stored as minutes. The editor shows each as a value plus
 // a unit, mirroring Google Calendar. Units are ordered largest-last so the
@@ -52,6 +54,13 @@ function splitReminder(minutes:number):{value:number;unit:ReminderUnit}{
 function joinReminder(value:number,unit:ReminderUnit):number{
   return Math.max(0,Math.round(value))*REMINDER_UNIT_MINUTES[unit];
 }
+// 已选提醒的可读标签，如「10 分钟前」；提前项使用最粗单位显示。
+function reminderLabel(minutes:number):string{
+  const {value,unit}=splitReminder(minutes);
+  return t('reminder.leadFormat',{value,unit:t(`reminder.unit.${unit}`)});
+}
+// 常用提醒快捷项，存的是分钟数：5、15、30 分钟前、1 小时前。
+const REMINDER_PRESETS=[5,15,30,60] as const;
 const presetOptions = () => (['none','daily','weekly','monthly','yearly','custom'] as const).map(preset=>({value:preset,label:t(`recurrence.preset.${preset}`)}));
 const freqOptions = () => (['daily','weekly','monthly','yearly'] as const).map(freq=>({value:freq,label:t(`recurrence.freq.${freq}`)}));
 const weekdayLabels = () => t('recurrence.weekdays').split(',');
@@ -67,7 +76,7 @@ function sameRecurrence(left:Recurrence|null,right:Recurrence|null){
     &&left.byDay.every((day,index)=>day===right.byDay[index])&&sameEnd(left.end,right.end);
 }
 
-export function EventModal({ mode,restoreFocusRef,onClose,onSaved,onDeleted,createEvent,updateEvent,deleteEvent,now=()=>new Date(),recentColors=[],onRememberCustomColor,subscriptions=[] }:EventModalProps) {
+export function EventModal({ mode,restoreFocusRef,onClose,onSaved,onDeleted,createEvent,updateEvent,deleteEvent,now=()=>new Date(),subscriptions=[],categories=[],onCreateCategory,onUpdateCategory,onDeleteCategory }:EventModalProps) {
   const initial = useMemo(()=>mode.type==='edit'?eventToForm(mode.event):createEventDraft(mode.dateIso,now()),[mode]);
   const [form,setForm]=useState<EventFormDraft>(initial);
   // 预设不是双射（「自定义」的种子就是一条普通周规则），只在打开表单时初始化一次。
@@ -79,6 +88,8 @@ export function EventModal({ mode,restoreFocusRef,onClose,onSaved,onDeleted,crea
   const [confirm,setConfirm]=useState<'discard'|'delete'|null>(null);
   const [scopeAction,setScopeAction]=useState<'edit'|'delete'|null>(null);
   const [targetSubscriptionId,setTargetSubscriptionId]=useState<string|null>(null);
+  // 预设外的提醒（例如历史自定义值）需要展开精确控件，开表单时判一次。
+  const [remindersCustomOpen,setRemindersCustomOpen]=useState(()=>initial.reminders.some(minutes=>!REMINDER_PRESETS.includes(minutes as (typeof REMINDER_PRESETS)[number])));
   const titleId=useId();
   const update=<K extends keyof EventFormDraft>(key:K,value:EventFormDraft[K])=>setForm(current=>({...current,[key]:value}));
   const requestClose=()=>{ if(busy)return; if(isEventFormDirty(initial,form))setConfirm('discard'); else onClose(); };
@@ -106,6 +117,10 @@ export function EventModal({ mode,restoreFocusRef,onClose,onSaved,onDeleted,crea
   const addReminder=()=>update('reminders',[...form.reminders,DEFAULT_REMINDER_MINUTES]);
   const removeReminder=(index:number)=>update('reminders',form.reminders.filter((_,position)=>position!==index));
   const changeReminder=(index:number,minutes:number)=>update('reminders',form.reminders.map((value,position)=>position===index?minutes:value));
+  const toggleReminderPreset=(minutes:number)=>{ if(form.reminders.includes(minutes))update('reminders',form.reminders.filter(value=>value!==minutes)); else if(form.reminders.length<MAX_REMINDERS)update('reminders',[...form.reminders,minutes]); };
+  const changeCategory=(categoryId:EventCategory)=>setForm(current=>applyCategory(current,categoryId,categories.find(c=>c.id===categoryId)?.color??''));
+  // 选择开始时间后默认结束时间为开始加一小时（自动跨天/月/年）。
+  const changeStartTime=(value:string)=>setForm(current=>applyStartTime(current,value));
 
   function save(){
     const validation=validateEventForm(form); setErrors(validation); setDialogError(''); if(Object.keys(validation).length)return;
@@ -114,7 +129,7 @@ export function EventModal({ mode,restoreFocusRef,onClose,onSaved,onDeleted,crea
   }
   async function commit(scope:EditScope){
     setBusy(true);
-    try { const draft=toEventDraft(form); if(mode.type==='create')await createEvent({...draft,recurrence:remoteTarget?null:draft.recurrence},targetSubscriptionId); else await updateEvent(mode.event,{...draft,recurrence:remoteEdit?null:draft.recurrence},scope); if(!remoteTarget&&onRememberCustomColor&&!eventColorPresets().some(p=>p.value===draft.color))await onRememberCustomColor(draft.color); await onSaved(); setScopeAction(null); onClose(); }
+    try { const draft=toEventDraft(form); if(mode.type==='create')await createEvent({...draft,recurrence:remoteTarget?null:draft.recurrence},targetSubscriptionId); else await updateEvent(mode.event,{...draft,recurrence:remoteEdit?null:draft.recurrence},scope); await onSaved(); setScopeAction(null); onClose(); }
     catch(error){ const repositoryError=error as RepositoryError; if(repositoryError.code==='validation_error'&&repositoryError.field){setErrors({[repositoryError.field]:repositoryError.message});setScopeAction(null);} else setDialogError(message(error)); }
     finally{setBusy(false);}
   }
@@ -126,45 +141,76 @@ export function EventModal({ mode,restoreFocusRef,onClose,onSaved,onDeleted,crea
       headerActions={<button type="button" aria-label={t('common.close')} className="good-icon-button" disabled={busy} onClick={requestClose}><X aria-hidden="true"/></button>}
       footer={<div className="event-dialog__actions">{dialogError&&!confirm&&!scopeAction?<div role="alert" className="dialog-error">{dialogError}</div>:null}{mode.type==='edit'?<button type="button" className="good-button good-button--danger-ghost" disabled={busy} onClick={requestDelete}>{t('eventModal.deleteEvent')}</button>:null}<button type="button" className="good-button" disabled={busy} onClick={requestClose}>{t('common.cancel')}</button><button type="button" className="good-button good-button--primary" disabled={busy} onClick={save}>{busy?t('common.saving'):t('eventModal.save')}</button></div>}>
       <form className="event-form" onSubmit={e=>{e.preventDefault();void save();}}>
-        {mode.type==='create'&&writableTargets.length?<Select id="event-target-calendar" label={t('eventModal.targetCalendar')} options={targetOptions} value={targetSubscriptionId??'local'} disabled={busy} onChange={value=>setTargetSubscriptionId(value==='local'?null:value)}/>:null}
-        {remoteEdit?<p className="reminder-field__empty">{t('eventModal.remoteCurrentOnly')}</p>:null}
-        <div className="good-field"><label htmlFor="event-title">{t('eventModal.title')}</label><input id="event-title" className="good-input" autoComplete="off" value={form.title} disabled={busy} aria-describedby={errors.title?'event-title-error':undefined} onChange={e=>update('title',e.target.value)}/>{errors.title?<span id="event-title-error" className="field-error">{errors.title}</span>:null}</div>
-        <label className="form-check form-check-custom form-check-solid"><input className="form-check-input" type="checkbox" checked={form.allDay} disabled={busy} onChange={e=>update('allDay',e.target.checked)}/><span className="form-check-label">{t('eventModal.allDay')}</span></label>
-        <div className="form-row"><DatePicker id="event-start-date" label={t('eventModal.startDate')} value={form.startDate} errorId={errors.startAt?'event-start-error':undefined} disabled={busy} open={openPicker==='startDate'} onOpenChange={open=>setOpenPicker(open?'startDate':null)} onChange={v=>update('startDate',v)}/><DatePicker id="event-end-date" label={t('eventModal.endDate')} value={form.endDate} errorId={errors.endAt?'event-end-error':undefined} disabled={busy} open={openPicker==='endDate'} onOpenChange={open=>setOpenPicker(open?'endDate':null)} onChange={v=>update('endDate',v)}/></div>
-        {!form.allDay?<div className="form-row"><TimePicker id="event-start-time" label={t('eventModal.startTime')} value={form.startTime} disabled={busy} open={openPicker==='startTime'} onOpenChange={open=>setOpenPicker(open?'startTime':null)} onChange={v=>update('startTime',v)}/><TimePicker id="event-end-time" label={t('eventModal.endTime')} value={form.endTime} disabled={busy} open={openPicker==='endTime'} onOpenChange={open=>setOpenPicker(open?'endTime':null)} onChange={v=>update('endTime',v)}/></div>:null}
-        {errors.startAt?<span id="event-start-error" className="field-error">{errors.startAt}</span>:null}{errors.endAt?<span id="event-end-error" className="field-error">{errors.endAt}</span>:null}
-        {!remoteTarget?<div className="recurrence-field">
-          <Select id="event-recurrence" label={t('eventModal.recurrence')} options={presetOptions()} value={preset} disabled={busy} onChange={v=>changePreset(v as RecurrencePreset)}/>
-          {preset==='custom'&&rule?<div className="recurrence-custom">
-            <div className="form-row">
-              <Select id="event-recurrence-freq" label={t('recurrence.freqLabel')} options={freqOptions()} value={rule.freq} disabled={busy} onChange={v=>changeFreq(v as RecurrenceFreq)}/>
-              <div className="good-field"><label htmlFor="event-recurrence-interval">{t('recurrence.interval')}</label><input id="event-recurrence-interval" className="good-input" type="number" min={1} value={rule.interval} disabled={busy} aria-describedby={errors.recurrence?'event-recurrence-error':undefined} onChange={e=>patchRecurrence({interval:Number(e.target.value)})}/></div>
-            </div>
-            {rule.freq==='weekly'?<fieldset className="recurrence-weekdays"><legend>{t('recurrence.byDay')}</legend>{WEEKDAYS.map((day,index)=><label key={day} className="form-check form-check-custom form-check-solid"><input className="form-check-input" type="checkbox" checked={rule.byDay.includes(day)} disabled={busy} onChange={()=>toggleWeekday(day)}/><span className="form-check-label">{weekdayLabels()[index]}</span></label>)}</fieldset>:null}
-            <fieldset className="recurrence-end"><legend>{t('recurrence.endLabel')}</legend>{(['never','until','count'] as const).map(kind=><label key={kind} className="form-check form-check-custom form-check-solid"><input className="form-check-input" type="radio" name="event-recurrence-end" value={kind} checked={rule.end.kind===kind} disabled={busy} onChange={()=>changeEnd(kind)}/><span className="form-check-label">{t(`recurrence.end.${kind}`)}</span></label>)}</fieldset>
-            {rule.end.kind==='until'?<DatePicker id="event-recurrence-until" label={t('recurrence.until')} value={rule.end.date} disabled={busy} open={openPicker==='recurrenceUntil'} onOpenChange={open=>setOpenPicker(open?'recurrenceUntil':null)} onChange={date=>patchRecurrence({end:{kind:'until',date}})}/>:null}
-            {rule.end.kind==='count'?<div className="good-field"><label htmlFor="event-recurrence-count">{t('recurrence.count')}</label><input id="event-recurrence-count" className="good-input" type="number" min={1} value={rule.end.count} disabled={busy} onChange={e=>patchRecurrence({end:{kind:'count',count:Number(e.target.value)}})}/></div>:null}
-          </div>:null}
-          {errors.recurrence?<span id="event-recurrence-error" className="field-error">{errors.recurrence}</span>:null}
-        </div>:null}
-        <div className="reminder-field">
-          <span className="reminder-field__label">{t('eventModal.reminders')}</span>
-          {form.reminders.length===0?<p className="reminder-field__empty">{t('reminder.none')}</p>:null}
-          {form.reminders.map((minutes,index)=>{
-            const {value,unit}=splitReminder(minutes);
-            return <div key={index} className="reminder-row">
-              <input className="good-input reminder-row__value" type="number" min={0} value={value} disabled={busy} aria-label={t('reminder.valueLabel')} onChange={e=>changeReminder(index,joinReminder(Number(e.target.value),unit))}/>
-              <Select id={`event-reminder-unit-${index}`} label={t('reminder.unitLabel')} hideLabel options={reminderUnitOptions()} value={unit} disabled={busy} onChange={v=>changeReminder(index,joinReminder(value,v as ReminderUnit))}/>
-              <span className="reminder-row__suffix">{t('reminder.before')}</span>
-              <button type="button" className="good-icon-button reminder-row__remove" aria-label={t('reminder.remove')} disabled={busy} onClick={()=>removeReminder(index)}><X aria-hidden="true"/></button>
-            </div>;
-          })}
-          {form.reminders.length<MAX_REMINDERS?<button type="button" className="good-button reminder-field__add" disabled={busy} onClick={addReminder}>{t('reminder.add')}</button>:null}
-          {errors.reminders?<span className="field-error">{errors.reminders}</span>:null}
+        <div className={`event-form__lead${mode.type==='create'&&writableTargets.length?'':' event-form__lead--single'}`}>
+          <div className="good-field event-form__title"><label htmlFor="event-title">{t('eventModal.title')}</label><input id="event-title" className="good-input" autoComplete="off" value={form.title} disabled={busy} aria-describedby={errors.title?'event-title-error':undefined} onChange={e=>update('title',e.target.value)}/>{errors.title?<span id="event-title-error" className="field-error">{errors.title}</span>:null}</div>
+          {mode.type==='create'&&writableTargets.length?<Select id="event-target-calendar" label={t('eventModal.targetCalendar')} options={targetOptions} value={targetSubscriptionId??'local'} disabled={busy} onChange={value=>setTargetSubscriptionId(value==='local'?null:value)}/>:null}
+          {remoteEdit?<p className="event-form__note-hint">{t('eventModal.remoteCurrentOnly')}</p>:null}
         </div>
-        {!remoteTarget?<><Select id="event-category" label={t('eventModal.category')} options={categoryOptions()} value={form.category} disabled={busy} onChange={v=>update('category',v as EventCategory)}/>{errors.category?<span className="field-error">{errors.category}</span>:null}
-        <ColorPicker legend={t('eventModal.color')} name="event-color" value={form.color} presets={eventColorPresets()} recentColors={recentColors} disabled={busy} onChange={color=>update('color',color)} onRememberColor={onRememberCustomColor}/>{errors.color?<span className="field-error">{errors.color}</span>:null}</>:null}
-        <div className="good-field"><label id="event-note-label">{t('eventModal.note')}</label><RichEditor id="event-note" labelledBy="event-note-label" value={form.note} disabled={busy} placeholder={t('richEditor.placeholder')} onChange={markdown=>update('note',markdown)}/></div>
+        <section className="event-form__time-range" aria-labelledby="event-time-heading">
+          <div className="event-form__row-heading">
+            <h3 id="event-time-heading">{t('eventModal.timeSection')}</h3>
+            <label className="form-check form-check-custom form-check-solid"><input className="form-check-input" type="checkbox" checked={form.allDay} disabled={busy} onChange={e=>update('allDay',e.target.checked)}/><span className="form-check-label">{t('eventModal.allDay')}</span></label>
+          </div>
+          <div className="event-form__range">
+            <div className="event-form__range-end">
+              <DatePicker id="event-start-date" label={t('eventModal.start')} hideLabel value={form.startDate} errorId={errors.startAt?'event-start-error':undefined} disabled={busy} open={openPicker==='startDate'} onOpenChange={open=>setOpenPicker(open?'startDate':null)} onChange={v=>update('startDate',v)}/>
+              {!form.allDay?<TimePicker id="event-start-time" label={t('eventModal.startTime')} hideLabel value={form.startTime} disabled={busy} open={openPicker==='startTime'} onOpenChange={open=>setOpenPicker(open?'startTime':null)} onChange={changeStartTime}/>:null}
+            </div>
+            <div className="event-form__range-end">
+              <DatePicker id="event-end-date" label={t('eventModal.end')} hideLabel value={form.endDate} errorId={errors.endAt?'event-end-error':undefined} disabled={busy} open={openPicker==='endDate'} onOpenChange={open=>setOpenPicker(open?'endDate':null)} onChange={v=>update('endDate',v)}/>
+              {!form.allDay?<TimePicker id="event-end-time" label={t('eventModal.endTime')} hideLabel value={form.endTime} disabled={busy} open={openPicker==='endTime'} onOpenChange={open=>setOpenPicker(open?'endTime':null)} onChange={v=>update('endTime',v)}/>:null}
+            </div>
+          </div>
+          {errors.startAt?<span id="event-start-error" className="field-error">{errors.startAt}</span>:null}{errors.endAt?<span id="event-end-error" className="field-error">{errors.endAt}</span>:null}
+        </section>
+        {!remoteTarget?<section className="event-form__category" aria-labelledby="event-category-heading">
+          <h3 id="event-category-heading">{t('eventModal.category')}</h3>
+          <CategorySelect id="event-category" label={t('eventModal.category')} hideLabel categories={categories} value={form.category} disabled={busy} onChange={changeCategory} onCreate={onCreateCategory} onUpdate={onUpdateCategory} onDelete={onDeleteCategory}/>{errors.category?<span className="field-error">{errors.category}</span>:null}
+        </section>:null}
+        {!remoteTarget?<section className="event-form__recurrence" aria-labelledby="event-recurrence-heading">
+          <h3 id="event-recurrence-heading">{t('eventModal.recurrence')}</h3>
+          <div className="recurrence-field">
+            <Select id="event-recurrence" label={t('eventModal.recurrence')} hideLabel options={presetOptions()} value={preset} disabled={busy} onChange={v=>changePreset(v as RecurrencePreset)}/>
+            {preset==='custom'&&rule?<div className="recurrence-custom">
+              <div className="form-row">
+                <Select id="event-recurrence-freq" label={t('recurrence.freqLabel')} options={freqOptions()} value={rule.freq} disabled={busy} onChange={v=>changeFreq(v as RecurrenceFreq)}/>
+                <div className="good-field"><label htmlFor="event-recurrence-interval">{t('recurrence.interval')}</label><input id="event-recurrence-interval" className="good-input" type="number" min={1} value={rule.interval} disabled={busy} aria-describedby={errors.recurrence?'event-recurrence-error':undefined} onChange={e=>patchRecurrence({interval:Number(e.target.value)})}/></div>
+              </div>
+              {rule.freq==='weekly'?<fieldset className="recurrence-weekdays"><legend>{t('recurrence.byDay')}</legend>{WEEKDAYS.map((day,index)=><label key={day} className="form-check form-check-custom form-check-solid"><input className="form-check-input" type="checkbox" checked={rule.byDay.includes(day)} disabled={busy} onChange={()=>toggleWeekday(day)}/><span className="form-check-label">{weekdayLabels()[index]}</span></label>)}</fieldset>:null}
+              <fieldset className="recurrence-end"><legend>{t('recurrence.endLabel')}</legend>{(['never','until','count'] as const).map(kind=><label key={kind} className="form-check form-check-custom form-check-solid"><input className="form-check-input" type="radio" name="event-recurrence-end" value={kind} checked={rule.end.kind===kind} disabled={busy} onChange={()=>changeEnd(kind)}/><span className="form-check-label">{t(`recurrence.end.${kind}`)}</span></label>)}</fieldset>
+              {rule.end.kind==='until'?<DatePicker id="event-recurrence-until" label={t('recurrence.until')} value={rule.end.date} disabled={busy} open={openPicker==='recurrenceUntil'} onOpenChange={open=>setOpenPicker(open?'recurrenceUntil':null)} onChange={date=>patchRecurrence({end:{kind:'until',date}})}/>:null}
+              {rule.end.kind==='count'?<div className="good-field"><label htmlFor="event-recurrence-count">{t('recurrence.count')}</label><input id="event-recurrence-count" className="good-input" type="number" min={1} value={rule.end.count} disabled={busy} onChange={e=>patchRecurrence({end:{kind:'count',count:Number(e.target.value)}})}/></div>:null}
+            </div>:null}
+            {errors.recurrence?<span id="event-recurrence-error" className="field-error">{errors.recurrence}</span>:null}
+          </div>
+        </section>:null}
+        <section className="event-form__quick-settings">
+          <div className="event-form__setting reminder-field">
+            <h3 className="reminder-field__label" id="event-reminders-heading">{t('eventModal.reminders')}</h3>
+            <div className="reminder-field__quick">
+              {REMINDER_PRESETS.map(minutes=><button key={minutes} type="button" className="good-chip" aria-pressed={form.reminders.includes(minutes)} disabled={busy||(!form.reminders.includes(minutes)&&form.reminders.length>=MAX_REMINDERS)} onClick={()=>toggleReminderPreset(minutes)}>{reminderLabel(minutes)}</button>)}
+              <button type="button" className="good-chip" aria-expanded={remindersCustomOpen} disabled={busy} onClick={()=>setRemindersCustomOpen(open=>!open)}>{t('reminder.custom')}</button>
+            </div>
+            {form.reminders.length===0?<p className="reminder-field__empty">{t('reminder.none')}</p>:null}
+            {remindersCustomOpen?<div className="reminder-field__rows">
+              {form.reminders.map((minutes,index)=>{
+                const {value,unit}=splitReminder(minutes);
+                return <div key={index} className="reminder-row">
+                  <input className="good-input reminder-row__value" type="number" min={0} value={value} disabled={busy} aria-label={t('reminder.valueLabel')} onChange={e=>changeReminder(index,joinReminder(Number(e.target.value),unit))}/>
+                  <Select id={`event-reminder-unit-${index}`} label={t('reminder.unitLabel')} hideLabel options={reminderUnitOptions()} value={unit} disabled={busy} onChange={v=>changeReminder(index,joinReminder(value,v as ReminderUnit))}/>
+                  <span className="reminder-row__before">{t('reminder.before')}</span>
+                  <button type="button" className="good-icon-button reminder-row__remove" aria-label={t('reminder.remove')} disabled={busy} onClick={()=>removeReminder(index)}><X aria-hidden="true"/></button>
+                </div>;
+              })}
+              {form.reminders.length<MAX_REMINDERS?<button type="button" className="good-icon-button reminder-field__add" aria-label={t('reminder.add')} title={t('reminder.add')} disabled={busy} onClick={addReminder}><Plus aria-hidden="true"/></button>:null}
+            </div>:null}
+            {errors.reminders?<span className="field-error">{errors.reminders}</span>:null}
+          </div>
+        </section>
+        <section className="event-form__note">
+          <h3 id="event-note-heading">{t('eventModal.note')}</h3>
+          <div className="good-field"><label id="event-note-label" className="visually-hidden">{t('eventModal.note')}</label><RichEditor id="event-note" labelledBy="event-note-label" value={form.note} disabled={busy} placeholder={t('richEditor.placeholder')} onChange={markdown=>update('note',markdown)}/></div>
+        </section>
       </form>
     </Dialog>
     {confirm==='discard'?<ConfirmDialog title={t('common.discardTitle')} description={t('common.discardDesc')} confirmLabel={t('common.discard')} busyLabel={t('common.discarding')} onCancel={()=>setConfirm(null)} onConfirm={onClose}/>:null}

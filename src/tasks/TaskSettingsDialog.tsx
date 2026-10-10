@@ -20,15 +20,8 @@ export function TaskSettingsDialog({
   return (
     <KanbanFieldManagerDialog
       snapshot={snapshot}
-      linkingEnabled={workspace.workspace.data.linkingEnabled}
-      onSetLinking={workspace.setTaskViewLinking}
-      fixedPrioritiesReadOnly
       restoreFocusRef={restoreFocusRef}
       onClose={onClose}
-      createPriority={async () => { throw new Error('Fixed priorities cannot be created.'); }}
-      updatePriority={async () => { throw new Error('Fixed priorities cannot be changed.'); }}
-      deletePriority={async () => { throw new Error('Fixed priorities cannot be deleted.'); }}
-      reorderPriorities={async () => snapshot.priorities}
       createTag={workspace.createTag}
       updateTag={workspace.updateTag}
       deleteTag={workspace.deleteTag}

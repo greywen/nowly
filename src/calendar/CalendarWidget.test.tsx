@@ -13,6 +13,12 @@ const baseProps = {
   anchorIso: '2026-07-23',
   view: 'month' as const,
   events: sampleEvents,
+  categories: [
+    { id: 'work', name: '工作', color: '#4F55DA', position: 0, createdAt: '', updatedAt: '' },
+    { id: 'important', name: '重要', color: '#F06445', position: 1, createdAt: '', updatedAt: '' },
+    { id: 'personal', name: '个人', color: '#4FC9DA', position: 2, createdAt: '', updatedAt: '' },
+    { id: 'learning', name: '学习', color: '#B8D935', position: 3, createdAt: '', updatedAt: '' }
+  ],
   status: 'ready' as const,
   onRetry: vi.fn(),
   onCreateEvent: vi.fn(),
@@ -33,6 +39,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   // jsdom has no elementFromPoint, so the drag test installs one by hand.
   Reflect.deleteProperty(document, 'elementFromPoint');
+  Reflect.deleteProperty(document, 'elementsFromPoint');
 });
 
 const weeklyRule: Recurrence = { freq: 'weekly', interval: 1, byDay: ['TH'], end: { kind: 'never' } };
@@ -81,7 +88,7 @@ describe('CalendarWidget', () => {
 
     const row = screen.getByRole('button', { name: '另有 1 个日程' });
     expect(row).toHaveClass('event-overflow-dots');
-    expect(row.querySelector('.event-overflow-dot')).toHaveStyle({ '--selected-color': '#4FC9DA' });
+    expect(row.querySelector('.event-overflow-dot')).toHaveStyle({ '--selected-color': '#4F55DA' });
   });
 
   it('renders a 42-day month and invokes all header navigation callbacks', async () => {
@@ -449,6 +456,41 @@ describe('CalendarWidget', () => {
     fireEvent(window, new MouseEvent('pointerup', {}));
     expect(onMoveEvent).toHaveBeenCalledTimes(1);
     expect(onMoveEvent).toHaveBeenCalledWith(instances[0], '2026-07-25');
+  });
+
+  it('shrinks a two-day all-day event when the first drag move still hits the event bar', () => {
+    const onResizeEvent = vi.fn();
+    const allDayEvent: CalendarEvent = {
+      ...sampleEvents[0],
+      id: 'two-day-event',
+      title: '两天日程',
+      startAt: '2026-07-23T00:00',
+      endAt: '2026-07-24T23:59',
+      allDay: true
+    };
+    const { container } = render(
+      <CalendarWidget {...baseProps} events={[allDayEvent]} onResizeEvent={onResizeEvent} />
+    );
+    const handle = container.querySelector('.event-bar__resize-handle') as HTMLElement;
+    const targetDay = container.querySelector('[data-iso-date="2026-07-23"]') as HTMLElement;
+
+    Reflect.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: () => handle
+    });
+    Reflect.defineProperty(document, 'elementsFromPoint', {
+      configurable: true,
+      value: () => [handle, targetDay]
+    });
+
+    fireEvent(
+      handle,
+      new MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 200, clientY: 10 })
+    );
+    fireEvent(window, new MouseEvent('pointermove', { clientX: 100, clientY: 10 }));
+    fireEvent(window, new MouseEvent('pointerup'));
+
+    expect(onResizeEvent).toHaveBeenCalledWith(allDayEvent, '2026-07-23');
   });
 
 });

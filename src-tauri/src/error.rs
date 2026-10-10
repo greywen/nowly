@@ -38,6 +38,21 @@ impl CommandError {
         eprintln!("system operation failed: {error}");
         Self::public("system_error", "系统操作失败，请重试。", None)
     }
+
+    /// A system failure whose message was written for the user.
+    ///
+    /// `system` redacts, because an internal error can carry a path, a query or a
+    /// raw OS message. That redaction is the right default, but it also means a
+    /// command that has already composed a specific, user-facing reason cannot
+    /// report it: the caller's message is logged and thrown away, and the user
+    /// gets "系统操作失败，请重试。" no matter what actually went wrong.
+    ///
+    /// This constructor is for that case only. The caller guarantees the message is
+    /// a fixed, translated string it authored — never an error's own `Display`, and
+    /// never anything carrying a path, a coordinate or captured content.
+    pub fn reported(message: &'static str) -> Self {
+        Self::public("system_error", message, None)
+    }
 }
 
 #[cfg(test)]

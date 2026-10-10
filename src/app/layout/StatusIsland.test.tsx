@@ -12,7 +12,8 @@ import {
   StatusIslandIdleView,
   StatusIslandPanel,
   StatusIslandReminderView,
-  StatusIslandSummaryView
+  StatusIslandSummaryView,
+  TopRail
 } from './StatusIsland';
 
 function event(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
@@ -70,7 +71,112 @@ function panelActions(overrides: Partial<React.ComponentProps<typeof StatusIslan
   };
 }
 
+describe('TopRail', () => {
+  it('keeps the status control and Nowly control inside one continuous status shell', () => {
+    const { container } = render(
+      <TopRail
+        open={false}
+        source="island"
+        surface="status"
+        assistantClosing={false}
+        statusAnim={null}
+        assistantAnim={null}
+        mode="idle"
+        panel={<div>状态详情</div>}
+        assistant={<div>Nowly 助手</div>}
+        onActivateNowly={vi.fn()}
+        onCollapse={vi.fn()}
+      >
+        <div>状态摘要</div>
+      </TopRail>
+    );
+
+    const shell = container.querySelector('.status-rail__status-presence');
+    expect(shell).not.toBeNull();
+    expect(shell?.querySelector('.status-rail__sheet')).not.toBeNull();
+    expect(shell?.querySelector('.status-rail__nowly')).not.toBeNull();
+    expect(container.querySelector('.status-rail > .status-rail__nowly')).toBeNull();
+  });
+
+  it('removes the hidden Nowly control from keyboard navigation while status details are open', () => {
+    const { container } = render(
+      <TopRail
+        open
+        source="island"
+        surface="status"
+        assistantClosing={false}
+        statusAnim="grow"
+        assistantAnim={null}
+        mode="summary"
+        panel={<div>状态详情</div>}
+        assistant={<div>Nowly 助手</div>}
+        onActivateNowly={vi.fn()}
+        onCollapse={vi.fn()}
+      >
+        <div>状态摘要</div>
+      </TopRail>
+    );
+
+    const nowly = container.querySelector('.status-rail__nowly');
+    expect(nowly).toHaveAttribute('aria-hidden', 'true');
+    expect(nowly).toHaveAttribute('tabindex', '-1');
+    expect(nowly).toHaveAttribute('data-available', 'false');
+  });
+
+  it('uses one shared close-button variant for status and assistant panels', () => {
+    const { container, rerender } = render(
+      <TopRail
+        open
+        source="island"
+        surface="status"
+        assistantClosing={false}
+        statusAnim="grow"
+        assistantAnim={null}
+        mode="summary"
+        panel={<div>状态详情</div>}
+        assistant={<div>Nowly 助手</div>}
+        onActivateNowly={vi.fn()}
+        onCollapse={vi.fn()}
+      >
+        <div>状态摘要</div>
+      </TopRail>
+    );
+
+    const statusClose = container.querySelector('[data-owner="status"]');
+    expect(statusClose).toHaveClass('status-rail__panel-close');
+
+    rerender(
+      <TopRail
+        open
+        source="nowly"
+        surface="assistant"
+        assistantClosing={false}
+        statusAnim={null}
+        assistantAnim="grow"
+        mode="summary"
+        panel={<div>状态详情</div>}
+        assistant={<div>Nowly 助手</div>}
+        onActivateNowly={vi.fn()}
+        onCollapse={vi.fn()}
+      >
+        <div>状态摘要</div>
+      </TopRail>
+    );
+
+    const assistantClose = container.querySelector('[data-owner="assistant"]');
+    expect(assistantClose).toHaveClass('status-rail__panel-close');
+    expect(statusClose?.className).toBe(assistantClose?.className);
+  });
+});
+
 describe('StatusIslandIdleView', () => {
+  it('does not create a first-run movement tooltip or acknowledgement button', () => {
+    render(<StatusIslandIdleView />);
+    expect(screen.queryByText('移动 Nowly Bar')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '知道了' })).not.toBeInTheDocument();
+    expect(document.querySelector('.status-island__drag-hint')).not.toBeInTheDocument();
+  });
+
   it('keeps the capsule and says there is nothing scheduled', () => {
     render(<StatusIslandIdleView />);
 

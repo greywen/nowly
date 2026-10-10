@@ -6,6 +6,7 @@ import type { CalendarSubscription } from './subscription-model';
 function sub(overrides: Partial<CalendarSubscription> = {}): CalendarSubscription {
   return {
     id: 's1', name: '家庭', url: 'https://example.com/a.ics', color: '#4FC9DA',
+    categoryId: null,
     refreshIntervalMinutes: 15, provider: 'ics', accountId: null, remoteCalendarId: null,
     lastSyncedAt: null, lastAttemptedAt: null, lastStatus: null, lastError: null,
     createdAt: '', updatedAt: '', ...overrides
@@ -17,6 +18,8 @@ function props(overrides = {}) {
     subscriptions: [sub()], onChanged: vi.fn(),
     onCreate: vi.fn().mockResolvedValue(sub()), onUpdate: vi.fn().mockResolvedValue(sub()),
     onDelete: vi.fn().mockResolvedValue(undefined), onRefresh: vi.fn().mockResolvedValue(undefined),
+    categories: [], onCreateCategory: vi.fn().mockResolvedValue(undefined),
+    onUpdateCategory: vi.fn().mockResolvedValue(undefined), onDeleteCategory: vi.fn().mockResolvedValue(undefined),
     ...overrides
   };
 }

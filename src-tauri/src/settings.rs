@@ -46,11 +46,6 @@ pub fn read_app_settings(connection: &Connection) -> Result<AppSettings, rusqlit
             crate::models::default_icon_style(),
         )?,
         hide_topbar_in_wallpaper: read_value_or(connection, "hide_topbar_in_wallpaper", true)?,
-        notification_display: read_value_or(
-            connection,
-            "notification_display",
-            crate::models::default_notification_display(),
-        )?,
         notification_mode: read_value_or(
             connection,
             "notification_mode",
@@ -62,11 +57,19 @@ pub fn read_app_settings(connection: &Connection) -> Result<AppSettings, rusqlit
             "quick_panel_shortcut",
             "Ctrl+Space".to_owned(),
         )?,
+        screenshot_shortcut: read_value_or(connection, "screenshot_shortcut", crate::models::default_screenshot_shortcut())?,
+        screenshot_history_shortcut: read_value_or(connection, "screenshot_history_shortcut", crate::models::default_screenshot_history_shortcut())?,
+        bar_menu: crate::models::normalize_bar_menu(read_value_or(connection, "bar_menu", crate::models::default_bar_menu())?),
         recent_colors: read_value_or(connection, "recent_colors", Vec::new())?,
     })
 }
 
 pub(crate) fn validate(settings: &AppSettings) -> Result<(), rusqlite::Error> {
+    let screenshot = crate::screenshot_shortcuts::normalize(&settings.screenshot_shortcut)
+        .map_err(|_| rusqlite::Error::InvalidParameterName("screenshotShortcut".into()))?;
+    let history = crate::screenshot_shortcuts::normalize(&settings.screenshot_history_shortcut)
+        .map_err(|_| rusqlite::Error::InvalidParameterName("screenshotHistoryShortcut".into()))?;
+    if screenshot == history { return Err(rusqlite::Error::InvalidParameterName("screenshotHistoryShortcut".into())); }
     if !matches!(
         settings.density.as_str(),
         "compact" | "balanced" | "comfortable"
@@ -84,21 +87,30 @@ pub(crate) fn validate(settings: &AppSettings) -> Result<(), rusqlite::Error> {
     if !matches!(settings.date_format.as_str(), "localized" | "iso") {
         return Err(rusqlite::Error::InvalidParameterName("dateFormat".into()));
     }
-    // The island only knows these two contents. An unknown value would leave the
-    // surface with no mode to render.
-    if !matches!(settings.notification_display.as_str(), "detail" | "summary") {
+    if !matches!(
+        settings.notification_mode.as_str(),
+        "persistent" | "notification"
+    ) {
         return Err(rusqlite::Error::InvalidParameterName(
-            "notificationDisplay".into(),
+            "notificationMode".into(),
         ));
-    }
-    if !matches!(settings.notification_mode.as_str(), "persistent" | "notification") {
-        return Err(rusqlite::Error::InvalidParameterName("notificationMode".into()));
     }
     if !matches!(
         settings.icon_style.as_str(),
         "duotone" | "solid" | "outline"
     ) {
         return Err(rusqlite::Error::InvalidParameterName("iconStyle".into()));
+    }
+    let defaults = crate::models::default_bar_menu();
+    if settings.bar_menu.len() != defaults.len() {
+        return Err(rusqlite::Error::InvalidParameterName("barMenu".into()));
+    }
+    for (index, item) in settings.bar_menu.iter().enumerate() {
+        if !defaults.iter().any(|known| known.id == item.id)
+            || settings.bar_menu[..index].iter().any(|previous| previous.id == item.id)
+        {
+            return Err(rusqlite::Error::InvalidParameterName("barMenu".into()));
+        }
     }
     Ok(())
 }
@@ -135,10 +147,6 @@ pub fn write_app_settings(
             serde_json::to_string(&settings.hide_topbar_in_wallpaper),
         ),
         (
-            "notification_display",
-            serde_json::to_string(&settings.notification_display),
-        ),
-        (
             "notification_mode",
             serde_json::to_string(&settings.notification_mode),
         ),
@@ -150,6 +158,9 @@ pub fn write_app_settings(
             "quick_panel_shortcut",
             serde_json::to_string(&settings.quick_panel_shortcut),
         ),
+        ("screenshot_shortcut", serde_json::to_string(&settings.screenshot_shortcut)),
+        ("screenshot_history_shortcut", serde_json::to_string(&settings.screenshot_history_shortcut)),
+        ("bar_menu", serde_json::to_string(&settings.bar_menu)),
         (
             "recent_colors",
             serde_json::to_string(&settings.recent_colors),
@@ -168,8 +179,14 @@ pub fn write_app_settings(
             (key, value),
         )?;
     }
+    transaction.execute(
+        "DELETE FROM settings WHERE key = 'notification_display'",
+        [],
+    )?;
+    transaction.execute("DELETE FROM settings WHERE key = 'bar_buttons'", [])?;
+    let saved = read_app_settings(&transaction)?;
     transaction.commit()?;
-    read_app_settings(connection)
+    Ok(saved)
 }
 
 #[cfg(test)]
@@ -185,6 +202,8 @@ mod tests {
 
         let settings = read_app_settings(&connection).unwrap();
 
+        assert_eq!(settings.screenshot_shortcut, "Ctrl+Alt+A");
+        assert_eq!(settings.screenshot_history_shortcut, "Ctrl+Alt+H");
         assert!(!settings.wallpaper_enabled);
         assert!(!settings.launch_at_login);
         assert_eq!(settings.target_monitor_id, None);
@@ -194,9 +213,115 @@ mod tests {
         assert!(settings.show_weekends);
         assert_eq!(settings.icon_style, "duotone");
         assert!(settings.hide_topbar_in_wallpaper);
-        // A new notification is worth reading once in full.
-        assert_eq!(settings.notification_display, "detail");
         assert_eq!(settings.notification_mode, "persistent");
+        assert_eq!(settings.bar_menu, crate::models::default_bar_menu());
+    }
+
+    #[test]
+    fn malformed_bar_menu_lists_are_rejected() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        migrate(&mut connection).unwrap();
+        let before = read_app_settings(&connection).unwrap();
+
+        let defaults = crate::models::default_bar_menu();
+        let mut unknown = defaults.clone();
+        unknown[0].id = "unknown".into();
+        let mut duplicate = defaults.clone();
+        duplicate[0].id = duplicate[1].id.clone();
+        for invalid_list in [vec![], defaults[..2].to_vec(), unknown, duplicate] {
+            let mut invalid = before.clone();
+            invalid.bar_menu = invalid_list;
+            assert!(super::write_app_settings(&mut connection, &invalid).is_err());
+            assert_eq!(read_app_settings(&connection).unwrap(), before);
+        }
+    }
+
+    #[test]
+    fn hidden_bar_menu_order_survives_save_and_repeated_migration() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        migrate(&mut connection).unwrap();
+        let mut settings = read_app_settings(&connection).unwrap();
+        settings.bar_menu.reverse();
+        for item in &mut settings.bar_menu { item.visible = false; }
+
+        let saved = super::write_app_settings(&mut connection, &settings).unwrap();
+
+        assert_eq!(saved.bar_menu, settings.bar_menu);
+        migrate(&mut connection).unwrap();
+        migrate(&mut connection).unwrap();
+        assert_eq!(read_app_settings(&connection).unwrap().bar_menu, settings.bar_menu);
+    }
+
+    #[test]
+    fn saved_menu_survives_database_close_and_reopen() {
+        struct TestDatabase(std::path::PathBuf);
+        impl Drop for TestDatabase {
+            fn drop(&mut self) { let _ = std::fs::remove_file(&self.0); }
+        }
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let file = TestDatabase(format!(".bar-menu-settings-{}-{stamp}.sqlite", std::process::id()).into());
+        let expected = {
+            let mut connection = Connection::open(&file.0).unwrap();
+            migrate(&mut connection).unwrap();
+            let mut settings = read_app_settings(&connection).unwrap();
+            settings.bar_menu.reverse();
+            settings.bar_menu[0].visible = false;
+            super::write_app_settings(&mut connection, &settings).unwrap().bar_menu
+        };
+        let mut reopened = Connection::open(&file.0).unwrap();
+        migrate(&mut reopened).unwrap();
+        assert_eq!(read_app_settings(&reopened).unwrap().bar_menu, expected);
+    }
+
+    #[test]
+    fn legacy_buttons_never_determine_new_menu_defaults() {
+        for legacy in ["[]", "[\"screenshot\"]"] {
+            let mut connection = Connection::open_in_memory().unwrap();
+            migrate(&mut connection).unwrap();
+            connection.execute("DELETE FROM settings WHERE key = 'bar_menu'", []).unwrap();
+            connection.execute(
+                "INSERT INTO settings(key,value,updated_at) VALUES ('bar_buttons',?1,'old')",
+                [legacy],
+            ).unwrap();
+            migrate(&mut connection).unwrap();
+            assert_eq!(read_app_settings(&connection).unwrap().bar_menu, crate::models::default_bar_menu());
+            let stored: String = connection.query_row("SELECT value FROM settings WHERE key='bar_menu'", [], |row| row.get(0)).unwrap();
+            assert_eq!(serde_json::from_str::<Vec<crate::models::BarMenuItem>>(&stored).unwrap(), crate::models::default_bar_menu());
+            let remaining: i64 = connection.query_row("SELECT COUNT(*) FROM settings WHERE key='bar_buttons'", [], |row| row.get(0)).unwrap();
+            assert_eq!(remaining, 0);
+        }
+    }
+
+    #[test]
+    fn reading_menu_appends_missing_features_and_preserves_hidden_order() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        migrate(&mut connection).unwrap();
+        connection.execute("UPDATE settings SET value=?1 WHERE key='bar_menu'", [
+            r#"[{"id":"assistant","visible":false},{"id":"unknown","visible":true},{"id":"assistant","visible":true}]"#
+        ]).unwrap();
+        let menu = read_app_settings(&connection).unwrap().bar_menu;
+        assert_eq!(menu.iter().map(|item| item.id.as_str()).collect::<Vec<_>>(), vec!["assistant", "screenshot", "screenshotHistory"]);
+        assert!(!menu[0].visible);
+    }
+
+    #[test]
+    fn malformed_menu_structures_are_rejected_by_deserialization() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        migrate(&mut connection).unwrap();
+        let mut value = serde_json::to_value(read_app_settings(&connection).unwrap()).unwrap();
+        for malformed in [
+            serde_json::json!(null),
+            serde_json::json!({"id":"assistant","visible":true}),
+            serde_json::json!([{"id":"assistant"}]),
+            serde_json::json!([{"id":"assistant","visible":"no"}]),
+            serde_json::json!([{"id":"assistant","visible":true,"extra":true}]),
+        ] {
+            value["barMenu"] = malformed;
+            assert!(serde_json::from_value::<crate::models::AppSettings>(value.clone()).is_err());
+        }
+        value.as_object_mut().unwrap().remove("barMenu");
+        assert!(serde_json::from_value::<crate::models::AppSettings>(value).is_err());
     }
 
     #[test]
@@ -213,13 +338,15 @@ mod tests {
             show_weekends: false,
             icon_style: "outline".into(),
             hide_topbar_in_wallpaper: false,
-            notification_display: "summary".into(),
             notification_mode: "notification".into(),
             // Non-default values, like every field above: the assertion below is a
             // round trip, so a field left at its default would pass even if it were
             // never written.
             quick_panel_enabled: false,
             quick_panel_shortcut: "Ctrl+Shift+K".into(),
+            screenshot_shortcut: "Ctrl+Shift+A".into(),
+            screenshot_history_shortcut: "Ctrl+Shift+H".into(),
+            bar_menu: crate::models::default_bar_menu().into_iter().rev().map(|mut item| { item.visible = false; item }).collect(),
             recent_colors: vec![],
         };
 
@@ -306,5 +433,31 @@ mod tests {
         // And the values persist on a fresh read.
         let reread = read_app_settings(&connection).unwrap();
         assert_eq!(reread, saved);
+    }
+
+    #[test]
+    fn write_removes_the_obsolete_notification_display_setting() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        migrate(&mut connection).unwrap();
+        connection
+            .execute(
+                "INSERT INTO settings(key, value, updated_at)
+                 VALUES ('notification_display', '\"summary\"', '2026-09-15T00:00:00Z')
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                [],
+            )
+            .unwrap();
+        let settings = read_app_settings(&connection).unwrap();
+
+        super::write_app_settings(&mut connection, &settings).unwrap();
+
+        let remaining: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM settings WHERE key = 'notification_display'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(remaining, 0);
     }
 }

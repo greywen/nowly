@@ -4,6 +4,7 @@ import { t } from '../i18n';
 
 export type ConfirmDialogProps = {
   title: string;
+  className?: string;
   description: ReactNode;
   tone?: 'default' | 'danger';
   confirmLabel: string;
@@ -18,6 +19,7 @@ export type ConfirmDialogProps = {
 
 export function ConfirmDialog({
   title,
+  className,
   description,
   tone = 'default',
   confirmLabel,
@@ -38,7 +40,7 @@ export function ConfirmDialog({
       isTopLayer={isTopLayer}
       restoreFocusRef={restoreFocusRef}
       onRequestClose={busy ? () => undefined : onCancel}
-      className="confirm-dialog"
+      className={`confirm-dialog${className ? ` ${className}` : ''}`}
       footer={
         <>
           <button type="button" className="good-button" disabled={busy} onClick={onCancel}>

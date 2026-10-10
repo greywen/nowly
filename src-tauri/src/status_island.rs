@@ -13,7 +13,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 const LOCAL_MINUTE_FORMAT: &str = "%Y-%m-%dT%H:%M";
 const LOCAL_DATE_FORMAT: &str = "%Y-%m-%d";
-const REMINDER_STORE_FILE: &str = "status-island-reminders.json";
+const LEGACY_REMINDER_STORE_FILE: &str = "status-island-reminders.json";
 static STATUS_APP: OnceLock<AppHandle> = OnceLock::new();
 
 /// Lifecycle facts the native coordinator owns. `dismissed` is the user closing
@@ -58,13 +58,6 @@ pub struct ReminderSnapshotState {
     pub hidden: bool,
     pub dismissed: bool,
     pub consumed: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct StoredReminders {
-    local_date: String,
-    reminders: Vec<ReminderState>,
 }
 
 /// Owns acknowledgement and the stored dismissal state. Everything here is
@@ -192,43 +185,87 @@ impl ReminderLifecycle {
 
 pub type ManagedReminders = Mutex<ReminderLifecycle>;
 
-pub fn reminder_store_path(app_data_dir: &Path) -> PathBuf {
-    app_data_dir.join(REMINDER_STORE_FILE)
+/// The pre-SQLite build wrote reminder lifecycle state to this one file. The
+/// current build has no reader or migration path for it; remove only this exact
+/// legacy path once at startup so stale state cannot be mistaken for live data.
+pub fn legacy_reminder_store_path(app_data_dir: &Path) -> PathBuf {
+    app_data_dir.join(LEGACY_REMINDER_STORE_FILE)
 }
 
-/// Corrupt or unreadable storage degrades to empty state; it must never stop
-/// the top surface from starting.
-pub fn load_reminders(path: &Path, today: &str) -> ReminderLifecycle {
-    let stored = std::fs::read_to_string(path)
-        .ok()
-        .and_then(|raw| serde_json::from_str::<StoredReminders>(&raw).ok());
-    match stored {
-        Some(stored) if stored.local_date == today => {
-            ReminderLifecycle::new(today.to_owned(), stored.reminders)
-        }
-        _ => ReminderLifecycle::new(today.to_owned(), Vec::new()),
+pub fn remove_legacy_reminder_store(app_data_dir: &Path) -> std::io::Result<bool> {
+    let path = legacy_reminder_store_path(app_data_dir);
+    match std::fs::remove_file(path) {
+        Ok(()) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error),
     }
 }
 
-pub fn save_reminders(path: &Path, lifecycle: &ReminderLifecycle) -> Result<(), std::io::Error> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
+/// Missing or unreadable rows degrade to empty state; reminder persistence must
+/// never stop the top surface from starting.
+pub fn load_reminders(connection: &rusqlite::Connection, today: &str) -> ReminderLifecycle {
+    let states = connection
+        .prepare(
+            "SELECT identity, acknowledged_at, hidden, dismissed, consumed
+             FROM status_island_reminders
+             WHERE local_date=?1
+             ORDER BY identity",
+        )
+        .and_then(|mut statement| {
+            let rows = statement.query_map([today], |row| {
+                Ok(ReminderState {
+                    identity: row.get(0)?,
+                    acknowledged_at: row.get(1)?,
+                    hidden: row.get::<_, i64>(2)? != 0,
+                    dismissed: row.get::<_, i64>(3)? != 0,
+                    consumed: row.get::<_, i64>(4)? != 0,
+                })
+            })?;
+            rows.collect::<rusqlite::Result<Vec<_>>>()
+        })
+        .unwrap_or_default();
+    ReminderLifecycle::new(today.to_owned(), states)
+}
+
+pub fn save_reminders(
+    connection: &rusqlite::Connection,
+    lifecycle: &ReminderLifecycle,
+) -> rusqlite::Result<()> {
+    let transaction = connection.unchecked_transaction()?;
+    transaction.execute(
+        "DELETE FROM status_island_reminders WHERE local_date<>?1",
+        [&lifecycle.local_date],
+    )?;
+    transaction.execute(
+        "DELETE FROM status_island_reminders WHERE local_date=?1",
+        [&lifecycle.local_date],
+    )?;
+    for state in lifecycle.states() {
+        transaction.execute(
+            "INSERT INTO status_island_reminders(
+                local_date, identity, acknowledged_at, hidden, dismissed, consumed, updated_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+            rusqlite::params![
+                lifecycle.local_date,
+                state.identity,
+                state.acknowledged_at,
+                state.hidden,
+                state.dismissed,
+                state.consumed,
+            ],
+        )?;
     }
-    let payload = StoredReminders {
-        local_date: lifecycle.local_date.clone(),
-        reminders: lifecycle.states(),
-    };
-    std::fs::write(
-        path,
-        serde_json::to_string(&payload).map_err(std::io::Error::other)?,
-    )
+    transaction.commit()
 }
 
 fn persist<R: tauri::Runtime>(app: &AppHandle<R>, lifecycle: &ReminderLifecycle) {
-    let Ok(dir) = app.path().app_data_dir() else {
+    let Some(db) = app.try_state::<AppDb>() else {
         return;
     };
-    if let Err(error) = save_reminders(&reminder_store_path(&dir), lifecycle) {
+    let Ok(connection) = db.0.lock() else {
+        return;
+    };
+    if let Err(error) = save_reminders(&connection, lifecycle) {
         // The live process keeps working; only cross-restart memory is lost.
         eprintln!("failed to persist status island reminders: {error}");
     }
@@ -237,7 +274,7 @@ fn persist<R: tauri::Runtime>(app: &AppHandle<R>, lifecycle: &ReminderLifecycle)
 /// Acknowledgement is recorded here, never in a WebView: the native coordinator
 /// is the single time source of truth. Called the moment the details panel is
 /// actually shown, whichever path opened it (sustained hover, click, or keyboard).
-pub fn acknowledge_primary<R: tauri::Runtime>(app: &AppHandle<R>) {
+pub fn acknowledge_identity<R: tauri::Runtime>(app: &AppHandle<R>, identity: &str) {
     let Some(state) = app.try_state::<ManagedReminders>() else {
         return;
     };
@@ -245,10 +282,7 @@ pub fn acknowledge_primary<R: tauri::Runtime>(app: &AppHandle<R>) {
         return;
     };
     lifecycle.roll_local_date(&today_local());
-    let Some(identity) = lifecycle.primary() else {
-        return;
-    };
-    if !lifecycle.acknowledge(&identity, Local::now()) {
+    if !lifecycle.acknowledge(identity, Local::now()) {
         return;
     }
     persist(app, &lifecycle);
@@ -283,11 +317,8 @@ pub struct StatusIslandSnapshot {
     pub tasks: Vec<Task>,
     pub focus: FocusStatusSnapshot,
     pub reminders: Vec<ReminderSnapshotState>,
-    /// The user's notification setting, forwarded so the island window does not
-    /// have to open the database itself. Decides whether a new reminder starts as
-    /// a full detail or goes straight into today's summary.
-    pub notification_display: String,
     pub notification_mode: String,
+    pub bar_menu: Vec<crate::models::BarMenuItem>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -355,10 +386,10 @@ pub fn get_status_island_snapshot(
     // Read on the same connection that is already open: the island window has no
     // database of its own, and a second command round-trip would let the surface
     // render one frame with the wrong mode.
-    let settings = crate::settings::read_app_settings(&connection)
-        .map_err(CommandError::database)?;
-    let notification_display = settings.notification_display;
+    let settings =
+        crate::settings::read_app_settings(&connection).map_err(CommandError::database)?;
     let notification_mode = settings.notification_mode;
+    let bar_menu = settings.bar_menu;
     drop(connection);
     let focus = timer
         .lock()
@@ -386,53 +417,63 @@ pub fn get_status_island_snapshot(
         tasks,
         focus,
         reminders: states,
-        notification_display,
         notification_mode,
+        bar_menu,
     })
 }
 
 #[tauri::command]
-pub fn acknowledge_status_island_notification(
-    app: AppHandle,
-    reminders: State<'_, ManagedReminders>,
-    identities: Vec<String>,
-) -> Result<(), CommandError> {
-    let mut changed = false;
-    {
-        let mut lifecycle = reminders.lock().map_err(CommandError::system)?;
-        lifecycle.roll_local_date(&today_local());
-        for identity in identities {
-            changed |= lifecycle.acknowledge(&identity, Local::now());
+pub fn set_status_island_visibility(app: AppHandle, visible: bool) -> Result<(), CommandError> {
+    let Some(window) = app.get_webview_window("quick-panel-handle") else {
+        return Ok(());
+    };
+    let enabled = app
+        .try_state::<crate::quick_panel::PanelController>()
+        .is_none_or(|controller| controller.is_enabled());
+    if !should_apply_visibility(enabled, visible) {
+        return Ok(());
+    }
+    if !visible {
+        let Some(db) = app.try_state::<AppDb>() else {
+            return Ok(());
+        };
+        // Settings saves use DB -> visibility as well. Keep this guard alive
+        // through hide so a persistent-mode save cannot show between our
+        // notification-mode check and the actual hide.
+        let connection = db.0.lock().map_err(CommandError::database)?;
+        let settings =
+            crate::settings::read_app_settings(&connection).map_err(CommandError::database)?;
+        if settings.notification_mode != "notification" {
+            return Ok(());
         }
-        if changed { persist(&app, &lifecycle); }
+        let result =
+            if let Some(controller) = app.try_state::<crate::quick_panel::PanelController>() {
+                controller.hide_serialized(|| window.hide())
+            } else {
+                window.hide()
+            };
+        return result.map_err(CommandError::system);
     }
-    if changed { invalidate(&app)?; }
-    Ok(())
+    if let Some(controller) = app.try_state::<crate::quick_panel::PanelController>() {
+        if visible {
+            if let Some(result) = controller.show_serialized(|| window.show()) {
+                result.map_err(CommandError::system)?;
+            }
+            Ok(())
+        } else {
+            controller
+                .hide_serialized(|| window.hide())
+                .map_err(CommandError::system)
+        }
+    } else if visible {
+        window.show().map_err(CommandError::system)
+    } else {
+        window.hide().map_err(CommandError::system)
+    }
 }
 
-#[tauri::command]
-pub fn dismiss_status_island_notification(
-    app: AppHandle,
-    reminders: State<'_, ManagedReminders>,
-    identities: Vec<String>,
-) -> Result<(), CommandError> {
-    {
-        let mut lifecycle = reminders.lock().map_err(CommandError::system)?;
-        lifecycle.roll_local_date(&today_local());
-        for identity in identities { lifecycle.acknowledge(&identity, Local::now()); }
-        persist(&app, &lifecycle);
-    }
-    let Some(window) = app.get_webview_window("quick-panel-handle") else { return Ok(()); };
-    window.hide().map_err(CommandError::system)
-}
-
-#[tauri::command]
-pub fn set_status_island_visibility(
-    app: AppHandle,
-    visible: bool,
-) -> Result<(), CommandError> {
-    let Some(window) = app.get_webview_window("quick-panel-handle") else { return Ok(()); };
-    if visible { window.show() } else { window.hide() }.map_err(CommandError::system)
+fn should_apply_visibility(enabled: bool, visible: bool) -> bool {
+    enabled || !visible
 }
 
 #[tauri::command]
@@ -599,8 +640,9 @@ pub fn resume_status_island_focus(
 #[cfg(test)]
 mod tests {
     use super::{
-        load_reminders, reminder_store_path, save_reminders, snapshot_range, PresenceSurface,
-        ReminderLifecycle, ReminderState, StatusIslandEventNavigation,
+        legacy_reminder_store_path, load_reminders, remove_legacy_reminder_store, save_reminders,
+        should_apply_visibility, snapshot_range, PresenceSurface, ReminderLifecycle, ReminderState,
+        StatusIslandEventNavigation,
     };
     use crate::models::EventTarget;
     use chrono::{Local, NaiveDate, TimeZone};
@@ -668,12 +710,14 @@ mod tests {
         assert!(dismissed.dismissed);
         assert!(!dismissed.consumed);
         assert!(dismissed.acknowledged_at.is_none());
-        assert!(lifecycle
-            .states()
-            .iter()
-            .find(|state| state.identity == "focus:session-1:completed:2")
-            .unwrap()
-            .consumed);
+        assert!(
+            lifecycle
+                .states()
+                .iter()
+                .find(|state| state.identity == "focus:session-1:completed:2")
+                .unwrap()
+                .consumed
+        );
         // Nothing was batch-acknowledged.
         assert!(states.iter().all(|state| state.acknowledged_at.is_none()));
     }
@@ -710,39 +754,54 @@ mod tests {
     }
 
     #[test]
-    fn reminders_round_trip_and_expire_with_the_local_date() {
-        let dir = std::env::temp_dir().join(format!("nowly-reminders-{}", uuid::Uuid::new_v4()));
-        let path = reminder_store_path(&dir);
+    fn reminders_round_trip_in_sqlite_and_expire_with_the_local_date() {
+        let mut connection = rusqlite::Connection::open_in_memory().unwrap();
+        crate::db::migrate(&mut connection).unwrap();
         let mut lifecycle = ReminderLifecycle::new("2026-09-13".into(), Vec::new());
         lifecycle.dismiss("event:a:reminder:15");
-        save_reminders(&path, &lifecycle).unwrap();
+        save_reminders(&connection, &lifecycle).unwrap();
 
-        let same_day = load_reminders(&path, "2026-09-13");
+        let same_day = load_reminders(&connection, "2026-09-13");
         assert_eq!(same_day.states().len(), 1);
         assert!(same_day.states()[0].dismissed);
 
-        let next_day = load_reminders(&path, "2026-09-14");
+        let next_day = load_reminders(&connection, "2026-09-14");
         assert!(next_day.states().is_empty());
         assert_eq!(next_day.local_date(), "2026-09-14");
+    }
+
+    #[test]
+    fn missing_database_rows_degrade_to_an_empty_store() {
+        let mut connection = rusqlite::Connection::open_in_memory().unwrap();
+        crate::db::migrate(&mut connection).unwrap();
+        let missing = load_reminders(&connection, "2026-09-13");
+        assert!(missing.states().is_empty());
+    }
+
+    #[test]
+    fn startup_deletes_only_the_exact_legacy_json_store() {
+        let dir =
+            std::env::temp_dir().join(format!("nowly-legacy-reminders-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let legacy = legacy_reminder_store_path(&dir);
+        let neighbour = dir.join("other.json");
+        std::fs::write(&legacy, b"stale reminder state").unwrap();
+        std::fs::write(&neighbour, b"keep").unwrap();
+
+        assert!(remove_legacy_reminder_store(&dir).unwrap());
+        assert!(!legacy.exists());
+        assert!(neighbour.exists());
+        assert!(!remove_legacy_reminder_store(&dir).unwrap());
 
         std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
-    fn corrupt_or_missing_storage_degrades_to_an_empty_store() {
-        let dir = std::env::temp_dir().join(format!("nowly-reminders-{}", uuid::Uuid::new_v4()));
-        let path = reminder_store_path(&dir);
-
-        let missing = load_reminders(&path, "2026-09-13");
-        assert!(missing.states().is_empty());
-
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(&path, "{not json").unwrap();
-        let corrupt = load_reminders(&path, "2026-09-13");
-        assert!(corrupt.states().is_empty());
-        assert_eq!(corrupt.local_date(), "2026-09-13");
-
-        std::fs::remove_dir_all(&dir).ok();
+    fn a_disabled_top_surface_cannot_be_reshown_by_its_hidden_webview() {
+        assert!(should_apply_visibility(true, true));
+        assert!(should_apply_visibility(true, false));
+        assert!(!should_apply_visibility(false, true));
+        assert!(should_apply_visibility(false, false));
     }
 
     #[test]
@@ -810,8 +869,8 @@ mod tests {
 
     #[test]
     fn a_collapsed_reminder_from_an_older_build_stays_collapsed() {
-        let dir = std::env::temp_dir().join(format!("nowly-hidden-{}", uuid::Uuid::new_v4()));
-        let path = reminder_store_path(&dir);
+        let mut connection = rusqlite::Connection::open_in_memory().unwrap();
+        crate::db::migrate(&mut connection).unwrap();
         // Written by a build that collapsed reminders 15s after acknowledgement.
         // Nothing sets `hidden` now, but upgrading must not replay every reminder
         // that had already collapsed before the upgrade.
@@ -825,15 +884,15 @@ mod tests {
                 consumed: false,
             }],
         );
-        save_reminders(&path, &lifecycle).unwrap();
+        save_reminders(&connection, &lifecycle).unwrap();
 
-        let restored = load_reminders(&path, "2026-09-13");
+        let restored = load_reminders(&connection, "2026-09-13");
 
         assert!(restored.states()[0].hidden);
         // The next local day clears it, as dismissals do.
-        assert!(load_reminders(&path, "2026-09-14").states().is_empty());
-
-        std::fs::remove_dir_all(&dir).ok();
+        assert!(load_reminders(&connection, "2026-09-14")
+            .states()
+            .is_empty());
     }
 
     #[test]

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { DEFAULT_ICON_STYLE } from '../components/icon-style';
+import { normalizeBarMenu } from '../app/bar-menu';
 import type { AppSettings, MonitorInfo } from '../data/nowly-repository';
 import { useNowlyRepository } from '../data/RepositoryContext';
 import { t } from '../i18n';
 
 export type SettingsResource = { status:'loading'|'ready'|'error'; data:AppSettings; message?:string };
-export const defaultSettings: AppSettings = { wallpaperEnabled:false, launchAtLogin:false, targetMonitorId:null, density:'balanced', weekStart:'monday', dateFormat:'localized', showWeekends:true, iconStyle:DEFAULT_ICON_STYLE, hideTopbarInWallpaper:true, notificationDisplay:'detail', notificationMode:'persistent', quickPanelEnabled:true, quickPanelShortcut:'Ctrl+Space', recentColors:[] };
+export const defaultSettings: AppSettings = { wallpaperEnabled:false, launchAtLogin:false, targetMonitorId:null, density:'balanced', weekStart:'monday', dateFormat:'localized', showWeekends:true, iconStyle:DEFAULT_ICON_STYLE, hideTopbarInWallpaper:true, notificationMode:'persistent', quickPanelEnabled:true, quickPanelShortcut:'Ctrl+Space', screenshotShortcut:'Ctrl+Alt+A', screenshotHistoryShortcut:'Ctrl+Alt+H', barMenu:normalizeBarMenu(undefined), recentColors:[] };
 
 function message(error:unknown) {
   return typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string' ? error.message : t('settings.opError');
@@ -18,7 +19,10 @@ export function useSettings() {
   const [monitors,setMonitors] = useState<{status:'loading'|'ready'|'error';data:MonitorInfo[];message?:string}>({status:'loading',data:[]});
   const loadSettings = useCallback(async () => {
     setSettings(current=>({status:'loading',data:current.data}));
-    try { setSettings({status:'ready',data:await repository.getSettings()}); }
+    try {
+      const data = await repository.getSettings();
+      setSettings({status:'ready',data:{...data,barMenu:normalizeBarMenu(data.barMenu)}});
+    }
     catch(error) { setSettings(current=>({status:'error',data:current.data,message:message(error)})); }
   },[repository]);
   const loadMonitors = useCallback(async()=>{
@@ -30,9 +34,11 @@ export function useSettings() {
   const saveSettings = useCallback(async (draft:AppSettings) => {
     setWriteError(null);
     const previous = settings;
-    setSettings({status:'ready',data:draft});
+    const normalized = {...draft,barMenu:normalizeBarMenu(draft.barMenu)};
+    setSettings({status:'ready',data:normalized});
     try {
-      const saved=await repository.updateSettings(draft);
+      const response=await repository.updateSettings(normalized);
+      const saved={...response,barMenu:normalizeBarMenu(response.barMenu)};
       setSettings({status:'ready',data:saved});
       return saved;
     } catch(error) { setSettings(previous); setWriteError(message(error)); throw error; }

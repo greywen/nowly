@@ -32,9 +32,13 @@ export function displayField(key: string, value: unknown, plan?: Plan): string {
   if (typeof value === 'boolean') return value ? '是' : '否';
   return String(value).replace('T', ' ');
 }
+// The plan preview as it appears in the Nowly Bar. An event's color is left out
+// of the diff: it is chosen from the category, not something the assistant asks
+// the user to verify here.
 export function ChangeDetails({ change, plan }: { change: Change; plan: Plan }) {
   return <dl className="assistant-diff">
-    {Object.entries(fields).filter(([key]) => change.before === null || change.after === null
+    {Object.entries(fields).filter(([key]) => !(change.kind.endsWith('Event') && key === 'color'))
+      .filter(([key]) => change.before === null || change.after === null
       ? (change.before ?? change.after)?.[key] !== undefined
       : JSON.stringify(change.before[key]) !== JSON.stringify(change.after[key]))
       .map(([key, label]) => <div key={key}><dt>{label}</dt><dd>
@@ -84,7 +88,7 @@ export function PlanCard({ plan, actions, edits, selected, dirty, busy, blocked,
         {!action.kind.startsWith('delete') && <details className="assistant-editor" open={actions.length === 1}>
           <summary>调整{kinds[action.kind]} · {change.title}<ChevronDown aria-hidden="true" size={17} /></summary>
           <fieldset disabled={busy || !selected[index] || blocked || expired} className="assistant-edit">
-          <legend className="sr-only">调整这项变更</legend>
+          <legend className="visually-hidden">调整这项变更</legend>
           <label>标题<input aria-label={`标题 ${index + 1}`} value={String(value.title ?? '')} maxLength={500} onChange={e => edit('title', e.target.value)} /></label>
           {event ? <>
             <DateField label={`开始 ${index + 1}`} value={String(value.startAt ?? '')} time onChange={v => edit('startAt', v)} />
@@ -113,10 +117,12 @@ export function PlanCard({ plan, actions, edits, selected, dirty, busy, blocked,
     {dirty && <p role="status">内容已调整，旧预览已失效。请更新预览后再确认。</p>}
     {(expired || blocked) && <p role="status">此预览不能继续确认，请重新发送请求生成新预览。</p>}
     <div className="assistant-actions">
-      <button className="btn" onClick={onCancel} disabled={busy}><X aria-hidden="true" />取消方案</button>
-      {dirty && <button className="btn" onClick={onRevise} disabled={busy || !count || expired || blocked}><RefreshCw aria-hidden="true" />更新预览</button>}
+      <button className="btn" aria-label="取消方案" onClick={onCancel} disabled={busy}><X aria-hidden="true" />取消</button>
+      {dirty && <button className="btn" aria-label="更新预览" onClick={onRevise} disabled={busy || !count || expired || blocked}><RefreshCw aria-hidden="true" />更新</button>}
       <button className={`btn ${deletes ? 'btn-danger' : 'btn-primary'}`} onClick={onConfirm}
-        disabled={busy || dirty || !count || expired || blocked}>{deletes ? <Trash2 aria-hidden="true" /> : <Check aria-hidden="true" />}确认执行 {count} 项</button>
+        aria-label={`确认执行 ${count} 项`} disabled={busy || dirty || !count || expired || blocked}>
+        {deletes ? <Trash2 aria-hidden="true" /> : <Check aria-hidden="true" />}{`确认 ${count} 项`}
+      </button>
     </div>
   </section>;
 }

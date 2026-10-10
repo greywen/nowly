@@ -16,8 +16,7 @@ const snapshot: NativeStatusIslandSnapshot = {
   externalEvents: [],
   tasks: [],
   focus: { status: 'idle', remainingSeconds: 0, plannedSeconds: 0, sessionId: null, stageSequence: 0, stageChangedAt: null },
-  reminders: [],
-  notificationDisplay: 'detail'
+  reminders: []
 };
 
 const reminderEvent = {
@@ -25,6 +24,13 @@ const reminderEvent = {
   category: 'work' as const, color: '#4FC9DA' as const, note: '', reminders: [15], createdAt: 'x', updatedAt: 'x',
   recurrence: null, startTz: null, endTz: null, rrule: null, seriesId: null, seriesStartAt: null,
   occurrenceStartAt: null, isOverridden: false, subscriptionId: null
+};
+const secondReminderEvent = {
+  ...reminderEvent,
+  id: 'event-2',
+  title: '客户回访',
+  startAt: '2026-09-12T14:32',
+  endAt: '2026-09-12T15:00'
 };
 
 const urgentTask = {
@@ -64,6 +70,13 @@ function invocations(command: string) {
   return invokeMock.mock.calls.filter(call => call[0] === command);
 }
 
+async function emitPanelEvent(name: string, payload: unknown) {
+  await act(async () => { await Promise.resolve(); });
+  const listener = listenMock.mock.calls.find(call => call[0] === name)?.[1];
+  expect(listener).toBeTypeOf('function');
+  await act(async () => listener({ payload }));
+}
+
 // `findBy*` polls on real timers, so tests that need one cannot freeze the clock.
 // Those build their event relative to now instead of pinning a fixed time.
 function localMinute(date: Date): string {
@@ -82,6 +95,60 @@ describe('screen status island windows', () => {
     respondWith(snapshot);
   });
 
+  it('opens the function menu from the only Logo entry rather than opening AI directly', async () => {
+    render(<StatusIslandApp />);
+    await act(async () => { await Promise.resolve(); });
+    fireEvent.click(screen.getByRole('button', { name: 'Nowly' }));
+    expect(invocations('toggle_bar_menu')).toHaveLength(1);
+    expect(invocations('toggle_nowly_panel')).toHaveLength(0);
+    expect(document.querySelector('.status-rail__app-button')).toBeNull();
+    await emitPanelEvent('status-island-details-open', { generation: 1, source: 'menu', identity: null });
+    expect(await screen.findByRole('menu', { name: '功能菜单' })).toBeVisible();
+    expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual([
+      expect.stringContaining('截图'), expect.stringContaining('截图历史'), expect.stringContaining('AI 助手')
+    ]);
+    fireEvent.click(screen.getByRole('menuitem', { name: /AI 助手/ }));
+    await waitFor(() => expect(invocations('toggle_nowly_panel')).toHaveLength(1));
+    expect(invocations('acknowledge_status_island_reminder')).toHaveLength(0);
+  });
+
+  it('opens screenshot history inside the Bar without opening or acknowledging status details', async () => {
+    invokeMock.mockImplementation((command: string) => Promise.resolve(
+      command === 'get_status_island_snapshot' ? snapshot
+        : command === 'list_screenshot_history' ? { items: [], nextCursor: null } : null
+    ));
+    render(<StatusIslandApp />);
+    await emitPanelEvent('status-island-details-open', { generation: 1, source: 'history', identity: null });
+    expect(await screen.findByRole('heading', { name: '截图历史' })).toBeVisible();
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-surface', 'history');
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-status-open', 'false');
+    expect(invocations('acknowledge_status_island_reminder')).toHaveLength(0);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(invocations('close_status_island_details')).toHaveLength(1);
+    await emitPanelEvent('status-island-details-close', { generation: 2 });
+    expect(screen.queryByRole('heading', { name: '截图历史' })).not.toBeInTheDocument();
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-frame-anim', 'shrink');
+  });
+
+  it('clears history when capture suppression forces the native sheet closed', async () => {
+    invokeMock.mockImplementation((command: string) => Promise.resolve(command === 'get_status_island_snapshot' ? snapshot : command === 'list_screenshot_history' ? { items: [], nextCursor: null } : null));
+    render(<StatusIslandApp />);
+    await emitPanelEvent('status-island-details-open', { generation: 1, source: 'history', identity: null });
+    expect(await screen.findByRole('heading', { name: '截图历史' })).toBeVisible();
+    await emitPanelEvent('status-island-details-closed', { generation: 2 });
+    expect(screen.queryByRole('heading', { name: '截图历史' })).not.toBeInTheDocument();
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-open', 'false');
+  });
+
+  it('returns keyboard focus to the Logo after the menu finishes closing', async () => {
+    render(<StatusIslandApp />);
+    await emitPanelEvent('status-island-details-open', { generation: 1, source: 'menu', identity: null });
+    expect(screen.getAllByRole('menuitem')[0]).toHaveFocus();
+    await emitPanelEvent('status-island-details-close', { generation: 2 });
+    await emitPanelEvent('status-island-details-closed', { generation: 2 });
+    expect(screen.getByRole('button', { name: 'Nowly' })).toHaveFocus();
+  });
+
   it('keeps the capsule and says the day is empty when there is no business state', async () => {
     render(<StatusIslandApp />);
     await act(async () => { await Promise.resolve(); });
@@ -95,22 +162,73 @@ describe('screen status island windows', () => {
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
   });
 
-  it('always offers the Nowly half and opens its own sheet content', async () => {
+  it('shows the Nowly logo as the menu entry without opening it on mount', async () => {
     render(<StatusIslandApp />);
     await act(async () => { await Promise.resolve(); });
 
-    const nowly = screen.getByRole('button', { name: 'Nowly' });
-    fireEvent.mouseEnter(nowly);
-
-    expect(invokeMock).toHaveBeenCalledWith('set_status_island_presence', { surface: 'island', present: true });
-    expect(invocations('hover_nowly_panel')).toHaveLength(1);
-
-    fireEvent.click(nowly);
-
-    // The other half of the same rail: it opens the same sheet, so native has to
-    // be told which content to put in it.
-    expect(invocations('toggle_nowly_panel')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Nowly' })).toHaveAttribute('aria-expanded', 'false');
+    expect(invocations('hover_nowly_panel')).toHaveLength(0);
+    expect(invocations('toggle_nowly_panel')).toHaveLength(0);
     expect(invocations('toggle_status_island_details')).toHaveLength(0);
+  });
+
+  it('starts capture from the function menu, prevents duplicate requests and allows retry after failure', async () => {
+    let rejectStartup!: (reason: unknown) => void;
+    const startup = new Promise<void>((_resolve, reject) => { rejectStartup = reject; });
+    invokeMock.mockImplementation((command: string) => {
+      if (command === 'get_status_island_snapshot') {
+        return Promise.resolve(snapshot);
+      }
+      if (command === 'start_screen_capture') return startup;
+      return Promise.resolve(null);
+    });
+    render(<StatusIslandApp />);
+    await emitPanelEvent('status-island-details-open', { generation: 1, source: 'menu', identity: null });
+    const button = await screen.findByRole('menuitem', { name: /^截图(?!历史)/ });
+
+    fireEvent.click(button);
+    fireEvent.click(button);
+    expect(invocations('start_screen_capture')).toHaveLength(1);
+    expect(invocations('start_screen_capture')[0]).toEqual(['start_screen_capture']);
+    expect(button).toBeDisabled();
+    expect(screen.getByRole('menu')).toHaveAttribute('aria-busy', 'true');
+    expect(invocations('toggle_nowly_panel')).toHaveLength(0);
+    expect(invocations('toggle_status_island_details')).toHaveLength(0);
+
+    await emitPanelEvent('status-island-details-closed', { generation: 2 });
+    expect(screen.queryByRole('menu')).toBeNull();
+    await emitPanelEvent('status-island-details-open', { generation: 3, source: 'menu', identity: null });
+    await act(async () => rejectStartup({ message: '截图启动超时。' }));
+    expect(button).not.toBeDisabled();
+    expect(screen.getAllByRole('alert').some(alert => alert.textContent?.includes('截图启动超时。'))).toBe(true);
+    expect(button).toHaveFocus();
+    expect(invocations('acknowledge_status_island_reminder')).toHaveLength(0);
+    fireEvent.click(button);
+    expect(invocations('start_screen_capture')).toHaveLength(2);
+    await act(async () => { await Promise.resolve(); });
+  });
+
+  it('clears screenshot pending state when startup succeeds', async () => {
+    let finishStartup!: () => void;
+    const startup = new Promise<void>(resolve => { finishStartup = resolve; });
+    invokeMock.mockImplementation((command: string) => {
+      if (command === 'get_status_island_snapshot') {
+        return Promise.resolve(snapshot);
+      }
+      if (command === 'start_screen_capture') return startup;
+      return Promise.resolve(null);
+    });
+    render(<StatusIslandApp />);
+    await emitPanelEvent('status-island-details-open', { generation: 1, source: 'menu', identity: null });
+    const button = await screen.findByRole('menuitem', { name: /^截图(?!历史)/ });
+    fireEvent.click(button);
+    expect(button).toBeDisabled();
+    await emitPanelEvent('status-island-details-closed', { generation: 2 });
+    await act(async () => finishStartup());
+    expect(button).not.toBeDisabled();
+    expect(button).not.toHaveAttribute('aria-busy', 'true');
+    expect(button).not.toHaveTextContent('重试');
+    expect(screen.queryByRole('menu')).toBeNull();
   });
 
   it('shows the summary in the island when state exists but nothing is unseen', async () => {
@@ -130,6 +248,10 @@ describe('screen status island windows', () => {
     expect(screen.queryByRole('button', { name: /^晚间复盘 ·/ })).not.toBeInTheDocument();
     // A summary is an aggregate, so there is no single reminder to acknowledge.
     expect(invokeMock).toHaveBeenCalledWith('set_status_island_primary', { identity: null });
+    fireEvent.click(screen.getByRole('button', {
+      name: '日程 1 项 · 今日汇总 · 共 1 项 · 今日日程 1 项'
+    }));
+    expect(invokeMock).toHaveBeenCalledWith('toggle_status_island_details', { identity: null });
   });
 
   it('expands to the island for an unacknowledged reminder and reports it as primary', async () => {
@@ -180,48 +302,45 @@ describe('screen status island windows', () => {
     fireEvent.pointerUp(window, { pointerId: 1, screenX: 900, screenY: 10 });
   });
 
-  it('closes a hover-opened panel after leaving but keeps an actively opened panel', async () => {
+  it('keeps an open panel until native reports an outside click', async () => {
     vi.useFakeTimers();
-    let openPanel: ((event: { payload: { source: 'island' | 'nowly'; identity: string | null; hovered: boolean } }) => void) | undefined;
+    let openPanel: ((event: { payload: { source: 'island'; identity: string | null; hovered: boolean } }) => void) | undefined;
     listenMock.mockImplementation((name: string, callback: typeof openPanel) => {
       if (name === 'status-island-details-open') openPanel = callback;
       return Promise.resolve(() => undefined);
     });
     render(<StatusIslandApp />);
     await act(async () => { await Promise.resolve(); });
-    const root = screen.getByLabelText('Nowly 状态岛');
+    const root = screen.getByLabelText('Nowly Bar');
 
-    act(() => openPanel?.({ payload: { source: 'nowly', identity: null, hovered: true } }));
+    act(() => openPanel?.({ payload: { source: 'island', identity: null, hovered: true } }));
     fireEvent.mouseLeave(root);
-    await act(async () => { vi.advanceTimersByTime(299); });
+    await act(async () => { vi.advanceTimersByTime(300); });
     expect(invocations('close_status_island_details')).toHaveLength(0);
-    await act(async () => { vi.advanceTimersByTime(1); });
-    expect(invocations('close_status_island_details')).toHaveLength(1);
 
-    invokeMock.mockClear();
-    act(() => openPanel?.({ payload: { source: 'nowly', identity: null, hovered: false } }));
+    act(() => openPanel?.({ payload: { source: 'island', identity: null, hovered: false } }));
     fireEvent.mouseLeave(root);
     await act(async () => { vi.advanceTimersByTime(300); });
     expect(invocations('close_status_island_details')).toHaveLength(0);
   });
 
-  it('closes a hover panel whose open event arrives after the pointer left', async () => {
+  it('keeps a delayed hover-open panel until native reports an outside click', async () => {
     vi.useFakeTimers();
-    let openPanel: ((event: { payload: { source: 'island' | 'nowly'; identity: string | null; hovered: boolean } }) => void) | undefined;
+    let openPanel: ((event: { payload: { source: 'island'; identity: string | null; hovered: boolean } }) => void) | undefined;
     listenMock.mockImplementation((name: string, callback: typeof openPanel) => {
       if (name === 'status-island-details-open') openPanel = callback;
       return Promise.resolve(() => undefined);
     });
     render(<StatusIslandApp />);
     await act(async () => { await Promise.resolve(); });
-    const root = screen.getByLabelText('Nowly 状态岛');
+    const root = screen.getByLabelText('Nowly Bar');
 
     fireEvent.mouseEnter(root);
     fireEvent.mouseLeave(root);
-    act(() => openPanel?.({ payload: { source: 'nowly', identity: null, hovered: true } }));
+    act(() => openPanel?.({ payload: { source: 'island', identity: null, hovered: true } }));
     await act(async () => { vi.advanceTimersByTime(300); });
 
-    expect(invocations('close_status_island_details')).toHaveLength(1);
+    expect(invocations('close_status_island_details')).toHaveLength(0);
   });
 
   it('keeps notification-only island visible through hover expansion and acknowledgement', async () => {
@@ -243,7 +362,222 @@ describe('screen status island windows', () => {
     expect(invocations('set_status_island_visibility')[invocations('set_status_island_visibility').length - 1]?.[1]).not.toEqual({ visible: false });
   });
 
-  it('hides the notification-only island once the pointer has left it', async () => {
+  it('hides notification-only mode after the last viewed reminder panel is collapsed', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-12T14:18:00'));
+    let open: (event: { payload: { source: 'island'; identity: string; hovered: boolean } }) => void = () => undefined;
+    let close: () => void = () => undefined;
+    let invalidate: () => void = () => undefined;
+    listenMock.mockImplementation((name: string, callback: () => void) => {
+      if (name === 'status-island-details-open') open = callback as typeof open;
+      if (name === 'status-island-details-close') close = callback;
+      if (name === 'status-island-invalidated') invalidate = callback;
+      return Promise.resolve(() => undefined);
+    });
+    let data = snapshotWith({ events: [reminderEvent], notificationMode: 'notification' });
+    invokeMock.mockImplementation((command: string) =>
+      command === 'get_status_island_snapshot' ? Promise.resolve(data) : Promise.resolve(null));
+    render(<StatusIslandApp />);
+    await act(async () => { await Promise.resolve(); });
+    invokeMock.mockClear();
+    await act(async () => {
+      open({
+        payload: {
+          source: 'island',
+          identity: 'event:event-1:2026-09-12T14:30:reminder:15',
+          hovered: false
+        }
+      });
+    });
+
+    data = snapshotWith({
+      ...data,
+      reminders: [{
+        identity: 'event:event-1:2026-09-12T14:30:reminder:15',
+        acknowledgedAt: '2026-09-12T14:18:00+08:00',
+        dismissed: false,
+        consumed: false
+      }]
+    });
+    await act(async () => { invalidate(); });
+    expect(invocations('set_status_island_visibility')).toHaveLength(0);
+    await act(async () => { close(); });
+
+    const visibilityCalls = invocations('set_status_island_visibility');
+    expect(visibilityCalls[visibilityCalls.length - 1]?.[1]).toEqual({ visible: false });
+  });
+
+  it('lets native finish the collapse animation before hiding notification-only mode', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-12T14:18:00'));
+    let close: (event: { payload: { hideAfterCollapse: boolean } }) => void = () => undefined;
+    let invalidate: () => void = () => undefined;
+    listenMock.mockImplementation((name: string, callback: () => void) => {
+      if (name === 'status-island-details-close') close = callback as typeof close;
+      if (name === 'status-island-invalidated') invalidate = callback;
+      return Promise.resolve(() => undefined);
+    });
+    let data = snapshotWith({ events: [reminderEvent], notificationMode: 'notification' });
+    invokeMock.mockImplementation((command: string) =>
+      command === 'get_status_island_snapshot' ? Promise.resolve(data) : Promise.resolve(null));
+    render(<StatusIslandApp />);
+    await act(async () => { await Promise.resolve(); });
+    invokeMock.mockClear();
+
+    await act(async () => {
+      close({ payload: { hideAfterCollapse: true } });
+      data = snapshotWith({
+        ...data,
+        reminders: [{
+          identity: 'event:event-1:2026-09-12T14:30:reminder:15',
+          acknowledgedAt: null,
+          dismissed: true,
+          consumed: false
+        }]
+      });
+      invalidate();
+    });
+
+    expect(invokeMock).not.toHaveBeenCalledWith('set_status_island_visibility', { visible: false });
+  });
+
+  it('releases the native hide hold after the collapse window has elapsed', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-12T14:18:00'));
+    let close: (event: { payload: { hideAfterCollapse: boolean } }) => void = () => undefined;
+    let invalidate: () => void = () => undefined;
+    listenMock.mockImplementation((name: string, callback: () => void) => {
+      if (name === 'status-island-details-close') close = callback as typeof close;
+      if (name === 'status-island-invalidated') invalidate = callback;
+      return Promise.resolve(() => undefined);
+    });
+    let data = snapshotWith({ events: [reminderEvent], notificationMode: 'notification' });
+    invokeMock.mockImplementation((command: string) =>
+      command === 'get_status_island_snapshot' ? Promise.resolve(data) : Promise.resolve(null));
+    render(<StatusIslandApp />);
+    await act(async () => { await Promise.resolve(); });
+    invokeMock.mockClear();
+
+    await act(async () => {
+      close({ payload: { hideAfterCollapse: true } });
+      data = snapshotWith({ events: [], notificationMode: 'notification' });
+      invalidate();
+    });
+    expect(invokeMock).not.toHaveBeenCalledWith('set_status_island_visibility', { visible: false });
+
+    await act(async () => { vi.advanceTimersByTime(220); });
+    expect(invokeMock).not.toHaveBeenCalledWith('set_status_island_visibility', { visible: false });
+    await act(async () => { vi.advanceTimersByTime(80); });
+    expect(invokeMock).toHaveBeenCalledWith('set_status_island_visibility', { visible: false });
+  });
+
+  it('orders a new-notification show after an already in-flight empty hide', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-12T14:18:00'));
+    let invalidate: () => void = () => undefined;
+    listenMock.mockImplementation((name: string, callback: () => void) => {
+      if (name === 'status-island-invalidated') invalidate = callback;
+      return Promise.resolve(() => undefined);
+    });
+    let releaseHide: () => void = () => undefined;
+    const hidePending = new Promise<void>(resolve => { releaseHide = resolve; });
+    let data = snapshotWith({ events: [], notificationMode: 'notification' });
+    invokeMock.mockImplementation((command: string, args?: unknown) => {
+      if (command === 'get_status_island_snapshot') return Promise.resolve(data);
+      if (command === 'set_status_island_visibility' && args && (args as { visible: boolean }).visible === false) {
+        return hidePending;
+      }
+      return Promise.resolve(null);
+    });
+    render(<StatusIslandApp />);
+    await act(async () => { await Promise.resolve(); });
+    expect(invokeMock).toHaveBeenCalledWith('set_status_island_visibility', { visible: false });
+
+    invokeMock.mockClear();
+    data = snapshotWith({ events: [reminderEvent], notificationMode: 'notification' });
+    await act(async () => { invalidate(); });
+    expect(invokeMock).not.toHaveBeenCalledWith('set_status_island_visibility', { visible: true });
+
+    await act(async () => {
+      releaseHide();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(invokeMock).toHaveBeenLastCalledWith('set_status_island_visibility', { visible: true });
+  });
+
+  it('shows the summary after an outside-click collapse until the notification batch changes', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-12T14:18:00'));
+    let open: (event: { payload: { source: 'island'; identity: string | null; hovered: boolean } }) => void = () => undefined;
+    let close: (event: { payload: { collapseToSummary: boolean } }) => void = () => undefined;
+    let invalidate: () => void = () => undefined;
+    listenMock.mockImplementation((name: string, callback: () => void) => {
+      if (name === 'status-island-details-open') open = callback as typeof open;
+      if (name === 'status-island-details-close') close = callback as typeof close;
+      if (name === 'status-island-invalidated') invalidate = callback;
+      return Promise.resolve(() => undefined);
+    });
+    let data = snapshotWith({ events: [reminderEvent], notificationMode: 'persistent' });
+    invokeMock.mockImplementation((command: string) =>
+      command === 'get_status_island_snapshot' ? Promise.resolve(data) : Promise.resolve(null));
+    render(<StatusIslandApp />);
+    await act(async () => { await Promise.resolve(); });
+
+    await act(async () => close({ payload: { collapseToSummary: true } }));
+    expect(screen.getByText(/今日汇总/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^产品评审 ·/ })).not.toBeInTheDocument();
+
+    await act(async () => open({
+      payload: {
+        source: 'island',
+        identity: 'event:event-1:2026-09-12T14:30:reminder:15',
+        hovered: true
+      }
+    }));
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-mode', 'summary');
+    expect(document.querySelector('.status-island__details')).toHaveAttribute('data-panel', 'overview');
+
+    data = snapshotWith({ events: [reminderEvent, secondReminderEvent], notificationMode: 'persistent' });
+    await act(async () => invalidate());
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-mode', 'detail');
+  });
+
+  it('keeps a persistent summary and its overview aligned when native sends a stale reminder identity', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-12T14:18:00'));
+    let open: (event: { payload: { source: 'island'; identity: string | null; hovered: boolean } }) => void = () => undefined;
+    listenMock.mockImplementation((name: string, callback: () => void) => {
+      if (name === 'status-island-details-open') open = callback as typeof open;
+      return Promise.resolve(() => undefined);
+    });
+    respondWith(snapshotWith({
+      events: [reminderEvent],
+      notificationMode: 'persistent',
+      reminders: [{
+        identity: 'event:event-1:2026-09-12T14:30:reminder:15',
+        acknowledgedAt: null,
+        dismissed: true,
+        consumed: false
+      }]
+    }));
+    render(<StatusIslandApp />);
+    await act(async () => { await Promise.resolve(); });
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-mode', 'summary');
+
+    await act(async () => open({
+      payload: {
+        source: 'island',
+        identity: 'event:event-1:2026-09-12T14:30:reminder:15',
+        hovered: true
+      }
+    }));
+
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-mode', 'summary');
+    expect(document.querySelector('.status-island__details')).toHaveAttribute('data-panel', 'overview');
+  });
+
+  it('does not hide a notification-only reminder after hover preview', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-12T14:18:00'));
     respondWith(snapshotWith({ events: [reminderEvent], notificationMode: 'notification' }));
@@ -255,7 +589,7 @@ describe('screen status island windows', () => {
     fireEvent.mouseLeave(root);
     await act(async () => { vi.advanceTimersByTime(300); });
 
-    expect(invokeMock).toHaveBeenCalledWith('set_status_island_visibility', { visible: false });
+    expect(invokeMock).not.toHaveBeenCalledWith('set_status_island_visibility', { visible: false });
   });
 
   it('keeps the island visible when the pointer comes back, and always in persistent mode', async () => {
@@ -287,7 +621,7 @@ describe('screen status island windows', () => {
     expect(invokeMock).not.toHaveBeenCalledWith('set_status_island_visibility', { visible: false });
   });
 
-  it('does not reshow existing reminders when switching from persistent to notification-only', async () => {
+  it('keeps an existing unseen reminder visible when switching to notification-only', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-12T14:18:00'));
     let invalidate: () => void = () => undefined;
@@ -305,7 +639,7 @@ describe('screen status island windows', () => {
     data = snapshotWith({ events: [reminderEvent], notificationMode: 'notification' });
     await act(async () => invalidate());
 
-    expect(invocations('set_status_island_visibility')).toHaveLength(0);
+    expect(invocations('set_status_island_visibility')[0]?.[1]).toEqual({ visible: true });
   });
 
   it('opens the panel on click and reports keyboard presence on focus', async () => {
@@ -318,6 +652,9 @@ describe('screen status island windows', () => {
 
     fireEvent.click(trigger);
     expect(invocations('toggle_status_island_details')).toHaveLength(1);
+    expect(invokeMock).toHaveBeenCalledWith('toggle_status_island_details', {
+      identity: 'event:event-1:2026-09-12T14:30:reminder:15'
+    });
 
     fireEvent.keyDown(trigger, { key: 'Enter' });
     expect(invocations('toggle_status_island_details')).toHaveLength(2);
@@ -483,18 +820,6 @@ describe('screen status island windows', () => {
     expect(screen.getByRole('button', { name: /^发布检查 ·/ })).toBeInTheDocument();
   });
 
-  it('starts in the summary when the user chose the summary in settings', async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-09-12T14:18:00'));
-    respondWith(snapshotWith({ events: [reminderEvent], notificationDisplay: 'summary' }));
-    render(<StatusIslandApp />);
-    await act(async () => { await Promise.resolve(); });
-
-    // The reminder is unseen, but the setting says never to expand it.
-    expect(screen.queryByRole('button', { name: /^产品评审 ·/ })).not.toBeInTheDocument();
-    expect(screen.getByText('临近 1 项')).toBeInTheDocument();
-  });
-
   it('falls back to the summary once the user closes the detail', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-12T14:18:00'));
@@ -566,8 +891,8 @@ describe('screen status island windows', () => {
     expect(progress).toHaveAttribute('aria-valuenow', '90');
     expect(progress).toHaveAttribute('aria-valuetext', '专注进行中，剩余 2 分钟');
 
-    // Advancing past 15s also fires the snapshot refresh interval, so the
-    // resulting promise has to settle inside act.
+    // Advancing past the 30s snapshot refresh interval means the resulting
+    // promise has to settle inside act.
     await act(async () => { vi.advanceTimersByTime(31_000); });
 
     expect(screen.getByRole('progressbar', { name: '专注进度' })).toHaveAttribute('aria-valuenow', '59');
@@ -632,7 +957,6 @@ describe('screen status island windows', () => {
     // Corrupt or unavailable native storage degrades to no reminder state at all.
     const degraded = { ...snapshotWith({ events: [reminderEvent] }) } as NativeStatusIslandSnapshot;
     delete degraded.reminders;
-    delete degraded.notificationDisplay;
     respondWith(degraded);
     render(<StatusIslandApp />);
     await act(async () => { await Promise.resolve(); });
@@ -747,6 +1071,8 @@ describe('sheet pinning', () => {
     await open();
 
     expect(document.querySelector('.status-rail')).toHaveAttribute('data-open', 'true');
+    expect(document.querySelector('.status-rail__header .status-island__copy strong'))
+      .toHaveTextContent('文件测试');
     expect(screen.getByRole('button', { name: '打开任务：文件测试' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '打开任务：完善 Nowly' })).not.toBeInTheDocument();
   });
@@ -779,6 +1105,10 @@ describe('sheet pinning', () => {
       id: undatedTask.id,
       completed: true
     });
+    expect(invokeMock).toHaveBeenCalledWith('close_status_island_details');
+    expect(invokeMock).toHaveBeenCalledWith('dismiss_status_island_reminder', {
+      identity: undatedIdentity
+    });
     expect(invokeMock).not.toHaveBeenCalledWith('set_task_completed', {
       id: overdueTask.id,
       completed: true
@@ -810,14 +1140,14 @@ describe('sheet pinning', () => {
     expect(screen.getByRole('button', { name: '打开任务：完善 Nowly' })).toBeInTheDocument();
   });
 
-  it('unpins when the sheet closes', async () => {
+  it('retains outgoing detail during collapse, then releases it after native close', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-12T14:18:00'));
     let open: (event: { payload: OpenPayload }) => void = () => undefined;
-    let close: () => void = () => undefined;
+    let close: (event: { payload: { generation: number } }) => void = () => undefined;
     listenMock.mockImplementation((name: string, callback: (event: { payload: OpenPayload }) => void) => {
       if (name === 'status-island-details-open') open = callback;
-      if (name === 'status-island-details-close') close = callback as unknown as () => void;
+      if (name === 'status-island-details-close') close = callback as unknown as typeof close;
       return Promise.resolve(() => undefined);
     });
     respondWith(snapshotWith({ tasks: [undatedTask, overdueTask] }));
@@ -827,22 +1157,69 @@ describe('sheet pinning', () => {
     await act(async () => open({ payload: { source: 'island', identity: undatedIdentity } }));
     expect(screen.getByRole('button', { name: '打开任务：文件测试' })).toBeInTheDocument();
 
-    await act(async () => close());
+    await act(async () => close({ payload: { generation: 2 } }));
 
     // Shrinking, not unmounting: the sheet is the capsule, so closing it changes
     // the rail's size rather than taking the surface away.
     expect(document.querySelector('.status-rail')).toHaveAttribute('data-open', 'false');
-    expect(document.querySelector('.status-rail')).toHaveAttribute('data-anim', 'shrink');
-    expect(screen.getByRole('button', { name: '打开任务：完善 Nowly' })).toBeInTheDocument();
+    expect(document.querySelector('.status-rail__status-presence')).toHaveAttribute('data-anim', 'shrink');
+    expect(screen.getByRole('button', { name: '打开任务：文件测试', hidden: true })).toBeInTheDocument();
+    expect(document.querySelector('.status-rail__panel')).toHaveAttribute('inert');
+    await emitPanelEvent('status-island-details-closed', { generation: 2 });
+    expect(screen.getByRole('button', { name: '打开任务：完善 Nowly', hidden: true })).toBeInTheDocument();
   });
 });
 
 describe('the sheet inside the rail', () => {
+  afterEach(() => vi.useRealTimers());
   beforeEach(() => {
     invokeMock.mockReset();
     listenMock.mockReset();
     listenMock.mockResolvedValue(() => undefined);
     respondWith(snapshot);
+  });
+
+  it('does not downgrade status reminders or start a status animation when AI closes', async () => {
+    respondWith(snapshotWith({ tasks: [urgentTask] }));
+    render(<StatusIslandApp />);
+    await act(async () => { await Promise.resolve(); });
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-mode', 'detail');
+    await emitPanelEvent('status-island-details-open', { generation: 1, source: 'nowly', identity: null });
+    expect(document.querySelector('.status-rail__sheet')).toHaveAttribute('inert');
+    expect(document.querySelector('.status-rail__status-presence')).not.toHaveAttribute('data-anim');
+    expect(document.querySelector('.status-rail__assistant')).toHaveAttribute('data-anim', 'grow');
+
+    await emitPanelEvent('status-island-details-close', { generation: 2, collapseToSummary: true });
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-mode', 'detail');
+    expect(document.querySelector('.status-rail__status-presence')).not.toHaveAttribute('data-anim');
+    expect(document.querySelector('.status-rail__assistant')).toHaveAttribute('data-anim', 'shrink');
+    expect(document.querySelector('.status-rail__panel')).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.queryByRole('button', { name: '完成任务' })).not.toBeInTheDocument();
+
+    await emitPanelEvent('status-island-details-closed', { generation: 2 });
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-mode', 'detail');
+    expect(document.querySelector('.status-rail__assistant')).not.toHaveAttribute('data-anim');
+  });
+
+  it('switches native panel ownership without carrying the other panel animation or controls', async () => {
+    render(<StatusIslandApp />);
+    await emitPanelEvent('status-island-details-open', { generation: 1, source: 'nowly', identity: null });
+    await emitPanelEvent('status-island-details-open', { generation: 2, source: 'island', identity: null });
+    expect(document.querySelector('.status-rail__status-presence')).toHaveAttribute('data-anim', 'grow');
+    expect(document.querySelector('.status-rail__assistant')).not.toHaveAttribute('data-anim');
+    expect(document.querySelector('.status-rail__assistant')).toHaveAttribute('inert');
+    expect(screen.queryByRole('textbox', { name: '告诉 Nowly 你想做什么' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '收起' })).toHaveAttribute('data-owner', 'status');
+    await emitPanelEvent('status-island-details-close', { generation: 1 });
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-status-open', 'true');
+  });
+
+  it('ignores status hover while the AI panel is opening', async () => {
+    render(<StatusIslandApp />);
+    await act(async () => { await Promise.resolve(); });
+    fireEvent.click(screen.getByRole('button', { name: 'Nowly' }));
+    fireEvent.mouseEnter(document.querySelector('.status-island__trigger')!);
+    expect(invocations('hover_status_island_details')).toHaveLength(0);
   });
 
   it('stays collapsed until native reports it open, and grows rather than appearing', async () => {
@@ -861,28 +1238,8 @@ describe('the sheet inside the rail', () => {
     await act(async () => open({ payload: { source: 'island', identity: null } }));
 
     expect(rail).toHaveAttribute('data-open', 'true');
-    expect(rail).toHaveAttribute('data-anim', 'grow');
+    expect(document.querySelector('.status-rail__status-presence')).toHaveAttribute('data-anim', 'grow');
     expect(rail).toHaveAttribute('data-source', 'island');
-  });
-
-  it('swaps the sheet to the Nowly half without collapsing it first', async () => {
-    let open: (event: { payload: { source: 'island' | 'nowly'; identity: string | null } }) => void = () => undefined;
-    listenMock.mockImplementation((name: string, callback: (event: { payload: unknown }) => void) => {
-      if (name === 'status-island-details-open') open = callback as typeof open;
-      return Promise.resolve(() => undefined);
-    });
-    respondWith(snapshotWith({ tasks: [urgentTask] }));
-    render(<StatusIslandApp />);
-    await act(async () => { await Promise.resolve(); });
-
-    await act(async () => open({ payload: { source: 'nowly', identity: null } }));
-
-    const rail = document.querySelector('.status-rail')!;
-    expect(rail).toHaveAttribute('data-source', 'nowly');
-    expect(rail).toHaveAttribute('data-open', 'true');
-    // One sheet, two contents: the status list is replaced, not stacked under it.
-    expect(screen.queryByRole('button', { name: '打开任务：发布检查' })).not.toBeInTheDocument();
-    expect(screen.getByText('内容待定')).toBeInTheDocument();
   });
 
   it('collapses on Escape only while the sheet is open', async () => {
@@ -918,6 +1275,7 @@ describe('the sheet inside the rail', () => {
   it('holds the surface open for the duration of an action', async () => {
     respondWith(snapshotWith({ tasks: [urgentTask] }));
     render(<StatusIslandApp />);
+    await emitPanelEvent('status-island-details-open', { source: 'island', identity: null });
 
     fireEvent.click(await screen.findByRole('button', { name: '完成任务' }));
 
@@ -928,6 +1286,7 @@ describe('the sheet inside the rail', () => {
 
   it('routes focus actions through native commands', async () => {
     render(<StatusIslandApp />);
+    await emitPanelEvent('status-island-details-open', { source: 'island', identity: null });
 
     fireEvent.click(await screen.findByRole('button', { name: '开始专注' }));
 
@@ -943,8 +1302,13 @@ describe('the sheet inside the rail', () => {
     render(<StatusIslandApp />);
     await act(async () => { await Promise.resolve(); });
 
+    await emitPanelEvent('status-island-details-open', { source: 'island', identity: null });
     fireEvent.click(screen.getByRole('button', { name: '打开日程：产品评审' }));
 
+    await act(async () => { await Promise.resolve(); });
+    expect(invokeMock).toHaveBeenCalledWith('acknowledge_status_island_reminder', {
+      identity: 'event:event-1:2026-09-12T14:00:reminder:15'
+    });
     expect(invokeMock).toHaveBeenCalledWith('open_status_island_event', {
       target: { id: 'event-1', occurrenceStartAt: '2026-09-12T14:00' },
       startAt: '2026-09-12T14:30'
@@ -966,11 +1330,105 @@ describe('the sheet inside the rail', () => {
     expect(document.querySelector('.status-island__retry')).not.toBeInTheDocument();
   });
 
-  it('offers no AI entry point anywhere in the sheet', async () => {
+  it('opens the full assistant from the menu without a compact composer state', async () => {
+    let openPanel: ((event: { payload: { generation: number; source: 'nowly' | 'menu'; identity: null; hovered: false } }) => void) | null = null;
+    listenMock.mockImplementation((name: string, callback: typeof openPanel) => {
+      if (name === 'status-island-details-open') openPanel = callback;
+      return Promise.resolve(() => undefined);
+    });
+    invokeMock.mockImplementation((command: string) => {
+      if (command === 'get_status_island_snapshot') return Promise.resolve(snapshot);
+      if (command === 'assistant_get_config') return Promise.resolve({
+        endpoint: 'https://example.com/v1',
+        model: 'fixture-model',
+        hasKey: true,
+        permissions: { calendar: true, tasks: true, external: false }
+      });
+      return Promise.resolve(null);
+    });
     render(<StatusIslandApp />);
     await act(async () => { await Promise.resolve(); });
 
-    expect(screen.queryByText('问 Nowly')).not.toBeInTheDocument();
-    expect(invocations('open_quick_panel')).toHaveLength(0);
+    const nowly = screen.getByRole('button', { name: 'Nowly' });
+    fireEvent.click(nowly);
+
+    expect(invocations('toggle_bar_menu')).toHaveLength(1);
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-surface', 'status');
+    expect(screen.queryByRole('textbox', { name: '告诉 Nowly 你想做什么' })).not.toBeInTheDocument();
+
+    await act(async () => openPanel?.({ payload: { generation: 6, source: 'menu', identity: null, hovered: false } }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'AI 助手' }));
+    expect(invocations('toggle_nowly_panel')).toHaveLength(1);
+    await act(async () => openPanel?.({ payload: { generation: 7, source: 'nowly', identity: null, hovered: false } }));
+
+    const input = await screen.findByRole('textbox', { name: '告诉 Nowly 你想做什么' });
+    await waitFor(() => expect(input).toHaveFocus());
+    expect(nowly).toHaveAttribute('aria-expanded', 'true');
+    expect(nowly).toHaveAttribute('aria-hidden', 'true');
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-surface', 'assistant');
+    expect(document.querySelector('.status-rail__assistant')).toHaveAttribute('data-anim', 'grow');
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-open', 'true');
+    expect(document.querySelector('.assistant-panel')).toHaveAttribute('data-open', 'true');
+    expect(document.querySelector('.status-rail')).not.toHaveAttribute('data-surface', 'composer');
+  });
+
+  it('submits from the already-open Nowly sheet and shows the user message while waiting', async () => {
+    let openPanel: ((event: { payload: { generation: number; source: 'nowly'; identity: null; hovered: false } }) => void) | null = null;
+    let closePanel: ((event: { payload: { generation: number; hideAfterCollapse: false; collapseToSummary: false } }) => void) | null = null;
+    let finishClose: ((event: { payload: { generation: number } }) => void) | null = null;
+    listenMock.mockImplementation((name: string, callback: typeof openPanel | typeof closePanel | typeof finishClose) => {
+      if (name === 'status-island-details-open') openPanel = callback as typeof openPanel;
+      if (name === 'status-island-details-close') closePanel = callback as typeof closePanel;
+      if (name === 'status-island-details-closed') finishClose = callback as typeof finishClose;
+      return Promise.resolve(() => undefined);
+    });
+    let resolveInterpret!: (value: unknown) => void;
+    invokeMock.mockImplementation((command: string) => {
+      if (command === 'get_status_island_snapshot') return Promise.resolve(snapshot);
+      if (command === 'assistant_get_config') return Promise.resolve({
+        endpoint: 'https://example.com/v1',
+        model: 'fixture-model',
+        hasKey: true,
+        permissions: { calendar: true, tasks: true, external: false }
+      });
+      if (command === 'assistant_interpret') return new Promise(resolve => { resolveInterpret = resolve; });
+      return Promise.resolve(null);
+    });
+    render(<StatusIslandApp />);
+    await act(async () => { await Promise.resolve(); });
+    fireEvent.click(screen.getByRole('button', { name: 'Nowly' }));
+    expect(invokeMock).toHaveBeenCalledWith('toggle_bar_menu');
+    await emitPanelEvent('status-island-details-open', { generation: 6, source: 'menu', identity: null, hovered: false });
+    fireEvent.click(screen.getByRole('menuitem', { name: 'AI 助手' }));
+    expect(invokeMock).toHaveBeenCalledWith('toggle_nowly_panel');
+    await act(async () => openPanel?.({ payload: { generation: 7, source: 'nowly', identity: null, hovered: false } }));
+    const input = await screen.findByRole('textbox', { name: '告诉 Nowly 你想做什么' });
+    await waitFor(() => expect(input).toHaveFocus());
+
+    fireEvent.change(input, { target: { value: '明天下午三点创建产品评审' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-surface', 'assistant');
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-open', 'true');
+    expect(screen.getByText('明天下午三点创建产品评审', { selector: '.assistant-chat-message p' })).toBeInTheDocument();
+    expect(screen.getByText('正在理解与查询…尚未执行任何变更。')).toBeInTheDocument();
+
+    await act(async () => closePanel?.({ payload: { generation: 6, hideAfterCollapse: false, collapseToSummary: false } }));
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-surface', 'assistant');
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-open', 'true');
+
+    fireEvent.keyDown(input, { key: 'Escape' });
+    expect(invocations('close_status_island_details')).toHaveLength(1);
+    await act(async () => closePanel?.({ payload: { generation: 8, hideAfterCollapse: false, collapseToSummary: false } }));
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-assistant-closing', 'true');
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-surface', 'status');
+    fireEvent(window, new Event('resize'));
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-assistant-closing', 'true');
+    await act(async () => finishClose?.({ payload: { generation: 7 } }));
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-assistant-closing', 'true');
+    await act(async () => finishClose?.({ payload: { generation: 8 } }));
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-assistant-closing', 'false');
+
+    await act(async () => resolveInterpret({ kind: 'clarify', message: '需要提醒吗？', records: [], plan: null }));
   });
 });

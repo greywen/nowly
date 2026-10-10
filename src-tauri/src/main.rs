@@ -4,21 +4,19 @@
 mod assistant;
 mod attachments;
 mod calendar_api;
+mod categories;
 mod color;
 mod commands;
 mod db;
-mod dev_modules;
 mod error;
 mod event_exceptions;
 mod events;
-mod extensions;
 mod feedback;
 mod focus;
 mod focus_timer;
 mod ics_parser;
 mod layout;
 mod models;
-mod module_state;
 mod monitors;
 mod net;
 mod notes;
@@ -30,6 +28,9 @@ mod reminders;
 mod remote_events;
 mod rrule_bridge;
 mod rrule_engine;
+mod screen_capture;
+mod screenshot_windows;
+mod screenshot_shortcuts;
 mod settings;
 mod shell;
 mod status_island;
@@ -66,6 +67,10 @@ fn should_activate_tray(kind: TrayClickKind, button: MouseButton) -> bool {
             kind,
             TrayClickKind::Single(MouseButtonState::Up) | TrayClickKind::Double
         )
+}
+
+fn should_prevent_close(window_label: &str) -> bool {
+    window_label == "quick-panel-handle"
 }
 
 fn sync_window_visibility<F>(show: F) -> tauri::Result<()>
@@ -243,11 +248,38 @@ fn main() {
 
     tauri::Builder::default()
         .manage(assistant::commands::Requests::default())
+        .manage(screen_capture::ActiveCapture::default())
+        .manage(screen_capture::FrameStore::default())
+        .manage(screen_capture::FreezeLayer::default())
+        .manage(screen_capture::OverlayStaging::default())
+        .manage(screen_capture::PreviewStore::default())
+        .manage(screenshot_windows::ScreenshotWindows::default())
+        .register_asynchronous_uri_scheme_protocol(
+            screen_capture::FRAME_URI_SCHEME,
+            |context, request, responder| {
+                let app = context.app_handle().clone();
+                let caller_label = context.webview_label().to_owned();
+                std::thread::spawn(move || {
+                    responder.respond(screen_capture::serve_frame(&app, &caller_label, request));
+                });
+            },
+        )
+        .register_asynchronous_uri_scheme_protocol(
+            "screenshot-history",
+            |context, request, responder| {
+                screen_capture::history::protocol::respond(
+                    context.app_handle().clone(),
+                    context.webview_label().to_owned(),
+                    request,
+                    responder,
+                );
+            },
+        )
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             show_main_window(app)
         }))
+        .plugin(screenshot_shortcuts::plugin())
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(
             tauri_plugin_autostart::Builder::new()
                 .args(["--background"])
@@ -259,6 +291,9 @@ fn main() {
                 .app_data_dir()
                 .expect("failed to resolve app data dir");
             std::fs::create_dir_all(&app_dir).expect("failed to create app data dir");
+            if let Err(error) = status_island::remove_legacy_reminder_store(&app_dir) {
+                eprintln!("failed to delete the legacy status island reminder store: {error}");
+            }
             // Ensure the dev-modules draft directory exists so the workbench
             // has a stable, discoverable place to read drafts from.
             std::fs::create_dir_all(app_dir.join("dev-modules"))
@@ -276,15 +311,20 @@ fn main() {
                 eprintln!("attachment garbage collection failed: {}", error.message);
             }
             app.manage(AppDb(Mutex::new(connection)));
+            if let Err(error) = screen_capture::history::setup(app.handle()) {
+                eprintln!("screenshot history recovery failed: {}", error.message);
+            }
             status_island::initialize(app.handle().clone());
             let quick_settings = settings::read_app_settings(&app.state::<AppDb>().0.lock().unwrap()).unwrap_or_else(|_| crate::models::AppSettings {
                 wallpaper_enabled: false, launch_at_login: false, target_monitor_id: None, density: "balanced".into(),
                 week_start: "monday".into(), date_format: "localized".into(), show_weekends: true, icon_style: "duotone".into(),
-                hide_topbar_in_wallpaper: true, notification_display: crate::models::default_notification_display(), notification_mode: crate::models::default_notification_mode(), quick_panel_enabled: true, quick_panel_shortcut: "Ctrl+Space".into(), recent_colors: vec![]
+                hide_topbar_in_wallpaper: true, notification_mode: crate::models::default_notification_mode(), quick_panel_enabled: true, quick_panel_shortcut: "Ctrl+Space".into(), screenshot_shortcut: crate::models::default_screenshot_shortcut(), screenshot_history_shortcut: crate::models::default_screenshot_history_shortcut(), bar_menu: crate::models::default_bar_menu(), recent_colors: vec![]
             });
             let quick_panel_controller = quick_panel::PanelController::default();
-            quick_panel_controller.set_enabled(quick_settings.quick_panel_enabled);
+            quick_panel_controller.set_enabled(true);
             quick_panel_controller.set_target_monitor_id(quick_settings.target_monitor_id.clone());
+            // The configured app buttons decide the host width and hit region, so
+            // they must be known before the window is first placed.
             // Where the user last dragged the top surface along the top edge.
             // Restored before the window is first placed, so it never appears
             // centred and then jumps.
@@ -292,23 +332,27 @@ fn main() {
                 &app.state::<AppDb>().0.lock().unwrap(),
             ));
             app.manage(quick_panel_controller);
+            quick_panel::start_outside_click_watch(app.handle().clone());
             quick_panel::start_monitor_watch(app.handle().clone());
-            if quick_settings.quick_panel_enabled {
-                // A top-surface creation or positioning failure must not stop the
-                // main app from starting; it is logged and the app continues.
-                if let Err(error) = quick_panel::initialize(&app.handle()) {
-                    eprintln!("failed to initialize the status island top surface: {error}");
-                }
+            // A top-surface creation or positioning failure must not stop the
+            // main app from starting; it is logged and the app continues.
+            if let Err(error) =
+                quick_panel::initialize(&app.handle(), &quick_settings.notification_mode)
+            {
+                eprintln!("failed to initialize the status island top surface: {error}");
             }
             // Reminder acknowledgement is wall-clock local time, so a restart,
             // tray restore or sleep/wake recomputes from the current local day.
-            // Corrupt storage degrades to an empty store instead of blocking the
-            // top surface.
+            // Missing or unreadable database rows degrade to an empty store
+            // instead of blocking the top surface.
             let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-            app.manage(Mutex::new(status_island::load_reminders(
-                &status_island::reminder_store_path(&app_dir),
-                &today,
-            )));
+            let reminder_lifecycle = app
+                .state::<AppDb>()
+                .0
+                .lock()
+                .map(|connection| status_island::load_reminders(&connection, &today))
+                .unwrap_or_else(|_| status_island::ReminderLifecycle::new(today, Vec::new()));
+            app.manage(Mutex::new(reminder_lifecycle));
             app.manage(Mutex::new(window_lifecycle::WindowLifecycle::default()));
             app.manage(Mutex::new(focus_timer::FocusTimerCoordinator::default()));
             let timer_handle = app.handle().clone();
@@ -512,11 +556,43 @@ fn main() {
                 }
             }
 
+            screen_capture::prewarm_after_launch(app.handle());
+            screenshot_shortcuts::setup(
+                app.handle(),
+                |handle| {
+                    if screen_capture::is_active(handle) { return Ok(()); }
+                    screen_capture::start_screen_capture(handle.clone())
+                },
+                |handle| {
+                    if screen_capture::is_active(handle) { return Ok(()); }
+                    screenshot_windows::open_history(handle)
+                },
+            );
             Ok(())
         })
         .on_window_event(|window, event| {
+            // A capture window can also go away by Alt+F4, the taskbar or a
+            // front-end crash. Without this the session would stay active and the
+            // bar would stay hidden, so Rust ends the session itself.
+            if screen_capture::is_capture_window(window.label()) {
+                if matches!(event, tauri::WindowEvent::Destroyed) {
+                    screen_capture::abandon_session(window.app_handle(), window.label());
+                }
+                return;
+            }
+            if window.label() == screenshot_windows::HISTORY_LABEL {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+                return;
+            }
             if window.label() == "quick-panel-handle" {
-                if matches!(
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    if should_prevent_close(window.label()) {
+                        api.prevent_close();
+                    }
+                } else if matches!(
                     event,
                     tauri::WindowEvent::ScaleFactorChanged { .. }
                         | tauri::WindowEvent::Resized(_)
@@ -531,18 +607,8 @@ fn main() {
                         .state::<quick_panel::PanelController>()
                         .are_details_open()
                     {
-                        if let Err(error) = quick_panel::close_details_for_navigation(app) {
+                        if let Err(error) = quick_panel::close_details_after_outside_click(app) {
                             eprintln!("failed to close status island details after focus loss: {error}");
-                        }
-                        let notification_only = app
-                            .state::<AppDb>()
-                            .0
-                            .lock()
-                            .ok()
-                            .and_then(|connection| settings::read_app_settings(&connection).ok())
-                            .is_some_and(|settings| settings.notification_mode == "notification");
-                        if notification_only {
-                            let _ = window.hide();
                         }
                     }
                 }
@@ -652,19 +718,6 @@ fn main() {
             update::check_for_update,
             layout::list_module_layout,
             layout::save_module_layout,
-            module_state::get_module_state,
-            module_state::set_module_state,
-            dev_modules::list_dev_modules,
-            dev_modules::dev_modules_dir_path,
-            extensions::list_extensions,
-            extensions::install_extension,
-            extensions::uninstall_extension,
-            net::proxy_fetch,
-            net::fetch_registry,
-            net::download_module,
-            net::proxy_fetch,
-            net::fetch_registry,
-            net::download_module,
             focus::create_focus_session,
             focus::list_focus_sessions,
             focus::get_focus_statistics,
@@ -678,6 +731,10 @@ fn main() {
             events::create_event,
             events::update_event,
             events::delete_event,
+            categories::list_categories,
+            categories::create_category,
+            categories::update_category,
+            categories::delete_category,
             subscriptions::list_calendar_subscriptions,
             subscriptions::create_calendar_subscription,
             subscriptions::update_calendar_subscription,
@@ -698,15 +755,30 @@ fn main() {
             quick_panel::toggle_status_island_details,
             quick_panel::toggle_nowly_panel,
             quick_panel::hover_status_island_details,
-            quick_panel::hover_nowly_panel,
             quick_panel::close_status_island_details,
             quick_panel::begin_status_island_drag,
             quick_panel::drag_status_island,
             quick_panel::end_status_island_drag,
+            screenshot_shortcuts::screenshot_shortcut_status,
+            screenshot_shortcuts::screenshot_shortcut_recording,
+            screen_capture::history::commands::list_screenshot_history,
+            screen_capture::history::commands::copy_screenshot_history,
+            screen_capture::history::commands::delete_screenshot_history,
+            screen_capture::history::commands::open_screenshot_folder,
+            quick_panel::toggle_bar_menu,
+            screenshot_windows::open_screenshot_history,
+            screen_capture::start_screen_capture,
+            screen_capture::cancel_screen_capture,
+            screen_capture::describe_capture_frame,
+            screen_capture::capture_window_ready,
+            screen_capture::capture_window_failed,
+            screen_capture::stage_capture_overlay,
+            screen_capture::copy_capture_to_clipboard,
+            screen_capture::save_capture_to_file,
+            screen_capture::render_mosaic_preview,
+            screen_capture::copy_capture_color,
             status_island::get_status_island_snapshot,
             status_island::acknowledge_status_island_reminder,
-            status_island::acknowledge_status_island_notification,
-            status_island::dismiss_status_island_notification,
             status_island::set_status_island_visibility,
             status_island::dismiss_status_island_reminder,
             status_island::consume_status_island_reminder,
@@ -725,8 +797,16 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{should_activate_tray, sync_window_visibility, TrayClickKind};
+    use super::{
+        should_activate_tray, should_prevent_close, sync_window_visibility, TrayClickKind,
+    };
     use tauri::tray::{MouseButton, MouseButtonState};
+
+    #[test]
+    fn nowly_bar_close_requests_are_prevented() {
+        assert!(should_prevent_close("quick-panel-handle"));
+        assert!(!should_prevent_close("main"));
+    }
 
     #[test]
     fn foreground_restore_resynchronizes_tauri_visibility() {

@@ -25,8 +25,9 @@ pub struct FocusStatusSnapshot {
     /// cannot tell a resumed "running" apart from the original start, so the
     /// status island would either replay or swallow the reminder.
     pub stage_sequence: u64,
-    /// Wall-clock local time of the last stage change. The status island derives
-    /// the 15s hold from it, so it must not be a monotonic instant.
+    /// Wall-clock local time of the last stage change. The status island uses it
+    /// to identify and order stages across restart/wake, so it cannot be a
+    /// monotonic instant.
     pub stage_changed_at: Option<String>,
 }
 

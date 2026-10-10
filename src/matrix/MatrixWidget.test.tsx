@@ -100,6 +100,11 @@ describe('MatrixWidget', () => {
     expect(screen.getByText('正在读取本地任务')).toBeInTheDocument();
   });
 
+  it('does not offer a priority filter above the four quadrants', () => {
+    render(<MatrixWidget {...props()} />);
+    expect(screen.queryByRole('combobox', { name: '按优先级筛选' })).not.toBeInTheDocument();
+  });
+
   it('moves a task to another quadrant on drag and drop', () => {
     const move = vi.fn();
     render(<MatrixWidget {...props({ onMoveTask: move })} />);

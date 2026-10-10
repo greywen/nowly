@@ -1,24 +1,34 @@
-import { DESIGN_COLORS, type ColorPreset, type HexColor } from '../lib/color';
-import { t } from '../i18n';
+import { type HexColor } from '../lib/color';
 
-export type EventCategory = 'work' | 'important' | 'personal' | 'learning';
+// A category is a user-defined record owning a name and a color. Choosing a
+// category is the single act that colors an event or subscription: "category"
+// and "color" are one concept. There are no default categories. An event's
+// category is the chosen category id, or '' when nothing is selected (which
+// means no color either).
+export type EventCategory = string;
 export type EventColor = HexColor;
 export type CalendarView = 'month' | 'week' | 'day' | 'list';
 
-// Language-aware category label. Reads the active language at call time.
-export function eventCategoryLabel(category: EventCategory): string {
-  return t(`category.${category}`);
-}
+export type Category = {
+  id: string;
+  name: string;
+  color: HexColor;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+};
 
-export function eventColorPresets(): readonly ColorPreset[] {
-  return [
-    { value: DESIGN_COLORS.primary, label: t('color.teal') },
-    { value: DESIGN_COLORS.danger, label: t('color.coral') },
-    { value: DESIGN_COLORS.success, label: t('color.green') },
-    { value: DESIGN_COLORS.warning, label: t('color.amber') }
-  ];
+export type CategoryDraft = {
+  name: string;
+  color: HexColor;
+};
+
+// Resolve a category id to its display name using the loaded category list.
+// Returns '' for the unselected/unknown case so callers can treat it as "none".
+export function categoryNameOf(categoryId: EventCategory, categories: readonly Category[]): string {
+  if (!categoryId) return '';
+  return categories.find((category) => category.id === categoryId)?.name ?? '';
 }
-export const DEFAULT_EVENT_COLOR = DESIGN_COLORS.primary;
 
 export type Weekday = 'MO' | 'TU' | 'WE' | 'TH' | 'FR' | 'SA' | 'SU';
 export type RecurrenceFreq = 'daily' | 'weekly' | 'monthly' | 'yearly';

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Nowly Screenshot Test Target</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; padding: 80px; background: #ffffff; color: #211f1c; font: 18px/1.5 Arial, sans-serif; }
+      main { max-width: 960px; margin: auto; }
+      h1 { margin: 0 0 24px; font-size: 32px; letter-spacing: 0; }
+      p { margin: 0 0 24px; }
+      .samples { display: grid; grid-template-columns: repeat(4, 1fr); height: 160px; margin-bottom: 24px; }
+      .sample { display: grid; place-items: center; font-weight: 700; }
+      .teal { background: #4fc9da; }
+      .yellow { background: #e8c444; }
+      .red { background: #f06445; }
+      .black { background: #000000; color: #ffffff; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { padding: 16px; border: 1px solid #211f1c; text-align: left; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Nowly Screenshot Test Target</h1>
+      <p>Synthetic local content. No personal data.</p>
+      <div class="samples">
+        <div class="sample teal">#4FC9DA</div>
+        <div class="sample yellow">#E8C444</div>
+        <div class="sample red">#F06445</div>
+        <div class="sample black">#000000</div>
+      </div>
+      <table>
+        <thead><tr><th>Sample</th><th>Expected Content</th></tr></thead>
+        <tbody>
+          <tr><td>ROW-001</td><td>Capture, select, cancel, and repeat</td></tr>
+          <tr><td>ROW-002</td><td>PNG output preserves the selected pixels</td></tr>
+          <tr><td>ROW-003</td><td>Nowly Bar and editing tools are excluded</td></tr>
+        </tbody>
+      </table>
+    </main>
+  </body>
+</html>

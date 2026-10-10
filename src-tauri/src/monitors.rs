@@ -25,16 +25,6 @@ pub fn monitor_id(name: Option<&str>, position_x: i32, position_y: i32) -> Strin
     }
 }
 
-pub fn select_target_monitor<'a>(
-    monitors: &'a [MonitorInfo],
-    saved: Option<&str>,
-) -> Option<&'a MonitorInfo> {
-    saved
-        .and_then(|id| monitors.iter().find(|monitor| monitor.id == id))
-        .or_else(|| monitors.iter().find(|monitor| monitor.is_primary))
-        .or_else(|| monitors.first())
-}
-
 pub fn position_target<R: tauri::Runtime>(
     window: &tauri::Window<R>,
     saved: Option<&str>,
@@ -96,19 +86,7 @@ pub fn list_monitors(
 
 #[cfg(test)]
 mod tests {
-    use super::{monitor_id, select_target_monitor, MonitorInfo};
-    fn monitor(id: &str, primary: bool) -> MonitorInfo {
-        MonitorInfo {
-            id: id.into(),
-            name: id.into(),
-            is_primary: primary,
-            position_x: 0,
-            position_y: 0,
-            width: 1920,
-            height: 1080,
-            scale_factor: 1.0,
-        }
-    }
+    use super::monitor_id;
     #[test]
     fn named_monitor_uses_the_os_name_as_id() {
         assert_eq!(
@@ -122,23 +100,5 @@ mod tests {
         // positioning so the saved selection can still be matched.
         assert_eq!(monitor_id(None, 1920, 0), "display:1920:0");
         assert_eq!(monitor_id(Some(""), -1080, 240), "display:-1080:240");
-    }
-    #[test]
-    fn saved_monitor_wins_and_disconnect_falls_back_without_changing_saved_id() {
-        let monitors = vec![monitor("primary", true), monitor("saved", false)];
-        assert_eq!(
-            select_target_monitor(&monitors, Some("saved")).unwrap().id,
-            "saved"
-        );
-        let fallback = select_target_monitor(&monitors[..1], Some("saved")).unwrap();
-        assert_eq!(fallback.id, "primary");
-    }
-    #[test]
-    fn no_preference_uses_primary() {
-        let monitors = vec![monitor("secondary", false), monitor("primary", true)];
-        assert_eq!(
-            select_target_monitor(&monitors, None).unwrap().id,
-            "primary"
-        );
     }
 }

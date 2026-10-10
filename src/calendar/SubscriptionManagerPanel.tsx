@@ -1,6 +1,6 @@
 import { Pencil, Plug, RefreshCw, Trash2, Unplug } from '../components/icons';
 import { useEffect, useState } from 'react';
-import { ColorPicker } from '../components/ColorPicker';
+import { CategorySelect } from '../components/CategorySelect';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Select } from '../components/Select';
 import { useNowlyRepository } from '../data/RepositoryContext';
@@ -11,8 +11,8 @@ import type {
   SubscriptionDraft,
   SubscriptionProvider
 } from './subscription-model';
-import { eventColorPresets } from './calendar-model';
-import { DESIGN_COLORS, type HexColor } from '../lib/color';
+import type { Category, CategoryDraft } from './calendar-model';
+import { DESIGN_COLORS, isHexColor, type HexColor } from '../lib/color';
 import { t } from '../i18n';
 
 // Backend caps subscriptions at 50; the UI mirrors that so the add controls
@@ -29,6 +29,10 @@ type Props = {
   onUpdate: (id: string, draft: SubscriptionDraft) => Promise<CalendarSubscription>;
   onDelete: (id: string) => Promise<void>;
   onRefresh: (id: string) => Promise<void>;
+  categories: Category[];
+  onCreateCategory: (draft: CategoryDraft) => Promise<Category>;
+  onUpdateCategory: (id: string, draft: CategoryDraft) => Promise<Category>;
+  onDeleteCategory: (id: string) => Promise<void>;
   // The delete confirmation renders its own dialog above the host dialog; the
   // host needs to know so it can hand over Escape and focus trapping.
   onOverlayOpenChange?: (open: boolean) => void;
@@ -48,7 +52,8 @@ function providerLabel(provider: SubscriptionProvider): string {
 }
 
 export function SubscriptionManagerPanel({
-  subscriptions, onChanged, onCreate, onUpdate, onDelete, onRefresh, onOverlayOpenChange
+  subscriptions, onChanged, onCreate, onUpdate, onDelete, onRefresh,
+  categories, onCreateCategory, onUpdateCategory, onDeleteCategory, onOverlayOpenChange
 }: Props) {
   const repository = useNowlyRepository();
   // Which source the creation flow targets. Editing reuses the form but keeps
@@ -58,7 +63,7 @@ export function SubscriptionManagerPanel({
   // Shared form fields (ICS create/edit + OAuth display edit).
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
-  const [color, setColor] = useState<HexColor>(DEFAULT_COLOR);
+  const [categoryId, setCategoryId] = useState<string>('');
   const [interval, setIntervalMinutes] = useState(15);
   const [editing, setEditing] = useState<{ id: string; provider: SubscriptionProvider } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -75,6 +80,9 @@ export function SubscriptionManagerPanel({
   const [oauthError, setOauthError] = useState('');
   const [confirmDisconnect, setConfirmDisconnect] = useState<{ id: string; name: string } | null>(null);
 
+  // Category and color are one concept: the chosen category supplies the color
+  // snapshot the subscription stores and renders with. No category = no color.
+  const selectedColor = (categories.find((c) => c.id === categoryId)?.color ?? '') as HexColor | '';
   const isOAuthProvider = OAUTH_PROVIDERS.includes(provider);
   const atLimit = subscriptions.length >= MAX_SOURCES && !editing;
   // Remote-calendar ids already subscribed under the picked account, so the
@@ -145,13 +153,13 @@ export function SubscriptionManagerPanel({
     onOverlayOpenChange?.(target !== null || confirmDelete !== null);
   }
   function resetForm() {
-    setName(''); setUrl(''); setColor(DEFAULT_COLOR); setIntervalMinutes(15);
+    setName(''); setUrl(''); setCategoryId(''); setIntervalMinutes(15);
     setEditing(null); setFormError('');
   }
   function beginEdit(item: CalendarSubscription) {
     setEditing({ id: item.id, provider: item.provider });
     setName(item.name); setUrl(item.url);
-    setColor(item.color); setIntervalMinutes(item.refreshIntervalMinutes); setFormError('');
+    setCategoryId(item.categoryId ?? ''); setIntervalMinutes(item.refreshIntervalMinutes); setFormError('');
   }
 
   // ICS create/edit + OAuth display edit share this submit path. OAuth rows have
@@ -165,18 +173,20 @@ export function SubscriptionManagerPanel({
       return;
     }
     setBusy(true); setFormError('');
+    const color = (selectedColor || '') as HexColor;
+    const draftCategoryId = categoryId || null;
     try {
       if (editing) {
         if (editingOAuth) {
-          await repository.updateSubscriptionDisplay(editing.id, trimmed, color, interval);
+          await repository.updateSubscriptionDisplay(editing.id, trimmed, color, interval, draftCategoryId);
         } else {
-          await onUpdate(editing.id, { name: trimmed, url: url.trim(), color, refreshIntervalMinutes: interval });
+          await onUpdate(editing.id, { name: trimmed, url: url.trim(), color, categoryId: draftCategoryId, refreshIntervalMinutes: interval });
         }
         onChanged();
       } else {
         // Sync the new source right away so its events appear without waiting
         // for the background poll; onRefresh reloads events + status on return.
-        const created = await onCreate({ name: trimmed, url: url.trim(), color, refreshIntervalMinutes: interval });
+        const created = await onCreate({ name: trimmed, url: url.trim(), color, categoryId: draftCategoryId, refreshIntervalMinutes: interval });
         await onRefresh(created.id);
         onChanged();
       }
@@ -429,14 +439,19 @@ export function SubscriptionManagerPanel({
             </label>
           ) : null}
           <div className="good-field">
-            <ColorPicker
-              legend={t('subscription.color')}
-              name="subscription-color"
-              value={color}
-              presets={eventColorPresets()}
-              recentColors={[]}
+            <span className="good-field__label">{t('subscription.category')}</span>
+            <CategorySelect
+              id="subscription-category"
+              label={t('subscription.category')}
+              hideLabel
+              categories={categories}
+              value={categoryId}
               disabled={busy}
-              onChange={setColor}
+              onChange={setCategoryId}
+              onCreate={onCreateCategory}
+              onUpdate={onUpdateCategory}
+              onDelete={onDeleteCategory}
+              onOverlayOpenChange={onOverlayOpenChange}
             />
           </div>
           <label className="good-field">
@@ -468,7 +483,7 @@ export function SubscriptionManagerPanel({
         ) : (
           subscriptions.map((item) => (
             <li key={item.id} className="subscription-list__row">
-              <span className="subscription-list__dot" style={{ background: item.color }} aria-hidden="true" />
+              <span className="subscription-list__dot" style={{ background: isHexColor(item.color) ? item.color : 'var(--border-default)' }} aria-hidden="true" />
               <span className="subscription-list__name">{item.name}</span>
               <span className="subscription-list__provider">{providerLabel(item.provider)}</span>
               <span className={`subscription-list__status is-${item.lastStatus ?? 'never'}`}>{statusText(item)}</span>

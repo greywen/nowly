@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { CalendarEvent, Recurrence } from '../calendar/calendar-model';
@@ -14,6 +14,11 @@ const recurring: CalendarEvent = { ...editable, startAt:'2026-08-10T10:00', endA
 // 同一系列的第二次，未被覆盖：occurrenceStartAt 仍等于 startAt，但它不是首个实例。
 const laterOccurrence: CalendarEvent = { ...recurring, startAt:'2026-08-17T10:00', endAt:'2026-08-17T11:00', occurrenceStartAt:'2026-08-17T10:00' };
 
+const testCategories = [
+  { id:'work', name:'工作', color:'#4F55DA', position:0, createdAt:'', updatedAt:'' },
+  { id:'important', name:'重要', color:'#F06445', position:1, createdAt:'', updatedAt:'' }
+];
+
 async function pick(user: ReturnType<typeof userEvent.setup>, select: string, option: string) {
   await user.click(screen.getByRole('combobox', { name:select }));
   await user.click(screen.getByRole('option', { name:option }));
@@ -23,21 +28,58 @@ function props(overrides: Record<string, unknown> = {}) {
   return {
     mode: { type:'create' as const, dateIso:'2026-07-23' }, onClose:vi.fn(), onSaved:vi.fn(), onDeleted:vi.fn(),
     createEvent:vi.fn().mockResolvedValue(existing), updateEvent:vi.fn().mockResolvedValue(undefined), deleteEvent:vi.fn().mockResolvedValue(undefined), now,
+    categories:testCategories, onCreateCategory:vi.fn().mockResolvedValue(testCategories[0]), onUpdateCategory:vi.fn().mockResolvedValue(testCategories[0]), onDeleteCategory:vi.fn().mockResolvedValue(undefined),
     ...overrides
   };
 }
 
 describe('EventModal', () => {
+  it('uses the approved borderless quick-entry hierarchy without descriptive copy', async () => {
+    render(<EventModal {...props()} />);
+    const lead = document.querySelector('.event-form__lead');
+    const schedule = document.querySelector('.event-form__time-range');
+    const category = document.querySelector('.event-form__category');
+    const recurrence = document.querySelector('.event-form__recurrence');
+    const quickSettings = document.querySelector('.event-form__quick-settings');
+    const note = document.querySelector('.event-form__note');
+
+    expect(lead).not.toBeNull();
+    expect(schedule).not.toBeNull();
+    expect(category).not.toBeNull();
+    expect(recurrence).not.toBeNull();
+    expect(quickSettings).not.toBeNull();
+    expect(note).not.toBeNull();
+    // 表单顺序：标题 时间 分类 重复 提醒 备注。
+    expect(lead?.nextElementSibling).toBe(schedule);
+    expect(schedule?.nextElementSibling).toBe(category);
+    expect(category?.nextElementSibling).toBe(recurrence);
+    expect(recurrence?.nextElementSibling).toBe(quickSettings);
+    expect(quickSettings?.nextElementSibling).toBe(note);
+    expect(screen.getByRole('heading', { name:'时间' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name:'备注' })).toBeInTheDocument();
+    expect(within(schedule as HTMLElement).getByRole('button', { name:'开始' })).toBeInTheDocument();
+    expect(await within(note as HTMLElement).findByLabelText('备注')).toBeInTheDocument();
+    expect(within(quickSettings as HTMLElement).getByText('提醒')).toBeInTheDocument();
+    expect(within(category as HTMLElement).getByRole('combobox', { name:'分类' })).toBeInTheDocument();
+    expect(screen.queryByText('安排日程的起止日期与时间')).toBeNull();
+    expect(screen.queryByText('记录议程、准备事项或相关信息')).toBeNull();
+  });
+
+  it('shows the recurrence preset inline for a new event', async () => {
+    render(<EventModal {...props()} />);
+    expect(screen.getByRole('combobox', { name:'重复' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name:'重复' })).toHaveTextContent('不重复');
+  });
+
   it('renders create defaults and every controlled field', async () => {
     const { container } = render(<EventModal {...props()} />);
     expect(screen.getByRole('dialog', { name:'新建日程' })).toBeInTheDocument();
     expect(screen.getByLabelText('日程标题')).toHaveValue('');
     expect(screen.getByLabelText('全天事件')).not.toBeChecked();
-    expect(screen.getByRole('button', { name:'开始日期' })).toHaveTextContent('2026 年 7 月 23 日');
+    expect(screen.getByRole('button', { name:'开始' })).toHaveTextContent('2026 年 7 月 23 日');
     expect(screen.getByRole('button', { name:'开始时间' })).toHaveTextContent('09:45');
     expect(screen.getByRole('button', { name:'结束时间' })).toHaveTextContent('10:45');
-    expect(screen.getByRole('combobox', { name:'分类' })).toHaveTextContent('工作');
-    expect(screen.getAllByRole('radio')).toHaveLength(4);
+    expect(screen.getByRole('combobox', { name:'分类' })).toHaveTextContent('无分类');
     // The note field is a rich text editor (a contenteditable surface), so it
     // has no `value`; assert it starts empty instead. It is awaited because the
     // editor defers construction until KaTeX and highlight.js have loaded.
@@ -51,7 +93,6 @@ describe('EventModal', () => {
     render(<EventModal {...props({ mode:{ type:'edit', event:existing } })} />);
     expect(screen.getByRole('dialog', { name:'编辑日程' })).toBeInTheDocument();
     expect(screen.getByLabelText('日程标题')).toHaveValue('设计评审');
-    expect(screen.getAllByRole('radio')).toHaveLength(4);
     expect(screen.getByRole('button', { name:'删除日程' })).toBeInTheDocument();
     await user.click(screen.getByLabelText('全天事件'));
     expect(screen.queryByRole('button', { name:'开始时间' })).not.toBeInTheDocument();
@@ -61,10 +102,10 @@ describe('EventModal', () => {
 
   it('keeps pickers mutually exclusive', async () => {
     const user = userEvent.setup(); render(<EventModal {...props()} />);
-    await user.click(screen.getByRole('button', { name:'开始日期' }));
-    expect(screen.getByRole('dialog', { name:'选择开始日期' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name:'开始' }));
+    expect(screen.getByRole('dialog', { name:'选择开始' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name:'开始时间' }));
-    expect(screen.queryByRole('dialog', { name:'选择开始日期' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name:'选择开始' })).not.toBeInTheDocument();
     expect(screen.getByRole('dialog', { name:'选择开始时间' })).toBeInTheDocument();
   });
 
@@ -210,7 +251,7 @@ describe('EventModal', () => {
   it('warns about cleared adjustments only when the whole series really moves', async () => {
     const user=userEvent.setup();
     render(<EventModal {...props({ mode:{type:'edit',event:recurring} })} />);
-    await user.click(screen.getByRole('button', { name:'开始日期' }));
+    await user.click(screen.getByRole('button', { name:'开始' }));
     // 同为周一 10:00，只有日期变了：只比 HH:MM 的判定会漏报。
     await user.click(document.querySelector('[data-date="2026-08-03"]') as HTMLElement);
     await user.click(screen.getByRole('button', { name:'保存' }));
@@ -293,20 +334,20 @@ describe('EventModal', () => {
   it('adds a reminder and submits it as minutes before start', async () => {
     const user=userEvent.setup(); const createEvent=vi.fn().mockResolvedValue(existing);
     render(<EventModal {...props({ createEvent })} />);
-    // 默认没有提醒。
-    expect(screen.getByText('无提醒')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name:'添加提醒' }));
-    // 新提醒默认 10 分钟前。
-    expect(screen.getByLabelText('提前数量')).toHaveValue(10);
+    const preset = screen.getByRole('button', { name:'5 分钟前' });
+    expect(preset).toHaveAttribute('aria-pressed', 'false');
+    await user.click(preset);
+    expect(preset).toHaveAttribute('aria-pressed', 'true');
     await user.type(screen.getByLabelText('日程标题'), '会议');
     await user.click(screen.getByRole('button', { name:'保存' }));
     await waitFor(()=>expect(createEvent).toHaveBeenCalledTimes(1));
-    expect(createEvent.mock.calls[0][0].reminders).toEqual([10]);
+    expect(createEvent.mock.calls[0][0].reminders).toEqual([5]);
   });
 
   it('converts the unit into stored minutes and loads them back', async () => {
     const user=userEvent.setup(); const createEvent=vi.fn().mockResolvedValue(existing);
     render(<EventModal {...props({ createEvent })} />);
+    await user.click(screen.getByRole('button', { name:'自定义提醒' }));
     await user.click(screen.getByRole('button', { name:'添加提醒' }));
     await user.click(screen.getByRole('combobox', { name:'提前单位' }));
     await user.click(screen.getByRole('option', { name:'小时' }));

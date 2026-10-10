@@ -1,5 +1,4 @@
 import {
-  DEFAULT_EVENT_COLOR,
   type CalendarEvent,
   type EventCategory,
   type EventColor,
@@ -28,8 +27,6 @@ export type EventFieldErrors = Partial<
   Record<'title' | 'startAt' | 'endAt' | 'category' | 'color' | 'reminders' | 'recurrence', string>
 >;
 
-const categories: EventCategory[] = ['work', 'important', 'personal', 'learning'];
-
 // The most a reminder may lead the start by: four weeks, in minutes. Kept in
 // lockstep with the backend `MAX_REMINDER_MINUTES`.
 export const MAX_REMINDER_MINUTES = 4 * 7 * 24 * 60;
@@ -42,6 +39,29 @@ function pad(value: number) {
 
 function minutesToTime(minutes: number) {
   return `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`;
+}
+
+export function applyEventDuration(form: EventFormDraft, durationMinutes: number): EventFormDraft {
+  const [year, month, day] = form.startDate.split('-').map(Number);
+  const [hour, minute] = form.startTime.split(':').map(Number);
+  const end = new Date(year, month - 1, day, hour, minute + durationMinutes);
+  return {
+    ...form,
+    endDate: `${end.getFullYear()}-${pad(end.getMonth() + 1)}-${pad(end.getDate())}`,
+    endTime: `${pad(end.getHours())}:${pad(end.getMinutes())}`
+  };
+}
+
+// Picking a category also picks its color: the two are one concept. An empty
+// category id means "no category", which also clears the color.
+export function applyCategory(form: EventFormDraft, category: EventCategory, color: EventColor | ''): EventFormDraft {
+  return { ...form, category, color: category ? color : '' };
+}
+
+// Choosing a start time defaults the end to one hour later, rolling across day,
+// month, or year boundaries as needed. All-day events keep their spanned dates.
+export function applyStartTime(form: EventFormDraft, startTime: string): EventFormDraft {
+  return applyEventDuration({ ...form, startTime }, 60);
 }
 
 export function createEventDraft(dateIso: string, now: Date): EventFormDraft {
@@ -58,8 +78,8 @@ export function createEventDraft(dateIso: string, now: Date): EventFormDraft {
     startTime: minutesToTime(startMinutes),
     endTime: minutesToTime(endMinutes),
     allDay: false,
-    category: 'work',
-    color: DEFAULT_EVENT_COLOR,
+    category: '',
+    color: '',
     note: '',
     reminders: [],
     recurrence: null
@@ -88,13 +108,15 @@ export function eventToForm(event: CalendarEvent): EventFormDraft {
 }
 
 export function toEventDraft(form: EventFormDraft): EventDraft {
+  // No category means no color; the backend enforces the same pairing.
+  const color = form.category ? (normalizeHexColor(form.color) ?? '') : '';
   return {
     title: form.title.trim(),
     startAt: formStartAt(form),
     endAt: `${form.endDate}T${form.allDay ? '23:59' : form.endTime}`,
     allDay: form.allDay,
     category: form.category,
-    color: normalizeHexColor(form.color) as EventColor,
+    color: color as EventColor,
     note: form.note,
     reminders: normalizeReminders(form.reminders),
     recurrence: form.recurrence
@@ -118,8 +140,8 @@ export function validateEventForm(form: EventFormDraft): EventFieldErrors {
   if (!form.allDay && form.startDate === form.endDate && form.endTime < form.startTime) {
     return { endAt: t('eventDraft.errorEndTimeBeforeStart') };
   }
-  if (!categories.includes(form.category)) return { category: t('eventDraft.errorCategory') };
-  if (!normalizeHexColor(form.color)) return { color: t('eventDraft.errorColor') };
+  // A category is optional ("无分类"). When one is chosen, it must carry a valid color.
+  if (form.category && !normalizeHexColor(form.color)) return { color: t('eventDraft.errorColor') };
   if (form.reminders.some((value) => value < 0 || value > MAX_REMINDER_MINUTES)) {
     return { reminders: t('eventDraft.errorReminderRange') };
   }

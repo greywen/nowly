@@ -32,12 +32,8 @@
     "e2e": "playwright test",
     "tauri": "tauri",
     "icons": "node scripts/generate-icons.mjs",
-    "module:css": "node scripts/generate-module-css.mjs",
-    "module:preview": "vite --open /preview.html",
     "version:check": "node scripts/check-version-sync.mjs",
-    "test:tooling": "node scripts/check-version-sync.mjs && node --test scripts/generate-module-css.test.mjs registry/lint.test.mjs",
-    "registry:lint": "node --test registry/lint.test.mjs",
-    "registry:validate": "node registry/validate.mjs"
+    "test:tooling": "node scripts/check-version-sync.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "latest",
@@ -51,7 +47,6 @@
   "devDependencies": {
     "@iconify-json/solar": "^1.2.10",
     "@playwright/test": "latest",
-    "@tailwindcss/postcss": "^4.3.3",
     "@tauri-apps/cli": "latest",
     "@testing-library/jest-dom": "latest",
     "@testing-library/react": "latest",
@@ -63,7 +58,6 @@
     "cross-env": "^10.1.0",
     "jsdom": "latest",
     "postcss": "latest",
-    "tailwindcss": "latest",
     "typescript": "latest",
     "vite": "latest",
     "vitest": "latest"

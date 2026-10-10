@@ -18,7 +18,7 @@ type TabsProps<Id extends string> = {
 const tabId = (prefix: string, id: string) => `${prefix}-tab-${id}`;
 const panelId = (prefix: string, id: string) => `${prefix}-panel-${id}`;
 
-// The single underline tab style for the whole app (design.md §8.12). Every
+// The single underline tab style for the whole app (design.md §10.10). Every
 // settings surface — app-level and per-module — goes through this component so
 // no screen re-implements a look-alike.
 export function Tabs<Id extends string>({ idPrefix, label, items, value, onChange }: TabsProps<Id>) {

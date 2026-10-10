@@ -21,6 +21,7 @@
 // file the desktop build would refuse is refused here too. ("Self-contained"
 // above means it needs no Tauri runtime, not that it avoids imports.)
 import { isAllowedAttachmentName } from '../lib/attachment';
+import { normalizeBarMenu } from '../app/bar-menu';
 
 type Dict = Record<string, unknown>;
 
@@ -28,6 +29,7 @@ const STORAGE_KEY = 'nowly:browser-backend';
 
 type Store = {
   events: Dict[];
+  categories: Dict[];
   subscriptions: Dict[];
   oauthAccounts: Dict[];
   externalEvents: Dict[];
@@ -35,9 +37,7 @@ type Store = {
   notes: Dict[];
   settings: Dict;
   moduleLayout: Dict[];
-  moduleState: Record<string, string>;
   focusSessions: Dict[];
-  extensions: Dict[];
   kanban: {
     lanes: Dict[];
     cards: Dict[];
@@ -59,12 +59,16 @@ const defaultSettings: Dict = {
   hideTopbarInWallpaper: true,
   quickPanelEnabled: true,
   quickPanelShortcut: 'Ctrl+Space',
+  screenshotShortcut: 'Ctrl+Alt+A',
+  screenshotHistoryShortcut: 'Ctrl+Alt+H',
+  barMenu: normalizeBarMenu(undefined),
   recentColors: []
 };
 
 function emptyStore(): Store {
   return {
     events: [],
+    categories: [],
     subscriptions: [],
     oauthAccounts: [],
     externalEvents: [],
@@ -72,9 +76,7 @@ function emptyStore(): Store {
     notes: [],
     settings: { ...defaultSettings },
     moduleLayout: [],
-    moduleState: {},
     focusSessions: [],
-    extensions: [],
     kanban: { lanes: [], cards: [], priorities: [], tags: [], collaborators: [] }
   };
 }
@@ -85,11 +87,12 @@ function loadStore(): Store {
     if (!raw) return emptyStore();
     const parsed = JSON.parse(raw) as Partial<Store>;
     const base = emptyStore();
+    const settings = { ...base.settings, ...(parsed.settings ?? {}), barMenu: normalizeBarMenu(parsed.settings?.barMenu) };
+    Reflect.deleteProperty(settings, 'barButtons');
     return {
       ...base,
       ...parsed,
-      settings: { ...base.settings, ...(parsed.settings ?? {}) },
-      moduleState: { ...(parsed.moduleState ?? {}) },
+      settings,
       kanban: { ...base.kanban, ...(parsed.kanban ?? {}) }
     };
   } catch {
@@ -161,6 +164,25 @@ function inRange(startAt: unknown, range: { startAt: string; endAtExclusive: str
 export function installBrowserTauriBackend() {
   const store = loadStore();
   ensureTaskWorkspace(store);
+  const listeners = new Map<number, { event: string; callback: number }>();
+  let listenerId = 0;
+  const emit = (event: string, payload: unknown) => {
+    for (const [id, listener] of listeners) {
+      if (listener.event !== event) continue;
+      const callback = Reflect.get(window, `_${listener.callback}`);
+      if (typeof callback === 'function') callback({ event, id, payload });
+    }
+  };
+  let panelSource: 'menu' | 'nowly' | 'history' | null = null;
+  let panelGeneration = 0;
+  const closePanel = () => {
+    panelSource = null;
+    emit('status-island-details-close', { generation: ++panelGeneration });
+  };
+  const openPanel = (source: Exclude<typeof panelSource, null>) => {
+    panelSource = source;
+    emit('status-island-details-open', { generation: ++panelGeneration, source, identity: null });
+  };
 
   // Attachment bytes and metadata, kept in memory only (see save_attachment).
   const attachmentBytes = new Map<string, Uint8Array>();
@@ -171,21 +193,17 @@ export function installBrowserTauriBackend() {
     lanes: store.kanban.lanes,
     tags: store.kanban.tags.map((tag) => ({ archivedAt: null, ...tag })),
     collaborators: store.kanban.collaborators.map((person) => ({ archivedAt: null, ...person })),
-    linkingEnabled: store.settings.taskViewLinkingEnabled !== false,
+    linkingEnabled: true,
     defaultLaneId: (store.settings.defaultTaskLaneId as string) ?? 'kanban-lane-todo',
     completionLaneId: (store.settings.completionTaskLaneId as string) ?? 'kanban-lane-done',
     viewPreferences: (store.settings.taskViewPreferences as Dict) ?? {}
   });
 
   const coordinateViews = (task: Dict) => {
-    if (store.settings.taskViewLinkingEnabled === false) {
-      const current = Array.isArray(task.views) ? task.views as string[] : ['kanban'];
-      task.views = current.filter((view) =>
-        view === 'kanban' || (view === 'matrix' && task.priority)
-      );
-      return;
-    }
-    task.views = ['kanban', ...(task.priority ? ['matrix'] : [])];
+    task.views = [
+      'kanban',
+      ...(task.priority ? ['matrix'] : [])
+    ];
   };
 
   const persist = () => {
@@ -195,6 +213,10 @@ export function installBrowserTauriBackend() {
       /* storage disabled; keep running from in-memory state */
     }
   };
+
+  store.settings.taskViewLinkingEnabled = true;
+  store.tasks.forEach(coordinateViews);
+  persist();
 
   const handlers: Record<string, (args: Dict) => unknown> = {
     // Calendar events
@@ -218,6 +240,56 @@ export function installBrowserTauriBackend() {
     delete_event: (a) => {
       const target = a.target as { id: string };
       store.events = store.events.filter((e) => e.id !== target.id);
+      persist();
+    },
+
+    // Calendar categories (user-defined name + color; shared by events & subs)
+    list_categories: () =>
+      [...store.categories].sort(
+        (a, b) => (a.position as number) - (b.position as number)
+      ),
+    create_category: (a) => {
+      const draft = a.draft as Dict;
+      const position = store.categories.reduce(
+        (max, c) => Math.max(max, (c.position as number) + 1),
+        0
+      );
+      const category = {
+        id: id('cat'),
+        position,
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+        ...draft
+      };
+      store.categories.push(category);
+      persist();
+      return category;
+    },
+    update_category: (a) => {
+      const draft = a.draft as Dict;
+      let updated: Dict | undefined;
+      store.categories = store.categories.map((c) =>
+        c.id === a.id ? (updated = { ...c, ...draft, updatedAt: nowIso() }) : c
+      );
+      // Category and color are one concept: refresh the color snapshot on every
+      // event/subscription referencing this category.
+      const color = draft.color as string;
+      store.events = store.events.map((e) => (e.category === a.id ? { ...e, color } : e));
+      store.subscriptions = store.subscriptions.map((s) =>
+        s.categoryId === a.id ? { ...s, color } : s
+      );
+      persist();
+      return updated;
+    },
+    delete_category: (a) => {
+      store.categories = store.categories.filter((c) => c.id !== a.id);
+      // Referencing rows fall back to "no category, no color".
+      store.events = store.events.map((e) =>
+        e.category === a.id ? { ...e, category: '', color: '' } : e
+      );
+      store.subscriptions = store.subscriptions.map((s) =>
+        s.categoryId === a.id ? { ...s, categoryId: null, color: '' } : s
+      );
       persist();
     },
 
@@ -287,6 +359,7 @@ export function installBrowserTauriBackend() {
         name: a.name as string,
         url: '',
         color: a.color as string,
+        categoryId: null,
         refreshIntervalMinutes: a.refreshIntervalMinutes as number,
         provider: (store.oauthAccounts.find((acct) => acct.id === a.accountId)?.provider as string) ?? 'google',
         accountId: a.accountId as string,
@@ -310,6 +383,7 @@ export function installBrowserTauriBackend() {
               ...s,
               name: a.name as string,
               color: a.color as string,
+              categoryId: (a.categoryId as string | null) ?? null,
               refreshIntervalMinutes: a.refreshIntervalMinutes as number,
               updatedAt: nowIso()
             })
@@ -459,15 +533,18 @@ export function installBrowserTauriBackend() {
     },
     set_task_view_memberships: (a) => {
       let updated: Dict | undefined;
-      store.tasks = store.tasks.map((task) =>
-        task.id === a.id ? (updated = { ...task, views: a.views, updatedAt: nowIso() }) : task
-      );
+      store.tasks = store.tasks.map((task) => {
+        if (task.id !== a.id) return task;
+        updated = { ...task, updatedAt: nowIso() };
+        coordinateViews(updated);
+        return updated;
+      });
       persist();
       return updated;
     },
-    set_task_view_linking: (a) => {
-      store.settings.taskViewLinkingEnabled = a.enabled;
-      if (a.enabled) store.tasks.forEach(coordinateViews);
+    set_task_view_linking: () => {
+      store.settings.taskViewLinkingEnabled = true;
+      store.tasks.forEach(coordinateViews);
       persist();
       return taskWorkspaceSnapshot();
     },
@@ -708,9 +785,21 @@ export function installBrowserTauriBackend() {
     get_app_settings: () => store.settings,
     update_app_settings: (a) => {
       store.settings = { ...store.settings, ...(a.settings as Dict) };
+      store.settings.barMenu = normalizeBarMenu(store.settings.barMenu);
+      Reflect.deleteProperty(store.settings, 'barButtons');
       persist();
       return store.settings;
     },
+    get_status_island_snapshot: () => ({
+      sampledAt: nowIso(),
+      events: store.events,
+      externalEvents: store.externalEvents,
+      tasks: store.tasks,
+      focus: { status: 'idle', remainingSeconds: 0, sessionId: null },
+      reminders: [],
+      notificationMode: store.settings.notificationMode ?? 'persistent',
+      barMenu: normalizeBarMenu(store.settings.barMenu)
+    }),
     list_monitors: () => [
       {
         id: 'browser',
@@ -730,16 +819,6 @@ export function installBrowserTauriBackend() {
       store.moduleLayout = (a.layout as Dict[]) ?? [];
       persist();
       return store.moduleLayout;
-    },
-    // Draft modules live on the real filesystem (%APPDATA%/com.nowly.app/dev-modules),
-    // which the browser shim cannot read. The standalone preview page (channel
-    // B) covers browser-based previewing, so here we just report no drafts.
-    list_dev_modules: () => [],
-    dev_modules_dir_path: () => '',
-    get_module_state: (a) => store.moduleState[a.moduleId as string] ?? null,
-    set_module_state: (a) => {
-      store.moduleState[a.moduleId as string] = a.state as string;
-      persist();
     },
 
     // Focus timer
@@ -795,44 +874,6 @@ export function installBrowserTauriBackend() {
     pause_focus_timer: () => undefined,
     resume_focus_timer: () => undefined,
     cancel_focus_timer: () => undefined,
-
-    // Sandbox extensions
-    list_extensions: () => store.extensions,
-    install_extension: (a) => {
-      const ext = {
-        id: id('ext'),
-        allowedHosts: [],
-        minW: 1,
-        minH: 1,
-        createdAt: nowIso(),
-        updatedAt: nowIso(),
-        ...(a.draft as Dict)
-      };
-      store.extensions.push(ext);
-      persist();
-      return ext;
-    },
-    uninstall_extension: (a) => {
-      store.extensions = store.extensions.filter((e) => e.id !== a.id);
-      persist();
-    },
-    proxy_fetch: async (a) => {
-      const req = a.request as { url: string; method?: string; headers?: [string, string][]; body?: string };
-      const res = await fetch(req.url, {
-        method: req.method ?? 'GET',
-        headers: req.headers,
-        body: req.body
-      });
-      const text = await res.text();
-      return {
-        ok: res.ok,
-        status: res.status,
-        headers: [...res.headers.entries()] as [string, string][],
-        text
-      };
-    },
-    fetch_registry: async (a) => (await fetch(a.url as string)).text(),
-    download_module: async (a) => (await fetch(a.url as string)).text(),
 
     // Kanban
     get_kanban_snapshot: () => store.kanban,
@@ -992,6 +1033,28 @@ export function installBrowserTauriBackend() {
       persist();
     },
 
+    list_screenshot_history: () => ({ items: [], nextCursor: null }),
+    screenshot_shortcut_status: () => ({
+      screenshot: {
+        shortcut: store.settings.screenshotShortcut,
+        registered: false,
+        error: 'Global shortcuts are available only in the desktop application.'
+      },
+      history: {
+        shortcut: store.settings.screenshotHistoryShortcut,
+        registered: false,
+        error: 'Global shortcuts are available only in the desktop application.'
+      }
+    }),
+    screenshot_shortcut_recording: () => undefined,
+    copy_screenshot_history: () => { throw new Error('Image clipboard requires the desktop application.'); },
+    delete_screenshot_history: () => { throw new Error('Screenshot files require the desktop application.'); },
+    open_screenshot_folder: () => { throw new Error('Screenshot folder requires the desktop application.'); },
+    open_screenshot_history: () => openPanel('history'),
+    toggle_bar_menu: () => panelSource === 'menu' ? closePanel() : openPanel('menu'),
+    toggle_nowly_panel: () => panelSource === 'nowly' ? closePanel() : openPanel('nowly'),
+    close_status_island_details: closePanel,
+
     // Window mode & shell — no desktop window to switch in the browser.
     enter_wallpaper_mode: () => 'ok',
     enter_foreground_mode: () => 'ok',
@@ -1006,11 +1069,18 @@ export function installBrowserTauriBackend() {
   };
 
   const invoke = async (command: string, args: Dict = {}) => {
-    // The event plugin (`@tauri-apps/api/event` listen/emit) routes through
-    // invoke. There is no OS event bus in the browser, so accept and ignore
-    // these so `listen(...)` resolves to a no-op unlisten instead of throwing.
-    if (command.startsWith('plugin:event|')) {
-      return command.endsWith('|listen') ? Math.floor(Math.random() * 2 ** 32) : undefined;
+    if (command === 'plugin:event|listen') {
+      const id = ++listenerId;
+      listeners.set(id, { event: String(args.event), callback: Number(args.handler) });
+      return id;
+    }
+    if (command === 'plugin:event|unlisten') {
+      listeners.delete(Number(args.eventId));
+      return;
+    }
+    if (command === 'plugin:event|emit' || command === 'plugin:event|emit_to') {
+      emit(String(args.event), args.payload);
+      return;
     }
     const handler = handlers[command];
     if (!handler) {
@@ -1029,5 +1099,9 @@ export function installBrowserTauriBackend() {
         return callbackId;
       }
     }
+  });
+  Object.defineProperty(window, '__TAURI_EVENT_PLUGIN_INTERNALS__', {
+    configurable: true,
+    value: { unregisterListener: (_event: string, id: number) => { listeners.delete(id); } }
   });
 }

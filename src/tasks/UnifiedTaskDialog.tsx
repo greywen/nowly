@@ -37,7 +37,6 @@ type Form = {
   laneId: string;
   tagIds: string[];
   collaboratorIds: string[];
-  views: TaskView[];
 };
 
 function message(error: unknown) {
@@ -59,12 +58,10 @@ export function UnifiedTaskDialog({ mode, restoreFocusRef, onClose }: Props) {
         completed: mode.task.completed,
         laneId: mode.task.laneId,
         tagIds: mode.task.tagIds,
-        collaboratorIds: mode.task.collaboratorIds,
-        views: mode.task.views
+        collaboratorIds: mode.task.collaboratorIds
       };
     }
     const priority = mode.originView === 'matrix' ? 'important_urgent' : '';
-    const views: TaskView[] = mode.originView === 'kanban' ? ['kanban'] : ['kanban', mode.originView];
     return {
       title: '',
       description: '',
@@ -73,8 +70,7 @@ export function UnifiedTaskDialog({ mode, restoreFocusRef, onClose }: Props) {
       completed: false,
       laneId: mode.laneId ?? snapshot.defaultLaneId,
       tagIds: [],
-      collaboratorIds: [],
-      views
+      collaboratorIds: []
     };
   }, [mode, snapshot.defaultLaneId]);
   const [form, setForm] = useState(initial);
@@ -110,9 +106,6 @@ export function UnifiedTaskDialog({ mode, restoreFocusRef, onClose }: Props) {
   }
 
   function draft(): TaskDraft {
-    const views = form.views.filter((view) =>
-      view === 'kanban' || (view === 'matrix' && form.priority)
-    );
     return {
       title: form.title.trim(),
       description: form.description,
@@ -121,8 +114,7 @@ export function UnifiedTaskDialog({ mode, restoreFocusRef, onClose }: Props) {
       completed: form.completed,
       laneId: form.laneId,
       tagIds: form.tagIds,
-      collaboratorIds: form.collaboratorIds,
-      ...(!snapshot.linkingEnabled ? { views: views.length ? views : ['kanban'] } : {})
+      collaboratorIds: form.collaboratorIds
     };
   }
 
@@ -166,11 +158,6 @@ export function UnifiedTaskDialog({ mode, restoreFocusRef, onClose }: Props) {
       setBusy(false);
     }
   }
-
-  const viewOptions: Array<{ id: TaskView; label: string; disabled: boolean }> = [
-    { id: 'kanban', label: t('taskModal.viewKanban'), disabled: false },
-    { id: 'matrix', label: t('taskModal.viewMatrix'), disabled: !form.priority }
-  ];
 
   return <>
     <Dialog
@@ -230,23 +217,6 @@ export function UnifiedTaskDialog({ mode, restoreFocusRef, onClose }: Props) {
           options={activeCollaborators.map((person) => ({ id: person.id, label: person.name }))}
           selected={form.collaboratorIds} disabled={busy} emptyHint={t('kanbanTask.collaboratorsEmpty')}
           onToggle={(id, checked) => update('collaboratorIds', toggle(form.collaboratorIds, id, checked))} />
-        {!snapshot.linkingEnabled ? (
-          <fieldset className="kanban-multiselect">
-            <legend>{t('taskModal.views')}</legend>
-            <div className="kanban-multiselect__options">
-              {viewOptions.map((view) => (
-                <label key={view.id} className="form-check form-check-custom form-check-solid">
-                  <input className="form-check-input" type="checkbox" checked={form.views.includes(view.id)}
-                    disabled={busy || view.disabled}
-                    onChange={(event) => update('views', event.target.checked
-                      ? [...form.views, view.id]
-                      : form.views.filter((item) => item !== view.id))} />
-                  <span className="form-check-label">{view.label}</span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
-        ) : null}
       </form>
     </Dialog>
     {confirm === 'discard' ? (

@@ -1,28 +1,19 @@
-import { useRef, useState } from 'react';
-import { Check, Minus, Plus, Trash2, X } from '../components/icons';
+import { Check, Minus, Plus, X } from '../components/icons';
 import { Dialog } from '../components/Dialog';
-import type { SandboxExtension, SandboxExtensionDraft } from '../data/nowly-repository';
 import {
   builtinDefinitions,
-  devModuleDefinition,
   extensionDefinitions,
   kanbanDefinition,
-  sandboxExtensionToDefinition,
   type WidgetDefinition,
   type WidgetId
 } from './widget-registry';
-import { parseModuleManifest, manifestToDraft, ManifestError } from './module-manifest';
-import { InstallRiskDialog, type InstallRiskInfo } from './InstallRiskDialog';
 import { t } from '../i18n';
 
 type Props = {
   presentIds: Set<WidgetId>;
-  sandboxExtensions: SandboxExtension[];
   onClose(): void;
   onAdd(id: WidgetId): void;
   onRemove(id: WidgetId): void;
-  onInstallExtension(draft: SandboxExtensionDraft): Promise<unknown>;
-  onUninstallExtension(extension: SandboxExtension): void;
 };
 
 // A single module preview card. Clicking the card toggles placement: modules
@@ -68,83 +59,14 @@ function ModuleCard({
   );
 }
 
-function errorMessage(error: unknown) {
-  if (error instanceof ManifestError) {
-    return t(`manifest.${error.message}` as Parameters<typeof t>[0]);
-  }
-  return typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string'
-    ? (error.message as string)
-    : t('template.uploadError');
-}
-
-export function TemplatePickerDialog({
-  presentIds,
-  sandboxExtensions,
-  onClose,
-  onAdd,
-  onRemove,
-  onInstallExtension,
-  onUninstallExtension
-}: Props) {
-  // The developer module is a dev-only preview tool; gate it on the same
-  // `import.meta.env.DEV` flag App uses to render it, so the picker never
-  // offers end users a module they cannot use. Read in the render body (not at
-  // module load) so the flag is honored per render.
-  const builtinModules = [
-    ...builtinDefinitions,
-    kanbanDefinition,
-    ...extensionDefinitions,
-    ...(import.meta.env.DEV ? [devModuleDefinition] : [])
-  ];
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [error, setError] = useState<string | null>(null);
-  // A pending network-module install waiting on the risk dialog confirmation.
-  const [pendingRisk, setPendingRisk] = useState<
-    { info: InstallRiskInfo; draft: SandboxExtensionDraft } | null
-  >(null);
+// Every module Nowly offers is built in, so the picker is a single list: add a
+// module to the canvas or take it off again.
+export function TemplatePickerDialog({ presentIds, onClose, onAdd, onRemove }: Props) {
+  const builtinModules = [...builtinDefinitions, kanbanDefinition, ...extensionDefinitions];
 
   function toggle(id: WidgetId) {
     if (presentIds.has(id)) onRemove(id);
     else onAdd(id);
-  }
-
-  // Upload a module file: read its source, parse the manifest header for its
-  // metadata and permissions, then install. Modules that declare `network` are
-  // routed through the risk dialog so granting network is always deliberate.
-  async function uploadFile(file: File) {
-    setError(null);
-    try {
-      const source = await file.text();
-      const manifest = parseModuleManifest(source);
-      const draft = manifestToDraft(manifest, source);
-      if (manifest.permissions.includes('network')) {
-        setPendingRisk({
-          draft,
-          info: {
-            name: manifest.name,
-            author: manifest.author,
-            source: file.name,
-            permissions: manifest.permissions,
-            allowedHosts: manifest.network
-          }
-        });
-        return;
-      }
-      await onInstallExtension(draft);
-    } catch (reason) {
-      setError(errorMessage(reason));
-    }
-  }
-
-  async function confirmRiskInstall() {
-    if (!pendingRisk) return;
-    const { draft } = pendingRisk;
-    setPendingRisk(null);
-    try {
-      await onInstallExtension(draft);
-    } catch (reason) {
-      setError(errorMessage(reason));
-    }
   }
 
   return (
@@ -161,7 +83,6 @@ export function TemplatePickerDialog({
     >
       <div className="template-picker">
         <section className="template-picker__group">
-          <h3>{t('template.builtin')}</h3>
           <div className="template-grid">
             {builtinModules.map((definition) => (
               <ModuleCard
@@ -173,43 +94,7 @@ export function TemplatePickerDialog({
             ))}
           </div>
         </section>
-
-        <section className="template-picker__group">
-          <h3>{t('template.myModules')}</h3>
-          <p className="template-picker__empty">{t('template.uploadComingSoon')}</p>
-          {sandboxExtensions.length === 0 ? null : (
-            <div className="template-grid">
-              {sandboxExtensions.map((extension) => {
-                const definition = sandboxExtensionToDefinition(extension);
-                const added = presentIds.has(definition.id);
-                return (
-                  <div key={extension.id} className="template-card-wrap">
-                    <ModuleCard definition={definition} added={added} onToggle={() => toggle(definition.id)} />
-                    <div className="template-card-wrap__tools">
-                      <button
-                        type="button"
-                        className="good-icon-button"
-                        aria-label={t('template.deleteModule', { name: extension.name })}
-                        onClick={() => onUninstallExtension(extension)}
-                      >
-                        <Trash2 aria-hidden="true" />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
       </div>
-
-      {pendingRisk ? (
-        <InstallRiskDialog
-          info={pendingRisk.info}
-          onConfirm={() => void confirmRiskInstall()}
-          onCancel={() => setPendingRisk(null)}
-        />
-      ) : null}
     </Dialog>
   );
 }

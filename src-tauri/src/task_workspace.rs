@@ -19,7 +19,7 @@ const PRIORITIES: &[&str] = &[
     "not_important_urgent",
     "not_important_not_urgent",
 ];
-const VIEWS: &[&str] = &["kanban", "matrix", "calendar"];
+const VIEWS: &[&str] = &["kanban", "matrix"];
 const LINKING_KEY: &str = "task_view_linking_enabled";
 const DEFAULT_LANE_KEY: &str = "default_task_lane_id";
 const COMPLETION_LANE_KEY: &str = "completion_task_lane_id";
@@ -76,7 +76,8 @@ fn write_setting<T: Serialize>(
 }
 
 fn linking_enabled(connection: &Connection) -> Result<bool, CommandError> {
-    read_setting(connection, LINKING_KEY, true)
+    let _: bool = read_setting(connection, LINKING_KEY, true)?;
+    Ok(true)
 }
 
 fn default_lane_id(connection: &Connection) -> Result<String, CommandError> {
@@ -170,7 +171,7 @@ fn task_links(connection: &Connection, task: &mut Task) -> Result<(), CommandErr
     task.views = connection
         .prepare(
             "SELECT view FROM task_view_memberships WHERE task_id=?1
-             ORDER BY CASE view WHEN 'kanban' THEN 0 WHEN 'matrix' THEN 1 ELSE 2 END",
+             ORDER BY CASE view WHEN 'kanban' THEN 0 ELSE 1 END",
         )
         .map_err(CommandError::database)?
         .query_map([&task.id], |row| row.get(0))
@@ -254,7 +255,51 @@ fn list_collaborators(connection: &Connection) -> Result<Vec<TaskCollaborator>, 
         .map_err(CommandError::database)
 }
 
+fn linking_invariants_stale(connection: &Connection) -> Result<bool, CommandError> {
+    if !read_setting(connection, LINKING_KEY, true)? {
+        return Ok(true);
+    }
+    connection
+        .query_row(
+            "SELECT EXISTS(
+                SELECT 1
+                FROM tasks t
+                WHERE NOT EXISTS(
+                    SELECT 1 FROM task_view_memberships m
+                    WHERE m.task_id=t.id AND m.view='kanban'
+                )
+                OR (t.priority IS NOT NULL) != EXISTS(
+                    SELECT 1 FROM task_view_memberships m
+                    WHERE m.task_id=t.id AND m.view='matrix'
+                )
+            )",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(CommandError::database)
+}
+
+fn ensure_linking_invariants(connection: &Connection) -> Result<(), CommandError> {
+    if !linking_invariants_stale(connection)? {
+        return Ok(());
+    }
+    let transaction = connection.domain_write().map_err(CommandError::database)?;
+    write_setting(&transaction, LINKING_KEY, &true)?;
+    let ids = transaction
+        .prepare("SELECT id FROM tasks ORDER BY id")
+        .map_err(CommandError::database)?
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(CommandError::database)?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(CommandError::database)?;
+    for id in ids {
+        coordinate_memberships(&transaction, &id)?;
+    }
+    transaction.commit().map_err(sql_write_error)
+}
+
 pub fn snapshot(connection: &Connection) -> Result<TaskWorkspaceSnapshot, CommandError> {
+    ensure_linking_invariants(connection)?;
     Ok(TaskWorkspaceSnapshot {
         tasks: list_tasks(connection)?,
         lanes: list_lanes(connection)?,
@@ -555,20 +600,16 @@ fn task_structure(
 }
 
 fn coordinate_memberships(transaction: &Connection, task_id: &str) -> Result<(), CommandError> {
-    let (priority, due_date) = task_structure(transaction, task_id)?;
+    let (priority, _due_date) = task_structure(transaction, task_id)?;
     membership(transaction, task_id, "kanban", true)?;
     membership(transaction, task_id, "matrix", priority.is_some())?;
-    membership(transaction, task_id, "calendar", due_date.is_some())?;
     Ok(())
 }
 
 fn prune_invalid_memberships(transaction: &Connection, task_id: &str) -> Result<(), CommandError> {
-    let (priority, due_date) = task_structure(transaction, task_id)?;
+    let (priority, _due_date) = task_structure(transaction, task_id)?;
     if priority.is_none() {
         membership(transaction, task_id, "matrix", false)?;
-    }
-    if due_date.is_none() {
-        membership(transaction, task_id, "calendar", false)?;
     }
     let count: i64 = transaction
         .query_row(
@@ -589,17 +630,11 @@ fn set_memberships(
     views: &[String],
 ) -> Result<(), CommandError> {
     let views = normalize_views(views)?;
-    let (priority, due_date) = task_structure(transaction, task_id)?;
+    let (priority, _due_date) = task_structure(transaction, task_id)?;
     if views.iter().any(|view| view == "matrix") && priority.is_none() {
         return Err(CommandError::validation(
             "views",
             "加入四象限前请先设置优先分类。",
-        ));
-    }
-    if views.iter().any(|view| view == "calendar") && due_date.is_none() {
-        return Err(CommandError::validation(
-            "views",
-            "加入日历前请先设置截止日期。",
         ));
     }
     transaction
@@ -937,23 +972,9 @@ fn set_task_memberships(
 
 fn set_linking(
     connection: &Connection,
-    enabled: bool,
+    _enabled: bool,
 ) -> Result<TaskWorkspaceSnapshot, CommandError> {
-    let transaction = connection.domain_write().map_err(CommandError::database)?;
-    write_setting(&transaction, LINKING_KEY, &enabled)?;
-    if enabled {
-        let ids = transaction
-            .prepare("SELECT id FROM tasks ORDER BY id")
-            .map_err(CommandError::database)?
-            .query_map([], |row| row.get::<_, String>(0))
-            .map_err(CommandError::database)?
-            .collect::<rusqlite::Result<Vec<_>>>()
-            .map_err(CommandError::database)?;
-        for id in ids {
-            coordinate_memberships(&transaction, &id)?;
-        }
-    }
-    transaction.commit().map_err(sql_write_error)?;
+    ensure_linking_invariants(connection)?;
     snapshot(connection)
 }
 
@@ -1567,9 +1588,7 @@ pub fn set_task_view_preferences(
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        create, create_tag_value, set_linking, set_task_memberships, snapshot, update_priority,
-    };
+    use super::{create, create_tag_value, set_linking, snapshot};
     use crate::db::migrate;
     use crate::models::{TaskDraft, TaskTagDraft};
     use rusqlite::Connection;
@@ -1612,42 +1631,98 @@ mod tests {
         let mut connection = database();
         let task = create(&mut connection, "kanban", draft()).unwrap();
         assert_eq!(task.title, "发布 Nowly");
-        assert_eq!(task.views, vec!["kanban", "matrix", "calendar"]);
+        assert_eq!(task.views, vec!["kanban", "matrix"]);
         assert_eq!(task.priority.as_deref(), Some("important_urgent"));
         assert_eq!(task.due_date.as_deref(), Some("2026-08-26"));
     }
 
     #[test]
-    fn disabled_linking_freezes_memberships_but_prunes_invalid_structure() {
+    fn linking_cannot_be_disabled_and_rebuilds_memberships() {
         let mut connection = database();
         let task = create(&mut connection, "kanban", draft()).unwrap();
-        set_linking(&mut connection, false).unwrap();
+        connection
+            .execute(
+                "UPDATE settings SET value='false' WHERE key='task_view_linking_enabled'",
+                [],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "DELETE FROM task_view_memberships WHERE task_id=?1 AND view IN ('matrix')",
+                [&task.id],
+            )
+            .unwrap();
 
-        let changed = update_priority(&mut connection, &task.id, None).unwrap();
-        assert_eq!(changed.views, vec!["kanban", "calendar"]);
-
-        let error = set_task_memberships(
-            &mut connection,
-            &task.id,
-            vec!["kanban".into(), "matrix".into()],
-        )
-        .unwrap_err();
-        assert_eq!(error.field.as_deref(), Some("views"));
-    }
-
-    #[test]
-    fn reenabling_linking_rebuilds_memberships() {
-        let mut connection = database();
-        let task = create(&mut connection, "kanban", draft()).unwrap();
-        set_linking(&mut connection, false).unwrap();
-        set_task_memberships(&mut connection, &task.id, vec!["kanban".into()]).unwrap();
-        let workspace = set_linking(&mut connection, true).unwrap();
+        let workspace = set_linking(&mut connection, false).unwrap();
+        assert!(workspace.linking_enabled);
         let task = workspace
             .tasks
             .iter()
             .find(|item| item.id == task.id)
             .unwrap();
-        assert_eq!(task.views, vec!["kanban", "matrix", "calendar"]);
+        assert_eq!(task.views, vec!["kanban", "matrix"]);
+
+        let stored: String = connection
+            .query_row(
+                "SELECT value FROM settings WHERE key='task_view_linking_enabled'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(stored, "true");
+    }
+
+    #[test]
+    fn snapshot_repairs_legacy_linking_once_for_every_consumer() {
+        let mut connection = database();
+        let task = create(&mut connection, "kanban", draft()).unwrap();
+        connection
+            .execute(
+                "UPDATE settings SET value='false' WHERE key='task_view_linking_enabled'",
+                [],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "DELETE FROM task_view_memberships WHERE task_id=?1 AND view IN ('matrix')",
+                [&task.id],
+            )
+            .unwrap();
+
+        let before_repair: i64 = connection
+            .query_row(
+                "SELECT revision FROM assistant_clock WHERE id=1",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let workspace = snapshot(&connection).unwrap();
+        let repaired = workspace
+            .tasks
+            .iter()
+            .find(|item| item.id == task.id)
+            .unwrap();
+        assert!(workspace.linking_enabled);
+        assert_eq!(repaired.views, vec!["kanban", "matrix"]);
+
+        let after_repair: i64 = connection
+            .query_row(
+                "SELECT revision FROM assistant_clock WHERE id=1",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(after_repair > before_repair);
+
+        snapshot(&connection).unwrap();
+        let after_second_snapshot: i64 = connection
+            .query_row(
+                "SELECT revision FROM assistant_clock WHERE id=1",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(after_second_snapshot, after_repair);
     }
 
     #[test]

@@ -40,10 +40,11 @@ pub struct Event {
 }
 
 // Unified task. A task is the single source of truth projected into the
-// kanban, matrix, and calendar views. `priority` is one of the four fixed
-// values or None (unclassified). `views` lists the view memberships the task
-// currently belongs to; the calendar/matrix ones are coordinated from
-// `priority`/`due_date` while linking is enabled, or frozen while it is off.
+// kanban and matrix views. `priority` is one of the four fixed values or None
+// (unclassified). `views` lists the view memberships the task currently belongs
+// to; the matrix one is coordinated from `priority` while linking is enabled,
+// or frozen while it is off. The calendar is fully independent and never
+// derives from tasks.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Task {
@@ -167,6 +168,9 @@ pub struct CalendarSubscription {
     pub name: String,
     pub url: String,
     pub color: String,
+    /// 订阅所选分类的 id；未选分类为 None。颜色随所选分类快照到 `color`。
+    #[serde(default)]
+    pub category_id: Option<String>,
     pub refresh_interval_minutes: i64,
     /// 订阅来源：'ics'（直连密钥地址）/ 'google' / 'microsoft'（OAuth API）。
     /// 迁移前的旧订阅默认 'ics'。
@@ -197,7 +201,31 @@ pub struct SubscriptionDraft {
     pub name: String,
     pub url: String,
     pub color: String,
+    /// 所选分类 id；未选为 None。
+    #[serde(default)]
+    pub category_id: Option<String>,
     pub refresh_interval_minutes: i64,
+}
+
+/// 用户自定义的日历分类：拥有名称与颜色。选择分类即为事件/订阅上色。
+/// 无默认分类，表初始为空，全部由用户创建。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Category {
+    pub id: String,
+    pub name: String,
+    pub color: String,
+    pub position: i64,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// 新建/编辑分类的草稿。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CategoryDraft {
+    pub name: String,
+    pub color: String,
 }
 
 /// 迁移前的旧订阅、以及前端未显式给出 provider 时的默认来源。
@@ -264,13 +292,14 @@ fn default_quick_panel_enabled() -> bool {
     true
 }
 
-// A new notification is worth reading once in full, so the island starts on the
-// detail. Closing it downgrades that one notification to today's summary.
-pub(crate) fn default_notification_display() -> String {
-    "detail".to_owned()
-}
 pub(crate) fn default_notification_mode() -> String {
     "persistent".to_owned()
+}
+pub(crate) fn default_screenshot_shortcut() -> String {
+    "Ctrl+Alt+A".to_owned()
+}
+pub(crate) fn default_screenshot_history_shortcut() -> String {
+    "Ctrl+Alt+H".to_owned()
 }
 fn default_quick_panel_shortcut() -> String {
     "Ctrl+Space".to_owned()
@@ -279,6 +308,39 @@ fn default_quick_panel_shortcut() -> String {
 // Icon drawing style. Matches the design baseline, which renders in duotone.
 pub(crate) fn default_icon_style() -> String {
     "duotone".to_owned()
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
+pub struct BarMenuItem {
+    pub id: String,
+    pub visible: bool,
+}
+
+pub(crate) fn default_bar_menu() -> Vec<BarMenuItem> {
+    ["screenshot", "screenshotHistory", "assistant"]
+        .into_iter()
+        .map(|id| BarMenuItem { id: id.into(), visible: true })
+        .collect()
+}
+
+pub(crate) fn normalize_bar_menu(items: Vec<BarMenuItem>) -> Vec<BarMenuItem> {
+    let defaults = default_bar_menu();
+    let mut normalized: Vec<BarMenuItem> = Vec::new();
+    for item in items {
+        if defaults.iter().any(|known| known.id == item.id)
+            && !normalized.iter().any(|previous| previous.id == item.id)
+        {
+            normalized.push(item);
+        }
+    }
+    for item in defaults {
+        if !normalized.iter().any(|previous| previous.id == item.id) {
+            normalized.push(item);
+        }
+    }
+    normalized
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -295,15 +357,18 @@ pub struct AppSettings {
     pub icon_style: String,
     #[serde(default = "default_hide_topbar_in_wallpaper")]
     pub hide_topbar_in_wallpaper: bool,
-    /// What the status island carries by default: `detail` or `summary`.
-    #[serde(default = "default_notification_display")]
-    pub notification_display: String,
     #[serde(default = "default_notification_mode")]
     pub notification_mode: String,
     #[serde(default = "default_quick_panel_enabled")]
     pub quick_panel_enabled: bool,
     #[serde(default = "default_quick_panel_shortcut")]
     pub quick_panel_shortcut: String,
+    #[serde(default = "default_screenshot_shortcut")]
+    pub screenshot_shortcut: String,
+    #[serde(default = "default_screenshot_history_shortcut")]
+    pub screenshot_history_shortcut: String,
+    /// Hidden features retain their position in the ordered menu.
+    pub bar_menu: Vec<BarMenuItem>,
     #[serde(default)]
     pub recent_colors: Vec<String>,
 }
@@ -390,39 +455,6 @@ pub struct TaskWorkspaceSnapshot {
     pub default_lane_id: String,
     pub completion_lane_id: String,
     pub view_preferences: serde_json::Value,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SandboxExtension {
-    pub id: String,
-    pub name: String,
-    pub description: String,
-    pub source: String,
-    pub permissions: Vec<String>,
-    #[serde(default)]
-    pub allowed_hosts: Vec<String>,
-    pub min_w: i64,
-    pub min_h: i64,
-    pub default_w: i64,
-    pub default_h: i64,
-    pub created_at: String,
-    pub updated_at: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SandboxExtensionDraft {
-    pub name: String,
-    #[serde(default)]
-    pub description: String,
-    pub source: String,
-    #[serde(default)]
-    pub permissions: Vec<String>,
-    #[serde(default)]
-    pub allowed_hosts: Vec<String>,
-    pub default_w: i64,
-    pub default_h: i64,
 }
 
 #[cfg(test)]
@@ -673,6 +705,7 @@ mod tests {
             name: "家庭".into(),
             url: "https://example.com/a.ics".into(),
             color: "#4FC9DA".into(),
+            category_id: None,
             refresh_interval_minutes: 15,
             provider: "ics".into(),
             account_id: None,

@@ -3,11 +3,11 @@ import { listen } from '@tauri-apps/api/event';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   buildDefinitions,
-  getWidgetDefinition,
   type WidgetId
 } from '../widgets/widget-registry';
 import { CalendarWidget } from '../calendar/CalendarWidget';
 import { useEvents } from '../calendar/useEvents';
+import { useCategories } from '../calendar/useCategories';
 import type { ModalState } from '../lib/modal-store';
 import { externalToCalendarEvent, type CalendarSubscription } from '../calendar/subscription-model';
 import { isEventWritable, type EventTarget } from '../calendar/calendar-model';
@@ -25,12 +25,6 @@ import { DesktopShell } from './layout/DesktopShell';
 import { useSettings } from '../settings/useSettings';
 import { useRecentColors } from '../settings/useRecentColors';
 import { useUpdateCheck } from '../settings/useUpdateCheck';
-import { useExtensions } from '../widgets/useExtensions';
-import { getExtensionComponent } from '../widgets/extension-modules';
-import { createModuleHost } from '../widgets/extension-module';
-import { SandboxModule } from '../widgets/sandbox/SandboxModule';
-import { DevModuleWidget } from '../widgets/DevModuleWidget';
-import { SANDBOX_ID_PREFIX } from '../widgets/widget-registry';
 import { useNowlyRepository } from '../data/RepositoryContext';
 import { useCurrentTime } from './useCurrentTime';
 import { t, useTranslation, getLanguage } from '../i18n';
@@ -60,10 +54,10 @@ function AppContent() {
   const repository = useNowlyRepository();
   const settingsFeature = useSettings();
   const eventsFeature = useEvents({ weekStart: settingsFeature.settings.data.weekStart });
+  const categoriesFeature = useCategories();
   const tasksFeature = useWorkspaceTasks();
   const notesFeature = useNotes();
   const notesView = useNotesView();
-  const extensionsFeature = useExtensions();
   const refreshEvents = useCallback(() => eventsFeature.retryEvents(), [eventsFeature]);
   const events = eventsFeature.events.data;
   const tasks = tasksFeature.tasks.data;
@@ -133,33 +127,8 @@ function AppContent() {
     return () => window.clearTimeout(id);
   }, [focusStatus, windowMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // The full set of placeable modules: built-ins, extensions, and installed
-  // user modules.
-  const definitions = buildDefinitions(extensionsFeature.extensions);
-
-  // Build a stable host per extension module, rebuilt only when the day rolls
-  // over. Each module talks to the app only through this host (identity, today,
-  // its own persisted state) — the same contract a sandboxed extension would use.
-  const hostCache = useRef(new Map<string, ReturnType<typeof createModuleHost>>());
-  const hostDayRef = useRef(todayIso);
-  if (hostDayRef.current !== todayIso) {
-    hostDayRef.current = todayIso;
-    hostCache.current.clear();
-  }
-  const hostFor = (id: string, allowedHosts: string[] = []) => {
-    let host = hostCache.current.get(id);
-    if (!host) {
-      host = createModuleHost(repository, id, todayIso, allowedHosts);
-      hostCache.current.set(id, host);
-    }
-    return host;
-  };
-  const renderExtension = (id: string): ReactNode => {
-    // Native (in-app) extension component.
-    const Component = getExtensionComponent(id);
-    if (!Component) return undefined;
-    return <Component host={hostFor(id)} />;
-  };
+  // The full set of placeable modules. Every module Nowly offers is built in.
+  const definitions = buildDefinitions();
 
   const todayEventCount = events.filter((event) => event.startAt.startsWith(todayIso)).length;
   const importantTaskCount = tasks.filter(
@@ -174,6 +143,7 @@ function AppContent() {
         monthIndex={eventsFeature.monthIndex}
         todayIso={todayIso}
         events={events}
+        categories={categoriesFeature.categories}
         status={eventsFeature.events.status}
         errorMessage={eventsFeature.events.status === 'error' ? eventsFeature.events.message : undefined}
         view={eventsFeature.view}
@@ -249,28 +219,6 @@ function AppContent() {
     />
   );
   modules.focusTimer = <FocusTimerWidget mode={windowMode} onOpenStatistics={() => setFocusStatisticsOpen(true)} onEnterWallpaper={() => void runWindowModeSwitch(switchToWallpaper)} />;
-  // The developer module (channel A) is a dev-only tool for previewing drafts
-  // on the real grid. `import.meta.env.DEV` is true under `tauri dev` and false
-  // in a built app, matching the backend's `cfg!(debug_assertions)` gate so it
-  // never ships to end users. It is added to the placeable set the same way in
-  // `buildDefinitions`.
-  if (import.meta.env.DEV) {
-    modules.devModule = <DevModuleWidget />;
-  }
-  // Installed user modules run their uploaded source in an isolated
-  // iframe, gated by the permissions they declared at install time.
-  for (const extension of extensionsFeature.extensions) {
-    const id = `${SANDBOX_ID_PREFIX}${extension.id}`;
-    modules[id] = (
-      <SandboxModule
-        host={hostFor(id, extension.allowedHosts)}
-        source={extension.source}
-        title={extension.name}
-        permissions={extension.permissions}
-        allowedHosts={extension.allowedHosts}
-      />
-    );
-  }
 
 
   useEffect(() => {
@@ -353,10 +301,6 @@ function AppContent() {
         summary={summary}
         modules={modules}
         definitions={definitions}
-        sandboxExtensions={extensionsFeature.extensions}
-        onInstallExtension={extensionsFeature.install}
-        onUninstallExtension={extensionsFeature.uninstall}
-        onReloadExtensions={() => void extensionsFeature.reload()}
         isModeSwitching={isSwitchingWindowMode}
         onSetWallpaper={() => void runWindowModeSwitch(switchToWallpaper)}
         onWallpaperDoubleClick={() => void runWindowModeSwitch(switchToForeground)}
@@ -394,6 +338,10 @@ function AppContent() {
         updateSubscription={repository.updateCalendarSubscription}
         deleteSubscription={repository.deleteCalendarSubscription}
         refreshSubscription={repository.refreshCalendarSubscription}
+        categories={categoriesFeature.categories}
+        createCategory={categoriesFeature.createCategory}
+        updateCategory={categoriesFeature.updateCategory}
+        deleteCategory={categoriesFeature.deleteCategory}
         recentColors={recentColors}
         onRememberCustomColor={rememberCustomColor}
       />

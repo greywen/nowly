@@ -44,6 +44,14 @@ async function send() {
 }
 async function click(element: HTMLElement) { await act(async () => { fireEvent.click(element); }); }
 describe('AssistantDock execution boundary', () => {
+  it('uses the Bar embedded surface and compact tool icons without a duplicate close button', async () => {
+    const { container } = render(<AssistantDock embedded client={clientFixture()} onRefresh={() => {}} />);
+    await connected();
+    expect(container.querySelector('.assistant-dock')).toHaveClass('assistant-dock--embedded');
+    expect(screen.getByRole('button', { name: '语音输入' }).querySelector('svg')).toHaveAttribute('width', '16');
+    expect(screen.queryByRole('button', { name: '收起助手' })).toBeNull();
+  });
+
   it('presents a generated plan as a card inside the single chat stream', async () => {
     const client = clientFixture();
     render(<AssistantDock client={client} onRefresh={() => {}} />);
@@ -90,9 +98,7 @@ describe('AssistantDock execution boundary', () => {
     render(<AssistantDock client={client} onRefresh={() => {}} />);
     await send();
     await click(await screen.findByRole('button', { name: '确认执行 1 项' }));
-    // The button reads "查看详情" but carries a per-operation aria-label so
-    // repeated cards stay distinguishable to screen readers.
-    const details = screen.getByRole('button', { name: /^查看.+详情$/ });
+    const details = screen.getByRole('button', { name: '查看详情' });
     expect(details).toHaveAttribute('aria-controls');
     await click(details);
     expect(document.getElementById(details.getAttribute('aria-controls')!)).toBeInTheDocument();

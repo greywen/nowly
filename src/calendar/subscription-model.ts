@@ -10,6 +10,9 @@ export type CalendarSubscription = {
   name: string;
   url: string;
   color: HexColor;
+  // The chosen category id, or null when no category is selected. Color is a
+  // snapshot of the chosen category's color.
+  categoryId: string | null;
   refreshIntervalMinutes: number;
   provider: SubscriptionProvider;
   accountId: string | null;
@@ -26,6 +29,7 @@ export type SubscriptionDraft = {
   name: string;
   url: string;
   color: HexColor;
+  categoryId: string | null;
   refreshIntervalMinutes: number;
 };
 

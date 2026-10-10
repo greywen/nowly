@@ -24,6 +24,14 @@ describe('tauriNowlyRepository', () => {
     expect(emitMock).toHaveBeenCalledWith('status-island-invalidated');
   });
 
+  it('keeps the legacy linking command enabled even when a caller requests false', async () => {
+    invokeMock.mockResolvedValue({ linkingEnabled: true });
+
+    await tauriNowlyRepository.setTaskViewLinking?.(false);
+
+    expect(invokeMock).toHaveBeenCalledWith('set_task_view_linking', { enabled: true });
+  });
+
   it('owns the exact event and startup IPC contracts', async () => {
     invokeMock.mockResolvedValue(undefined);
     const range = {
@@ -77,16 +85,11 @@ describe('tauriNowlyRepository', () => {
     const layoutEntry = { id: 'calendar', x: 0, y: 0, w: 7, h: 8 };
     await tauriNowlyRepository.listModuleLayout();
     await tauriNowlyRepository.saveModuleLayout([layoutEntry]);
-    await tauriNowlyRepository.getModuleState('focusTimer');
-    await tauriNowlyRepository.setModuleState('focusTimer', '{"durationMinutes":15}');
-    const extensionDraft = { name: '计数器', description: '', source: 'Nowly.defineModule(()=>{});', permissions: ['state' as const], allowedHosts: [], defaultW: 4, defaultH: 4 };
-    await tauriNowlyRepository.listExtensions();
-    await tauriNowlyRepository.installExtension(extensionDraft);
-    await tauriNowlyRepository.uninstallExtension('x1');
     const subscriptionDraft = {
       name: '家庭',
       url: 'https://example.com/a.ics',
       color: '#4FC9DA' as const,
+      categoryId: null,
       refreshIntervalMinutes: 15
     };
     await tauriNowlyRepository.listCalendarSubscriptions();
@@ -132,11 +135,6 @@ describe('tauriNowlyRepository', () => {
     expect(invokeMock.mock.calls).toContainEqual(['update_app_settings', { settings: expect.objectContaining({ density:'balanced' }) }]);
     expect(invokeMock.mock.calls).toContainEqual(['list_module_layout']);
     expect(invokeMock.mock.calls).toContainEqual(['save_module_layout', { layout: [layoutEntry] }]);
-    expect(invokeMock.mock.calls).toContainEqual(['get_module_state', { moduleId: 'focusTimer' }]);
-    expect(invokeMock.mock.calls).toContainEqual(['set_module_state', { moduleId: 'focusTimer', state: '{"durationMinutes":15}' }]);
-    expect(invokeMock.mock.calls).toContainEqual(['list_extensions']);
-    expect(invokeMock.mock.calls).toContainEqual(['install_extension', { draft: extensionDraft }]);
-    expect(invokeMock.mock.calls).toContainEqual(['uninstall_extension', { id: 'x1' }]);
     expect(invokeMock.mock.calls).toContainEqual(['list_calendar_subscriptions']);
     expect(invokeMock.mock.calls).toContainEqual(['create_calendar_subscription', { draft: subscriptionDraft }]);
     expect(invokeMock.mock.calls).toContainEqual(['update_calendar_subscription', { id: 's1', draft: subscriptionDraft }]);
