@@ -36,6 +36,10 @@ const ICON_SOURCES = {
   Cursor: 'cursor',
   Stop: 'stop',
   GalleryCircle: 'gallery-circle',
+  Circle: 'record',
+  Mosaic: 'mosaic-pixels',
+  Text: 'text-field',
+  ScrollVertical: 'sort-vertical',
   ArrowRightUp: 'arrow-right-up',
   UndoLeft: 'undo-left',
   UndoRight: 'undo-right',
@@ -84,6 +88,18 @@ if (set.width !== 24 || set.height !== 24) {
 }
 
 function body(base, style) {
+  if (base === 'mosaic-pixels') {
+    const tones = [1, 0.35, 0.65, 1, 0.65, 1, 0.35, 0.65, 0.35, 0.65, 1, 0.35, 1, 0.35, 0.65, 1];
+    return tones.map((tone, index) => {
+      const x = 2 + (index % 4) * 5;
+      const y = 2 + Math.floor(index / 4) * 5;
+      const opacity = style === 'duotone' ? tone : tone === 0.35 ? 0.35 : 1;
+      if (style === 'outline') {
+        return `<rect x="${x + 0.75}" y="${y + 0.75}" width="3.5" height="3.5" fill="none" stroke="currentColor" stroke-width="1.5" opacity="${opacity}"/>`;
+      }
+      return `<rect x="${x}" y="${y}" width="5" height="5" fill="currentColor" opacity="${opacity}"/>`;
+    }).join('');
+  }
   const name = `${base}-${STYLE_SUFFIX[style]}`;
   // Iconify stores some variants as aliases pointing at a shared glyph.
   const resolved = set.aliases?.[name]?.parent ?? name;
@@ -104,8 +120,8 @@ const entries = Object.entries(ICON_SOURCES)
 
 const output = `// GENERATED FILE — do not edit by hand.
 // Run \`npm run icons\` to regenerate from the Solar icon set (CC BY 4.0, by
-// 480 Design). Each entry holds the inner SVG markup of one glyph on a
-// 0 0 24 24 grid, in the three styles the app can switch between.
+// 480 Design), except the original Nowly mosaic-pixels glyph (design.md §14).
+// Each entry holds SVG markup on a 0 0 24 24 grid in three styles.
 import type { IconStyle } from './icon-style';
 
 export const ICON_VIEW_BOX = '0 0 24 24';

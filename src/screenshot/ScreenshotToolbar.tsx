@@ -4,9 +4,11 @@ import {
   Check,
   Cursor,
   Download,
-  GalleryCircle,
+  Circle,
+  Mosaic,
   Pencil,
-  RadialBlur,
+  ScrollVertical,
+  Text,
   Stop,
   UndoLeft,
   UndoRight,
@@ -42,14 +44,14 @@ export type ScreenshotToolbarProps = {
 const ICONS: Record<ToolId | ActionId, React.ComponentType<{ size?: number }>> = {
   select: Cursor,
   rect: Stop,
-  ellipse: GalleryCircle,
+  ellipse: Circle,
   arrow: ArrowRightUp,
   pen: Pencil,
-  text: () => <span aria-hidden="true">T</span>, // No text icon in Solar, use glyph
-  mosaic: RadialBlur,
+  text: Text,
+  mosaic: Mosaic,
   undo: UndoLeft,
   redo: UndoRight,
-  scroll: () => <span aria-hidden="true">↕</span>, // No scroll icon, use glyph
+  scroll: ScrollVertical,
   save: Download,
   cancel: X,
   done: Check

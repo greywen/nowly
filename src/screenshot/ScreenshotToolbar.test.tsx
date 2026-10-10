@@ -2,6 +2,9 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { ScreenshotToolbar } from './ScreenshotToolbar';
+import { IconStyleProvider } from '../components/icons';
+import { type IconStyle } from '../components/icon-style';
+import { iconBodies } from '../components/icon-data';
 import { type ToolbarState, type ToolId } from './toolbar-model';
 
 function state(overrides: Partial<ToolbarState> = {}): ToolbarState {
@@ -32,6 +35,63 @@ function renderToolbar(overrides: Partial<ToolbarState> = {}, activeTool: ToolId
 }
 
 describe('the toolbar', () => {
+  it.each<IconStyle>(['outline', 'solid', 'duotone'])('uses consistent SVG geometry in %s style', (style) => {
+    render(
+      <IconStyleProvider style={style}>
+        <ScreenshotToolbar activeTool="select" onSelectTool={vi.fn()} onAction={vi.fn()} state={state()} />
+      </IconStyleProvider>
+    );
+
+    for (const button of screen.getAllByRole('button')) {
+      const icon = button.querySelector('svg');
+      expect(icon, button.getAttribute('aria-label') ?? '').not.toBeNull();
+      expect(icon).toHaveAttribute('width', '18');
+      expect(icon).toHaveAttribute('height', '18');
+      expect(icon).toHaveAttribute('viewBox', '0 0 24 24');
+      expect(icon).toHaveAttribute('data-icon-style', style);
+    }
+
+    const glyphs = { 椭圆: iconBodies.Circle, 马赛克: iconBodies.Mosaic, 文字: iconBodies.Text, 滚动截图: iconBodies.ScrollVertical };
+    for (const [label, bodies] of Object.entries(glyphs)) {
+      const expected = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      expected.innerHTML = bodies[style];
+      expect(screen.getByRole('button', { name: label }).querySelector('svg')?.innerHTML).toBe(expected.innerHTML);
+    }
+    const mosaic = screen.getByRole('button', { name: '马赛克' }).querySelector('svg');
+    expect(mosaic?.querySelectorAll('rect')).toHaveLength(16);
+    expect(mosaic?.querySelectorAll('rect[opacity="0.35"]')).not.toHaveLength(0);
+    if (style === 'outline') {
+      expect(mosaic?.querySelectorAll('rect[fill="none"][stroke="currentColor"]')).toHaveLength(16);
+    } else {
+      expect(mosaic?.querySelectorAll('rect[fill="currentColor"]')).toHaveLength(16);
+      expect(mosaic?.querySelectorAll('rect[opacity="0.65"]')).toHaveLength(style === 'solid' ? 0 : 5);
+    }
+    expect(mosaic?.querySelectorAll('rect[rx]')).toHaveLength(0);
+    if (style === 'outline') {
+      expect(screen.getByRole('button', { name: '椭圆' }).querySelector('svg')?.children).toHaveLength(1);
+      expect(screen.getByRole('button', { name: '椭圆' }).querySelector('circle')).toHaveAttribute('r', '10');
+      expect(screen.getByRole('button', { name: '马赛克' }).querySelector('circle')).toBeNull();
+    }
+  });
+  it('updates mosaic geometry when the global icon style changes', () => {
+    const toolbar = (style: IconStyle) => (
+      <IconStyleProvider style={style}>
+        <ScreenshotToolbar activeTool="mosaic" onSelectTool={vi.fn()} onAction={vi.fn()} state={state()} />
+      </IconStyleProvider>
+    );
+    const { rerender } = render(toolbar('duotone'));
+    const glyph = () => screen.getByRole('button', { name: '马赛克' }).querySelector('svg')!.innerHTML;
+    const duotone = glyph();
+    rerender(toolbar('solid'));
+    const solid = glyph();
+    expect(solid).not.toBe(duotone);
+    rerender(toolbar('outline'));
+    expect(glyph()).not.toBe(solid);
+    expect(glyph()).not.toBe(duotone);
+    rerender(toolbar('duotone'));
+    expect(glyph()).toBe(duotone);
+  });
+
   it('is announced as one labelled toolbar', () => {
     renderToolbar();
 
