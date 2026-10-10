@@ -36,7 +36,20 @@ const MIGRATIONS: &[(i64, Migration)] = &[
     (27, migration_27_drop_calendar_task_view),
     (28, migration_28_categories),
     (29, crate::screen_capture::history::migrate),
+    (30, migration_30_bar_menu),
 ];
+
+fn migration_30_bar_menu(transaction: &Transaction<'_>) -> Result<()> {
+    let defaults = serde_json::to_string(&crate::models::default_bar_menu())
+        .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
+    transaction.execute(
+        "INSERT OR IGNORE INTO settings(key,value,updated_at)
+         VALUES ('bar_menu',?1,strftime('%Y-%m-%dT%H:%M:%fZ','now'))",
+        [defaults],
+    )?;
+    transaction.execute("DELETE FROM settings WHERE key = 'bar_buttons'", [])?;
+    Ok(())
+}
 
 // Calendar categories become first-class, user-defined records. A category owns
 // a name and a color, and choosing a category is the single act that colors an
@@ -229,6 +242,11 @@ pub fn migrate(connection: &mut Connection) -> Result<()> {
         )?;
         transaction.commit()?;
     }
+    // Repair partially restored settings even after version 30 was recorded;
+    // INSERT OR IGNORE never resets an existing menu's visibility or order.
+    let transaction = connection.transaction()?;
+    migration_30_bar_menu(&transaction)?;
+    transaction.commit()?;
     Ok(())
 }
 
@@ -334,7 +352,6 @@ fn migration_4_default_settings(transaction: &Transaction<'_>) -> Result<()> {
         ("calendar_enabled", "true"),
         ("matrix_enabled", "true"),
         ("notes_enabled", "true"),
-        ("bar_buttons", "[]"),
         ("recent_colors", "[]"),
     ];
     for (key, value) in DEFAULTS {
@@ -1419,6 +1436,32 @@ mod tests {
 
     fn all_migration_versions() -> Vec<i64> {
         MIGRATIONS.iter().map(|(version, _)| *version).collect()
+    }
+
+    #[test]
+    fn migration_30_upgrades_legacy_buttons_to_the_same_defaults_as_fresh_install() {
+        for old_buttons in ["[]", "[\"screenshot\"]"] {
+            let mut connection = Connection::open_in_memory().unwrap();
+            migrate_through(&mut connection, 29).unwrap();
+            connection.execute(
+                "INSERT INTO settings(key,value,updated_at) VALUES ('bar_buttons',?1,'old')",
+                [old_buttons],
+            ).unwrap();
+
+            migrate(&mut connection).unwrap();
+
+            let value: String = connection.query_row(
+                "SELECT value FROM settings WHERE key='bar_menu'", [], |row| row.get(0),
+            ).unwrap();
+            assert_eq!(
+                serde_json::from_str::<Vec<crate::models::BarMenuItem>>(&value).unwrap(),
+                crate::models::default_bar_menu(),
+            );
+            let old_rows: i64 = connection.query_row(
+                "SELECT COUNT(*) FROM settings WHERE key='bar_buttons'", [], |row| row.get(0),
+            ).unwrap();
+            assert_eq!(old_rows, 0);
+        }
     }
 
     #[test]

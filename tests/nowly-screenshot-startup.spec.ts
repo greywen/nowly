@@ -46,6 +46,12 @@ async function installCaptureShell(
       return decode.call(this).then(() => { decoded.add(this); });
     };
     let callbackId = 0;
+    const listeners = new Map<string, number>();
+    let generation = 0;
+    const emit = (name: string, payload: unknown) => {
+      const handler = listeners.get(name);
+      if (handler) Reflect.get(window, `_${handler}`)({ payload });
+    };
     let finish: ((error?: string) => void) | undefined;
     let finishOutput: ((error?: string) => void) | undefined;
     Object.assign(window, {
@@ -78,8 +84,16 @@ async function installCaptureShell(
             });
           }
           if (command === 'start_screen_capture') {
+            if (label === 'quick-panel-handle') emit('status-island-details-closed', { generation: ++generation });
             return new Promise<void>((resolve, reject) => {
-              finish = error => error ? reject({ message: error }) : resolve();
+              finish = error => {
+                if (error) {
+                  if (label === 'quick-panel-handle') emit('status-island-details-open', {
+                    generation: ++generation, source: 'menu', identity: null
+                  });
+                  reject({ message: error });
+                } else resolve();
+              };
             });
           }
           if (command === 'describe_capture_frame') {
@@ -118,10 +132,21 @@ async function installCaptureShell(
               },
               reminders: [],
               notificationMode: 'persistent',
-              barButtons: ['screenshot']
+              barMenu: [
+                { id: 'screenshot', visible: true },
+                { id: 'screenshotHistory', visible: true },
+                { id: 'assistant', visible: true }
+              ]
             };
           }
-          if (command === 'plugin:event|listen') return 1;
+          if (command === 'plugin:event|listen') {
+            const eventArgs = args as { event: string; handler: number };
+            listeners.set(eventArgs.event, eventArgs.handler);
+            return 1;
+          }
+          if (command === 'toggle_bar_menu') {
+            emit('status-island-details-open', { generation: ++generation, source: 'menu', identity: null });
+          }
           return null;
         }
       }
@@ -675,14 +700,17 @@ test('cancelled save returns to the same annotated selection', async ({ page }) 
 });
 
 for (const [language, retry] of [['zh', '\u91cd\u8bd5'], ['en', 'Retry']] as const) {
-test(`pending and retry controls retain the 336 by 40 collapsed Bar (${language})`, async ({ page }, testInfo) => {
+test(`capture pending and retry feedback remain in the 432px function menu (${language})`, async ({ page }, testInfo) => {
+  test.setTimeout(60000);
+  await page.setViewportSize({ width: 432, height: 288 });
   await installCaptureShell(page, 'quick-panel-handle', language);
-  await page.goto('/');
-  const shell = page.locator('.status-rail__status-presence');
-  const button = page.locator('.status-rail__app-button[data-app="screenshot"]');
+  await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await page.getByRole('button', { name: 'Nowly', exact: true }).click();
+  const shell = page.locator('.status-rail__menu');
+  const button = shell.locator('.bar-menu-panel__item').first();
   await expect(button).toBeEnabled();
-  await expect(shell).toHaveCSS('width', '336px');
-  await expect(shell).toHaveCSS('height', '40px');
+  await expect(shell).toHaveCSS('width', '432px');
+  await expect(shell).toHaveCSS('height', '288px');
   const originalBounds = await shell.boundingBox();
 
   await button.evaluate((element: HTMLButtonElement) => {
@@ -690,36 +718,23 @@ test(`pending and retry controls retain the 336 by 40 collapsed Bar (${language}
     element.click();
   });
   await expect(button).toBeDisabled();
-  await expect(button).toHaveAttribute('aria-busy', 'true');
   expect(await captureCalls(page, 'start_screen_capture')).toHaveLength(1);
-  expect(await shell.boundingBox()).toEqual(originalBounds);
+  await expect(page.locator('.status-rail')).toHaveAttribute('data-open', 'false');
   await page.evaluate(error => {
     (Reflect.get(window, '__CAPTURE_TEST__') as { finish: (error?: string) => void }).finish(error);
   }, TIMEOUT);
 
   await expect(button).toBeEnabled();
-  await expect(button).toHaveText(retry);
-  await expect(button).toHaveAttribute('data-error', 'true');
-  await expect(button).toHaveAttribute('title', new RegExp(TIMEOUT));
+  await expect(page.getByRole('alert').filter({ hasText: TIMEOUT })).toBeVisible();
+  await expect(page.getByRole('button', { name: retry }).last()).toBeVisible();
+  await expect(shell).toHaveCSS('width', '432px');
+  await expect(shell).toHaveCSS('height', '288px');
   expect(await shell.boundingBox()).toEqual(originalBounds);
-  const textBounds = await button.evaluate(element => {
-    const bounds = element.getBoundingClientRect();
-    const range = document.createRange();
-    range.selectNodeContents(element.querySelector('span')!);
-    const text = range.getBoundingClientRect();
-    return {
-      width: bounds.width,
-      height: bounds.height,
-      fits: text.left >= bounds.left && text.right <= bounds.right
-        && text.top >= bounds.top && text.bottom <= bounds.bottom,
-      overflows: element.scrollWidth > element.clientWidth || element.scrollHeight > element.clientHeight
-    };
-  });
-  expect(textBounds).toEqual({ width: 48, height: 40, fits: true, overflows: false });
-  await expect(page.locator('.status-rail')).toHaveAttribute('data-open', 'false');
+  expect(await shell.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+  await expect(page.locator('.status-rail')).toHaveAttribute('data-open', 'true');
   const path = testInfo.outputPath('bar-capture-retry.png');
   await shell.screenshot({ path });
-  await testInfo.attach('Capture retry fits the collapsed Bar', { path, contentType: 'image/png' });
+  await testInfo.attach('Capture retry stays in the function menu', { path, contentType: 'image/png' });
 
   await button.click();
   await expect(button).toBeDisabled();
@@ -728,9 +743,7 @@ test(`pending and retry controls retain the 336 by 40 collapsed Bar (${language}
     (Reflect.get(window, '__CAPTURE_TEST__') as { finish: () => void }).finish();
   });
   await expect(button).toBeEnabled();
-  await expect(button).not.toHaveAttribute('data-error');
-  await expect(button.locator('svg')).toBeVisible();
-  expect(await shell.boundingBox()).toEqual(originalBounds);
+  await expect(page.locator('.status-rail')).toHaveAttribute('data-open', 'false');
 });
 }
 

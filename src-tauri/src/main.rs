@@ -318,14 +318,13 @@ fn main() {
             let quick_settings = settings::read_app_settings(&app.state::<AppDb>().0.lock().unwrap()).unwrap_or_else(|_| crate::models::AppSettings {
                 wallpaper_enabled: false, launch_at_login: false, target_monitor_id: None, density: "balanced".into(),
                 week_start: "monday".into(), date_format: "localized".into(), show_weekends: true, icon_style: "duotone".into(),
-                hide_topbar_in_wallpaper: true, notification_mode: crate::models::default_notification_mode(), quick_panel_enabled: true, quick_panel_shortcut: "Ctrl+Space".into(), screenshot_shortcut: crate::models::default_screenshot_shortcut(), screenshot_history_shortcut: crate::models::default_screenshot_history_shortcut(), bar_buttons: vec![], recent_colors: vec![]
+                hide_topbar_in_wallpaper: true, notification_mode: crate::models::default_notification_mode(), quick_panel_enabled: true, quick_panel_shortcut: "Ctrl+Space".into(), screenshot_shortcut: crate::models::default_screenshot_shortcut(), screenshot_history_shortcut: crate::models::default_screenshot_history_shortcut(), bar_menu: crate::models::default_bar_menu(), recent_colors: vec![]
             });
             let quick_panel_controller = quick_panel::PanelController::default();
             quick_panel_controller.set_enabled(true);
             quick_panel_controller.set_target_monitor_id(quick_settings.target_monitor_id.clone());
             // The configured app buttons decide the host width and hit region, so
             // they must be known before the window is first placed.
-            quick_panel_controller.set_bar_button_count(quick_settings.bar_buttons.len());
             // Where the user last dragged the top surface along the top edge.
             // Restored before the window is first placed, so it never appears
             // centred and then jumps.
@@ -581,12 +580,6 @@ fn main() {
                 }
                 return;
             }
-            if window.label() == screenshot_windows::MENU_LABEL {
-                if matches!(event, tauri::WindowEvent::Focused(false)) {
-                    let _ = screenshot_windows::close_menu(window.app_handle());
-                }
-                return;
-            }
             if window.label() == screenshot_windows::HISTORY_LABEL {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
@@ -772,8 +765,7 @@ fn main() {
             screen_capture::history::commands::copy_screenshot_history,
             screen_capture::history::commands::delete_screenshot_history,
             screen_capture::history::commands::open_screenshot_folder,
-            screenshot_windows::toggle_screenshot_menu,
-            screenshot_windows::close_screenshot_menu,
+            quick_panel::toggle_bar_menu,
             screenshot_windows::open_screenshot_history,
             screen_capture::start_screen_capture,
             screen_capture::cancel_screen_capture,

@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { routeForLabel } from './window-route';
 
 describe('routeForLabel', () => {
-  it('routes independent screenshot history and menu windows', () => {
+  it('routes screenshot history but does not route the removed standalone menu', () => {
     expect(routeForLabel('screenshot-history')).toBe('screenshot-history');
-    expect(routeForLabel('screenshot-menu')).toBe('screenshot-menu');
+    expect(routeForLabel('screenshot-menu')).toBe('main');
   });
 
   it('routes the status rail by its compatibility label', () => {

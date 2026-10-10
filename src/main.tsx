@@ -9,7 +9,6 @@ import './app/styles.css';
 import { StatusIslandApp } from './quick-panel/StatusIslandApp';
 import { routeForLabel } from './screenshot/window-route';
 import { ScreenshotHistoryApp } from './screenshot-history/ScreenshotHistoryApp';
-import { ScreenshotMenuApp } from './screenshot-history/ScreenshotMenuApp';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
 // Outside the Tauri desktop shell (e.g. the plain Vite page in a browser) there
@@ -35,7 +34,7 @@ if (browserOnly) {
 function currentWindowLabel(): string {
   if (browserOnly) {
     const surface = new URLSearchParams(window.location.search).get('surface');
-    return surface === 'screenshot-history' || surface === 'screenshot-menu' ? surface : 'main';
+    return surface === 'screenshot-history' ? surface : 'main';
   }
   try {
     return getCurrentWindow().label;
@@ -47,7 +46,7 @@ function currentWindowLabel(): string {
 // `quick-panel-handle` is a compatibility label: it now hosts the whole top
 // rail — status capsule, Nowly entry and the sheet they open into — not the
 // removed AI quick panel. Screenshot surfaces load screenshot.html, not this
-// entry. The history and menu surfaces use this ordinary application entry.
+// entry. The history surface uses this ordinary application entry.
 const route = routeForLabel(currentWindowLabel());
 
 function surface() {
@@ -56,8 +55,6 @@ function surface() {
       return <StatusIslandApp />;
     case 'screenshot-history':
       return <ScreenshotHistoryApp />;
-    case 'screenshot-menu':
-      return <ScreenshotMenuApp />;
     default:
       return (
         <RepositoryProvider repository={tauriNowlyRepository}>

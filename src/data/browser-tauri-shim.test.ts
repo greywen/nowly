@@ -1,7 +1,13 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { listen } from '@tauri-apps/api/event';
 import { installBrowserTauriBackend } from './browser-tauri-shim';
 
 const storageKey = 'nowly:browser-backend';
+const defaultMenu = [
+  { id: 'screenshot', visible: true },
+  { id: 'screenshotHistory', visible: true },
+  { id: 'assistant', visible: true }
+];
 
 type BrowserInvoke = (command: string, args?: Record<string, unknown>) => Promise<unknown>;
 
@@ -12,7 +18,69 @@ function invoke(): BrowserInvoke {
 
 afterEach(() => {
   Reflect.deleteProperty(window, '__TAURI_INTERNALS__');
+  Reflect.deleteProperty(window, '__TAURI_EVENT_PLUGIN_INTERNALS__');
   localStorage.clear();
+  vi.restoreAllMocks();
+});
+
+describe('browser Bar shell commands', () => {
+  it('opens and closes the current menu through shell events without opening a removed route', async () => {
+    const openWindow = vi.spyOn(window, 'open').mockReturnValue(null);
+    installBrowserTauriBackend();
+    const opened = vi.fn();
+    const closed = vi.fn();
+    const unlistenOpen = await listen('status-island-details-open', opened);
+    const unlistenClose = await listen('status-island-details-close', closed);
+    await invoke()('toggle_bar_menu');
+    expect(opened).toHaveBeenCalledWith(expect.objectContaining({
+      payload: { generation: 1, source: 'menu', identity: null }
+    }));
+    await invoke()('toggle_bar_menu');
+    expect(closed).toHaveBeenCalledWith(expect.objectContaining({ payload: { generation: 2 } }));
+    expect(openWindow).not.toHaveBeenCalled();
+    await expect(invoke()('toggle_screenshot_menu')).rejects.toEqual(expect.objectContaining({ code: 'system_error' }));
+    await expect(invoke()('close_screenshot_menu')).rejects.toEqual(expect.objectContaining({ code: 'system_error' }));
+    unlistenOpen();
+    unlistenClose();
+  });
+  it('switches menu to assistant and history within the same shell and unlistens correctly', async () => {
+    const openWindow = vi.spyOn(window, 'open').mockReturnValue(null);
+    installBrowserTauriBackend();
+    const opened = vi.fn();
+    const remove = await listen('status-island-details-open', opened);
+    await invoke()('toggle_bar_menu');
+    await invoke()('toggle_nowly_panel');
+    await invoke()('open_screenshot_history');
+    expect(opened.mock.calls.map(([event]) => event.payload.source)).toEqual(['menu', 'nowly', 'history']);
+    remove();
+    await invoke()('toggle_bar_menu');
+    expect(opened).toHaveBeenCalledTimes(3);
+    expect(openWindow).not.toHaveBeenCalled();
+  });
+});
+
+describe('browser bar menu persistence', () => {
+  it.each([{ barButtons: [] }, { barButtons: ['screenshot'] }])('replaces legacy buttons $barButtons with durable defaults', async ({ barButtons }) => {
+    localStorage.setItem(storageKey, JSON.stringify({ settings: { barButtons } }));
+    installBrowserTauriBackend();
+    expect(await invoke()('get_app_settings')).toEqual(expect.objectContaining({ barMenu: defaultMenu }));
+    const stored = JSON.parse(localStorage.getItem(storageKey)!);
+    expect(stored.settings.barMenu).toEqual(defaultMenu);
+    expect(stored.settings).not.toHaveProperty('barButtons');
+  });
+  it('preserves hidden item order after save and reinstall', async () => {
+    installBrowserTauriBackend();
+    const barMenu = [
+      { id: 'assistant', visible: false }, { id: 'screenshotHistory', visible: false },
+      { id: 'screenshot', visible: false }
+    ];
+    const settings = await invoke()('get_app_settings') as Record<string, unknown>;
+    await invoke()('update_app_settings', { settings: { ...settings, barMenu } });
+    Reflect.deleteProperty(window, '__TAURI_INTERNALS__');
+    installBrowserTauriBackend();
+    expect(await invoke()('get_app_settings')).toEqual(expect.objectContaining({ barMenu }));
+    expect(await invoke()('get_status_island_snapshot')).toEqual(expect.objectContaining({ barMenu }));
+  });
 });
 
 describe('browser screenshot history fallback', () => {

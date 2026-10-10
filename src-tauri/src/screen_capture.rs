@@ -501,6 +501,10 @@ pub fn abandon_session(app: &tauri::AppHandle, label: &str) {
     let Some(session_id) = window::window_session_id(label) else {
         return;
     };
+    if app.state::<ActiveCapture>().is_current(session_id) {
+        app.state::<crate::quick_panel::PanelController>()
+            .capture_startup_succeeded();
+    }
     finish_capture(app, session_id);
 }
 
@@ -554,14 +558,27 @@ pub fn start_screen_capture(app: tauri::AppHandle) -> Result<(), CommandError> {
         });
     if let Err(failure) = &outcome {
         startup.fail(failure.clone());
+        // Cancelling is not a retryable startup error and must not reopen Menu.
+        if *failure == session::StartFailure::Cancelled {
+            app.state::<crate::quick_panel::PanelController>()
+                .capture_startup_succeeded();
+        }
         finish_capture(&app, token.session_id);
+        // Teardown queues restoration on the main thread. Wait behind it so the
+        // menu's fresh details-open event precedes the rejected IPC result.
+        let (restored, wait) = std::sync::mpsc::sync_channel(1);
+        if app.run_on_main_thread(move || { let _ = restored.send(()); }).is_ok() {
+            let _ = wait.recv_timeout(window::STARTUP_TIMEOUT);
+        }
+    } else {
+        app.state::<crate::quick_panel::PanelController>()
+            .capture_startup_succeeded();
     }
     if outcome == Err(session::StartFailure::Cancelled) {
         return Ok(());
     }
     outcome.map_err(|failure| {
-        // The reason is logged as well as reported: the bar can only show it as a
-        // tooltip, and the bar is hidden at the moment a startup failure happens.
+        // The restored menu shows this error inline and allows a retry.
         eprintln!(
             "capture session={} phase=failed elapsed_ms={} reason={failure:?}",
             token.session_id,
@@ -584,6 +601,10 @@ pub fn cancel_screen_capture(
     // front end to only call it from the right place.
     let session_id = window::window_session_id(window.label())
         .ok_or_else(|| CommandError::system("该窗口不能操作截图会话。"))?;
+    if app.state::<ActiveCapture>().is_current(session_id) {
+        app.state::<crate::quick_panel::PanelController>()
+            .capture_startup_succeeded();
+    }
     finish_capture(&app, session_id);
     Ok(())
 }

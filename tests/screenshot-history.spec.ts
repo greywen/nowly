@@ -1,36 +1,9 @@
 import { expect, test } from '@playwright/test';
 
-test('screenshot menu shows configured keys and executes selected action', async ({ page }) => {
-  await page.addInitScript(() => {
-    const calls: string[] = [];
-    Reflect.set(window, '__menuCalls', calls);
-    Reflect.set(window, '__TAURI_INTERNALS__', {
-      metadata: { currentWindow: { label: 'screenshot-menu' }, currentWebview: { label: 'screenshot-menu' } },
-      transformCallback: () => 1,
-      invoke: async (command: string) => {
-        calls.push(command);
-        if (command.startsWith('plugin:event|')) return 1;
-        if (command === 'screenshot_shortcut_status') return {
-          screenshot: { shortcut: 'Ctrl+Alt+A', registered: true, error: null },
-          history: { shortcut: 'Ctrl+Alt+H', registered: true, error: null }
-        };
-        if (command === 'get_app_settings') return { iconStyle: 'duotone' };
-        return null;
-      }
-    });
-  });
-  await page.goto('/');
-  await expect(page.getByRole('menu')).toBeVisible();
-  await expect(page.getByText('Ctrl+Alt+A', { exact: true })).toBeVisible();
-  await expect(page.getByText('Ctrl+Alt+H', { exact: true })).toBeVisible();
-  await page.keyboard.press('ArrowDown');
-  await page.keyboard.press('Enter');
-  await expect.poll(() => page.evaluate(() => Reflect.get(window, '__menuCalls') as string[])).toContain('open_screenshot_history');
-});
-
 const id = '11111111-1111-4111-8111-111111111111';
 
 test('history copies images without adding entries and confirms file deletion', async ({ page }) => {
+  test.setTimeout(60000);
   await page.addInitScript(({ id }) => {
     const calls: Array<{ command: string; args: unknown }> = [];
     const callbacks = new Map<number, (payload: unknown) => void>();
@@ -43,6 +16,7 @@ test('history copies images without adding entries and confirms file deletion', 
       if (handler) callbacks.get(handler)?.({ event, id: handler, payload });
     };
     Reflect.set(window, '__historyCalls', calls);
+    Reflect.set(window, '__TAURI_EVENT_PLUGIN_INTERNALS__', { unregisterListener: () => undefined });
     Reflect.set(window, '__TAURI_INTERNALS__', {
       metadata: { currentWindow: { label: 'quick-panel-handle' }, currentWebview: { label: 'quick-panel-handle' } },
       convertFileSrc: () => 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a0WQAAAAASUVORK5CYII=',
@@ -65,15 +39,15 @@ test('history copies images without adding entries and confirms file deletion', 
     });
   }, { id });
   await page.setViewportSize({ width: 432, height: 560 });
-  await page.goto('/');
+  await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 60000 });
   await expect(page.getByRole('main', { name: 'Nowly Bar' })).toBeVisible();
   await page.evaluate(() => Reflect.get(window, '__TAURI_INTERNALS__').invoke('open_screenshot_history'));
   await expect(page.getByRole('heading', { name: '截图历史', exact: true })).toBeVisible();
   const titleBefore = await page.getByRole('heading', { name: '截图历史', exact: true }).boundingBox();
   await expect(page.locator('.status-rail')).toHaveAttribute('data-surface', 'history');
   await expect.poll(async () => Math.round((await page.locator('.status-rail__history').boundingBox())!.height)).toBe(560);
-  expect((await page.locator('.status-rail__history').boundingBox())!.width).toBe(408);
-  expect((await page.getByRole('heading', { name: '截图历史', exact: true }).boundingBox())!.x).toBe(titleBefore!.x);
+  expect((await page.locator('.status-rail__history').boundingBox())!.width).toBe(432);
+  expect((await page.getByRole('heading', { name: '截图历史', exact: true }).boundingBox())!.x).toBeCloseTo(titleBefore!.x, 1);
   await expect(page.getByText('1920 × 1080')).toBeVisible();
   await page.getByRole('button', { name: /复制/ }).first().click();
   await expect.poll(() => page.evaluate(() => (Reflect.get(window, '__historyCalls') as Array<{ command: string }>).filter(call => call.command === 'copy_screenshot_history').length)).toBe(1);

@@ -13,28 +13,15 @@ import { useStatusIslandSnapshot } from './useStatusIslandSnapshot';
 import { useStatusIslandDrag } from './useStatusIslandDrag';
 import { useTransparentSurfaces } from './useTransparentSurfaces';
 import { useTranslation } from '../i18n';
-import { t } from '../i18n';
-import type { BarAppId } from '../app/bar-buttons';
 import { AssistantDock } from '../assistant/AssistantDock';
+import { BarMenuPanel } from '../app/layout/BarMenuPanel';
 import { ScreenshotHistoryApp } from '../screenshot-history/ScreenshotHistoryApp';
+import { SurfaceIconProvider } from '../screenshot-history/SurfaceIconProvider';
 
-const BAR_BUTTON_COMMANDS: Record<BarAppId, string> = {
-  screenshot: 'start_screen_capture'
-};
+type PanelSource = 'island' | 'nowly' | 'history' | 'menu';
+type RailSurface = 'status' | 'assistant' | 'history' | 'menu';
 
-function barButtonErrorMessage(reason: unknown): string {
-  if (typeof reason === 'object' && reason !== null && 'message' in reason) {
-    const { message } = reason as { message?: unknown };
-    if (typeof message === 'string' && message.trim()) return message;
-  }
-  if (typeof reason === 'string' && reason.trim()) return reason;
-  return t('barButtons.unavailable');
-}
-
-type PanelSource = 'island' | 'nowly' | 'history';
-type RailSurface = 'status' | 'assistant' | 'history';
-
-// One native window hosts two independent sibling panels. The native source
+// One native window hosts independent sibling panels. The native source
 // selects which panel is open; each panel owns its own animation state.
 //
 // Native owns whether the sheet is open, because it also owns the window size,
@@ -58,7 +45,7 @@ async function withActionHold(run: () => Promise<unknown>): Promise<void> {
 export function StatusIslandApp() {
   useTransparentSurfaces();
   const { t } = useTranslation();
-  const { model, status, refresh, notificationMode, barButtons } = useStatusIslandSnapshot();
+  const { model, status, refresh, notificationMode, barMenu } = useStatusIslandSnapshot();
   const drag = useStatusIslandDrag();
   const surfaceState = model.surface;
   const [open, setOpen] = useState(false);
@@ -71,6 +58,7 @@ export function StatusIslandApp() {
   const closingGeneration = useRef<number | null>(null);
   const transitionGeneration = useRef(0);
   const assistantSheetRequested = useRef(false);
+  const [activationError, setActivationError] = useState('');
   // Null until the first transition, so the rail does not animate itself into
   // existence on mount.
   const [statusAnim, setStatusAnim] = useState<'grow' | 'shrink' | null>(null);
@@ -247,7 +235,7 @@ export function StatusIslandApp() {
   const hoverStart = useCallback(() => {
     // A drag is a move, not a hover: the sheet is the rail grown, so it must not
     // open while the rail is being moved out from under the pointer.
-    if (drag.dragging || assistantSheetRequested.current || assistantSurface !== null || assistantClosing || (open && source === 'history')) return;
+    if (drag.dragging || assistantSheetRequested.current || assistantSurface !== null || assistantClosing || (open && source !== 'island')) return;
     lastPresence.current = true;
     reportPresence('island', true);
     // Native waits 300ms before opening, so a quick pass neither opens the sheet
@@ -276,47 +264,29 @@ export function StatusIslandApp() {
 
   const activateNowly = useCallback(() => {
     if (drag.consumedClick()) return;
-    if (assistantSurface === 'assistant' || (open && source === 'nowly')) {
+    if (open && source === 'menu') {
       collapse();
       return;
     }
     if (assistantSheetRequested.current) return;
     assistantSheetRequested.current = true;
-    void invoke('toggle_nowly_panel').catch(() => {
+    setActivationError('');
+    void invoke('toggle_bar_menu').catch((reason: unknown) => {
       assistantSheetRequested.current = false;
+      setActivationError(reason instanceof Error ? reason.message
+        : typeof reason === 'string' ? reason : t('barMenu.actionFailed'));
     });
-  }, [assistantSurface, collapse, drag, open, source]);
+  }, [collapse, drag, open, source, t]);
 
   useEffect(() => {
     if (open && source === 'nowly') {
       document.querySelector<HTMLTextAreaElement>('.status-rail__assistant textarea')?.focus();
     } else if (open && source === 'history') {
       document.querySelector<HTMLButtonElement>('.screenshot-history__folder')?.focus();
+    } else if (!open && source !== 'island' && assistantAnim === null && !assistantClosing) {
+      document.querySelector<HTMLButtonElement>('.status-rail__nowly')?.focus();
     }
-  }, [open, source]);
-
-  // Each app button calls its own command. A rejection is reported on the button
-  // that failed, not as a toast, and clears on the next attempt.
-  const [barButtonErrors, setBarButtonErrors] = useState<Partial<Record<BarAppId, string>>>({});
-  const pendingBarButtons = useRef(new Set<BarAppId>());
-  const [barButtonPending, setBarButtonPending] = useState<Partial<Record<BarAppId, boolean>>>({});
-  const activateBarButton = useCallback((id: BarAppId) => {
-    if (drag.consumedClick() || pendingBarButtons.current.has(id)) return;
-    pendingBarButtons.current.add(id);
-    setBarButtonPending(current => ({ ...current, [id]: true }));
-    setBarButtonErrors(current => {
-      if (!(id in current)) return current;
-      const next = { ...current };
-      delete next[id];
-      return next;
-    });
-    void invoke(BAR_BUTTON_COMMANDS[id]).catch((reason: unknown) => {
-      setBarButtonErrors(current => ({ ...current, [id]: barButtonErrorMessage(reason) }));
-    }).finally(() => {
-      pendingBarButtons.current.delete(id);
-      setBarButtonPending(current => ({ ...current, [id]: false }));
-    });
-  }, [drag]);
+  }, [open, source, assistantAnim, assistantClosing]);
 
   const focusEnter = useCallback(() => reportPresence('keyboard', true), []);
   const focusLeave = useCallback(() => reportPresence('keyboard', false), []);
@@ -333,7 +303,7 @@ export function StatusIslandApp() {
     expanded: open && source === 'island'
   };
   const retry = status === 'error' ? { onRetryStatus: () => void refresh() } : {};
-  const railSurface: RailSurface = open && source === 'history' ? 'history' : assistantSurface ?? 'status';
+  const railSurface: RailSurface = open && (source === 'history' || source === 'menu') ? source : assistantSurface ?? 'status';
 
   const context = useMemo(() => {
     if (displayedSurface.mode === 'summary') {
@@ -397,18 +367,16 @@ export function StatusIslandApp() {
         statusAnim={statusAnim}
         assistantAnim={assistantAnim}
         mode={displayedSurface.mode}
-        barButtons={barButtons}
-        barButtonErrors={barButtonErrors}
-        barButtonPending={barButtonPending}
-        onActivateBarButton={activateBarButton}
         onCollapse={collapse}
         onActivateNowly={activateNowly}
+        menu={<BarMenuPanel active={open && source === 'menu'} items={barMenu} />}
         history={source === 'history' && (open || assistantAnim !== null) ? <ScreenshotHistoryApp compact /> : null}
         assistant={(
-          <AssistantDock
+          <SurfaceIconProvider><AssistantDock
+            embedded
             active={assistantSurface !== null}
             onRefresh={refresh}
-          />
+          /></SurfaceIconProvider>
         )}
         panel={(
           <StatusIslandPanel
@@ -461,6 +429,9 @@ export function StatusIslandApp() {
           <StatusIslandIdleView {...retry} {...surface} />
         )}
       </TopRail>
+      {activationError && <button type="button" className="status-rail__action-error" onClick={activateNowly}>
+        <span role="alert">{activationError}</span> {t('common.retry')}
+      </button>}
     </main>
   );
 }

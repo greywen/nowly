@@ -39,6 +39,7 @@ import type {
 } from '../tasks/task-model';
 import type { HexColor } from '../lib/color';
 import type { IconStyle } from '../components/icon-style';
+import type { BarMenuItem } from '../app/bar-menu';
 
 export type AppSettings = {
   wallpaperEnabled: boolean;
@@ -59,9 +60,8 @@ export type AppSettings = {
   quickPanelShortcut?: string;
   screenshotShortcut?: string;
   screenshotHistoryShortcut?: string;
-  // Ordered app ids occupying the Nowly Bar's button slots, left to right.
-  // Capped at three by design.md §8.3; see `src/app/bar-buttons.ts`.
-  barButtons?: string[];
+  // Hidden features retain their position in the ordered menu.
+  barMenu?: BarMenuItem[];
   recentColors?: HexColor[];
 };
 

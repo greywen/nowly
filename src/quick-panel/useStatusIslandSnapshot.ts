@@ -5,7 +5,7 @@ import type { CalendarEvent } from '../calendar/calendar-model';
 import { externalToCalendarEvent, type ExternalEvent } from '../calendar/subscription-model';
 import type { FocusStatus } from '../focus/focus-model';
 import type { Task } from '../tasks/task-model';
-import { normalizeBarButtons, type BarAppId } from '../app/bar-buttons';
+import { normalizeBarMenu, type BarMenuItem } from '../app/bar-menu';
 import {
   deriveStatusIslandModel,
   type StatusIslandModel,
@@ -30,8 +30,7 @@ export type NativeStatusIslandSnapshot = {
   // file and is the single source of truth across the two windows.
   reminders?: StatusIslandReminderState[];
   notificationMode?: 'persistent' | 'notification';
-  // Ordered app ids the bar renders as buttons, left to right.
-  barButtons?: string[];
+  barMenu?: BarMenuItem[];
 };
 
 type SnapshotResource =
@@ -63,7 +62,7 @@ export function useStatusIslandSnapshot(): {
   error: string;
   refresh: () => Promise<void>;
   notificationMode: 'persistent' | 'notification';
-  barButtons: BarAppId[];
+  barMenu: BarMenuItem[];
 } {
   const [resource, setResource] = useState<SnapshotResource>({ status: 'loading', data: null, error: '' });
   const [now, setNow] = useState(() => new Date());
@@ -133,13 +132,10 @@ export function useStatusIslandSnapshot(): {
     });
   }, [now, resource.data, resource.status]);
 
-  // Normalized here rather than at each use site: an unknown or duplicated id
-  // must never reach the bar, where it would render a button with no handler or
-  // widen the shell past the geometry native has already sized the host for.
-  const barButtons = useMemo(
-    () => normalizeBarButtons(resource.data?.barButtons),
-    [resource.data?.barButtons]
+  const barMenu = useMemo(
+    () => normalizeBarMenu(resource.data?.barMenu),
+    [resource.data?.barMenu]
   );
 
-  return { model, status: resource.status, error: resource.error, refresh, notificationMode: resource.data?.notificationMode ?? 'persistent', barButtons };
+  return { model, status: resource.status, error: resource.error, refresh, notificationMode: resource.data?.notificationMode ?? 'persistent', barMenu };
 }

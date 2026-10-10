@@ -12,8 +12,8 @@ const FIXED_TIME = '2026-09-12T09:30:00';
 // The rail's two native sizes. Every viewport here is one of them, because the
 // webview has exactly the room the native window gives it and a viewport that
 // disagrees would prove nothing about what the user sees.
-const COLLAPSED = { width: 288, height: 40 };
-const EXPANDED = { width: 288, height: 288 };
+const COLLAPSED = { width: 432, height: 40 };
+const EXPANDED = { width: 432, height: 288 };
 
 const snapshot = {
   sampledAt: FIXED_TIME,
@@ -133,26 +133,26 @@ for (const scale of [1, 1.5, 2]) {
     test.beforeEach(async ({ page }) => {
       await page.clock.setFixedTime(new Date(FIXED_TIME));
       await installRail(page, reminderSnapshot);
-      await page.goto('/');
+      await page.goto('/', { waitUntil: 'domcontentloaded' });
     });
 
     test('uses one continuous shell with separate status and Nowly action lanes', async ({ page }) => {
       const trigger = page.getByRole('button', { name: /^产品发布评审 ·/ });
       await expect(trigger).toBeVisible();
       const shell = page.locator('.status-rail__status-presence');
-      expect(await shell.boundingBox()).toEqual({ x: 0, y: 0, width: 288, height: 40 });
+      expect(await shell.boundingBox()).toEqual({ x: 72, y: 0, width: 288, height: 40 });
       await expect(shell).toHaveCSS('background-color', 'rgb(255, 255, 255)');
       await expect(shell).toHaveCSS('border-top-width', '1px');
       await expect(shell).toHaveCSS('border-top-color', 'rgb(234, 234, 234)');
       await expect(shell).toHaveCSS('border-radius', '20px');
       await expect(shell).toHaveCSS('overflow', 'hidden');
-      expect(await trigger.boundingBox()).toEqual({ x: 1, y: 1, width: 239, height: 38 });
+      expect(await trigger.boundingBox()).toEqual({ x: 73, y: 1, width: 239, height: 38 });
       // The same pixel the open sheet puts it on: the head is what carries the
       // growth, so it may not move between the two sizes.
       expect(await page.locator('.status-island__icon').first().boundingBox())
-        .toEqual({ x: 9, y: 8, width: 24, height: 24 });
+        .toEqual({ x: 81, y: 8, width: 24, height: 24 });
       const nowly = page.locator('.status-rail__nowly');
-      expect(await nowly.boundingBox()).toEqual({ x: 240, y: 0, width: 48, height: 40 });
+      expect(await nowly.boundingBox()).toEqual({ x: 312, y: 0, width: 48, height: 40 });
       await expect(nowly).toHaveCSS('border-top-width', '0px');
       await expect(nowly).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
       expect(await nowly.evaluate(element => {
@@ -184,7 +184,8 @@ for (const scale of [1, 1.5, 2]) {
       const nowly = page.getByRole('button', { name: 'Nowly' });
       await expect(nowly).toBeVisible();
       await nowly.click();
-      await expect(page.getByRole('textbox', { name: '告诉 Nowly 你想做什么' })).toBeVisible();
+      expect(await commands(page)).toContain('toggle_bar_menu');
+      await expect(page.getByRole('textbox', { name: '告诉 Nowly 你想做什么' })).toHaveCount(0);
       expect(await commands(page)).not.toContain('toggle_nowly_panel');
       expect(await commands(page)).not.toContain('hover_nowly_panel');
     });
@@ -198,91 +199,22 @@ for (const scale of [1, 1.5, 2]) {
   });
 }
 
-// The configurable app buttons (design.md §8.3). Each one adds a 48px lane to the
-// right of the logo; the panels' widths are their own constants and must not
-// follow. These are real layout numbers, so they can only be checked in a browser.
-test.describe('configured app buttons', () => {
-  const withScreenshot = { ...reminderSnapshot, barButtons: ['screenshot'] };
+test.describe('the Logo-only Bar', () => {
+  test.use({ viewport: { width: 432, height: 40 } });
 
-  test.describe('one button', () => {
-    // The native host is still 408 wide at one button, and the visible collapsed
-    // shell is 336.
-    test.use({ viewport: { width: 336, height: 40 } });
-
-    test('adds one lane to the right of the logo without moving the status area', async ({ page }) => {
-      await page.clock.setFixedTime(new Date(FIXED_TIME));
-      await installRail(page, withScreenshot);
-      await page.goto('/');
-
-      const shell = page.locator('.status-rail__status-presence');
-      expect(await shell.boundingBox()).toEqual({ x: 0, y: 0, width: 336, height: 40 });
-      // The status area and the logo keep the exact geometry they have with no
-      // buttons configured: the lane is added, nothing is rearranged.
-      expect(await page.getByRole('button', { name: /^产品发布评审 ·/ }).boundingBox())
-        .toEqual({ x: 1, y: 1, width: 239, height: 38 });
-      expect(await page.locator('.status-rail__nowly').boundingBox())
-        .toEqual({ x: 240, y: 0, width: 48, height: 40 });
-      // The app button takes the next lane and ends on the shell's right edge.
-      const button = page.getByRole('button', { name: '截屏' });
-      expect(await button.boundingBox()).toEqual({ x: 288, y: 0, width: 48, height: 40 });
-      // §10.1's compact box, drawn as the lane's ::after, centred in the lane.
-      expect(await button.evaluate(element => {
-        const box = getComputedStyle(element, '::after');
-        const separator = getComputedStyle(element, '::before');
-        const icon = element.querySelector('svg');
-        return {
-          box: { width: box.width, height: box.height, radius: box.borderTopLeftRadius },
-          separator: { width: separator.width, height: separator.height, top: separator.top },
-          icon: { width: icon?.getAttribute('width'), height: icon?.getAttribute('height') }
-        };
-      })).toEqual({
-        box: { width: '28px', height: '28px', radius: '7.6px' },
-        separator: { width: '1px', height: '22px', top: '9px' },
-        icon: { width: '16', height: '16' }
-      });
-    });
-
-    test('invokes its own command and reports a rejection in place', async ({ page }) => {
-      await page.clock.setFixedTime(new Date(FIXED_TIME));
-      await installRail(page, withScreenshot);
-      await page.goto('/');
-
-      const button = page.getByRole('button', { name: '截屏' });
-      await button.click();
-      expect(await commands(page)).toContain('start_screen_capture');
-      // The mock resolves, so no error is reported. The failure path is covered by
-      // the unit tests; what matters here is that the button calls its own command
-      // and not the panel's.
-      expect(await commands(page)).not.toContain('toggle_nowly_panel');
-      expect(await commands(page)).not.toContain('toggle_status_island_details');
-    });
-  });
-
-  test.describe('three buttons', () => {
-    // At three buttons the collapsed shell is 432 and the native host widens to
-    // match it.
-    test.use({ viewport: { width: 432, height: 40 } });
-
-    test('fills every slot without overflowing the shell', async ({ page }) => {
-      await page.clock.setFixedTime(new Date(FIXED_TIME));
-      // Only one app exists so far, so the geometry is driven directly here to
-      // prove the full three-lane form is reachable.
-      await installRail(page, reminderSnapshot);
-      await page.goto('/');
-      await page.evaluate(() => {
-        const rail = document.querySelector('.status-rail') as HTMLElement;
-        rail.style.setProperty('--app-buttons', '3');
-      });
-
-      expect(await page.locator('.status-rail__status-presence').boundingBox())
-        .toEqual({ x: 0, y: 0, width: 432, height: 40 });
-      // The status area and the logo still have not moved.
-      expect(await page.locator('.status-rail__nowly').boundingBox())
-        .toEqual({ x: 240, y: 0, width: 48, height: 40 });
-      // Still no scrollbar: the shell has the room its geometry asks for.
-      expect(await page.evaluate(() => window.innerWidth - document.documentElement.clientWidth))
-        .toBe(0);
-    });
+  test('keeps fixed geometry regardless of the feature configuration', async ({ page }) => {
+    await page.clock.setFixedTime(new Date(FIXED_TIME));
+    await installRail(page, { ...reminderSnapshot, barMenu: [
+      { id: 'assistant', visible: false },
+      { id: 'screenshot', visible: true },
+      { id: 'screenshotHistory', visible: true }
+    ] });
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('.status-rail__status-presence')).toHaveCSS('width', '288px');
+    await expect(page.locator('.status-rail__app-button')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Nowly', exact: true }).click();
+    expect(await commands(page)).toContain('toggle_bar_menu');
+    expect(await commands(page)).not.toContain('toggle_nowly_panel');
   });
 });
 
@@ -292,13 +224,13 @@ test.describe('an empty day', () => {
   test('keeps the capsule and says so, instead of shrinking to a stub', async ({ page }) => {
     await page.clock.setFixedTime(new Date(FIXED_TIME));
     await installRail(page);
-    await page.goto('/');
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
 
     // The rail is one object at one size. An empty day is something the surface
     // reports, not a reason for it to become a different shape.
     await expect(page.locator('.status-rail')).toHaveAttribute('data-mode', 'idle');
     expect(await page.locator('.status-rail__status-presence').boundingBox())
-      .toEqual({ x: 0, y: 0, width: 288, height: 40 });
+      .toEqual({ x: 72, y: 0, width: 288, height: 40 });
     await expect(page.locator('.status-island .status-island__copy strong')).toHaveText('今天没有安排');
     await expect(page.locator('.status-island .status-island__copy > span')).toHaveText('0 项日程 · 0 项待办');
     // Nothing to count and nothing to acknowledge.
@@ -316,7 +248,7 @@ test.describe('summary content', () => {
   test('shows the aggregate on the same slots a detail uses', async ({ page }) => {
     await page.clock.setFixedTime(new Date(FIXED_TIME));
     await installRail(page, passiveSnapshot);
-    await page.goto('/');
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
 
     await expect(page.locator('.status-rail__status-presence')).toBeVisible();
     await expect(page.locator('.status-island')).toHaveAttribute('data-mode', 'summary');
@@ -337,7 +269,7 @@ test.describe('summary content', () => {
   test('shows the grab cursor only after a long press starts dragging', async ({ page }) => {
     await page.clock.setFixedTime(new Date(FIXED_TIME));
     await installRail(page, passiveSnapshot, null, true);
-    await page.goto('/');
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
 
     const island = page.locator('.status-island__trigger');
     const nowly = page.locator('.status-rail__nowly');
@@ -358,7 +290,7 @@ test.describe('summary content', () => {
   test('offers no dismissal: an aggregate is not one notification to close', async ({ page }) => {
     await page.clock.setFixedTime(new Date(FIXED_TIME));
     await installRail(page, passiveSnapshot);
-    await page.goto('/');
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
 
     await expect(page.locator('.status-island__dismiss[data-at="collapsed"]')).toHaveCount(0);
     // The badge/dismiss lane stays reserved even so, otherwise the copy would
@@ -370,7 +302,7 @@ test.describe('summary content', () => {
   test('exposes focus progress as text, not colour alone', async ({ page }) => {
     await page.clock.setFixedTime(new Date(FIXED_TIME));
     await installRail(page, focusSnapshot);
-    await page.goto('/');
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
 
     const progress = page.getByRole('progressbar', { name: '专注进度' });
     await expect(progress).toHaveAttribute('aria-valuemin', '0');
@@ -389,7 +321,7 @@ test.describe('closing one notification', () => {
   test('routes closing the detail to native and does not open the sheet', async ({ page }) => {
     await page.clock.setFixedTime(new Date(FIXED_TIME));
     await installRail(page, reminderSnapshot);
-    await page.goto('/');
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
 
     const dismiss = page.getByRole('button', { name: '暂时隐藏：产品发布评审' });
     await expect(dismiss).toHaveCSS('opacity', '0');
@@ -435,7 +367,7 @@ test.describe('the open sheet', () => {
         updatedAt: '2026-09-01T00:00:00Z'
       }]
     }, { source: 'island', identity: null });
-    await page.goto('/');
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
 
     await expect(page.locator('.status-rail')).toHaveAttribute('data-open', 'true');
     await expect(page.locator('.status-rail__panel')).toHaveCSS('border-top-style', 'dashed');
@@ -446,24 +378,24 @@ test.describe('the open sheet', () => {
   test('is the capsule grown: the head stays put and the rest is uncovered', async ({ page }) => {
     await page.clock.setFixedTime(new Date(FIXED_TIME));
     await installRail(page, passiveSnapshot, { source: 'island', identity: null });
-    await page.goto('/');
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
 
     const rail = page.locator('.status-rail');
     await expect(rail).toHaveAttribute('data-open', 'true');
     // Polled, because the growth is a real 220ms transition rather than a swap.
     await expect.poll(() => page.locator('.status-rail__status-presence').boundingBox())
-      .toEqual({ x: 0, y: 0, width: 288, height: 288 });
+      .toEqual({ x: 0, y: 0, width: 432, height: 288 });
     // The continuity anchor: the icon is on the same pixel it occupies collapsed,
     // so the sheet reads as the capsule grown rather than a panel that replaced it.
     // y=8 is dead centre of the 40px capsule; x=9 is the 8px head padding inside
     // the 1px border.
     expect(await page.locator('.status-island__icon').first().boundingBox())
-      .toEqual({ x: 9, y: 8, width: 24, height: 24 });
+      .toEqual({ x: 81, y: 8, width: 24, height: 24 });
     // The dot is absorbed and the always-on dismiss takes the space it left.
     await expect(page.locator('.status-rail__nowly')).toHaveCSS('opacity', '0');
     const dismiss = page.locator('.status-island__dismiss[data-owner="status"]');
     await expect(dismiss).toHaveCSS('opacity', '1');
-    expect(await dismiss.boundingBox()).toEqual({ x: 252, y: 6, width: 28, height: 28 });
+    expect(await dismiss.boundingBox()).toEqual({ x: 396, y: 6, width: 28, height: 28 });
     // The sheet's own body drops the frame and the title the head already carries.
     const details = page.getByRole('region', { name: '此刻详情' });
     await expect(details).toBeVisible();
@@ -478,7 +410,7 @@ test.describe('the open sheet', () => {
   test('animates only its own width and height, at the approved timing', async ({ page }) => {
     await page.clock.setFixedTime(new Date(FIXED_TIME));
     await installRail(page, passiveSnapshot, { source: 'island', identity: null });
-    await page.goto('/');
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
 
     const shell = page.locator('.status-rail__status-presence');
     await expect(shell).toHaveAttribute('data-anim', 'grow');
@@ -492,14 +424,14 @@ test.describe('the open sheet', () => {
     // The shell is positioned from the host's left edge, not centred, so the
     // host box is what carries the centring transform. The host is 408 wide with
     // no app buttons configured, so it offsets by half of that.
-    await expect(shell).toHaveCSS('transform', 'none');
-    await expect(page.locator('.status-rail')).toHaveCSS('transform', 'matrix(1, 0, 0, 1, -204, 0)');
+    await expect(shell).toHaveCSS('transform', 'matrix(1, 0, 0, 1, -216, 0)');
+    await expect(page.locator('.status-rail')).toHaveCSS('transform', 'matrix(1, 0, 0, 1, -216, 0)');
   });
 
   test('routes sheet actions and Escape through native commands', async ({ page }) => {
     await page.clock.setFixedTime(new Date(FIXED_TIME));
     await installRail(page, passiveSnapshot, { source: 'island', identity: null });
-    await page.goto('/');
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
 
     await page.getByRole('button', { name: '打开日程：晚间复盘' }).click();
     await page.keyboard.press('Escape');
@@ -516,7 +448,7 @@ test.describe('the open sheet', () => {
   test('offers focus controls with accessible progress', async ({ page }) => {
     await page.clock.setFixedTime(new Date(FIXED_TIME));
     await installRail(page, focusSnapshot, { source: 'island', identity: null });
-    await page.goto('/');
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
 
     await expect(page.getByRole('progressbar', { name: '专注进度' }))
       .toHaveAttribute('aria-valuetext', '专注进行中，剩余 10 分钟');
@@ -529,7 +461,7 @@ test.describe('the open sheet', () => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.clock.setFixedTime(new Date(FIXED_TIME));
     await installRail(page, passiveSnapshot, { source: 'island', identity: null });
-    await page.goto('/');
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
 
     // The exception in design.md §12.3 is opt-out, not mandatory: asked for no
     // motion, the rail simply is its new size.
@@ -537,14 +469,14 @@ test.describe('the open sheet', () => {
       .toHaveCSS('transition-duration', '0s, 0s, 0s, 0s, 0s');
     await expect(page.locator('.status-rail__panel')).toHaveCSS('transition-duration', '0s, 0s');
     expect(await page.locator('.status-rail__status-presence').boundingBox())
-      .toEqual({ x: 0, y: 0, width: 288, height: 288 });
+      .toEqual({ x: 0, y: 0, width: 432, height: 288 });
   });
 
   test('uses an opaque surface under reduced transparency', async ({ page }) => {
     await page.emulateMedia({ reducedTransparency: 'reduce' });
     await page.clock.setFixedTime(new Date(FIXED_TIME));
     await installRail(page, passiveSnapshot, { source: 'island', identity: null });
-    await page.goto('/');
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
 
     const background = await page.locator('.status-rail__status-presence')
       .evaluate(element => getComputedStyle(element).backgroundColor);

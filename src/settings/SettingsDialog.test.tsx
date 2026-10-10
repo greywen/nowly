@@ -4,6 +4,8 @@ import { describe, expect, it, vi } from 'vitest';
 import type { AppSettings } from '../data/nowly-repository';
 import { SettingsDialog } from './SettingsDialog';
 import { invoke } from '@tauri-apps/api/core';
+import { DEFAULT_BAR_MENU } from '../app/bar-menu';
+import { t } from '../i18n';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn().mockRejectedValue(new Error('unsupported')) }));
 
@@ -67,13 +69,23 @@ describe('SettingsDialog',()=>{
     expect(save).toHaveBeenCalledWith(expect.objectContaining({iconStyle:'outline'}));
   });
 
-  it('configures the Nowly Bar app buttons and saves them with the document',async()=>{
+  it('saves all hidden menu items with their draft order',async()=>{
     const user=userEvent.setup(); const save=vi.fn().mockImplementation(async value=>value);
     render(<SettingsDialog settings={settings} onClose={vi.fn()} onSave={save}/>);
     await user.click(screen.getByRole('tab',{name:'Nowly Bar'}));
-    await user.click(screen.getByRole('button',{name:'添加应用按钮到第 1 个位置'}));
-    await user.click(screen.getByRole('menuitemradio',{name:/截屏/}));
+    for (const item of DEFAULT_BAR_MENU) await user.click(screen.getByRole('checkbox',{name:t(`barMenu.${item.id}`)}));
     await user.click(screen.getByRole('button',{name:'保存设置'}));
-    expect(save).toHaveBeenCalledWith(expect.objectContaining({barButtons:['screenshot']}));
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({barMenu:DEFAULT_BAR_MENU.map(item=>({...item,visible:false}))}));
+  });
+  it('cancels menu edits without saving or mutating the provided settings',async()=>{
+    const user=userEvent.setup(); const save=vi.fn(); const close=vi.fn();
+    const configured={...settings,barMenu:DEFAULT_BAR_MENU.map(item=>({...item}))};
+    render(<SettingsDialog settings={configured} onClose={close} onSave={save}/>);
+    await user.click(screen.getByRole('tab',{name:'Nowly Bar'}));
+    await user.click(screen.getByRole('checkbox',{name:t('barMenu.screenshot')}));
+    await user.click(screen.getByRole('button',{name:'取消'}));
+    expect(close).toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
+    expect(configured.barMenu).toEqual(DEFAULT_BAR_MENU);
   });
 });

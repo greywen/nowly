@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, History, MessageCircle, Mic, Send, Sparkles, Square } from 'lucide-react';
+import { ChevronDown, History, MessageCircle, Mic, Send, Sparkles, Square } from '../components/icons';
 import { assistantClient, assistantError } from './client';
 import { AssistantChat } from './AssistantChat';
 import { AssistantHistory, historyCount, type HistoryRange } from './AssistantHistory';
@@ -9,6 +9,7 @@ import './assistant.css';
 export type AssistantDockProps = {
   client?: AssistantClient;
   active?: boolean;
+  embedded?: boolean;
   onRefresh: () => void | Promise<unknown>;
   onOpenSettings?: () => void;
   onOpenRecord?: (record: AssistantRecord, trigger: HTMLElement) => void | Promise<void>;
@@ -30,7 +31,7 @@ function upsertPlanItem(items: ChatItem[], next: Plan): ChatItem[] {
   return items.map((item, index) => index === existing && item.kind === 'plan' ? { ...item, plan: next } : item);
 }
 type PanelSurface = 'chat' | 'history';
-export function AssistantDock({ client = assistantClient, active = true, onRefresh, onOpenSettings, onOpenRecord }: AssistantDockProps) {
+export function AssistantDock({ client = assistantClient, active = true, embedded = false, onRefresh, onOpenSettings, onOpenRecord }: AssistantDockProps) {
   const [config, setConfig] = useState<AssistantConfig | null>(null);
   const [connectionError, setConnectionError] = useState('');
   const dockRef = useRef<HTMLDivElement>(null);
@@ -306,13 +307,14 @@ export function AssistantDock({ client = assistantClient, active = true, onRefre
   const panelTitle = surface === 'history' ? '操作记录' : '当前聊天';
   const panelBadge = surface === 'history' ? `${historyCount(history ?? [], historyRange)} 条` : `${visibleItems.length} 条`;
   const PanelIcon = surface === 'history' ? History : MessageCircle;
-  return <div ref={dockRef} className="assistant-dock" hidden={!active} aria-label="Nowly AI 助手">
+  const toolIconSize = embedded ? 16 : 18;
+  return <div ref={dockRef} className={`assistant-dock${embedded ? ' assistant-dock--embedded' : ''}`} hidden={!active} aria-label="Nowly AI 助手">
     <section className="assistant-panel" aria-label={panelTitle} data-state={surface} data-open={expanded} aria-hidden={!expanded}>
       <header className="assistant-panel-header"><div className="assistant-panel-title">
         <span className="assistant-state-icon" aria-hidden="true"><PanelIcon size={18} /></span>
         <h2>{panelTitle}</h2><span className="assistant-state-badge">{panelBadge}</span>
       </div>
-        <button className="btn btn-icon" aria-label="收起助手" onClick={closePanel}><ChevronDown size={18} /></button></header>
+        {!embedded && <button className="btn btn-icon" aria-label="收起助手" onClick={closePanel}><ChevronDown size={18} /></button>}</header>
       <div className="assistant-panel-body" aria-live="polite">
         {surface === 'history' ? <>
           {historyError && <p role="alert" className="assistant-error">{historyError}</p>}
@@ -350,11 +352,11 @@ export function AssistantDock({ client = assistantClient, active = true, onRefre
         }} />
       <div className="assistant-composer-tools">
         <button className={`btn btn-icon${surface === 'history' && expanded ? ' is-active' : ''}`} aria-label="操作记录"
-          aria-pressed={surface === 'history' && expanded} disabled={busy || reading} onClick={() => void toggleHistory()}><History size={18} /></button>
-        {reading ? <button className="btn btn-icon assistant-stop" aria-label="停止处理" onClick={() => stop()}><Square size={14} fill="currentColor" /></button>
-          : draft.trim() ? <button className="btn btn-icon btn-primary" aria-label="发送请求" disabled={busy || Boolean(uncertain && !uncertain.preserveCurrent)} onClick={() => void send()}><Send size={18} /></button>
+          aria-pressed={surface === 'history' && expanded} disabled={busy || reading} onClick={() => void toggleHistory()}><History size={toolIconSize} /></button>
+        {reading ? <button className="btn btn-icon assistant-stop" aria-label="停止处理" onClick={() => stop()}><Square size={embedded ? 16 : 14} fill="currentColor" /></button>
+          : draft.trim() ? <button className="btn btn-icon btn-primary" aria-label="发送请求" disabled={busy || Boolean(uncertain && !uncertain.preserveCurrent)} onClick={() => void send()}><Send size={toolIconSize} /></button>
             : <button className={`btn btn-icon${listening ? ' assistant-listening' : ''}`} aria-label="语音输入" aria-pressed={listening}
-              disabled={busy || Boolean(uncertain && !uncertain.preserveCurrent)} onClick={dictate}><Mic size={18} /></button>}
+              disabled={busy || Boolean(uncertain && !uncertain.preserveCurrent)} onClick={dictate}><Mic size={toolIconSize} /></button>}
       </div>
     </div>
   </div>;

@@ -155,15 +155,7 @@ fn update_settings_blocking(app: tauri::AppHandle, settings: AppSettings) -> Res
     if saved.notification_mode != previous_settings.notification_mode {
         crate::status_island::invalidate(&app)?;
     }
-    // The bar's app buttons change its width, so the host window has to be
-    // resized and re-clipped before the WebView can render the new lane.
-    if app
-        .state::<crate::quick_panel::PanelController>()
-        .set_bar_button_count(saved.bar_buttons.len())
-    {
-        crate::quick_panel::request_position_reconcile(app.clone());
-    }
-    if saved.bar_buttons != previous_settings.bar_buttons {
+    if saved.bar_menu != previous_settings.bar_menu {
         crate::status_island::invalidate(&app)?;
     }
     Ok(saved)
@@ -193,7 +185,7 @@ mod tests {
             quick_panel_shortcut: "Ctrl+Space".into(),
             screenshot_shortcut: crate::models::default_screenshot_shortcut(),
             screenshot_history_shortcut: crate::models::default_screenshot_history_shortcut(),
-            bar_buttons: Vec::new(),
+            bar_menu: crate::models::default_bar_menu(),
             recent_colors: Vec::new(),
         }
     }

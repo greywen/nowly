@@ -2,7 +2,8 @@ import { X } from '../components/icons';
 import type { IconStyle } from '../components/icon-style';
 import { useEffect, useState } from 'react';
 import { AssistantSettingsPanel } from '../assistant/AssistantSettingsPanel';
-import { BarButtonSettings } from './BarButtonSettings';
+import { BarMenuSettings } from './BarMenuSettings';
+import { normalizeBarMenu } from '../app/bar-menu';
 import { ShortcutRecorder, normalizeShortcut } from './ShortcutRecorder';
 import { invoke } from '@tauri-apps/api/core';
 import './shortcut-settings.css';
@@ -22,7 +23,7 @@ export function SettingsDialog({settings,monitors=[],onClose,onSave}:Props){
  // Language switches in real time via the i18n store, independent of the save
  // button, so the whole UI updates the moment the user picks a language.
  const {language,setLanguage}=useTranslation();
- const [draft,setDraft]=useState(()=>({...settings, notificationMode: settings.notificationMode ?? 'persistent', quickPanelEnabled: true, quickPanelShortcut: settings.quickPanelShortcut ?? 'Ctrl+Space', screenshotShortcut: settings.screenshotShortcut ?? 'Ctrl+Alt+A', screenshotHistoryShortcut: settings.screenshotHistoryShortcut ?? 'Ctrl+Alt+H'})); const [saving,setSaving]=useState(false); const [error,setError]=useState<string|null>(null);
+ const [draft,setDraft]=useState(()=>({...settings, barMenu: normalizeBarMenu(settings.barMenu), notificationMode: settings.notificationMode ?? 'persistent', quickPanelEnabled: true, quickPanelShortcut: settings.quickPanelShortcut ?? 'Ctrl+Space', screenshotShortcut: settings.screenshotShortcut ?? 'Ctrl+Alt+A', screenshotHistoryShortcut: settings.screenshotHistoryShortcut ?? 'Ctrl+Alt+H'})); const [saving,setSaving]=useState(false); const [error,setError]=useState<string|null>(null);
  const [tab,setTab]=useState<SettingsTab>('interface');
  const [shortcutStatus,setShortcutStatus]=useState<ShortcutStatuses|null>(null);
  const [statusError,setStatusError]=useState(false);
@@ -61,7 +62,7 @@ export function SettingsDialog({settings,monitors=[],onClose,onSave}:Props){
     <div className="settings-grid">
      <Select id="settings-notification-mode" label={t('settings.notificationMode')} value={draft.notificationMode ?? 'persistent'} options={[{value:'persistent',label:t('settings.notificationModePersistent')},{value:'notification',label:t('settings.notificationModeNotification')}]} onChange={value=>setDraft({...draft,notificationMode:value as NonNullable<AppSettings['notificationMode']>})}/>
     </div>
-    <BarButtonSettings buttons={draft.barButtons} onChange={barButtons=>setDraft(current=>({...current,barButtons}))}/>
+    <BarMenuSettings menu={draft.barMenu} onChange={barMenu=>setDraft(current=>({...current,barMenu}))}/>
    </TabPanel>
    <TabPanel idPrefix="settings" tabId="desktop" active={tab==='desktop'}>
     {monitors.length?<Select id="settings-monitor" label={t('settings.targetMonitor')} value={resolvedMonitorId??''} options={monitors.map(item=>({value:item.id,label:`${item.name}${item.isPrimary?t('settings.primaryMonitor'):''} · ${item.width}×${item.height} · ${Math.round(item.scaleFactor*100)}%`}))} onChange={value=>setDraft({...draft,targetMonitorId:value})}/>:null}

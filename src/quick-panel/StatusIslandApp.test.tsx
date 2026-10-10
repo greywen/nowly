@@ -95,6 +95,23 @@ describe('screen status island windows', () => {
     respondWith(snapshot);
   });
 
+  it('opens the function menu from the only Logo entry rather than opening AI directly', async () => {
+    render(<StatusIslandApp />);
+    await act(async () => { await Promise.resolve(); });
+    fireEvent.click(screen.getByRole('button', { name: 'Nowly' }));
+    expect(invocations('toggle_bar_menu')).toHaveLength(1);
+    expect(invocations('toggle_nowly_panel')).toHaveLength(0);
+    expect(document.querySelector('.status-rail__app-button')).toBeNull();
+    await emitPanelEvent('status-island-details-open', { generation: 1, source: 'menu', identity: null });
+    expect(await screen.findByRole('menu', { name: '功能菜单' })).toBeVisible();
+    expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual([
+      expect.stringContaining('截图'), expect.stringContaining('截图历史'), expect.stringContaining('AI 助手')
+    ]);
+    fireEvent.click(screen.getByRole('menuitem', { name: /AI 助手/ }));
+    await waitFor(() => expect(invocations('toggle_nowly_panel')).toHaveLength(1));
+    expect(invocations('acknowledge_status_island_reminder')).toHaveLength(0);
+  });
+
   it('opens screenshot history inside the Bar without opening or acknowledging status details', async () => {
     invokeMock.mockImplementation((command: string) => Promise.resolve(
       command === 'get_status_island_snapshot' ? snapshot
@@ -123,6 +140,15 @@ describe('screen status island windows', () => {
     expect(document.querySelector('.status-rail')).toHaveAttribute('data-open', 'false');
   });
 
+  it('returns keyboard focus to the Logo after the menu finishes closing', async () => {
+    render(<StatusIslandApp />);
+    await emitPanelEvent('status-island-details-open', { generation: 1, source: 'menu', identity: null });
+    expect(screen.getAllByRole('menuitem')[0]).toHaveFocus();
+    await emitPanelEvent('status-island-details-close', { generation: 2 });
+    await emitPanelEvent('status-island-details-closed', { generation: 2 });
+    expect(screen.getByRole('button', { name: 'Nowly' })).toHaveFocus();
+  });
+
   it('keeps the capsule and says the day is empty when there is no business state', async () => {
     render(<StatusIslandApp />);
     await act(async () => { await Promise.resolve(); });
@@ -136,7 +162,7 @@ describe('screen status island windows', () => {
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
   });
 
-  it('shows the Nowly logo as the assistant entry without opening it on mount', async () => {
+  it('shows the Nowly logo as the menu entry without opening it on mount', async () => {
     render(<StatusIslandApp />);
     await act(async () => { await Promise.resolve(); });
 
@@ -146,36 +172,39 @@ describe('screen status island windows', () => {
     expect(invocations('toggle_status_island_details')).toHaveLength(0);
   });
 
-  it('starts capture directly without a menu, prevents duplicate requests and allows retry after failure', async () => {
+  it('starts capture from the function menu, prevents duplicate requests and allows retry after failure', async () => {
     let rejectStartup!: (reason: unknown) => void;
     const startup = new Promise<void>((_resolve, reject) => { rejectStartup = reject; });
     invokeMock.mockImplementation((command: string) => {
       if (command === 'get_status_island_snapshot') {
-        return Promise.resolve(snapshotWith({ barButtons: ['screenshot'] }));
+        return Promise.resolve(snapshot);
       }
       if (command === 'start_screen_capture') return startup;
       return Promise.resolve(null);
     });
     render(<StatusIslandApp />);
-    const button = await screen.findByRole('button', { name: '截屏' });
+    await emitPanelEvent('status-island-details-open', { generation: 1, source: 'menu', identity: null });
+    const button = await screen.findByRole('menuitem', { name: /^截图(?!历史)/ });
 
     fireEvent.click(button);
     fireEvent.click(button);
     expect(invocations('start_screen_capture')).toHaveLength(1);
     expect(invocations('start_screen_capture')[0]).toEqual(['start_screen_capture']);
-    expect(invocations('toggle_screenshot_menu')).toHaveLength(0);
     expect(button).toBeDisabled();
-    expect(button).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getByRole('menu')).toHaveAttribute('aria-busy', 'true');
     expect(invocations('toggle_nowly_panel')).toHaveLength(0);
     expect(invocations('toggle_status_island_details')).toHaveLength(0);
 
+    await emitPanelEvent('status-island-details-closed', { generation: 2 });
+    expect(screen.queryByRole('menu')).toBeNull();
+    await emitPanelEvent('status-island-details-open', { generation: 3, source: 'menu', identity: null });
     await act(async () => rejectStartup({ message: '截图启动超时。' }));
     expect(button).not.toBeDisabled();
-    expect(button).toHaveTextContent('重试');
-    expect(button).toHaveAttribute('title', '截屏：截图启动超时。');
+    expect(screen.getAllByRole('alert').some(alert => alert.textContent?.includes('截图启动超时。'))).toBe(true);
+    expect(button).toHaveFocus();
+    expect(invocations('acknowledge_status_island_reminder')).toHaveLength(0);
     fireEvent.click(button);
     expect(invocations('start_screen_capture')).toHaveLength(2);
-    expect(invocations('toggle_screenshot_menu')).toHaveLength(0);
     await act(async () => { await Promise.resolve(); });
   });
 
@@ -184,19 +213,22 @@ describe('screen status island windows', () => {
     const startup = new Promise<void>(resolve => { finishStartup = resolve; });
     invokeMock.mockImplementation((command: string) => {
       if (command === 'get_status_island_snapshot') {
-        return Promise.resolve(snapshotWith({ barButtons: ['screenshot'] }));
+        return Promise.resolve(snapshot);
       }
       if (command === 'start_screen_capture') return startup;
       return Promise.resolve(null);
     });
     render(<StatusIslandApp />);
-    const button = await screen.findByRole('button', { name: '截屏' });
+    await emitPanelEvent('status-island-details-open', { generation: 1, source: 'menu', identity: null });
+    const button = await screen.findByRole('menuitem', { name: /^截图(?!历史)/ });
     fireEvent.click(button);
     expect(button).toBeDisabled();
+    await emitPanelEvent('status-island-details-closed', { generation: 2 });
     await act(async () => finishStartup());
     expect(button).not.toBeDisabled();
     expect(button).not.toHaveAttribute('aria-busy', 'true');
     expect(button).not.toHaveTextContent('重试');
+    expect(screen.queryByRole('menu')).toBeNull();
   });
 
   it('shows the summary in the island when state exists but nothing is unseen', async () => {
@@ -1298,8 +1330,8 @@ describe('the sheet inside the rail', () => {
     expect(document.querySelector('.status-island__retry')).not.toBeInTheDocument();
   });
 
-  it('opens the full assistant panel directly from the logo without a compact composer state', async () => {
-    let openPanel: ((event: { payload: { generation: number; source: 'nowly'; identity: null; hovered: false } }) => void) | null = null;
+  it('opens the full assistant from the menu without a compact composer state', async () => {
+    let openPanel: ((event: { payload: { generation: number; source: 'nowly' | 'menu'; identity: null; hovered: false } }) => void) | null = null;
     listenMock.mockImplementation((name: string, callback: typeof openPanel) => {
       if (name === 'status-island-details-open') openPanel = callback;
       return Promise.resolve(() => undefined);
@@ -1320,10 +1352,13 @@ describe('the sheet inside the rail', () => {
     const nowly = screen.getByRole('button', { name: 'Nowly' });
     fireEvent.click(nowly);
 
-    expect(invocations('toggle_nowly_panel')).toHaveLength(1);
+    expect(invocations('toggle_bar_menu')).toHaveLength(1);
     expect(document.querySelector('.status-rail')).toHaveAttribute('data-surface', 'status');
     expect(screen.queryByRole('textbox', { name: '告诉 Nowly 你想做什么' })).not.toBeInTheDocument();
 
+    await act(async () => openPanel?.({ payload: { generation: 6, source: 'menu', identity: null, hovered: false } }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'AI 助手' }));
+    expect(invocations('toggle_nowly_panel')).toHaveLength(1);
     await act(async () => openPanel?.({ payload: { generation: 7, source: 'nowly', identity: null, hovered: false } }));
 
     const input = await screen.findByRole('textbox', { name: '告诉 Nowly 你想做什么' });
@@ -1362,6 +1397,9 @@ describe('the sheet inside the rail', () => {
     render(<StatusIslandApp />);
     await act(async () => { await Promise.resolve(); });
     fireEvent.click(screen.getByRole('button', { name: 'Nowly' }));
+    expect(invokeMock).toHaveBeenCalledWith('toggle_bar_menu');
+    await emitPanelEvent('status-island-details-open', { generation: 6, source: 'menu', identity: null, hovered: false });
+    fireEvent.click(screen.getByRole('menuitem', { name: 'AI 助手' }));
     expect(invokeMock).toHaveBeenCalledWith('toggle_nowly_panel');
     await act(async () => openPanel?.({ payload: { generation: 7, source: 'nowly', identity: null, hovered: false } }));
     const input = await screen.findByRole('textbox', { name: '告诉 Nowly 你想做什么' });

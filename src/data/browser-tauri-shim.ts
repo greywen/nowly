@@ -21,6 +21,7 @@
 // file the desktop build would refuse is refused here too. ("Self-contained"
 // above means it needs no Tauri runtime, not that it avoids imports.)
 import { isAllowedAttachmentName } from '../lib/attachment';
+import { normalizeBarMenu } from '../app/bar-menu';
 
 type Dict = Record<string, unknown>;
 
@@ -60,6 +61,7 @@ const defaultSettings: Dict = {
   quickPanelShortcut: 'Ctrl+Space',
   screenshotShortcut: 'Ctrl+Alt+A',
   screenshotHistoryShortcut: 'Ctrl+Alt+H',
+  barMenu: normalizeBarMenu(undefined),
   recentColors: []
 };
 
@@ -85,10 +87,12 @@ function loadStore(): Store {
     if (!raw) return emptyStore();
     const parsed = JSON.parse(raw) as Partial<Store>;
     const base = emptyStore();
+    const settings = { ...base.settings, ...(parsed.settings ?? {}), barMenu: normalizeBarMenu(parsed.settings?.barMenu) };
+    Reflect.deleteProperty(settings, 'barButtons');
     return {
       ...base,
       ...parsed,
-      settings: { ...base.settings, ...(parsed.settings ?? {}) },
+      settings,
       kanban: { ...base.kanban, ...(parsed.kanban ?? {}) }
     };
   } catch {
@@ -160,6 +164,25 @@ function inRange(startAt: unknown, range: { startAt: string; endAtExclusive: str
 export function installBrowserTauriBackend() {
   const store = loadStore();
   ensureTaskWorkspace(store);
+  const listeners = new Map<number, { event: string; callback: number }>();
+  let listenerId = 0;
+  const emit = (event: string, payload: unknown) => {
+    for (const [id, listener] of listeners) {
+      if (listener.event !== event) continue;
+      const callback = Reflect.get(window, `_${listener.callback}`);
+      if (typeof callback === 'function') callback({ event, id, payload });
+    }
+  };
+  let panelSource: 'menu' | 'nowly' | 'history' | null = null;
+  let panelGeneration = 0;
+  const closePanel = () => {
+    panelSource = null;
+    emit('status-island-details-close', { generation: ++panelGeneration });
+  };
+  const openPanel = (source: Exclude<typeof panelSource, null>) => {
+    panelSource = source;
+    emit('status-island-details-open', { generation: ++panelGeneration, source, identity: null });
+  };
 
   // Attachment bytes and metadata, kept in memory only (see save_attachment).
   const attachmentBytes = new Map<string, Uint8Array>();
@@ -762,9 +785,21 @@ export function installBrowserTauriBackend() {
     get_app_settings: () => store.settings,
     update_app_settings: (a) => {
       store.settings = { ...store.settings, ...(a.settings as Dict) };
+      store.settings.barMenu = normalizeBarMenu(store.settings.barMenu);
+      Reflect.deleteProperty(store.settings, 'barButtons');
       persist();
       return store.settings;
     },
+    get_status_island_snapshot: () => ({
+      sampledAt: nowIso(),
+      events: store.events,
+      externalEvents: store.externalEvents,
+      tasks: store.tasks,
+      focus: { status: 'idle', remainingSeconds: 0, sessionId: null },
+      reminders: [],
+      notificationMode: store.settings.notificationMode ?? 'persistent',
+      barMenu: normalizeBarMenu(store.settings.barMenu)
+    }),
     list_monitors: () => [
       {
         id: 'browser',
@@ -1015,9 +1050,10 @@ export function installBrowserTauriBackend() {
     copy_screenshot_history: () => { throw new Error('Image clipboard requires the desktop application.'); },
     delete_screenshot_history: () => { throw new Error('Screenshot files require the desktop application.'); },
     open_screenshot_folder: () => { throw new Error('Screenshot folder requires the desktop application.'); },
-    open_screenshot_history: () => { window.open('?surface=screenshot-history', '_blank', 'noopener,noreferrer'); },
-    toggle_screenshot_menu: () => { window.open('?surface=screenshot-menu', '_blank', 'noopener,noreferrer,width=320,height=136'); },
-    close_screenshot_menu: () => undefined,
+    open_screenshot_history: () => openPanel('history'),
+    toggle_bar_menu: () => panelSource === 'menu' ? closePanel() : openPanel('menu'),
+    toggle_nowly_panel: () => panelSource === 'nowly' ? closePanel() : openPanel('nowly'),
+    close_status_island_details: closePanel,
 
     // Window mode & shell — no desktop window to switch in the browser.
     enter_wallpaper_mode: () => 'ok',
@@ -1033,11 +1069,18 @@ export function installBrowserTauriBackend() {
   };
 
   const invoke = async (command: string, args: Dict = {}) => {
-    // The event plugin (`@tauri-apps/api/event` listen/emit) routes through
-    // invoke. There is no OS event bus in the browser, so accept and ignore
-    // these so `listen(...)` resolves to a no-op unlisten instead of throwing.
-    if (command.startsWith('plugin:event|')) {
-      return command.endsWith('|listen') ? Math.floor(Math.random() * 2 ** 32) : undefined;
+    if (command === 'plugin:event|listen') {
+      const id = ++listenerId;
+      listeners.set(id, { event: String(args.event), callback: Number(args.handler) });
+      return id;
+    }
+    if (command === 'plugin:event|unlisten') {
+      listeners.delete(Number(args.eventId));
+      return;
+    }
+    if (command === 'plugin:event|emit' || command === 'plugin:event|emit_to') {
+      emit(String(args.event), args.payload);
+      return;
     }
     const handler = handlers[command];
     if (!handler) {
@@ -1056,5 +1099,9 @@ export function installBrowserTauriBackend() {
         return callbackId;
       }
     }
+  });
+  Object.defineProperty(window, '__TAURI_EVENT_PLUGIN_INTERNALS__', {
+    configurable: true,
+    value: { unregisterListener: (_event: string, id: number) => { listeners.delete(id); } }
   });
 }

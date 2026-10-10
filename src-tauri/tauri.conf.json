@@ -24,7 +24,7 @@
       {
         "label": "quick-panel-handle",
         "title": "Nowly Bar",
-        "width": 408,
+        "width": 432,
         "height": 40,
         "resizable": false,
         "minimizable": false,

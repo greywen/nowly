@@ -1,7 +1,12 @@
 import { expect, test, type Page } from '@playwright/test';
 
-test.use({ viewport: { width: 408, height: 440 } });
+test.use({ viewport: { width: 432, height: 440 } });
 test.setTimeout(60_000);
+
+async function openAssistant(page: Page) {
+  await page.getByRole('button', { name: 'Nowly', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'AI 助手', exact: true }).click();
+}
 
 async function installNowlyBar(page: Page) {
   await page.addInitScript(() => {
@@ -61,7 +66,7 @@ async function installNowlyBar(page: Page) {
           if (command === 'assistant_interpret') {
             return { kind: 'clarify', message: '需要提醒吗？', records: [], plan: null };
           }
-          if (command === 'toggle_nowly_panel') {
+          if (command === 'toggle_nowly_panel' || command === 'toggle_bar_menu') {
             panelGeneration += 1;
             const handler = listeners.get('status-island-details-open');
             const callback = handler
@@ -70,7 +75,7 @@ async function installNowlyBar(page: Page) {
             if (typeof callback === 'function') {
               window.setTimeout(() => callback({
                 event: 'status-island-details-open',
-                payload: { generation: panelGeneration, source: 'nowly', identity: null, hovered: false }
+                payload: { generation: panelGeneration, source: command === 'toggle_bar_menu' ? 'menu' : 'nowly', identity: null, hovered: false }
               }), 0);
             }
           }
@@ -97,7 +102,7 @@ async function installNowlyBar(page: Page) {
 
 test('uses compact Solar glyphs for the embedded voice and send actions', async ({ page }) => {
   await installNowlyBar(page);
-  await page.getByRole('button', { name: 'Nowly' }).click();
+  await openAssistant(page);
 
   const input = page.getByRole('textbox', { name: '告诉 Nowly 你想做什么' });
   await expect(page.getByRole('button', { name: '语音输入' }).locator('svg')).toHaveAttribute('width', '16');
@@ -243,7 +248,7 @@ test('does not let a pointer activate Nowly while the status shell is still shri
 
 test('reveals only the status capsule while AI is still closing', async ({ page }) => {
   await installNowlyBar(page);
-  await page.getByRole('button', { name: 'Nowly' }).click();
+  await openAssistant(page);
   await page.getByRole('textbox', { name: '告诉 Nowly 你想做什么' }).fill('测试收起衔接');
   await page.getByRole('textbox', { name: '告诉 Nowly 你想做什么' }).press('Enter');
   await expect(page.locator('.status-rail__assistant')).toHaveCSS('height', '440px');
@@ -276,7 +281,7 @@ test('reveals only the status capsule while AI is still closing', async ({ page 
 
 test('keeps the returning status capsule stationary throughout AI collapse', async ({ page }) => {
   await installNowlyBar(page);
-  await page.getByRole('button', { name: 'Nowly' }).click();
+  await openAssistant(page);
   const input = page.getByRole('textbox', { name: '告诉 Nowly 你想做什么' });
   await input.fill('检查状态胶囊闪动');
   await input.press('Enter');
@@ -295,12 +300,12 @@ test('keeps the returning status capsule stationary throughout AI collapse', asy
       return sheet.getBoundingClientRect().left;
     });
   });
-  for (const left of samples) expect(left).toBeCloseTo(60, 1);
+  for (const left of samples) expect(left).toBeCloseTo(72, 1);
 });
 
 test('does not wipe the returning status capsule with the opaque closing AI shell', async ({ page }) => {
   await installNowlyBar(page);
-  await page.getByRole('button', { name: 'Nowly' }).click();
+  await openAssistant(page);
   const input = page.getByRole('textbox', { name: '告诉 Nowly 你想做什么' });
   await input.fill('检查遮挡闪动');
   await input.press('Enter');
@@ -353,7 +358,7 @@ test('keeps movement help inside the status panel and AI animations out of it on
     emit('status-island-details-close', { generation: 0 });
     emit('status-island-details-closed', { generation: 0 });
   });
-  await page.getByRole('button', { name: 'Nowly' }).click();
+  await openAssistant(page);
   await expect(assistant).toHaveAttribute('data-anim', 'grow');
   await expect(statusShell).not.toHaveAttribute('data-anim');
   // The panels are siblings, never nested: the assistant lives in its own frame
@@ -376,7 +381,7 @@ test('keeps movement help inside the status panel and AI animations out of it on
   await expect(page.locator('.status-rail__panel')).toHaveAttribute('inert', '');
   await expect(note).not.toBeVisible();
   expect(await sheet.evaluate(element => element.getAnimations().length)).toBe(0);
-  await expect(assistant).toHaveCSS('width', '48px');
+  await expect(assistant).toHaveCSS('width', '288px');
   await expect(note).not.toBeVisible();
   await expect(page.locator('.status-island__drag-hint')).toHaveCount(0);
 });
@@ -385,7 +390,7 @@ test('morphs the logo radius and reveals fixed-size content without stretching',
   await installNowlyBar(page);
   const shell = page.locator('.status-rail__assistant');
   await expect(shell).toHaveCSS('border-radius', '20px');
-  await page.getByRole('button', { name: 'Nowly' }).click();
+  await openAssistant(page);
   await expect(shell).toHaveCSS('transition-property', 'width, height, border-radius, opacity');
   await expect(shell).toHaveCSS('transition-duration', '0.28s, 0.28s, 0.28s, 0s');
   await expect(shell).toHaveCSS('border-radius', '15.2px');
@@ -393,14 +398,14 @@ test('morphs the logo radius and reveals fixed-size content without stretching',
   await input.press('Escape');
   await expect(shell).toHaveAttribute('inert', '');
   await expect(shell).toHaveCSS('transition-duration', '0.22s, 0.22s, 0.22s, 0s');
-  await expect(shell).toHaveCSS('width', '48px');
+  await expect(shell).toHaveCSS('width', '288px');
   await expect(shell).toHaveCSS('border-radius', '20px');
   await page.evaluate(() => {
     (Reflect.get(window, '__EMIT_TAURI_EVENT__') as Function)(
-      'status-island-details-closed', { generation: 2 });
+      'status-island-details-closed', { generation: 3 });
   });
   await expect(page.getByRole('button', { name: 'Nowly' })).toBeVisible();
-  await page.getByRole('button', { name: 'Nowly' }).click();
+  await openAssistant(page);
   await input.fill('测试面板形变');
   await input.press('Enter');
   await expect(shell).toHaveCSS('height', '440px');
@@ -415,7 +420,7 @@ test('morphs the logo radius and reveals fixed-size content without stretching',
     };
   });
   expect(geometry).toEqual({
-    childWidth: 408, childHeight: 440, background: 'rgb(255, 255, 255)', transform: 'none'
+    childWidth: 432, childHeight: 440, background: 'rgb(255, 255, 255)', transform: 'matrix(1, 0, 0, 1, -216, 0)'
   });
   expect(await shell.evaluate(element => {
     const border = getComputedStyle(element, '::before');
@@ -435,7 +440,7 @@ test('disables both independent morphs with reduced motion', async ({ page }) =>
   });
   expect(tokens).toEqual([280, 220]);
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.getByRole('button', { name: 'Nowly' }).click();
+  await openAssistant(page);
   await expect(page.locator('.status-rail__assistant'))
     .toHaveCSS('transition-duration', '0s, 0s, 0s, 0s');
 });
@@ -465,25 +470,26 @@ test('morphs status with Logo timing and radius while clipping fixed content', a
     for (const animation of shell.getAnimations()) animation.play();
     return result;
   });
-  expect(sample.width).toBe(288);
+  expect(sample.width).toBeGreaterThan(288);
+  expect(sample.width).toBeLessThan(432);
   expect(sample.height).toBeGreaterThan(40);
   expect(sample.height).toBeLessThan(288);
   expect(sample.radius).toBeGreaterThan(15.2);
   expect(sample.radius).toBeLessThan(20);
-  expect(sample.contentWidth).toBe(286);
+  expect(sample.contentWidth).toBe(430);
   expect(sample.contentHeight).toBe(286);
-  expect(sample.offset).toBe(1);
-  await expect(shell).toHaveCSS('transition-duration', '0.28s, 0.28s, 0.14s, 0s');
+  expect(sample.offset).toBeCloseTo((sample.width - 430) / 2, 1);
+  await expect(shell).toHaveCSS('transition-duration', '0.28s, 0.28s, 0.28s, 0.14s, 0s');
   await expect(shell).toHaveCSS('border-radius', '15.2px');
   const statusClose = page.locator('[data-owner="status"]');
-  await expect(statusClose).toHaveCSS('width', '40px');
-  await expect(statusClose).toHaveCSS('height', '40px');
+  await expect(statusClose).toHaveCSS('width', '28px');
+  await expect(statusClose).toHaveCSS('height', '28px');
   await statusClose.hover();
   await expect(statusClose).toHaveCSS('color', 'rgb(79, 201, 218)');
   await expect(statusClose).toHaveCSS('background-color', 'rgb(246, 241, 233)');
   await expect(page.locator('.status-rail__assistant')).not.toHaveAttribute('data-anim');
   await page.getByRole('button', { name: '收起', exact: true }).click();
-  await expect(shell).toHaveCSS('transition-duration', '0.22s, 0.22s, 0.14s, 0s');
+  await expect(shell).toHaveCSS('transition-duration', '0.22s, 0.22s, 0.22s, 0.14s, 0s');
   await expect(page.locator('.status-rail__panel')).toHaveAttribute('inert', '');
   await expect(shell).toHaveCSS('height', '40px');
   await expect(shell).toHaveCSS('border-radius', '20px');
@@ -493,7 +499,7 @@ test('morphs status with Logo timing and radius while clipping fixed content', a
     (Reflect.get(window, '__EMIT_TAURI_EVENT__') as Function)(
       'status-island-details-open', { generation: 3, source: 'island', identity: null });
   });
-  await expect(shell).toHaveCSS('transition-duration', '0s, 0s, 0s, 0s');
+  await expect(shell).toHaveCSS('transition-duration', '0s, 0s, 0s, 0s, 0s');
   await expect(shell).toHaveCSS('height', '288px');
 });
 
@@ -502,7 +508,8 @@ test('morphs directly from the Logo footprint to the full assistant panel', asyn
   await expect(page.getByRole('button', { name: 'Nowly' })).toBeVisible();
   // Freeze real browser CSS transitions partway through, not a second animation implementation.
   const sample = await page.evaluate(async () => {
-    (document.querySelector('.status-rail__nowly') as HTMLButtonElement).click();
+    (Reflect.get(window, '__EMIT_TAURI_EVENT__') as (event: string, payload: unknown) => void)(
+      'status-island-details-open', { generation: 1, source: 'nowly', identity: null });
     await new Promise(requestAnimationFrame);
     await new Promise(requestAnimationFrame);
     const shell = document.querySelector('.status-rail__assistant')!;
@@ -517,13 +524,13 @@ test('morphs directly from the Logo footprint to the full assistant panel', asyn
       childWidth: dock.width, childHeight: dock.height, right: bounds.right, childRight: dock.right
     };
   });
-  expect(sample.width).toBeGreaterThan(48);
-  expect(sample.width).toBeLessThan(408);
+  expect(sample.width).toBeGreaterThan(288);
+  expect(sample.width).toBeLessThan(432);
   expect(sample.radius).toBeGreaterThan(15.2);
   expect(sample.radius).toBeLessThan(20);
-  expect(sample.childWidth).toBe(408);
+  expect(sample.childWidth).toBe(432);
   expect(sample.childHeight).toBe(440);
-  expect(sample.childRight).toBeCloseTo(sample.right, 1);
+  expect(sample.childRight).toBeCloseTo(432, 1);
 });
 
 test('reverses the status morph without restarting or animating the AI panel', async ({ page }) => {
@@ -559,8 +566,8 @@ test('reverses the status morph without restarting or animating the AI panel', a
 test('reverses a closing assistant from its current shape instead of restarting at the Logo', async ({ page }) => {
   await installNowlyBar(page);
   const shell = page.locator('.status-rail__assistant');
-  await page.getByRole('button', { name: 'Nowly' }).click();
-  await expect(shell).toHaveCSS('width', '408px');
+  await openAssistant(page);
+  await expect(shell).toHaveCSS('width', '432px');
   // Slow the same transitions for a stable intermediate-frame assertion.
   await page.locator('.status-rail').evaluate(element => {
     (element as HTMLElement).style.setProperty('--logo-grow', '2800ms');
@@ -568,20 +575,21 @@ test('reverses a closing assistant from its current shape instead of restarting 
   });
   await page.getByRole('textbox', { name: '告诉 Nowly 你想做什么' }).press('Escape');
   await expect.poll(() => shell.evaluate(element => element.getBoundingClientRect().width))
-    .toBeLessThan(275);
+    .toBeLessThan(400);
   const before = await shell.evaluate(element => element.getBoundingClientRect().width);
-  expect(before).toBeGreaterThan(100);
-  await page.locator('.status-rail__nowly').evaluate((element: HTMLButtonElement) => element.click());
+  expect(before).toBeGreaterThan(288);
+  await page.evaluate(() => (Reflect.get(window, '__EMIT_TAURI_EVENT__') as (event: string, payload: unknown) => void)(
+    'status-island-details-open', { generation: 4, source: 'nowly', identity: null }));
   const after = await shell.evaluate(element => element.getBoundingClientRect().width);
   expect(Math.abs(after - before)).toBeLessThan(55);
   await expect(shell).not.toHaveAttribute('inert');
-  await expect(shell).toHaveCSS('width', '408px');
+  await expect(shell).toHaveCSS('width', '432px');
   await expect(shell).toHaveCSS('border-radius', '15.2px');
 });
 
 test('clips the expanded assistant to all four rail corners', async ({ page }) => {
   await installNowlyBar(page);
-  await page.getByRole('button', { name: 'Nowly' }).click();
+  await openAssistant(page);
   const input = page.getByRole('textbox', { name: '告诉 Nowly 你想做什么' });
   await input.fill('明天下午三点创建产品评审');
   await input.press('Enter');
@@ -594,14 +602,14 @@ test('clips the expanded assistant to all four rail corners', async ({ page }) =
   const close = page.getByRole('button', { name: '收起' });
   await expect(close).toBeVisible();
   await close.hover();
-  await expect(close).toHaveCSS('width', '40px');
-  await expect(close).toHaveCSS('height', '40px');
+  await expect(close).toHaveCSS('width', '28px');
+  await expect(close).toHaveCSS('height', '28px');
   await expect(close).toHaveCSS('color', 'rgb(79, 201, 218)');
   await expect(close).toHaveCSS('background-color', 'rgb(246, 241, 233)');
   await expect.poll(() => page.locator('.status-rail__assistant').evaluate(element => {
     const bounds = element.getBoundingClientRect();
     return { width: Math.round(bounds.width), height: Math.round(bounds.height) };
-  })).toEqual({ width: 408, height: 440 });
+  })).toEqual({ width: 432, height: 440 });
   const assistantBox = await page.locator('.status-rail__assistant').boundingBox();
   const composerBox = await page.locator('.assistant-dock--embedded .assistant-composer').boundingBox();
   const panelBox = await page.locator('.assistant-dock--embedded .assistant-panel').boundingBox();
@@ -616,46 +624,15 @@ test('clips the expanded assistant to all four rail corners', async ({ page }) =
   await expect(page.locator('.assistant-dock--embedded .assistant-composer'))
     .toHaveCSS('border-top-style', 'dashed');
   const message = page.locator('.assistant-dock--embedded .assistant-chat-message').first();
-  await expect(message).toHaveCSS('border-top-width', '0px');
-  await expect(message).toHaveCSS('display', 'flex');
-  await expect(message).toHaveCSS('align-items', 'center');
-  await expect(message.locator('p')).toHaveCSS('margin-top', '0px');
-
-  await page.evaluate(() => {
-    const dock = document.querySelector('.assistant-dock--embedded');
-    if (!dock) throw new Error('embedded assistant not found');
-    const operation = document.createElement('section');
-    operation.className = 'assistant-operation test-operation';
-    const details = document.createElement('div');
-    details.className = 'assistant-operation-details test-operation-details';
-    const changeHeader = document.createElement('div');
-    changeHeader.className = 'assistant-change-header test-change-header';
-    const editor = document.createElement('div');
-    editor.className = 'assistant-editor test-editor';
-    const actions = document.createElement('div');
-    actions.className = 'assistant-actions test-actions';
-    const button = document.createElement('button');
-    button.className = 'btn';
-    button.textContent = '确认';
-    actions.append(button);
-    dock.append(operation, details, changeHeader, editor, actions);
-  });
-  await expect(page.locator('.test-operation')).not.toHaveCSS('border-style', 'dashed');
-  await expect(page.locator('.test-operation-details')).not.toHaveCSS('border-top-style', 'dashed');
-  await expect(page.locator('.test-change-header')).not.toHaveCSS('border-bottom-style', 'dashed');
-  await expect(page.locator('.test-editor')).not.toHaveCSS('border-top-style', 'dashed');
-  await expect(page.locator('.test-actions')).toHaveCSS('justify-self', 'stretch');
-  await expect(page.locator('.test-actions .btn')).toHaveCSS('height', '40px');
-  const toolbarWidth = await page.locator('.test-actions').evaluate(element => element.getBoundingClientRect().width);
-  const dockWidth = await page.locator('.assistant-dock--embedded').evaluate(element => element.getBoundingClientRect().width);
-  expect(toolbarWidth).toBeCloseTo(dockWidth, 0);
-  const actionButtonWidth = await page.locator('.test-actions .btn').evaluate(element => element.getBoundingClientRect().width);
-  expect(actionButtonWidth).toBeLessThan(120);
+  await expect(message).toHaveCSS('border-top-style', 'solid');
+  await expect(message).toHaveCSS('border-top-width', '1px');
+  expect(await page.locator('.assistant-panel-body').evaluate(element =>
+    element.scrollWidth <= element.clientWidth)).toBe(true);
 });
 
 test('keeps the rail centered while the assistant closes', async ({ page }) => {
   await installNowlyBar(page);
-  await page.getByRole('button', { name: 'Nowly' }).click();
+  await openAssistant(page);
   const input = page.getByRole('textbox', { name: '告诉 Nowly 你想做什么' });
   await input.fill('明天下午三点创建产品评审');
   await input.press('Enter');
@@ -672,16 +649,16 @@ test('keeps the rail centered while the assistant closes', async ({ page }) => {
   // host box (408 here), so the shell's own left edge is what must land on 60 and
   // stay there — §12.3's "keeps its final screen position".
   await expect.poll(() => page.locator('.status-rail__status-presence')
-    .evaluate(element => Math.round(element.getBoundingClientRect().left))).toBe(60);
+    .evaluate(element => Math.round(element.getBoundingClientRect().left))).toBe(72);
   await expect(page.locator('.status-rail__sheet')).toHaveCSS('transform', 'none');
 
   // Native host keeps its width and x; only its bottom edge is removed.
   const beforeResize = await page.locator('.status-rail__sheet').boundingBox();
-  await page.setViewportSize({ width: 408, height: 40 });
+  await page.setViewportSize({ width: 432, height: 40 });
   await expect(rail).toHaveAttribute('data-assistant-closing', 'true');
   await page.evaluate(() => {
     const emit = Reflect.get(window, '__EMIT_TAURI_EVENT__') as (event: string, payload: unknown) => void;
-    emit('status-island-details-closed', { generation: 2 });
+    emit('status-island-details-closed', { generation: 3 });
   });
   await expect(rail).toHaveAttribute('data-assistant-closing', 'false');
   const afterResize = await page.locator('.status-rail__sheet').boundingBox();

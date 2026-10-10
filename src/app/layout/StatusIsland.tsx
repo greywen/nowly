@@ -12,8 +12,6 @@ import {
   X
 } from '../../components/icons';
 import { useTranslation } from '../../i18n';
-import { BarButtonLane, useBarButtonLaneAnim } from './BarButtonLane';
-import type { BarAppId } from '../bar-buttons';
 import type { CalendarEvent } from '../../calendar/calendar-model';
 import type { Task } from '../../tasks/task-model';
 import type {
@@ -25,11 +23,8 @@ import type {
   StatusIslandSummary
 } from '../status-island-model';
 
-// The top rail hosts two independent panels: the 240x40 status action grows to
-// 288x288; the 48px Nowly action grows into its own 408x440 AI conversation.
-// Collapsed, both actions share one continuous shell, 40px high and
-// 288 + 48px per configured app button wide (design.md §8.3). The panels' widths
-// are their own constants and do not follow the collapsed width.
+// Status and Logo share a 288x40 shell. Every expanded surface uses the same
+// 432px host; feature panels never consume the reminder lifecycle.
 //
 // The capsule carries exactly one of three things, always on the same slots and
 // at the same size, so switching content never moves or resizes anything:
@@ -504,17 +499,14 @@ export function StatusIslandSummaryView({
   panel,
   assistant,
   history,
-  barButtons = [],
-  barButtonErrors,
-  barButtonPending,
-  onActivateBarButton,
+  menu,
   onActivateNowly,
   onCollapse,
   children
 }: {
   open: boolean;
-  source: 'island' | 'nowly' | 'history';
-  surface: 'status' | 'assistant' | 'history';
+  source: 'island' | 'nowly' | 'history' | 'menu';
+  surface: 'status' | 'assistant' | 'history' | 'menu';
   assistantClosing: boolean;
   statusAnim: 'grow' | 'shrink' | null;
   assistantAnim: 'grow' | 'shrink' | null;
@@ -522,11 +514,7 @@ export function StatusIslandSummaryView({
   panel: React.ReactNode;
   assistant: React.ReactNode;
   history?: React.ReactNode;
-  /** Configured app buttons, left to right, already normalized. */
-  barButtons?: readonly BarAppId[];
-  barButtonErrors?: Partial<Record<BarAppId, string>>;
-  barButtonPending?: Partial<Record<BarAppId, boolean>>;
-  onActivateBarButton?: (id: BarAppId) => void;
+  menu?: React.ReactNode;
   onActivateNowly: () => void;
   onCollapse: () => void;
   children: React.ReactNode;
@@ -539,7 +527,6 @@ export function StatusIslandSummaryView({
     && !statusOpen
     && statusAnim !== 'shrink'
     && !assistantClosing;
-  const laneAnim = useBarButtonLaneAnim(barButtons.length);
   return (
     <div
       className="status-rail"
@@ -550,10 +537,6 @@ export function StatusIslandSummaryView({
       data-status-open={statusOpen}
       data-status-hidden={statusHidden}
       data-mode={mode}
-      // The collapsed shell's width and its centred position both derive from
-      // this count (design.md §8.3). The panels' widths do not.
-      style={{ '--app-buttons': barButtons.length } as React.CSSProperties}
-      {...(laneAnim ? { 'data-lane-anim': laneAnim } : {})}
       {...(assistantAnim ? { 'data-frame-anim': assistantAnim } : {})}
     >
       <div
@@ -592,13 +575,6 @@ export function StatusIslandSummaryView({
         >
           <img src="/logo.png" alt="" />
         </button>
-        <BarButtonLane
-          buttons={barButtons}
-          available={nowlyAvailable}
-          errors={barButtonErrors}
-          pending={barButtonPending}
-          onActivate={id => onActivateBarButton?.(id)}
-        />
       </div>
       <div className="status-rail__assistant-frame">
         <div className="status-rail__assistant" aria-hidden={surface !== 'assistant'} inert={surface !== 'assistant'}
@@ -618,9 +594,18 @@ export function StatusIslandSummaryView({
           </button>
         </div>
       </div>
-      <div className="status-rail__history" aria-hidden={surface !== 'history'} inert={surface !== 'history'}
+      <div className="status-rail__menu status-rail__feature-panel" aria-hidden={surface !== 'menu'} inert={surface !== 'menu'}
+        {...(source === 'menu' && assistantAnim ? { 'data-anim': assistantAnim } : {})}>
+        <div className="status-rail__menu-content status-rail__feature-content">{menu}</div>
+        <button type="button" className="status-island__dismiss status-rail__panel-close"
+          data-at="expanded" data-owner="menu" aria-hidden={surface !== 'menu'}
+          tabIndex={surface === 'menu' ? 0 : -1} aria-label={t('statusIsland.collapse')} onClick={onCollapse}>
+          <X aria-hidden="true" />
+        </button>
+      </div>
+      <div className="status-rail__history status-rail__feature-panel" aria-hidden={surface !== 'history'} inert={surface !== 'history'}
         {...(source === 'history' && assistantAnim ? { 'data-anim': assistantAnim } : {})}>
-        <div className="status-rail__history-content">{history}</div>
+        <div className="status-rail__history-content status-rail__feature-content">{history}</div>
         <button type="button" className="status-island__dismiss status-rail__panel-close"
           data-at="expanded" data-owner="history" aria-hidden={surface !== 'history'}
           tabIndex={surface === 'history' ? 0 : -1} aria-label={t('statusIsland.collapse')} onClick={onCollapse}>

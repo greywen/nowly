@@ -312,6 +312,39 @@ pub(crate) fn default_icon_style() -> String {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
+pub struct BarMenuItem {
+    pub id: String,
+    pub visible: bool,
+}
+
+pub(crate) fn default_bar_menu() -> Vec<BarMenuItem> {
+    ["screenshot", "screenshotHistory", "assistant"]
+        .into_iter()
+        .map(|id| BarMenuItem { id: id.into(), visible: true })
+        .collect()
+}
+
+pub(crate) fn normalize_bar_menu(items: Vec<BarMenuItem>) -> Vec<BarMenuItem> {
+    let defaults = default_bar_menu();
+    let mut normalized: Vec<BarMenuItem> = Vec::new();
+    for item in items {
+        if defaults.iter().any(|known| known.id == item.id)
+            && !normalized.iter().any(|previous| previous.id == item.id)
+        {
+            normalized.push(item);
+        }
+    }
+    for item in defaults {
+        if !normalized.iter().any(|previous| previous.id == item.id) {
+            normalized.push(item);
+        }
+    }
+    normalized
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AppSettings {
     pub wallpaper_enabled: bool,
     pub launch_at_login: bool,
@@ -334,10 +367,8 @@ pub struct AppSettings {
     pub screenshot_shortcut: String,
     #[serde(default = "default_screenshot_history_shortcut")]
     pub screenshot_history_shortcut: String,
-    /// Ordered app ids occupying the Nowly Bar's button slots, left to right.
-    /// Capped at `BAR_BUTTON_SLOTS`; see `quick_panel::bar_buttons`.
-    #[serde(default)]
-    pub bar_buttons: Vec<String>,
+    /// Hidden features retain their position in the ordered menu.
+    pub bar_menu: Vec<BarMenuItem>,
     #[serde(default)]
     pub recent_colors: Vec<String>,
 }
