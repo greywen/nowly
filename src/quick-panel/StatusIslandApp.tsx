@@ -24,9 +24,8 @@ type RailSurface = 'status' | 'assistant' | 'history' | 'menu';
 // One native window hosts independent sibling panels. The native source
 // selects which panel is open; each panel owns its own animation state.
 //
-// Native owns whether the sheet is open, because it also owns the window size,
-// the 300ms hover delay and the acknowledgement that goes with opening. This
-// component follows the open/close events rather than holding its own opinion.
+// Native owns whether the sheet is open, the window size and acknowledgement.
+// Click and keyboard activation request opening; pointer hover does not.
 
 function reportPresence(surface: 'island' | 'keyboard' | 'details' | 'action', present: boolean): void {
   void invoke('set_status_island_presence', { surface, present });
@@ -101,7 +100,6 @@ export function StatusIslandApp() {
   // summary and idle mode it is showing no single reminder, so there is nothing
   // to acknowledge.
   const primaryIdentity = surfaceState.mode === 'detail' ? surfaceState.reminder.identity : null;
-  const lastPresence = useRef(false);
   const [nativeHidePending, setNativeHidePending] = useState(false);
   const lastStatusActivationSource = useRef<'pointer' | 'keyboard' | null>(null);
   const visibilityRequest = useRef<Promise<void>>(Promise.resolve());
@@ -208,11 +206,6 @@ export function StatusIslandApp() {
     return () => { disposed = true; removers.forEach(remove => remove()); };
   }, []);
 
-  useEffect(() => () => {
-    if (lastPresence.current) reportPresence('island', false);
-    reportPresence('details', false);
-  }, []);
-
   useEffect(() => {
     if (!open) return;
     function dismissOnEscape(event: KeyboardEvent) {
@@ -231,28 +224,6 @@ export function StatusIslandApp() {
     document.addEventListener('keydown', dismissOnEscape);
     return () => document.removeEventListener('keydown', dismissOnEscape);
   }, [open, collapse]);
-
-  const hoverStart = useCallback(() => {
-    // A drag is a move, not a hover: the sheet is the rail grown, so it must not
-    // open while the rail is being moved out from under the pointer.
-    if (drag.dragging || assistantSheetRequested.current || assistantSurface !== null || assistantClosing || (open && source !== 'island')) return;
-    lastPresence.current = true;
-    reportPresence('island', true);
-    // Native waits 300ms before opening, so a quick pass neither opens the sheet
-    // nor acknowledges anything.
-    void invoke('hover_status_island_details');
-  }, [assistantClosing, assistantSurface, drag.dragging, open, source]);
-
-  const hoverEnd = useCallback(() => {
-    lastPresence.current = false;
-    reportPresence('island', false);
-  }, []);
-
-  const grabStart = useCallback((event: React.PointerEvent) => {
-    lastPresence.current = false;
-    reportPresence('island', false);
-    drag.onGrab(event);
-  }, [drag]);
 
   const activate = useCallback((activationSource: 'pointer' | 'keyboard') => {
     // Releasing a drag over the rail still fires a click. That click is the end
@@ -293,11 +264,9 @@ export function StatusIslandApp() {
 
   const surface = {
     onActivate: activate,
-    onHoverStart: hoverStart,
-    onHoverEnd: hoverEnd,
     onFocusEnter: focusEnter,
     onFocusLeave: focusLeave,
-    onGrab: grabStart,
+    onGrab: drag.onGrab,
     onNudge: drag.nudge,
     dragging: drag.dragging,
     expanded: open && source === 'island'
@@ -356,8 +325,6 @@ export function StatusIslandApp() {
     <main
       className="screen-status-island-root"
       aria-label={t('statusIsland.rootLabel')}
-      onMouseEnter={() => reportPresence('details', true)}
-      onMouseLeave={() => reportPresence('details', false)}
     >
       <TopRail
         open={open}

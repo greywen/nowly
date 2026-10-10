@@ -111,7 +111,7 @@ test('uses compact Solar glyphs for the embedded voice and send actions', async 
   await expect(page.getByRole('button', { name: '发送请求' }).locator('svg')).toHaveAttribute('width', '16');
 });
 
-test('keeps the collapsed Bar unselectable with a light keyboard focus ring and quiet pointer active state', async ({ page }) => {
+test('keeps the collapsed Bar unselectable without keyboard focus or pointer active rings', async ({ page }) => {
   await installNowlyBar(page);
 
   const trigger = page.locator('.status-island__trigger');
@@ -122,7 +122,7 @@ test('keeps the collapsed Bar unselectable with a light keyboard focus ring and 
   for (const control of [trigger, logo]) {
     await control.focus();
     await expect(control).toHaveCSS('outline-style', 'none');
-    await expect(control).toHaveCSS('box-shadow', /inset/);
+    await expect(control).toHaveCSS('box-shadow', 'none');
     await expect(control).toHaveCSS('appearance', 'none');
     await expect(control).toHaveCSS('-webkit-tap-highlight-color', 'rgba(0, 0, 0, 0)');
   }
@@ -171,10 +171,10 @@ test('keeps keyboard focus on the status trigger after Escape collapses the pane
 
   await expect(page.locator('.status-rail')).toHaveAttribute('data-open', 'false');
   expect(await trigger.evaluate(element => document.activeElement === element)).toBe(true);
-  await expect(trigger).toHaveCSS('box-shadow', /inset/);
+  await expect(trigger).toHaveCSS('box-shadow', 'none');
 });
 
-test('restores text selection and normal focus treatment inside an expanded panel', async ({ page }) => {
+test('restores text selection without focus rings inside an expanded panel', async ({ page }) => {
   await installNowlyBar(page);
   await page.evaluate(() => {
     const emit = Reflect.get(window, '__EMIT_TAURI_EVENT__') as (event: string, payload: unknown) => void;
@@ -186,7 +186,7 @@ test('restores text selection and normal focus treatment inside an expanded pane
   const movementNote = page.locator('.status-island__movement-note');
   await expect(panel).toHaveCSS('user-select', 'text');
   await action.focus();
-  await expect(action).not.toHaveCSS('box-shadow', 'none');
+  await expect(action).toHaveCSS('box-shadow', 'none');
   await movementNote.selectText();
   expect(await page.evaluate(() => window.getSelection()?.toString())).toContain('长按拖动');
 });

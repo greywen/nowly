@@ -94,8 +94,6 @@ function MarkerIcon({ kind }: { kind: StatusIslandMarker['kind'] }) {
 
 type SurfaceProps = {
   onActivate?: (source: 'pointer' | 'keyboard') => void;
-  onHoverStart?: () => void;
-  onHoverEnd?: () => void;
   onFocusEnter?: () => void;
   onFocusLeave?: () => void;
   /** Long press, then move: parks the rail along the top edge. */
@@ -107,11 +105,9 @@ type SurfaceProps = {
   expanded?: boolean;
 };
 
-function surfaceHandlers({ onActivate, onHoverStart, onHoverEnd, onFocusEnter, onFocusLeave, onGrab, onNudge }: SurfaceProps) {
+function surfaceHandlers({ onActivate, onFocusEnter, onFocusLeave, onGrab, onNudge }: SurfaceProps) {
   return {
     onClick: (event: React.MouseEvent) => onActivate?.(event.detail === 0 ? 'keyboard' : 'pointer'),
-    onMouseEnter: onHoverStart,
-    onMouseLeave: onHoverEnd,
     onFocus: onFocusEnter,
     onBlur: onFocusLeave,
     onPointerDown: onGrab,
@@ -219,10 +215,8 @@ type IslandShellProps = {
 } & SurfaceProps;
 
 /**
- * The capsule's head. All three modes render through it, so the icon, title and
- * meta land on identical pixels whatever the capsule is carrying — and, because
- * the head is laid out at its *expanded* width and clipped by the sheet, on
- * identical pixels in both sizes of the rail too (design.md §12.3).
+ * The capsule's head. All three modes share the same icon, title and meta slots.
+ * Expanded headers immediately align to the panel's left edge (design.md §12.3).
  *
  * The hit area is a sibling overlay rather than a button wrapped around the text:
  * the sheet owns the border and background now, and the two dismiss buttons have

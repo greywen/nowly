@@ -109,6 +109,41 @@ test('all expanded panels measure 432px while the collapsed Logo Bar is 288px', 
     name === 'acknowledge_status_island_reminder').length)).toBe(0);
 });
 
+test('Bar controls never draw focus or active rings, including Logo after Escape', async ({ page }) => {
+  await installBar(page);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  const logo = page.getByRole('button', { name: 'Nowly', exact: true });
+  await logo.click();
+  const menu = page.getByRole('menu', { name: '功能菜单' });
+  await expect(menu).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(logo).toBeFocused();
+  await expect(logo).toHaveCSS('box-shadow', 'none');
+  await expect(logo).toHaveCSS('outline-style', 'none');
+
+  for (const surface of ['island', 'menu', 'history', 'nowly']) {
+    await page.evaluate(source => Reflect.get(window, '__barTest').open(source), surface);
+    const controls = page.locator('.status-rail').locator('button:visible:not(:disabled), a:visible, summary:visible');
+    expect(await controls.count()).toBeGreaterThan(0);
+    for (const control of await controls.all()) {
+      if (await control.evaluate(element => Boolean(element.closest('[inert], [aria-hidden="true"]'))
+        || getComputedStyle(element).pointerEvents === 'none')) continue;
+      await control.focus();
+      await expect(control).toBeFocused();
+      await expect(control).toHaveCSS('outline-style', 'none');
+      await expect(control).toHaveCSS('box-shadow', 'none');
+      await control.hover();
+      await page.mouse.down();
+      await expect(control).toHaveCSS('outline-style', 'none');
+      await expect(control).toHaveCSS('box-shadow', 'none');
+      // Release outside the control to avoid activating destructive actions.
+      await page.mouse.move(431, 559);
+      await page.mouse.up();
+    }
+    await page.keyboard.press('Escape');
+  }
+});
+
 test('live menu order and visibility update without changing Bar geometry', async ({ page }) => {
   await installBar(page);
   await page.getByRole('button', { name: 'Nowly', exact: true }).click();

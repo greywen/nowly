@@ -268,7 +268,7 @@ describe('screen status island windows', () => {
     });
   });
 
-  it('defers opening to native on hover so a quick pass neither opens nor acknowledges', async () => {
+  it('ignores pointer hover and opens reminders only on activation', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-12T14:18:00'));
     respondWith(snapshotWith({ events: [reminderEvent] }));
@@ -277,16 +277,20 @@ describe('screen status island windows', () => {
     const trigger = screen.getByRole('button', { name: /^产品评审 ·/ });
 
     fireEvent.mouseEnter(trigger);
-    expect(invokeMock).toHaveBeenCalledWith('set_status_island_presence', { surface: 'island', present: true });
-    expect(invocations('hover_status_island_details')).toHaveLength(1);
-
+    await act(async () => { vi.advanceTimersByTime(500); });
     fireEvent.mouseLeave(trigger);
-    expect(invokeMock).toHaveBeenCalledWith('set_status_island_presence', { surface: 'island', present: false });
-    // The frontend never acknowledges; native does it when the panel appears.
+    expect(invocations('set_status_island_presence')).toHaveLength(0);
+    expect(invocations('hover_status_island_details')).toHaveLength(0);
+    expect(invocations('toggle_status_island_details')).toHaveLength(0);
     expect(invocations('acknowledge_status_island_reminder')).toHaveLength(0);
+
+    fireEvent.click(trigger);
+    expect(invokeMock).toHaveBeenCalledWith('toggle_status_island_details', {
+      identity: 'event:event-1:2026-09-12T14:30:reminder:15'
+    });
   });
 
-  it('cancels the pending hover open as soon as a long press begins', async () => {
+  it('does not request hover expansion when a long press begins', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-12T14:18:00'));
     respondWithDraggable(snapshotWith({ events: [reminderEvent] }));
@@ -297,8 +301,8 @@ describe('screen status island windows', () => {
     fireEvent.mouseEnter(trigger);
     fireEvent.pointerDown(trigger, { button: 0, pointerId: 1, screenX: 900, screenY: 10 });
 
-    const presenceCalls = invocations('set_status_island_presence');
-    expect(presenceCalls[presenceCalls.length - 1]?.[1]).toEqual({ surface: 'island', present: false });
+    expect(invocations('set_status_island_presence')).toHaveLength(0);
+    expect(invocations('hover_status_island_details')).toHaveLength(0);
     fireEvent.pointerUp(window, { pointerId: 1, screenX: 900, screenY: 10 });
   });
 
@@ -1260,16 +1264,14 @@ describe('the sheet inside the rail', () => {
     expect(invocations('close_status_island_details')).toHaveLength(1);
   });
 
-  it('reports pointer presence so the hold survives the gap between the halves', async () => {
+  it('does not report pointer hover presence from the Bar root', async () => {
     render(<StatusIslandApp />);
     await act(async () => { await Promise.resolve(); });
     const root = document.querySelector('.screen-status-island-root')!;
 
     fireEvent.mouseEnter(root);
-    expect(invokeMock).toHaveBeenCalledWith('set_status_island_presence', { surface: 'details', present: true });
-
     fireEvent.mouseLeave(root);
-    expect(invokeMock).toHaveBeenCalledWith('set_status_island_presence', { surface: 'details', present: false });
+    expect(invocations('set_status_island_presence')).toHaveLength(0);
   });
 
   it('holds the surface open for the duration of an action', async () => {

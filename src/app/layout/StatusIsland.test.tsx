@@ -254,15 +254,13 @@ describe('StatusIslandSummaryView', () => {
     expect(screen.queryByRole('button', { name: /暂时隐藏/ })).not.toBeInTheDocument();
   });
 
-  it('activates from click, Enter and Space and reports hover and focus presence', () => {
+  it('activates from click, Enter and Space and reports focus presence', () => {
     const onActivate = vi.fn();
-    const onHoverStart = vi.fn();
-    const onHoverEnd = vi.fn();
     const onFocusEnter = vi.fn();
     const onFocusLeave = vi.fn();
     render(<StatusIslandSummaryView
       summary={indicatorSummary({ lead: { kind: 'conflict', count: 2, tone: 'red' }, totalCount: 2 })}
-      onActivate={onActivate} onHoverStart={onHoverStart} onHoverEnd={onHoverEnd}
+      onActivate={onActivate}
       onFocusEnter={onFocusEnter} onFocusLeave={onFocusLeave}
     />);
     const trigger = screen.getByRole('button');
@@ -279,8 +277,6 @@ describe('StatusIslandSummaryView', () => {
     fireEvent.mouseLeave(trigger);
     fireEvent.focus(trigger);
     fireEvent.blur(trigger);
-    expect(onHoverStart).toHaveBeenCalledOnce();
-    expect(onHoverEnd).toHaveBeenCalledOnce();
     expect(onFocusEnter).toHaveBeenCalledOnce();
     expect(onFocusLeave).toHaveBeenCalledOnce();
   });

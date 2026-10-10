@@ -261,8 +261,9 @@ test.describe('summary content', () => {
     await expect(page.locator('.status-island .status-island__copy > span')).toHaveText('今日汇总 · 共 1 项');
 
     await page.mouse.move(120, 20);
-    expect(await commands(page)).toContain('hover_status_island_details');
-    // Native owns the 300ms delay, so hovering never acknowledges on its own.
+    expect(await commands(page)).not.toContain('hover_status_island_details');
+    expect(await commands(page)).not.toContain('toggle_status_island_details');
+    // Hover never opens or acknowledges a reminder.
     expect(await commands(page)).not.toContain('acknowledge_status_island_reminder');
   });
 
@@ -375,7 +376,7 @@ test.describe('the open sheet', () => {
       .toHaveCSS('border-top-style', 'dashed');
   });
 
-  test('is the capsule grown: the head stays put and the rest is uncovered', async ({ page }) => {
+  test('left-aligns the expanded reminder heading with the panel edge', async ({ page }) => {
     await page.clock.setFixedTime(new Date(FIXED_TIME));
     await installRail(page, passiveSnapshot, { source: 'island', identity: null });
     await page.goto('/', { waitUntil: 'domcontentloaded' });
@@ -385,12 +386,11 @@ test.describe('the open sheet', () => {
     // Polled, because the growth is a real 220ms transition rather than a swap.
     await expect.poll(() => page.locator('.status-rail__status-presence').boundingBox())
       .toEqual({ x: 0, y: 0, width: 432, height: 288 });
-    // The continuity anchor: the icon is on the same pixel it occupies collapsed,
-    // so the sheet reads as the capsule grown rather than a panel that replaced it.
-    // y=8 is dead centre of the 40px capsule; x=9 is the 8px head padding inside
-    // the 1px border.
+    // Expanded headers use the panel's left padding, not the capsule offset.
     expect(await page.locator('.status-island__icon').first().boundingBox())
-      .toEqual({ x: 81, y: 8, width: 24, height: 24 });
+      .toEqual({ x: 9, y: 8, width: 24, height: 24 });
+    await expect(page.locator('.status-island__copy').first()).toHaveCSS('text-align', 'left');
+    expect((await page.locator('.status-island__copy').first().boundingBox())?.x).toBe(41);
     // The dot is absorbed and the always-on dismiss takes the space it left.
     await expect(page.locator('.status-rail__nowly')).toHaveCSS('opacity', '0');
     const dismiss = page.locator('.status-island__dismiss[data-owner="status"]');

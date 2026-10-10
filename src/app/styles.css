@@ -221,10 +221,10 @@ button:disabled { cursor: default; opacity: .65; }
 /* design.md §7 reserves the dashed border for the top surface family, which the
    user can pick up and move. */
 .status-rail:not([data-status-open="true"]) .status-rail__status-presence:hover { background: var(--bg-subtle); }
-/* Laid out at the open size, so nothing inside reflows or moves as the sheet
-   grows: the icon and title land on the same pixel in both sizes. */
+/* The content grid stays at the open size; header alignment switches instantly. */
 .status-rail__content { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: calc(var(--bar-panel-w) - var(--rail-edge) * 2); height: calc(288px - var(--rail-edge) * 2); display: grid; grid-template-rows: calc(var(--rail-h) - var(--rail-edge) * 2) minmax(0, 1fr); }
 .status-rail__header { position: relative; left: var(--shell-left); width: calc(var(--rail-collapsed-w) - var(--rail-edge) * 2); min-width: 0; }
+.status-rail[data-status-open="true"] .status-rail__header { left: 0; width: 100%; }
 .status-rail__panel { min-height: 0; border-top: 1px dashed var(--border-default); visibility: hidden; opacity: 0; pointer-events: none; transition: opacity var(--rail-out) var(--rail-ease), visibility 0s var(--rail-out) !important; }
 .status-rail[data-status-open="true"] .status-rail__panel { visibility: visible; opacity: 1; pointer-events: auto; transition: opacity var(--rail-in) var(--rail-ease) var(--rail-in-delay), visibility 0s !important; }
 /* Switching owners must never retain the status exit content over the AI shell. */
@@ -258,7 +258,7 @@ button:disabled { cursor: default; opacity: .65; }
 .status-island[data-mode="idle"] .status-island__icon { color: var(--text-muted); background: var(--bg-secondary); }
 .status-island[data-mode="idle"] .status-island__copy strong { color: var(--text-strong); font-weight: 500; }
 .status-island__icon svg { width: 16px; height: 16px; }
-.status-island__copy { min-width: 0; flex: 1; display: grid; line-height: 1.2; }
+.status-island__copy { min-width: 0; flex: 1; display: grid; line-height: 1.2; text-align: left; }
 .status-island__copy strong, .status-island__copy > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .status-island__copy strong { color: var(--text-primary); font-size: 0.95rem; font-weight: 600; }
 .status-island__copy > span { color: var(--text-muted); font-size: 0.85rem; font-weight: 500; }
@@ -319,6 +319,12 @@ button:disabled { cursor: default; opacity: .65; }
 .status-rail__nowly[data-available="false"] { pointer-events: none; }
 .status-rail__nowly:focus, .status-rail__nowly:active { outline: 0; background: transparent; box-shadow: none; }
 .status-rail__nowly:focus-visible { box-shadow: inset 0 0 0 2px var(--color-primary); }
+
+/* Bar controls keep keyboard focus and color feedback without focus rings. */
+.screen-status-island-root .status-rail :is(button, a, summary, [tabindex]):not(:is(input, textarea, select, [contenteditable])):is(:focus, :focus-visible, :active) {
+  outline: 0;
+  box-shadow: var(--shadow-none);
+}
 
 .status-rail__assistant { box-sizing: border-box; position: absolute; z-index: 4; top: 0; left: 50%; transform: translateX(-50%); width: var(--rail-collapsed-w); height: var(--rail-h); overflow: hidden; border-radius: var(--logo-radius); background: var(--bg-surface); box-shadow: var(--shadow-none); opacity: 0; pointer-events: none; transition: width var(--logo-grow) var(--rail-ease), height var(--logo-grow) var(--rail-ease), border-radius var(--logo-grow) var(--rail-ease), opacity 0s var(--logo-shrink) !important; }
 .status-rail__panel, .status-rail__assistant { user-select: text; }
