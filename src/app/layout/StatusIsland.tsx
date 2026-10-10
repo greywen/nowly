@@ -617,15 +617,15 @@ export function StatusIslandSummaryView({
             <X aria-hidden="true" />
           </button>
         </div>
-        <div className="status-rail__history" aria-hidden={surface !== 'history'} inert={surface !== 'history'}
-          {...(source === 'history' && assistantAnim ? { 'data-anim': assistantAnim } : {})}>
-          <div className="status-rail__history-content">{history}</div>
-          <button type="button" className="status-island__dismiss status-rail__panel-close"
-            data-at="expanded" data-owner="history" aria-hidden={surface !== 'history'}
-            tabIndex={surface === 'history' ? 0 : -1} aria-label={t('statusIsland.collapse')} onClick={onCollapse}>
-            <X aria-hidden="true" />
-          </button>
-        </div>
+      </div>
+      <div className="status-rail__history" aria-hidden={surface !== 'history'} inert={surface !== 'history'}
+        {...(source === 'history' && assistantAnim ? { 'data-anim': assistantAnim } : {})}>
+        <div className="status-rail__history-content">{history}</div>
+        <button type="button" className="status-island__dismiss status-rail__panel-close"
+          data-at="expanded" data-owner="history" aria-hidden={surface !== 'history'}
+          tabIndex={surface === 'history' ? 0 : -1} aria-label={t('statusIsland.collapse')} onClick={onCollapse}>
+          <X aria-hidden="true" />
+        </button>
       </div>
     </div>
   );

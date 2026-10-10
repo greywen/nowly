@@ -69,9 +69,11 @@ test('history copies images without adding entries and confirms file deletion', 
   await expect(page.getByRole('main', { name: 'Nowly Bar' })).toBeVisible();
   await page.evaluate(() => Reflect.get(window, '__TAURI_INTERNALS__').invoke('open_screenshot_history'));
   await expect(page.getByRole('heading', { name: '截图历史', exact: true })).toBeVisible();
+  const titleBefore = await page.getByRole('heading', { name: '截图历史', exact: true }).boundingBox();
   await expect(page.locator('.status-rail')).toHaveAttribute('data-surface', 'history');
   await expect.poll(async () => Math.round((await page.locator('.status-rail__history').boundingBox())!.height)).toBe(560);
   expect((await page.locator('.status-rail__history').boundingBox())!.width).toBe(408);
+  expect((await page.getByRole('heading', { name: '截图历史', exact: true }).boundingBox())!.x).toBe(titleBefore!.x);
   await expect(page.getByText('1920 × 1080')).toBeVisible();
   await page.getByRole('button', { name: /复制/ }).first().click();
   await expect.poll(() => page.evaluate(() => (Reflect.get(window, '__historyCalls') as Array<{ command: string }>).filter(call => call.command === 'copy_screenshot_history').length)).toBe(1);
@@ -91,4 +93,8 @@ test('history copies images without adding entries and confirms file deletion', 
   await page.keyboard.press('Escape');
   await expect(page.locator('.status-rail')).toHaveAttribute('data-surface', 'status');
   await expect(page.getByRole('heading', { name: '截图历史', exact: true })).toHaveCount(0);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.evaluate(() => Reflect.get(window, '__TAURI_INTERNALS__').invoke('open_screenshot_history'));
+  await expect(page.getByRole('heading', { name: '截图历史', exact: true })).toBeVisible();
+  expect(await page.locator('.status-rail__history').evaluate(element => getComputedStyle(element).transitionDuration.split(',').every(duration => duration.trim() === '0s'))).toBe(true);
 });

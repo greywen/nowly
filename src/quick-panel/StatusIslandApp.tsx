@@ -203,7 +203,15 @@ export function StatusIslandApp() {
       if (closingAssistant) setAssistantSurface(null);
     }).then(keep);
     void listen<{ generation: number }>('status-island-details-closed', event => {
-      if (closingGeneration.current !== event.payload.generation) return;
+      if (closingGeneration.current !== event.payload.generation) {
+        if (event.payload.generation <= transitionGeneration.current) return;
+        transitionGeneration.current = event.payload.generation;
+        setOpen(false);
+        setPinnedIdentity(null);
+        setAssistantSurface(null);
+        setAssistantAnim(null);
+        assistantSheetRequested.current = false;
+      }
       closingGeneration.current = null;
       setStatusAnim(null);
       if (assistantSurfaceRef.current === null) setAssistantAnim(null);

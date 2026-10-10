@@ -113,6 +113,16 @@ describe('screen status island windows', () => {
     expect(document.querySelector('.status-rail')).toHaveAttribute('data-frame-anim', 'shrink');
   });
 
+  it('clears history when capture suppression forces the native sheet closed', async () => {
+    invokeMock.mockImplementation((command: string) => Promise.resolve(command === 'get_status_island_snapshot' ? snapshot : command === 'list_screenshot_history' ? { items: [], nextCursor: null } : null));
+    render(<StatusIslandApp />);
+    await emitPanelEvent('status-island-details-open', { generation: 1, source: 'history', identity: null });
+    expect(await screen.findByRole('heading', { name: '截图历史' })).toBeVisible();
+    await emitPanelEvent('status-island-details-closed', { generation: 2 });
+    expect(screen.queryByRole('heading', { name: '截图历史' })).not.toBeInTheDocument();
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-open', 'false');
+  });
+
   it('keeps the capsule and says the day is empty when there is no business state', async () => {
     render(<StatusIslandApp />);
     await act(async () => { await Promise.resolve(); });
