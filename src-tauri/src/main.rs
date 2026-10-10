@@ -3,6 +3,7 @@
 
 mod assistant;
 mod attachments;
+mod autostart;
 mod calendar_api;
 mod categories;
 mod color;

@@ -94,7 +94,7 @@ fn update_settings_blocking(app: tauri::AppHandle, settings: AppSettings) -> Res
         let autostart_result = if settings.launch_at_login {
             app.autolaunch().enable()
         } else {
-            app.autolaunch().disable()
+            crate::autostart::disable(&app)
         };
         if let Err(error) = autostart_result {
             let _ = crate::quick_panel::set_enabled(
@@ -119,7 +119,7 @@ fn update_settings_blocking(app: tauri::AppHandle, settings: AppSettings) -> Res
                 let rollback = if previous_launch_at_login {
                     app.autolaunch().enable()
                 } else {
-                    app.autolaunch().disable()
+                    crate::autostart::disable(&app)
                 };
                 if let Err(rollback_error) = rollback {
                     eprintln!("failed to restore autostart setting: {rollback_error}");
