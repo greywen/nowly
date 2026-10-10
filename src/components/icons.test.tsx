@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import * as icons from './icons';
 import { IconStyleProvider, Settings } from './icons';
 import { ICON_STYLES } from './icon-style';
+import { iconBodies } from './icon-data';
 
 const iconComponents = Object.entries(icons)
   .filter(([name]) => name !== 'IconStyleProvider')
@@ -27,7 +28,7 @@ describe('icons', () => {
   });
 
   it.each(ICON_STYLES)('renders every icon in the %s style', (style) => {
-    expect(iconComponents.length).toBe(53);
+    expect(iconComponents.length).toBe(Object.keys(iconBodies).length);
 
     for (const Icon of iconComponents) {
       const { container, unmount } = render(

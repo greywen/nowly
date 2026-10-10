@@ -11,9 +11,12 @@ function setup(items = [entry], nextCursor: string | null = null) {
 }
 describe('screenshot history', () => {
   beforeEach(() => { ipc.invoke.mockReset(); ipc.listen.mockReset().mockResolvedValue(() => undefined); });
-  it('shows metadata and copies image by controlled id, without archiving', async () => {
+  it('shows only capture time and copies image by controlled id, without archiving', async () => {
     setup();
-    expect(await screen.findByText('640 × 480')).toBeInTheDocument();
+    const card = await screen.findByRole('article');
+    expect(card.querySelector('time')).toHaveAttribute('dateTime', entry.createdAt);
+    expect(screen.queryByText('640 × 480')).not.toBeInTheDocument();
+    expect(card.querySelector('.screenshot-history-card__metadata')).not.toBeInTheDocument();
     expect(ipc.convertFileSrc).toHaveBeenCalledWith('image-1', 'screenshot-history');
     expect(screen.getByRole('img')).toHaveAttribute('loading', 'lazy');
     await waitFor(() => expect(screen.getByRole('img').closest('article')?.querySelector('svg')).toHaveAttribute('data-icon-style', 'outline'));
@@ -22,9 +25,26 @@ describe('screenshot history', () => {
     expect(ipc.invoke).toHaveBeenCalledWith('copy_screenshot_history', { id: 'image-1' });
     expect(ipc.invoke).not.toHaveBeenCalledWith('copy_capture_to_clipboard', expect.anything());
   });
+  it('keeps the compact folder action in the header and uses labelled compact tools', async () => {
+    ipc.invoke.mockImplementation((command: string) => Promise.resolve(command === 'list_screenshot_history' ? { items: [entry], nextCursor: null } : undefined));
+    render(<ScreenshotHistoryApp compact />);
+    await screen.findByRole('article');
+    const folder = screen.getByRole('button', { name: '打开文件夹' });
+    expect(folder.closest('header')).not.toBeNull();
+    expect(folder).toHaveAttribute('title', '打开文件夹');
+    expect(folder.querySelector('svg')).toHaveAttribute('width', '16');
+    const copy = screen.getByRole('button', { name: '复制图片' });
+    expect(copy).toHaveAttribute('title', '复制图片');
+    expect(copy.querySelector('svg')).toHaveAttribute('width', '16');
+    const remove = screen.getByRole('button', { name: '删除截图' });
+    expect(remove).toHaveAttribute('title', '删除截图');
+    expect(remove.querySelector('svg')).toHaveAttribute('width', '16');
+    fireEvent.click(folder);
+    await waitFor(() => expect(ipc.invoke).toHaveBeenCalledWith('open_screenshot_folder'));
+  });
   it('loads cursor pages and deduplicates repeated ids', async () => {
     setup([entry], 'older');
-    await screen.findByText('640 × 480');
+    await screen.findByRole('article');
     ipc.invoke.mockImplementation((command: string) => Promise.resolve(command === 'list_screenshot_history' ? { items: [entry, { ...entry, id: 'image-2', fileName: 'older.png' }], nextCursor: null } : undefined));
     fireEvent.click(screen.getByRole('button', { name: '加载更多' }));
     await waitFor(() => expect(screen.getAllByRole('article')).toHaveLength(2));
@@ -76,7 +96,7 @@ describe('screenshot history', () => {
   it('ignores a pending old page after a change event reload', async () => {
     let oldPage!: (page: unknown) => void;
     setup([entry], 'older');
-    await screen.findByText('640 × 480');
+    await screen.findByRole('article');
     ipc.invoke.mockImplementation((command: string) => command === 'list_screenshot_history' ? new Promise(resolve => { oldPage = resolve; }) : Promise.resolve(undefined));
     fireEvent.click(screen.getByRole('button', { name: '加载更多' }));
     ipc.invoke.mockImplementation((command: string) => Promise.resolve(command === 'list_screenshot_history' ? { items: [], nextCursor: null } : undefined));

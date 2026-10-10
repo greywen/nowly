@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { useRef, useState } from 'react';
 import { ConfirmDialog } from '../components/ConfirmDialog';
-import { GalleryCircle } from '../components/icons';
+import { FolderOpen } from '../components/icons';
 import { useTranslation } from '../i18n';
 import { deleteScreenshotHistory, type ScreenshotHistoryEntry } from './client';
 import { ScreenshotHistoryCard } from './ScreenshotHistoryCard';
@@ -44,10 +44,9 @@ export function ScreenshotHistoryApp({ compact = false }: { compact?: boolean })
   };
   return <SurfaceIconProvider><section className={`screenshot-history${compact ? ' screenshot-history--compact' : ''}`} aria-label={t('screenshotHistory.title')}>
     <header className="screenshot-history__header"><h1>{t('screenshotHistory.title')}</h1>
-      {!compact && <button className="good-button" disabled={openingFolder} onClick={() => void openFolder()}><GalleryCircle size={18} />{t('screenshotHistory.openFolder')}</button>}
+      <button className={compact ? 'screenshot-history__icon-button' : 'good-button'} aria-label={t('screenshotHistory.openFolder')} title={t('screenshotHistory.openFolder')} disabled={openingFolder} aria-busy={openingFolder} onClick={() => void openFolder()}><FolderOpen size={compact ? 16 : 18} />{!compact && t('screenshotHistory.openFolder')}</button>
     </header>
     <div className="screenshot-history__content" aria-busy={history.loading}>
-      {compact && <button className="good-button screenshot-history__folder" disabled={openingFolder} onClick={() => void openFolder()}><GalleryCircle size={16} />{t('screenshotHistory.openFolder')}</button>}
       {folderError && <p role="alert" className="screenshot-history__error">{t('screenshotHistory.folderFailed')}</p>}
       {history.error && <div role="alert" className="screenshot-history__error"><p>{t('screenshotHistory.loadFailed')}</p><button className="good-button" onClick={history.refresh}>{t('common.retry')}</button></div>}
       {!history.loading && !history.error && history.items.length === 0 && <p className="screenshot-history__empty">{t('screenshotHistory.empty')}</p>}

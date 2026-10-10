@@ -50,6 +50,8 @@ const ICON_SOURCES = {
   Download: 'download-minimalistic',
   Droplets: 'waterdrop',
   FileText: 'file-text',
+  FolderOpen: 'folder-open',
+  Copy: 'copy',
   GripVertical: 'menu-dots',
   History: 'history',
   Layers: 'layers-minimalistic',

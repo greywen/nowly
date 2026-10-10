@@ -44,7 +44,7 @@ export const AlertTriangle=createIcon('AlertTriangle'), ArrowRightUp=createIcon(
   ChevronRight=createIcon('ChevronRight'), ChevronUp=createIcon('ChevronUp'),
   Circle=createIcon('Circle'), Mosaic=createIcon('Mosaic'), Text=createIcon('Text'), ScrollVertical=createIcon('ScrollVertical'),
   CircleAlert=createIcon('CircleAlert'), Clock3=createIcon('Clock3'), Crop=createIcon('Crop'), Cursor=createIcon('Cursor'), Download=createIcon('Download'),
-  Droplets=createIcon('Droplets'), FileText=createIcon('FileText'), GalleryCircle=createIcon('GalleryCircle'), GripVertical=createIcon('GripVertical'), History=createIcon('History'),
+  Droplets=createIcon('Droplets'), FileText=createIcon('FileText'), FolderOpen=createIcon('FolderOpen'), Copy=createIcon('Copy'), GalleryCircle=createIcon('GalleryCircle'), GripVertical=createIcon('GripVertical'), History=createIcon('History'),
   Layers=createIcon('Layers'), LayoutGrid=createIcon('LayoutGrid'), List=createIcon('List'),
   Mail=createIcon('Mail'), MessageCircle=createIcon('MessageCircle'), Mic=createIcon('Mic'), Minus=createIcon('Minus'),
   MonitorDown=createIcon('MonitorDown'), Paperclip=createIcon('Paperclip'), Pause=createIcon('Pause'), Pencil=createIcon('Pencil'), Pin=createIcon('Pin'),
