@@ -32,7 +32,8 @@ focusing. All data stays on your machine in a local SQLite database.
 - **Eisenhower matrix** — sort tasks across the urgent/important quadrants and
   keep the "do it now" quadrant honest.
 - **Focus timer** — countdown sessions with a distraction-free fullscreen mode
-  and session statistics.
+  and session statistics. On desktop, one native timer supplies the same remaining
+  time to the dashboard, fullscreen focus, and Nowly Bar; views resync on resume.
 - **Kanban board** — customizable lanes, cards, and fields for lightweight
   project tracking.
 - **Notes** — quick capture with a dedicated manager for organizing entries.

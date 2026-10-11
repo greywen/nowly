@@ -18,9 +18,9 @@ let invalidated: (() => void) | undefined;
 beforeEach(() => {
   vi.clearAllMocks();
   invalidated = undefined;
-  vi.mocked(invoke).mockResolvedValue(snapshot);
+  vi.mocked(invoke).mockImplementation(async command => command === 'get_focus_timer_snapshot' ? null : snapshot);
   vi.mocked(listen).mockImplementation(async (_event, handler) => {
-    invalidated = () => handler({} as never);
+    if (_event === 'status-island-invalidated') invalidated = () => handler({} as never);
     return () => {};
   });
 });
@@ -50,6 +50,6 @@ describe('status island menu snapshot', () => {
     vi.mocked(invoke).mockResolvedValue({ ...snapshot, barMenu });
     await act(async () => { invalidated?.(); });
     await waitFor(() => expect(result.current.barMenu).toEqual(barMenu));
-    expect(invoke).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(invoke).mock.calls.filter(([command]) => command === 'get_status_island_snapshot')).toHaveLength(2);
   });
 });

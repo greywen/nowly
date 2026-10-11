@@ -20,6 +20,8 @@ pub struct FocusStatusSnapshot {
     pub status: String,
     pub remaining_seconds: u64,
     pub planned_seconds: u64,
+    pub focused_seconds: u64,
+    pub started_at: Option<String>,
     pub session_id: Option<String>,
     /// Distinguishes repeated stages of one session. A status-only snapshot
     /// cannot tell a resumed "running" apart from the original start, so the
@@ -59,6 +61,8 @@ impl FocusTimerCoordinator {
                     status: "completed".into(),
                     remaining_seconds: 0,
                     planned_seconds: pending.planned_seconds,
+                    focused_seconds: pending.planned_seconds,
+                    started_at: Some(pending.started_at.clone()),
                     session_id: Some(pending.id.clone()),
                     stage_sequence: self.stage_sequence,
                     stage_changed_at: self.stage_changed_at.clone(),
@@ -68,6 +72,8 @@ impl FocusTimerCoordinator {
                 status: "idle".into(),
                 remaining_seconds: 0,
                 planned_seconds: 0,
+                focused_seconds: 0,
+                started_at: None,
                 session_id: None,
                 stage_sequence: self.stage_sequence,
                 stage_changed_at: self.stage_changed_at.clone(),
@@ -84,8 +90,12 @@ impl FocusTimerCoordinator {
             } else {
                 "paused".into()
             },
-            remaining_seconds: remaining.as_secs(),
+            remaining_seconds: remaining.as_secs() + u64::from(remaining.subsec_nanos() > 0),
             planned_seconds: active.snapshot.planned_seconds,
+            focused_seconds: Duration::from_secs(active.snapshot.planned_seconds)
+                .saturating_sub(remaining)
+                .as_secs(),
+            started_at: Some(active.snapshot.started_at.clone()),
             session_id: Some(active.snapshot.id.clone()),
             stage_sequence: self.stage_sequence,
             stage_changed_at: self.stage_changed_at.clone(),
@@ -167,6 +177,19 @@ fn locked(
     timer.lock().map_err(CommandError::system)
 }
 
+pub(crate) fn broadcast(app: &AppHandle, timer: &ManagedFocusTimer) -> Result<(), CommandError> {
+    let snapshot = locked(timer)?.status_snapshot(Instant::now());
+    app.emit("focus-timer-updated", snapshot)
+        .map_err(CommandError::system)
+}
+
+#[tauri::command]
+pub fn get_focus_timer_snapshot(
+    timer: State<'_, ManagedFocusTimer>,
+) -> Result<FocusStatusSnapshot, CommandError> {
+    Ok(locked(timer.inner())?.status_snapshot(Instant::now()))
+}
+
 #[tauri::command]
 pub fn start_focus_timer(
     app: AppHandle,
@@ -179,6 +202,7 @@ pub fn start_focus_timer(
         Duration::from_secs(remaining_seconds),
         Instant::now(),
     );
+    broadcast(&app, timer.inner())?;
     app.emit("status-island-invalidated", ())
         .map_err(CommandError::system)?;
     Ok(())
@@ -190,6 +214,7 @@ pub fn pause_focus_timer(
     timer: State<'_, ManagedFocusTimer>,
 ) -> Result<(), CommandError> {
     locked(timer.inner())?.pause(Instant::now());
+    broadcast(&app, timer.inner())?;
     app.emit("status-island-invalidated", ())
         .map_err(CommandError::system)?;
     Ok(())
@@ -201,6 +226,7 @@ pub fn resume_focus_timer(
     timer: State<'_, ManagedFocusTimer>,
 ) -> Result<(), CommandError> {
     locked(timer.inner())?.resume(Instant::now());
+    broadcast(&app, timer.inner())?;
     app.emit("status-island-invalidated", ())
         .map_err(CommandError::system)?;
     Ok(())
@@ -212,6 +238,7 @@ pub fn cancel_focus_timer(
     timer: State<'_, ManagedFocusTimer>,
 ) -> Result<(), CommandError> {
     locked(timer.inner())?.cancel();
+    broadcast(&app, timer.inner())?;
     app.emit("status-island-invalidated", ())
         .map_err(CommandError::system)?;
     Ok(())
@@ -246,6 +273,33 @@ mod tests {
             notification_title: "专注完成".into(),
             notification_body: "你已完成 2 秒专注。".into(),
         }
+    }
+
+    #[test]
+    fn partial_seconds_round_up_and_pause_preserves_the_fraction() {
+        let origin = Instant::now();
+        let mut timer = FocusTimerCoordinator::default();
+        timer.start(snapshot(), Duration::from_secs(2), origin);
+        assert_eq!(
+            timer
+                .status_snapshot(origin + Duration::from_millis(250))
+                .remaining_seconds,
+            2
+        );
+        timer.pause(origin + Duration::from_millis(250));
+        assert_eq!(
+            timer
+                .status_snapshot(origin + Duration::from_secs(10))
+                .remaining_seconds,
+            2
+        );
+        timer.resume(origin + Duration::from_secs(10));
+        assert_eq!(
+            timer
+                .status_snapshot(origin + Duration::from_millis(10_750))
+                .remaining_seconds,
+            1
+        );
     }
 
     #[test]

@@ -875,7 +875,12 @@ describe('screen status island windows', () => {
     expect(screen.queryByRole('button', { name: /专注完成/ })).not.toBeInTheDocument();
   });
 
-  it('ticks a native running focus snapshot every second', async () => {
+  it('updates a running focus countdown only from native broadcasts', async () => {
+    let updateFocus!: (event: { payload: unknown }) => void;
+    listenMock.mockImplementation((name: string, callback: typeof updateFocus) => {
+      if (name === 'focus-timer-updated') updateFocus = callback;
+      return Promise.resolve(() => undefined);
+    });
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-12T09:30:00'));
     respondWith(snapshotWith({
@@ -899,6 +904,12 @@ describe('screen status island windows', () => {
     // promise has to settle inside act.
     await act(async () => { vi.advanceTimersByTime(31_000); });
 
+    expect(screen.getByRole('progressbar', { name: '专注进度' })).toHaveAttribute('aria-valuenow', '90');
+    await act(async () => updateFocus({ payload: {
+      status: 'running', remainingSeconds: 59, plannedSeconds: 1500,
+      focusedSeconds: 1441, startedAt: '2026-09-12T09:00:00+08:00',
+      sessionId: 'focus-1', stageSequence: 1, stageChangedAt: '2026-09-12T09:00:00+08:00'
+    } }));
     expect(screen.getByRole('progressbar', { name: '专注进度' })).toHaveAttribute('aria-valuenow', '59');
   });
   it('refreshes on invalidation and keeps the last snapshot when refresh fails', async () => {

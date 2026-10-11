@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CalendarEvent } from '../calendar/calendar-model';
 import { externalToCalendarEvent, type ExternalEvent } from '../calendar/subscription-model';
 import type { FocusStatus } from '../focus/focus-model';
+import { useNativeFocusSnapshot } from '../focus/useNativeFocusSnapshot';
 import type { Task } from '../tasks/task-model';
 import { normalizeBarMenu, type BarMenuItem } from '../app/bar-menu';
 import {
@@ -65,6 +66,7 @@ export function useStatusIslandSnapshot(): {
   notificationMode: 'persistent' | 'notification';
   barMenu: BarMenuItem[];
 } {
+  const nativeFocus = useNativeFocusSnapshot();
   const [resource, setResource] = useState<SnapshotResource>({ status: 'loading', data: null, error: '' });
   const [now, setNow] = useState(() => new Date());
   const requestIdRef = useRef(0);
@@ -113,25 +115,14 @@ export function useStatusIslandSnapshot(): {
 
   const model = useMemo(() => {
     if (!resource.data) return resource.status === 'loading' ? emptyModel : errorModel;
-    const sampledAt = new Date(resource.data.sampledAt).getTime();
-    const elapsedSeconds = resource.data.focus.status === 'running' && Number.isFinite(sampledAt)
-      ? Math.max(0, Math.floor((now.getTime() - sampledAt) / 1000))
-      : 0;
-    const remainingSeconds = Math.max(0, resource.data.focus.remainingSeconds - elapsedSeconds);
     return deriveStatusIslandModel({
       now,
       events: [...resource.data.events, ...resource.data.externalEvents.map(externalToCalendarEvent)],
       tasks: resource.data.tasks,
-      focus: {
-        ...resource.data.focus,
-        status: resource.data.focus.status === 'running' && remainingSeconds === 0
-          ? 'completed'
-          : resource.data.focus.status,
-        remainingSeconds
-      },
+      focus: nativeFocus ?? resource.data.focus,
       reminderStates: resource.data.reminders ?? []
     });
-  }, [now, resource.data, resource.status]);
+  }, [now, nativeFocus, resource.data, resource.status]);
 
   const barMenu = useMemo(
     () => normalizeBarMenu(resource.data?.barMenu),

@@ -173,6 +173,59 @@ export function installBrowserTauriBackend() {
       if (typeof callback === 'function') callback({ event, id, payload });
     }
   };
+  let focus = { status: 'idle', sessionId: null as string | null, plannedSeconds: 0, remainingSeconds: 0, focusedSeconds: 0, startedAt: null as string | null, stageSequence: 0, stageChangedAt: null as string | null };
+  let remainingMs = 0;
+  let runStarted = 0;
+  let focusInterval: number | undefined;
+  let pendingFocus: Dict | null = null;
+  let focusSession: Dict | null = null;
+  const sampleFocus = () => {
+    const remaining = focus.status === 'running' ? Math.max(0, remainingMs - (performance.now() - runStarted)) : remainingMs;
+    return { ...focus, remainingSeconds: Math.ceil(remaining / 1000), focusedSeconds: Math.floor((focus.plannedSeconds * 1000 - remaining) / 1000) };
+  };
+  const publishFocus = () => {
+    focus = sampleFocus();
+    emit('focus-timer-updated', focus);
+  };
+  const markFocusStage = () => {
+    focus.stageSequence += 1;
+    focus.stageChangedAt = nowIso();
+    publishFocus();
+    emit('status-island-invalidated', null);
+  };
+  const startFocusTimer = (snapshot: Dict, seconds: number) => {
+    if (focusInterval !== undefined) window.clearInterval(focusInterval);
+    focusSession = snapshot;
+    pendingFocus = null;
+    remainingMs = seconds * 1000;
+    runStarted = performance.now();
+    focus = { ...focus, status: 'running', sessionId: String(snapshot.id), plannedSeconds: Number(snapshot.plannedSeconds), startedAt: String(snapshot.startedAt) };
+    markFocusStage();
+    focusInterval = window.setInterval(() => {
+      if (focus.status !== 'running') return;
+      const current = sampleFocus();
+      if (current.remainingSeconds === 0) {
+        remainingMs = 0;
+        focus.status = 'completed';
+        pendingFocus = focusSession;
+        markFocusStage();
+        window.clearInterval(focusInterval);
+        emit('focus-session-completed', pendingFocus);
+      } else if (current.remainingSeconds !== focus.remainingSeconds || current.focusedSeconds !== focus.focusedSeconds) publishFocus();
+    }, 250);
+  };
+  const pauseFocusTimer = () => {
+    if (focus.status !== 'running') return;
+    remainingMs = Math.max(0, remainingMs - (performance.now() - runStarted));
+    focus.status = 'paused';
+    markFocusStage();
+  };
+  const resumeFocusTimer = () => {
+    if (focus.status !== 'paused') return;
+    runStarted = performance.now();
+    focus.status = 'running';
+    markFocusStage();
+  };
   let panelSource: 'menu' | 'nowly' | 'history' | null = null;
   let panelGeneration = 0;
   const closePanel = () => {
@@ -795,7 +848,7 @@ export function installBrowserTauriBackend() {
       events: store.events,
       externalEvents: store.externalEvents,
       tasks: store.tasks,
-      focus: { status: 'idle', remainingSeconds: 0, sessionId: null },
+      focus: sampleFocus(),
       reminders: [],
       notificationMode: store.settings.notificationMode ?? 'persistent',
       barMenu: normalizeBarMenu(store.settings.barMenu)
@@ -866,14 +919,27 @@ export function installBrowserTauriBackend() {
         points
       };
     },
-    // The background OS timer has no browser equivalent; these are no-ops so the
-    // in-app countdown still runs off the JS state machine.
-    get_pending_focus_completion: () => null,
-    acknowledge_focus_completion: () => undefined,
-    start_focus_timer: () => undefined,
-    pause_focus_timer: () => undefined,
-    resume_focus_timer: () => undefined,
-    cancel_focus_timer: () => undefined,
+    get_focus_timer_snapshot: sampleFocus,
+    get_pending_focus_completion: () => pendingFocus,
+    acknowledge_focus_completion: (a) => { if (pendingFocus?.id === a.id) pendingFocus = null; },
+    start_focus_timer: (a) => startFocusTimer(a.snapshot as Dict, Number(a.remainingSeconds)),
+    pause_focus_timer: pauseFocusTimer,
+    resume_focus_timer: resumeFocusTimer,
+    cancel_focus_timer: () => {
+      window.clearInterval(focusInterval);
+      remainingMs = 0;
+      pendingFocus = null;
+      focusSession = null;
+      focus = { status: 'idle', sessionId: null, plannedSeconds: 0, remainingSeconds: 0, focusedSeconds: 0, startedAt: null, stageSequence: 0, stageChangedAt: null };
+      publishFocus();
+      emit('status-island-invalidated', null);
+    },
+    start_status_island_focus: (a) => {
+      const seconds = Number(a.minutes) * 60;
+      startFocusTimer({ id: id('focus'), plannedSeconds: seconds, startedAt: nowIso() }, seconds);
+    },
+    pause_status_island_focus: pauseFocusTimer,
+    resume_status_island_focus: resumeFocusTimer,
 
     // Kanban
     get_kanban_snapshot: () => store.kanban,

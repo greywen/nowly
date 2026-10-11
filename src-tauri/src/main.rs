@@ -357,24 +357,37 @@ fn main() {
             app.manage(Mutex::new(window_lifecycle::WindowLifecycle::default()));
             app.manage(Mutex::new(focus_timer::FocusTimerCoordinator::default()));
             let timer_handle = app.handle().clone();
-            std::thread::spawn(move || loop {
-                std::thread::sleep(std::time::Duration::from_millis(250));
-                let completed = timer_handle
-                    .state::<focus_timer::ManagedFocusTimer>()
-                    .lock()
-                    .ok()
-                    .and_then(|mut timer| timer.poll(std::time::Instant::now()));
-                if let Some(snapshot) = completed {
-                    if let Err(error) = send_native_notification(
-                        &timer_handle,
-                        &snapshot.notification_title,
-                        &snapshot.notification_body,
-                        false,
-                    ) {
-                        eprintln!("failed to send focus notification: {error}");
+            std::thread::spawn(move || {
+                let mut previous = None;
+                loop {
+                    std::thread::sleep(std::time::Duration::from_millis(250));
+                    let (completed, current) = timer_handle
+                        .state::<focus_timer::ManagedFocusTimer>()
+                        .lock()
+                        .ok()
+                        .map(|mut timer| {
+                            let now = std::time::Instant::now();
+                            let completed = timer.poll(now);
+                            (completed, Some(timer.status_snapshot(now)))
+                        }).unwrap_or((None, None));
+                    if current != previous {
+                        if let Some(snapshot) = current.as_ref() {
+                            let _ = timer_handle.emit("focus-timer-updated", snapshot);
+                        }
+                        previous = current;
                     }
-                    if let Err(error) = timer_handle.emit("focus-session-completed", snapshot) {
-                        eprintln!("failed to emit focus completion: {error}");
+                    if let Some(snapshot) = completed {
+                        if let Err(error) = send_native_notification(
+                            &timer_handle,
+                            &snapshot.notification_title,
+                            &snapshot.notification_body,
+                            false,
+                        ) {
+                            eprintln!("failed to send focus notification: {error}");
+                        }
+                        if let Err(error) = timer_handle.emit("focus-session-completed", snapshot) {
+                            eprintln!("failed to emit focus completion: {error}");
+                        }
                     }
                 }
             });
@@ -722,6 +735,7 @@ fn main() {
             focus::create_focus_session,
             focus::list_focus_sessions,
             focus::get_focus_statistics,
+            focus_timer::get_focus_timer_snapshot,
             focus_timer::start_focus_timer,
             focus_timer::pause_focus_timer,
             focus_timer::resume_focus_timer,

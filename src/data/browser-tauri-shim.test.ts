@@ -23,6 +23,29 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe('browser focus coordinator', () => {
+  it('broadcasts the same seconds it exposes in both snapshots and freezes on pause', async () => {
+    vi.useFakeTimers();
+    try {
+      installBrowserTauriBackend();
+      const updated = vi.fn();
+      const remove = await listen('focus-timer-updated', updated);
+      await invoke()('start_focus_timer', { snapshot: { id: 'session', plannedSeconds: 60, startedAt: new Date().toISOString() }, remainingSeconds: 60 });
+      await vi.advanceTimersByTimeAsync(1250);
+      expect(await invoke()('get_focus_timer_snapshot')).toEqual(expect.objectContaining({ remainingSeconds: 59, focusedSeconds: 1 }));
+      expect(updated).toHaveBeenLastCalledWith(expect.objectContaining({ payload: expect.objectContaining({ remainingSeconds: 59 }) }));
+      await invoke()('pause_focus_timer');
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(await invoke()('get_status_island_snapshot')).toEqual(expect.objectContaining({ focus: expect.objectContaining({ status: 'paused', remainingSeconds: 59 }) }));
+      await invoke()('resume_focus_timer');
+      await vi.advanceTimersByTimeAsync(750);
+      expect(await invoke()('get_focus_timer_snapshot')).toEqual(expect.objectContaining({ remainingSeconds: 58 }));
+      await invoke()('cancel_focus_timer');
+      remove();
+    } finally { vi.useRealTimers(); }
+  });
+});
+
 describe('browser Bar shell commands', () => {
   it('opens and closes the current menu through shell events without opening a removed route', async () => {
     const openWindow = vi.spyOn(window, 'open').mockReturnValue(null);

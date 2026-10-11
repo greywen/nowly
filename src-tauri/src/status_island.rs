@@ -604,6 +604,7 @@ pub fn start_status_island_focus(
         StdDuration::from_secs(minutes * 60),
         Instant::now(),
     );
+    crate::focus_timer::broadcast(&app, timer.inner())?;
     app.emit("focus-timer-started", snapshot)
         .map_err(CommandError::system)?;
     invalidate(&app)
@@ -618,6 +619,7 @@ pub fn pause_status_island_focus(
         .lock()
         .map_err(CommandError::system)?
         .pause(Instant::now());
+    crate::focus_timer::broadcast(&app, timer.inner())?;
     app.emit("focus-timer-paused", ())
         .map_err(CommandError::system)?;
     invalidate(&app)
@@ -632,6 +634,7 @@ pub fn resume_status_island_focus(
         .lock()
         .map_err(CommandError::system)?
         .resume(Instant::now());
+    crate::focus_timer::broadcast(&app, timer.inner())?;
     app.emit("focus-timer-resumed", ())
         .map_err(CommandError::system)?;
     invalidate(&app)
