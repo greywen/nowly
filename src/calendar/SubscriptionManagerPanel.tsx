@@ -283,17 +283,6 @@ export function SubscriptionManagerPanel({
     return t('subscription.statusNever');
   }
 
-  const guideTitleKey = provider === 'google'
-    ? 'subscription.googleGuideTitle'
-    : provider === 'microsoft'
-      ? 'subscription.microsoftGuideTitle'
-      : 'subscription.icsGuideTitle';
-  const guideKey = provider === 'google'
-    ? 'subscription.googleGuide'
-    : provider === 'microsoft'
-      ? 'subscription.microsoftGuide'
-      : 'subscription.icsGuide';
-
   return (
     <>
       {/* Editing hides the source chooser; the row's own provider decides the form. */}
@@ -310,14 +299,6 @@ export function SubscriptionManagerPanel({
             ]}
             onChange={(value) => { setProvider(value as SubscriptionProvider); setOauthError(''); }}
           />
-        </div>
-      ) : null}
-
-      {/* Source guidance: how to obtain an ICS link, or a hint for the OAuth flow. */}
-      {!editing ? (
-        <div className="subscription-guide">
-          <p className="subscription-guide__title">{t(guideTitleKey)}</p>
-          <p className="subscription-guide__body">{t(guideKey)}</p>
         </div>
       ) : null}
 
@@ -373,7 +354,6 @@ export function SubscriptionManagerPanel({
           {selectedAccountId ? (
             <div className="subscription-picker">
               <span className="subscription-oauth__label">{t('subscription.pickCalendars')}</span>
-              <p className="subscription-oauth__hint">{t('subscription.pickCalendarsHint')}</p>
               {remoteCalendars.length === 0 ? (
                 <p className="subscription-oauth__empty">{t('subscription.pickEmpty')}</p>
               ) : (

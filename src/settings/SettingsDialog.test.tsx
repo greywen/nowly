@@ -18,6 +18,9 @@ describe('SettingsDialog',()=>{
     fireEvent.click(screen.getByRole('tab', { name: '快捷键' }));
     const capture = screen.getByRole('textbox', { name: '截图快捷键' });
     expect(capture).toHaveValue('Ctrl+Alt+A');
+    expect(screen.getByRole('textbox', { name: '截图快捷键' })).toHaveAttribute('aria-describedby', 'settings-shortcut-hint');
+    expect(screen.getByRole('textbox', { name: '截图历史快捷键' })).toHaveAttribute('aria-describedby', 'settings-shortcut-hint');
+    expect(screen.getAllByText('点击输入框后按下组合键，保存后生效。')).toHaveLength(1);
     expect(screen.getByRole('textbox', { name: '截图历史快捷键' })).toHaveValue('Ctrl+Alt+H');
     fireEvent.keyDown(capture, { key: 'k', code: 'KeyK', ctrlKey: true, shiftKey: true });
     fireEvent.click(screen.getByRole('button', { name: '保存设置' }));

@@ -72,8 +72,9 @@ export function SettingsDialog({settings,monitors=[],onClose,onSave}:Props){
    </TabPanel>
    <TabPanel idPrefix="settings" tabId="shortcuts" active={tab==='shortcuts'}>
     <div className="shortcut-settings">
-     <ShortcutRecorder id="settings-screenshot-shortcut" label={t('settings.screenshotShortcut')} value={draft.screenshotShortcut} otherValue={draft.screenshotHistoryShortcut} disabled={saving} onChange={screenshotShortcut=>setDraft(current=>({...current,screenshotShortcut}))}/>
-     <ShortcutRecorder id="settings-history-shortcut" label={t('settings.screenshotHistoryShortcut')} value={draft.screenshotHistoryShortcut} otherValue={draft.screenshotShortcut} disabled={saving} onChange={screenshotHistoryShortcut=>setDraft(current=>({...current,screenshotHistoryShortcut}))}/>
+     <p id="settings-shortcut-hint" className="shortcut-recorder__hint">{t('settings.shortcutRecordHint')}</p>
+     <ShortcutRecorder hintId="settings-shortcut-hint" id="settings-screenshot-shortcut" label={t('settings.screenshotShortcut')} value={draft.screenshotShortcut} otherValue={draft.screenshotHistoryShortcut} disabled={saving} onChange={screenshotShortcut=>setDraft(current=>({...current,screenshotShortcut}))}/>
+     <ShortcutRecorder hintId="settings-shortcut-hint" id="settings-history-shortcut" label={t('settings.screenshotHistoryShortcut')} value={draft.screenshotHistoryShortcut} otherValue={draft.screenshotShortcut} disabled={saving} onChange={screenshotHistoryShortcut=>setDraft(current=>({...current,screenshotHistoryShortcut}))}/>
      <p className="shortcut-settings__status">{t('settings.shortcutPending')}</p>
      {statusError?<p className="shortcut-settings__status shortcut-settings__status--error" role="status">{t('settings.shortcutStatusError')}</p>:shortcutStatus?(['screenshot','history'] as const).map(action=>{const status=shortcutStatus[action];return <p key={action} className={`shortcut-settings__status${status.registered?'':' shortcut-settings__status--error'}`} role="status">{t(action==='screenshot'?'settings.screenshotShortcut':'settings.screenshotHistoryShortcut')}: {status.shortcut} — {t(status.registered?'settings.shortcutRegistered':'settings.shortcutUnavailable')}</p>;}):<p role="status" className="shortcut-settings__status">{t('settings.shortcutStatusLoading')}</p>}
     </div>

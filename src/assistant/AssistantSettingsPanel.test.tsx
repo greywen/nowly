@@ -19,6 +19,15 @@ it('requires only URL, Key and Model ID without exposing protocol controls', asy
   expect(screen.getByRole('button', { name: '检测并保存连接' })).toBeInTheDocument();
 });
 
+  it('keeps essential model connection safeguards concise', async () => {
+    const config: AssistantConfig = { endpoint: '', model: '', hasKey: false, permissions: { calendar: false, tasks: false, external: false } };
+    render(<AssistantSettingsPanel client={clientFixture(config)} />);
+    await loaded();
+    expect(screen.getByText('填写 API 地址、Model ID 和 Key；保存时会自动检测连接。')).toBeInTheDocument();
+    expect(screen.getByText(/本机地址可用 HTTP 和空 Key；远程地址需 HTTPS 和 Key/)).toBeInTheDocument();
+    expect(screen.getByText(/检测请求不包含日历、任务或对话，可能产生少量费用/)).toBeInTheDocument();
+  });
+
 it('sends explicit consent and a password only to the native settings boundary', async () => {
   const config: AssistantConfig = { endpoint: 'https://example.com/v1', model: 'model', hasKey: false, permissions: { calendar: false, tasks: false, external: false } };
   const saveConfig = vi.fn(async () => ({ ...config, hasKey: true }));
@@ -42,7 +51,7 @@ it('freezes inputs during detection, avoids duplicate submissions and shows one 
   await loaded();
   fireEvent.change(screen.getByLabelText('API Key'), { target: { value: 'fixture-secret' } });
   fireEvent.click(screen.getByRole('button', { name: '检测并保存连接' }));
-  expect(screen.getByRole('status')).toHaveTextContent('正在按地址和模型名称依次检测');
+  expect(screen.getByRole('status')).toHaveTextContent('正在检测连接，最长约 2 分钟');
   expect(screen.getByLabelText('API 地址')).toBeDisabled();
   expect(screen.getByLabelText('Model ID')).toBeDisabled();
   expect(screen.getByLabelText('API Key')).toBeDisabled();
@@ -50,10 +59,10 @@ it('freezes inputs during detection, avoids duplicate submissions and shows one 
   expect(saveConfig).toHaveBeenCalledTimes(1);
   await act(async () => reject({ message: '自动检测失败；原设置未更改。\nAnthropic Messages：HTTP 401\nOpenAI Chat Completions：HTTP 404' }));
   expect(screen.getAllByRole('alert')).toHaveLength(1);
-  expect(screen.getByRole('alert')).toHaveTextContent('连接失败，请检查 API 地址、Key 和 Model ID 后重试。');
-  expect(screen.getByText('查看检测详情', { selector: 'summary' })).toBeInTheDocument();
+  expect(screen.getByRole('alert')).toHaveTextContent('连接失败，请检查地址、Model ID 和 Key 后重试。');
+  expect(screen.getByText('查看错误详情', { selector: 'summary' })).toBeInTheDocument();
   expect(screen.getByText(/Anthropic Messages：HTTP 401/)).not.toBeVisible();
-  fireEvent.click(screen.getByText('查看检测详情', { selector: 'summary' }));
+  fireEvent.click(screen.getByText('查看错误详情', { selector: 'summary' }));
   expect(screen.getByText(/Anthropic Messages：HTTP 401/)).toBeVisible();
   expect(screen.getByLabelText('API 地址')).toHaveValue(config.endpoint);
   expect(screen.getByLabelText('Model ID')).toHaveValue(config.model);

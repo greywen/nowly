@@ -30,6 +30,14 @@ describe('SubscriptionManagerPanel', () => {
     expect(screen.getByText('家庭')).toBeInTheDocument();
   });
 
+  it('removes redundant source guidance from the subscription form', () => {
+    render(<SubscriptionManagerPanel {...props({ subscriptions: [] })} />);
+    expect(screen.queryByText('如何获取 Google 日历链接')).not.toBeInTheDocument();
+    expect(screen.queryByText('如何获取 Outlook 日历链接')).not.toBeInTheDocument();
+    expect(screen.queryByText(/粘贴任意公开的 https:\/\/ 或 webcal:\/\//)).not.toBeInTheDocument();
+    expect(screen.queryByText(/勾选后将作为订阅显示在日历中/)).not.toBeInTheDocument();
+  });
+
   it('creates a subscription from the form', async () => {
     const p = props({ subscriptions: [] });
     render(<SubscriptionManagerPanel {...p} />);

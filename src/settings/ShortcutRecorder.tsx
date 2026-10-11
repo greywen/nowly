@@ -16,8 +16,8 @@ export function normalizeShortcut(value: string): string | null {
   return found.size && key ? [...modifiers.filter(modifier => found.has(modifier)), key].join('+') : null;
 }
 
-type Props = {id:string;label:string;value:string;otherValue?:string;disabled?:boolean;onChange(value:string):void};
-export function ShortcutRecorder({id,label,value,otherValue,disabled,onChange}: Props) {
+type Props = {id:string;label:string;value:string;otherValue?:string;disabled?:boolean;hintId?:string;onChange(value:string):void};
+export function ShortcutRecorder({id,label,value,otherValue,disabled,hintId,onChange}: Props) {
   const [error,setError] = useState<string|null>(null);
   const [recording,setRecording] = useState(false);
   useEffect(()=>{if(!recording)return;void invoke('screenshot_shortcut_recording',{recording:true}).catch(()=>{});return()=>{void invoke('screenshot_shortcut_recording',{recording:false}).catch(()=>{});};},[recording]);
@@ -33,5 +33,5 @@ export function ShortcutRecorder({id,label,value,otherValue,disabled,onChange}: 
     if (shortcut === normalizeShortcut(otherValue ?? '')) { setError(t('settings.shortcutDuplicate')); return; }
     setError(null); onChange(shortcut);
   }
-  return <div className="shortcut-recorder"><label htmlFor={id}>{label}</label><input id={id} readOnly value={value} disabled={disabled} onFocus={()=>setRecording(true)} onBlur={()=>setRecording(false)} onKeyDown={record} onKeyUp={event=>{if(event.key!=='Tab') {event.preventDefault();event.stopPropagation();}}} aria-invalid={!!error} aria-describedby={`${id}-hint${error?` ${id}-error`:''}`}/><p id={`${id}-hint`} className="shortcut-recorder__hint">{t('settings.shortcutRecordHint')}</p>{error?<p id={`${id}-error`} className="dialog-error" role="alert">{error}</p>:null}</div>;
+  return <div className="shortcut-recorder"><label htmlFor={id}>{label}</label><input id={id} readOnly value={value} disabled={disabled} onFocus={()=>setRecording(true)} onBlur={()=>setRecording(false)} onKeyDown={record} onKeyUp={event=>{if(event.key!=='Tab') {event.preventDefault();event.stopPropagation();}}} aria-invalid={!!error} aria-describedby={`${hintId ?? `${id}-hint`}${error?` ${id}-error`:''}`}/>{!hintId && <p id={`${id}-hint`} className="shortcut-recorder__hint">{t('settings.shortcutRecordHint')}</p>}{error?<p id={`${id}-error`} className="dialog-error" role="alert">{error}</p>:null}</div>;
 }
