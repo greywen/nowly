@@ -228,13 +228,15 @@ impl SurfaceRegion {
     }
 }
 
-/// `CreateRoundRectRgn` is a binary clip with no antialiasing. Clipping it to
-/// the exact CSS radius cuts through WebView2's partially covered corner pixels
-/// and leaves a jagged fringe. Keep the same bounds but make the native clip one
-/// physical pixel fuller, so CSS owns the visible antialiased edge.
+/// Expand the binary GDI clip by two physical pixels for CSS alpha coverage.
+/// CreateRoundRectRgn excludes its final row/column, hence the extra +1.
+/// WebView2, not the native region, owns the visible antialiased edge.
 fn native_clip_region(region: SurfaceRegion) -> SurfaceRegion {
     SurfaceRegion {
-        radius: region.radius.saturating_sub(1),
+        left: region.left.saturating_sub(2),
+        top: region.top.saturating_sub(2),
+        right: region.right.saturating_add(3),
+        bottom: region.bottom.saturating_add(3),
         ..region
     }
 }
@@ -2472,14 +2474,50 @@ mod tests {
     }
 
     #[test]
-    fn native_clip_leaves_one_physical_pixel_for_css_corner_antialiasing() {
+    fn native_clip_leaves_room_for_css_corner_antialiasing() {
         for scale in [1.0, 1.25, 1.5, 1.75, 2.0] {
             for source in [None, Some(PanelSource::Island), Some(PanelSource::Nowly)] {
                 let visual = super::surface_region(source, scale);
                 let clip = super::native_clip_region(visual);
 
-                assert_eq!(clip.bounds(), visual.bounds());
-                assert_eq!(clip.radius, visual.radius.saturating_sub(1));
+                assert_eq!(clip.left, visual.left - 2);
+                assert_eq!(clip.top, visual.top - 2);
+                assert_eq!(clip.right, visual.right + 3);
+                assert_eq!(clip.bottom, visual.bottom + 3);
+            }
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn native_clip_contains_css_corner_coverage() {
+        use windows::Win32::Foundation::RECT;
+        use windows::Win32::Graphics::Gdi::{CreateRoundRectRgn, DeleteObject, RectInRegion};
+
+        for scale in [1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0] {
+            for source in [None, Some(PanelSource::Island), Some(PanelSource::Nowly)] {
+                let visual = super::surface_region(source, scale);
+                let clip = super::native_clip_region(visual);
+                unsafe {
+                    let native = CreateRoundRectRgn(clip.left, clip.top, clip.right, clip.bottom, clip.radius * 2, clip.radius * 2);
+                    assert!(!native.is_invalid());
+                    let mut missing = Vec::new();
+                    for y in visual.top..visual.bottom {
+                        for x in visual.left..visual.right {
+                            let cx = (x as f64 + 0.5).clamp((visual.left + visual.radius) as f64, (visual.right - visual.radius) as f64);
+                            let cy = (y as f64 + 0.5).clamp((visual.top + visual.radius) as f64, (visual.bottom - visual.radius) as f64);
+                            let dx = ((cx - x as f64 - 0.5).abs() - 0.5).max(0.0);
+                            let dy = ((cy - y as f64 - 0.5).abs() - 0.5).max(0.0);
+                            if dx * dx + dy * dy <= (visual.radius as f64).powi(2)
+                                && RectInRegion(native, &RECT { left: x, top: y, right: x + 1, bottom: y + 1 }) == false
+                            {
+                                missing.push((x, y));
+                            }
+                        }
+                    }
+                    let _ = DeleteObject(native.into());
+                    assert!(missing.is_empty(), "scale={scale}, source={source:?}: clipped {} CSS pixels, first={:?}", missing.len(), missing.first());
+                }
             }
         }
     }
