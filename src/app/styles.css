@@ -1399,7 +1399,7 @@ body:has(.screen-status-island-root),
 .bar-menu-panel__item { box-sizing: border-box; display: flex; align-items: center; gap: var(--space-2); width: 100%; min-height: 44px; padding: var(--space-2) var(--space-3); border: 1px solid transparent; border-radius: var(--radius-sm); color: var(--text-secondary); background: transparent; font: inherit; font-size: 0.95rem; font-weight: 500; line-height: 1.5; text-align: left; cursor: pointer; }
 .bar-menu-panel__item svg { flex: none; }
 .bar-menu-panel__item:hover, .bar-menu-panel__item:active { color: var(--color-primary-active); background: var(--bg-subtle); }
-.bar-menu-panel__item:focus-visible { outline: 0; box-shadow: inset 0 0 0 2px var(--color-primary); color: var(--color-primary-active); background: var(--bg-subtle); }
+.bar-menu-panel__item:focus-visible { outline: 0; box-shadow: inset 0 0 0 2px var(--color-primary); }
 .bar-menu-panel__item:disabled { opacity: 0.65; pointer-events: none; }
 .bar-menu-panel__shortcut { display: grid; margin-left: auto; text-align: right; color: var(--text-secondary); font-size: 0.85rem; font-weight: 500; white-space: nowrap; }
 .bar-menu-panel__empty { margin: 0; padding: var(--space-4); color: var(--text-secondary); font-size: 0.95rem; line-height: 1.5; }

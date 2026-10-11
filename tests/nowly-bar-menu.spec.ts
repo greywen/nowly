@@ -144,6 +144,35 @@ test('Bar controls never draw focus or active rings, including Logo after Escape
   }
 });
 
+test('reopening the menu after Escape does not leave the first item hover-styled', async ({ page }) => {
+  await installBar(page);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  const logo = page.getByRole('button', { name: 'Nowly', exact: true });
+  await logo.click();
+  await expect(page.getByRole('menu')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(logo).toBeFocused();
+  await logo.click();
+  const first = page.getByRole('menuitem').first();
+  await expect(first).toBeFocused();
+  await page.mouse.move(431, 559);
+  expect(await first.evaluate(element => ({
+    hovered: element.matches(':hover'),
+    focusVisible: element.matches(':focus-visible')
+  }))).toEqual({ hovered: false, focusVisible: true });
+  const normalColor = await page.getByRole('menuitem').nth(1).evaluate(element => getComputedStyle(element).color);
+  await expect(first).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  await expect(first).toHaveCSS('color', normalColor);
+  await first.hover();
+  await expect(first).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  await page.mouse.move(431, 559);
+  await expect(first).toBeFocused();
+  await expect(first).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  await expect(first).toHaveCSS('color', normalColor);
+  await page.keyboard.press('ArrowDown');
+  await expect(page.getByRole('menuitem').nth(1)).toBeFocused();
+});
+
 test('live menu order and visibility update without changing Bar geometry', async ({ page }) => {
   await installBar(page);
   await page.getByRole('button', { name: 'Nowly', exact: true }).click();
