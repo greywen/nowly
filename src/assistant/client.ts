@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import { invoke } from '@tauri-apps/api/core';
 import type { AssistantClient } from './types';
 
@@ -14,7 +15,18 @@ export const assistantClient: AssistantClient = {
   history: () => invoke('assistant_history'),
   status: planId => invoke('assistant_status', { planId })
 };
-export function assistantError(error: unknown): string {
+export function assistantErrorSource(error: unknown): string {
   if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') return error.message;
-  return typeof error === 'string' ? error : '操作未能完成，请检查连接后重试。';
+  return typeof error === 'string' ? error : 'assistant.text93';
 }
+
+export function assistantNotice(key: string, detail = ''): string { return JSON.stringify({ assistantNotice: key, detail }); }
+export function translateAssistantNotice(source: string): string {
+  if (source.startsWith('assistant.')) return t(source);
+  try {
+    const parsed = JSON.parse(source);
+    if (parsed && typeof parsed === 'object' && typeof parsed.assistantNotice === 'string') return t(parsed.assistantNotice) + (parsed.detail ? ' ' + translateAssistantNotice(parsed.detail) : '');
+  } catch { /* Native errors are plain text. */ }
+  return source;
+}
+export function assistantError(error: unknown): string { return translateAssistantNotice(assistantErrorSource(error)); }

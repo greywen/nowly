@@ -220,13 +220,13 @@ impl ActiveCapture {
 
     fn caller_token(&self, label: &str) -> Result<SessionToken, CommandError> {
         let id = window::window_session_id(label)
-            .ok_or_else(|| CommandError::system("该窗口不能操作截图会话。"))?;
+            .ok_or_else(|| CommandError::system("This window cannot access the screenshot session."))?;
         self.session
             .lock()
             .unwrap()
             .current()
             .filter(|token| token.session_id == id)
-            .ok_or_else(|| CommandError::system("截图会话已结束。"))
+            .ok_or_else(|| CommandError::system("The screenshot session has ended."))
     }
 
     fn startup_for(&self, session_id: u64) -> Option<std::sync::Arc<startup::Startup>> {
@@ -451,10 +451,10 @@ pub fn describe_capture_frame(
     window: tauri::Window,
 ) -> Result<Option<FramePlan>, CommandError> {
     let Some(display_id) = window::overlay_display_id(window.label()) else {
-        return Err(CommandError::system("该窗口不是截图覆盖层。"));
+        return Err(CommandError::system("This window is not a screenshot overlay."));
     };
     let session_id = window::window_session_id(window.label())
-        .ok_or_else(|| CommandError::system("该窗口不能操作截图会话。"))?;
+        .ok_or_else(|| CommandError::system("This window cannot access the screenshot session."))?;
     let state = app.state::<ActiveCapture>();
     let Some(startup) = state.startup_for(session_id) else {
         return Ok(None);
@@ -467,7 +467,7 @@ pub fn describe_capture_frame(
     }
     let store = app.state::<FrameStore>();
     let Some(frame) = store.descriptor_for(session_id, display_id) else {
-        return Err(CommandError::system("找不到该屏幕的截图帧。"));
+        return Err(CommandError::system("No screenshot frame was found for this display."));
     };
 
     Ok(Some(FramePlan {
@@ -524,7 +524,7 @@ fn finish_capture<R: tauri::Runtime>(app: &tauri::AppHandle<R>, session_id: u64)
 #[tauri::command(async)]
 pub fn start_screen_capture(app: tauri::AppHandle) -> Result<(), CommandError> {
     if !is_available() {
-        return Err(CommandError::reported("截图功能尚未可用。"));
+        return Err(CommandError::reported("Screenshots are not available yet."));
     }
 
     let started = std::time::Instant::now();
@@ -600,7 +600,7 @@ pub fn cancel_screen_capture(
     // §9: a sensitive command checks its calling window rather than trusting the
     // front end to only call it from the right place.
     let session_id = window::window_session_id(window.label())
-        .ok_or_else(|| CommandError::system("该窗口不能操作截图会话。"))?;
+        .ok_or_else(|| CommandError::system("This window cannot access the screenshot session."))?;
     if app.state::<ActiveCapture>().is_current(session_id) {
         app.state::<crate::quick_panel::PanelController>()
             .capture_startup_succeeded();
@@ -615,7 +615,7 @@ pub fn capture_window_ready(
     window: tauri::Window,
 ) -> Result<(), CommandError> {
     let session_id = window::window_session_id(window.label())
-        .ok_or_else(|| CommandError::system("该窗口不能操作截图会话。"))?;
+        .ok_or_else(|| CommandError::system("This window cannot access the screenshot session."))?;
     if let Some(startup) = app.state::<ActiveCapture>().startup_for(session_id) {
         if startup.ready(window.label()) {
             eprintln!(
@@ -633,7 +633,7 @@ pub fn capture_window_failed(
     window: tauri::Window,
 ) -> Result<(), CommandError> {
     let session_id = window::window_session_id(window.label())
-        .ok_or_else(|| CommandError::system("该窗口不能操作截图会话。"))?;
+        .ok_or_else(|| CommandError::system("This window cannot access the screenshot session."))?;
     if let Some(startup) = app.state::<ActiveCapture>().startup_for(session_id) {
         startup.fail(session::StartFailure::Window(
             "capture frontend did not load".into(),
@@ -645,20 +645,20 @@ pub fn capture_window_failed(
 
 fn start_failure_message(failure: &session::StartFailure) -> &'static str {
     match failure {
-        session::StartFailure::Busy => "截图已在进行中。",
-        session::StartFailure::Cancelled => "截图已取消。",
+        session::StartFailure::Busy => "A screenshot is already in progress.",
+        session::StartFailure::Cancelled => "Screenshot cancelled.",
         session::StartFailure::Capture(backend::CaptureBackendError::NotDpiAware) => {
-            "当前进程无法读取物理像素，无法截图。"
+            "Screenshots are unavailable because physical pixels cannot be read."
         }
         session::StartFailure::Capture(backend::CaptureBackendError::SessionBudgetExceeded) => {
-            "当前屏幕超出截图内存预算。"
+            "The current display exceeds the screenshot memory limit."
         }
         session::StartFailure::Capture(backend::CaptureBackendError::AccessDenied) => {
-            "系统暂时不允许读取屏幕，请解锁桌面后重试。"
+            "Screen capture is unavailable. Unlock the desktop and try again."
         }
-        session::StartFailure::Capture(_) => "无法获取屏幕内容。",
-        session::StartFailure::Window(_) => "无法创建截图界面。",
-        session::StartFailure::TimedOut => "截图启动超时。",
+        session::StartFailure::Capture(_) => "Unable to capture the screen.",
+        session::StartFailure::Window(_) => "Unable to open the screenshot interface.",
+        session::StartFailure::TimedOut => "Screenshot startup timed out.",
     }
 }
 
@@ -679,27 +679,27 @@ pub fn stage_capture_overlay(
 ) -> Result<(), CommandError> {
     // §9: a sensitive command checks its calling window.
     if !window::is_screenshot_label(window.label()) {
-        return Err(CommandError::system("该窗口不能操作截图会话。"));
+        return Err(CommandError::system("This window cannot access the screenshot session."));
     }
 
     let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
-        return Err(CommandError::system("标注图层必须以二进制体上传。"));
+        return Err(CommandError::system("The annotation layer must be uploaded as binary data."));
     };
 
     let version = header_number(&request, "x-overlay-version")?;
     let width = u32::try_from(header_number(&request, "x-overlay-width")?)
-        .map_err(|_| CommandError::system("标注图层尺寸超出范围。"))?;
+        .map_err(|_| CommandError::system("The annotation layer dimensions are out of range."))?;
     let height = u32::try_from(header_number(&request, "x-overlay-height")?)
-        .map_err(|_| CommandError::system("标注图层尺寸超出范围。"))?;
+        .map_err(|_| CommandError::system("The annotation layer dimensions are out of range."))?;
 
     let expected = (width as usize)
         .checked_mul(height as usize)
         .and_then(|pixels| pixels.checked_mul(4))
-        .ok_or_else(|| CommandError::system("标注图层尺寸超出范围。"))?;
+        .ok_or_else(|| CommandError::system("The annotation layer dimensions are out of range."))?;
     if bytes.len() != expected {
         // A mismatch means the frontend and the selection disagree, which would
         // otherwise paint an offset layer into the exported file.
-        return Err(CommandError::system("标注图层大小与选区不符。"));
+        return Err(CommandError::system("The annotation layer size does not match the selection."));
     }
 
     let state = app.state::<ActiveCapture>();
@@ -716,7 +716,7 @@ pub fn stage_capture_overlay(
                 rgba,
             );
         })
-        .ok_or_else(|| CommandError::system("截图会话已结束。"))?;
+        .ok_or_else(|| CommandError::system("The screenshot session has ended."))?;
     Ok(())
 }
 
@@ -727,7 +727,7 @@ fn header_number(request: &tauri::ipc::Request<'_>, name: &str) -> Result<u64, C
         .get(name)
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.parse::<u64>().ok())
-        .ok_or_else(|| CommandError::system("标注图层参数无效。"))
+        .ok_or_else(|| CommandError::system("The annotation layer parameters are invalid."))
 }
 
 /// The selection and mosaics for one export, in physical pixels.
@@ -767,11 +767,11 @@ pub fn copy_capture_to_clipboard(
     geometry: ExportGeometry,
 ) -> Result<(), CommandError> {
     if !window::is_screenshot_label(window.label()) {
-        return Err(CommandError::reported("该窗口不能操作截图会话。"));
+        return Err(CommandError::reported("This window cannot access the screenshot session."));
     }
     let state = app.state::<ActiveCapture>();
     let _operation = state.export_operation.try_lock()
-        .map_err(|_| CommandError::reported("截图正在完成，请稍候。"))?;
+        .map_err(|_| CommandError::reported("Finishing the screenshot. Please wait."))?;
     let token = state.caller_token(window.label())?;
     let request = build_export_request(&app, token.session_id, &geometry)?;
     let image = export::render_request(&app.state::<FrameStore>(), &request)
@@ -779,7 +779,7 @@ pub fn copy_capture_to_clipboard(
     let encoded = encode::encode_export(image).map_err(export_error_message)?;
     state.with_current(token.session_id, || {
         history::archive(&app, token.session_id, geometry.version, &encoded)
-    }).ok_or_else(|| CommandError::reported("截图会话已结束。"))??;
+    }).ok_or_else(|| CommandError::reported("The screenshot session has ended."))??;
     let owner = window.hwnd()
         .map_err(|_| archived_copy_error())?;
     let mut clipboard = clipboard::WindowsClipboard::guarded(owner, || state.is_current(token.session_id));
@@ -793,7 +793,7 @@ pub fn copy_capture_to_clipboard(
 }
 
 fn archived_copy_error() -> CommandError {
-    CommandError { code: "archived_copy_failed".into(), message: "图片已保存，但复制失败，请重试。".into(), field: None }
+    CommandError { code: "archived_copy_failed".into(), message: "The image was saved, but copying failed. Please try again.".into(), field: None }
 }
 
 /// Saves directly to the system Pictures archive. True means the PNG is ready.
@@ -804,11 +804,11 @@ pub fn save_capture_to_file(
     geometry: ExportGeometry,
 ) -> Result<bool, CommandError> {
     if !window::is_screenshot_label(window.label()) {
-        return Err(CommandError::reported("该窗口不能操作截图会话。"));
+        return Err(CommandError::reported("This window cannot access the screenshot session."));
     }
     let state = app.state::<ActiveCapture>();
     let _operation = state.export_operation.try_lock()
-        .map_err(|_| CommandError::reported("截图正在完成，请稍候。"))?;
+        .map_err(|_| CommandError::reported("Finishing the screenshot. Please wait."))?;
     let token = state.caller_token(window.label())?;
     let request = build_export_request(&app, token.session_id, &geometry)?;
     let image = export::render_request(&app.state::<FrameStore>(), &request)
@@ -816,7 +816,7 @@ pub fn save_capture_to_file(
     let encoded = encode::encode_export(image).map_err(export_error_message)?;
     state.with_current(token.session_id, || {
         history::archive(&app, token.session_id, geometry.version, &encoded)
-    }).ok_or_else(|| CommandError::reported("截图会话已结束。"))??;
+    }).ok_or_else(|| CommandError::reported("The screenshot session has ended."))??;
     finish_capture(&app, token.session_id);
     Ok(true)
 }
@@ -835,7 +835,7 @@ fn build_export_request(
             geometry.width,
             geometry.height,
         ) else {
-            return Err(CommandError::system("标注已变更，请重试。"));
+            return Err(CommandError::system("The annotation changed. Try again."));
         };
         Some(bytes)
     } else {
@@ -883,7 +883,7 @@ pub fn render_mosaic_preview(
     geometry: ExportGeometry,
 ) -> Result<PreviewPlan, CommandError> {
     if !window::is_screenshot_label(window.label()) {
-        return Err(CommandError::system("该窗口不能操作截图会话。"));
+        return Err(CommandError::system("This window cannot access the screenshot session."));
     }
 
     let state = app.state::<ActiveCapture>();
@@ -924,7 +924,7 @@ pub fn render_mosaic_preview(
             app.state::<PreviewStore>()
                 .store(token.session_id, encoded.png)
         })
-        .ok_or_else(|| CommandError::system("截图会话已结束。"))?;
+        .ok_or_else(|| CommandError::system("The screenshot session has ended."))?;
 
     Ok(PreviewPlan {
         path: format!("preview/{}/{serial}", token.session_id),
@@ -967,7 +967,7 @@ pub fn copy_capture_color(
     y: i32,
 ) -> Result<bool, CommandError> {
     if !window::is_screenshot_label(window.label()) {
-        return Err(CommandError::system("该窗口不能操作截图会话。"));
+        return Err(CommandError::system("This window cannot access the screenshot session."));
     }
 
     let state = app.state::<ActiveCapture>();
@@ -978,7 +978,7 @@ pub fn copy_capture_color(
         .with_frames(token.session_id, |frames| {
             composite::sample_pixel(frames, x, y)
         })
-        .ok_or_else(|| CommandError::system("截图会话已结束。"))?;
+        .ok_or_else(|| CommandError::system("The screenshot session has ended."))?;
 
     // A gap between displays has no pixel to copy.
     let Some(rgb) = sampled else {
@@ -987,7 +987,7 @@ pub fn copy_capture_color(
 
     let owner = window
         .hwnd()
-        .map_err(|_| CommandError::system("无法定位截图窗口。"))?;
+        .map_err(|_| CommandError::system("Unable to locate the screenshot window."))?;
     let mut clipboard =
         clipboard::WindowsClipboard::guarded(owner, || state.is_current(token.session_id));
     let mut sink = output::SessionSink::new(&mut clipboard, || state.is_current(token.session_id));
@@ -997,11 +997,11 @@ pub fn copy_capture_color(
 
 fn export_error_message(error: output::ExportError) -> CommandError {
     // §8.3: the message carries a category, never a path or pixel content.
-    CommandError::system(match error {
-        output::ExportError::ClipboardBusy => "剪贴板被占用，请重试或保存图片。",
-        output::ExportError::Superseded => "标注已变更，请重试。",
-        output::ExportError::TargetChanged => "保存位置已变化，请重新选择。",
-        output::ExportError::WriteFailed(_) => "复制失败，请重试或保存图片。",
+    CommandError::reported(match error {
+        output::ExportError::ClipboardBusy => "The clipboard is busy. Try again or save the image.",
+        output::ExportError::Superseded => "The annotation changed. Try again.",
+        output::ExportError::TargetChanged => "The save location changed. Choose it again.",
+        output::ExportError::WriteFailed(_) => "Copy failed. Try again or save the image.",
     })
 }
 
@@ -1011,6 +1011,19 @@ mod tests {
         validate_output_dimensions, CapacityError, CapturePhase, CaptureSession, SessionError,
         MAX_OUTPUT_DIMENSION, MAX_OUTPUT_PIXELS,
     };
+
+    #[test]
+    fn export_error_messages_are_english() {
+        for error in [
+            super::output::ExportError::ClipboardBusy,
+            super::output::ExportError::Superseded,
+            super::output::ExportError::TargetChanged,
+            super::output::ExportError::WriteFailed("disk full".into()),
+        ] {
+            let message = super::export_error_message(error).message;
+            assert!(!message.chars().any(|character| ('\u{4e00}'..='\u{9fff}').contains(&character)));
+        }
+    }
 
     #[test]
     fn idle_prewarm_target_does_not_activate_or_block_first_capture() {
@@ -1275,7 +1288,7 @@ mod failure_message_tests {
         // user can retry, so it must not read as a generic failure.
         assert_eq!(
             start_failure_message(&StartFailure::Capture(CaptureBackendError::AccessDenied)),
-            "系统暂时不允许读取屏幕，请解锁桌面后重试。"
+            "Screen capture is unavailable. Unlock the desktop and try again."
         );
     }
 

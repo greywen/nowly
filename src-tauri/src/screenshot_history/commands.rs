@@ -12,17 +12,17 @@ fn trusted(label: &str) -> Result<(), CommandError> {
     if matches!(label, "screenshot-history" | "quick-panel-handle") {
         Ok(())
     } else {
-        Err(CommandError::reported("该窗口不能操作截图历史。"))
+        Err(CommandError::reported("This window cannot access screenshot history."))
     }
 }
 pub(crate) fn history_state<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Result<tauri::State<'_, HistoryState>, CommandError> {
     app.try_state::<HistoryState>()
-        .ok_or_else(|| CommandError::reported("截图历史尚不可用，请重试。"))
+        .ok_or_else(|| CommandError::reported("Screenshot history is not available yet. Please try again."))
 }
 fn failure(_: String) -> CommandError {
-    CommandError::reported("无法操作截图历史，请重试。")
+    CommandError::reported("Unable to access screenshot history. Please try again.")
 }
 #[tauri::command(async)]
 pub fn list_screenshot_history(
@@ -49,7 +49,7 @@ pub fn copy_screenshot_history(
         .map_err(failure)?;
     let owner = window
         .hwnd()
-        .map_err(|_| CommandError::reported("无法定位截图历史窗口。"))?;
+        .map_err(|_| CommandError::reported("Unable to locate the screenshot history window."))?;
     let mut clipboard = WindowsClipboard::guarded(owner, || true);
     let token = ExportToken {
         session_id: 0,
@@ -60,7 +60,7 @@ pub fn copy_screenshot_history(
         .run_clipboard(&mut clipboard, &image, token, std::thread::sleep, || {
             start.elapsed()
         })
-        .map_err(|_| CommandError::reported("复制图片失败，请重试。"))
+        .map_err(|_| CommandError::reported("Unable to copy the image. Please try again."))
 }
 /// Caller must show a confirmation dialog before invoking this command.
 #[tauri::command(async)]
@@ -88,6 +88,6 @@ pub fn open_screenshot_folder(
     std::process::Command::new("explorer.exe")
         .arg(state.0.archive_dir())
         .spawn()
-        .map_err(|_| CommandError::reported("无法打开截图文件夹。"))?;
+        .map_err(|_| CommandError::reported("Unable to open the screenshot folder."))?;
     Ok(())
 }

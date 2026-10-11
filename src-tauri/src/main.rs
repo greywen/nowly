@@ -219,7 +219,7 @@ fn send_windows_notification(title: &str, body: &str, reminder: bool) -> Result<
             .scenario(Scenario::Reminder)
             .duration(Duration::Long)
             .sound(Some(Sound::Reminder))
-            .add_button("关闭", "dismiss");
+            .add_button("Close", "dismiss");
     }
     toast
         .show()
@@ -460,12 +460,12 @@ fn main() {
             }
 
             let menu = MenuBuilder::new(app)
-                .text("open", "打开 Nowly")
-                .text("wallpaper", "设为壁纸 / 退出壁纸模式")
+                .text("open", "Open Nowly")
+                                .text("wallpaper", "Set as wallpaper / Exit wallpaper mode")
                 .separator()
-                .text("settings", "设置")
+                                .text("settings", "Settings")
                 .separator()
-                .text("quit", "退出 Nowly")
+                                .text("quit", "Quit Nowly")
                 .build()?;
 
             let mut tray_builder = TrayIconBuilder::new()

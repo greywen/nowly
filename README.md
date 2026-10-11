@@ -43,7 +43,9 @@ focusing. All data stays on your machine in a local SQLite database.
 - **Personalization** — Gaussian blur, a global color picker, calendar
   formatting, density controls, and login-on-startup.
 - **Localization** — English and Simplified Chinese, following your system
-  language on startup.
+  language on startup. Language changes synchronize across screenshot and Bar
+  windows. Missing translations fall back to English; native surfaces without
+  localization, including the calendar authorization callback, use English.
 
 ## Usage
 

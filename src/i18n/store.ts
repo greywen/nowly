@@ -48,6 +48,18 @@ function readSavedLanguage(): Language | null {
 let current: Language = readSavedLanguage() ?? detectSystemLanguage();
 const listeners = new Set<() => void>();
 
+function handleStorageChange(event: StorageEvent): void {
+  if (event.key !== LANGUAGE_STORAGE_KEY) return;
+  const next = normalizeLanguage(event.newValue);
+  if (next === current) return;
+  current = next;
+  for (const listener of listeners) listener();
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', handleStorageChange);
+}
+
 export function getLanguage(): Language {
   return current;
 }

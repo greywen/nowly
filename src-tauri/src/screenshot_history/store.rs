@@ -44,7 +44,7 @@ fn decode_failure(error: image::ImageError) -> DecodeFailure {
 type Db = Mutex<Connection>;
 type Result<T> = std::result::Result<T, String>;
 fn err(_: impl std::fmt::Display) -> String {
-    "截图历史操作失败。".into()
+    "The screenshot history operation failed.".into()
 }
 pub struct HistoryStore {
     root: PathBuf,
@@ -95,7 +95,7 @@ impl HistoryStore {
         self.ensure_archive_dir()?;
         let id = uuid::Uuid::new_v4().to_string();
         let now = chrono::Utc::now();
-        let file_name = format!("Nowly-截图-{}-{}.png", now.format("%Y%m%d-%H%M%S-%3f"), id);
+        let file_name =         format!("Nowly-Screenshot-{}-{}.png", now.format("%Y%m%d-%H%M%S-%3f"), id);
         let target = self.checked_file(&file_name)?;
         let temporary = self.checked_file(&format!("{id}.pending"))?;
         db.lock()
@@ -139,7 +139,7 @@ impl HistoryStore {
     }
     fn entry(&self, db: &Db, id: &str, state: &str) -> Result<Entry> {
         validate_id(id)?;
-        db.lock().unwrap().query_row("SELECT id,file_name,created_at,width,height,byte_size FROM screenshot_history WHERE id=?1 AND state=?2",params![id,state],row_entry).optional().map_err(err)?.ok_or_else(||"截图记录不存在。".into())
+        db.lock().unwrap().query_row("SELECT id,file_name,created_at,width,height,byte_size FROM screenshot_history WHERE id=?1 AND state=?2",params![id,state],row_entry).optional().map_err(err)?.ok_or_else(||"The screenshot record does not exist.".into())
     }
     fn checked_file(&self, name: &str) -> Result<PathBuf> {
         checked_child(&self.root, name)
@@ -362,7 +362,7 @@ impl HistoryStore {
 fn validate_entry(e: &Entry) -> Result<()> {
     validate_id(&e.id)?;
     let expected = format!("-{}.png", e.id);
-    if !e.file_name.starts_with("Nowly-截图-")
+    if !e.file_name.starts_with("Nowly-截图-") && !e.file_name.starts_with("Nowly-Screenshot-")
         || !e.file_name.ends_with(&expected)
         || e.file_name.contains(['/', '\\', ':'])
     {

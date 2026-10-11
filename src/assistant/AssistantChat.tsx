@@ -1,3 +1,5 @@
+import { translateAssistantNotice } from './client';
+import { useTranslation, t, getLanguage } from '../i18n';
 import { ChevronDown, ChevronUp } from '../components/icons';
 import { displayField, ChangeDetails, kinds, PlanCard } from './PlanCard';
 import type { Action, AssistantRecord, ChatItem, Fields, Plan } from './types';
@@ -24,29 +26,30 @@ export type AssistantChatProps = {
   onOpenRecord?: (record: AssistantRecord, trigger: HTMLElement) => void;
 };
 
-const statuses: Record<Plan['status'], string> = { pending: '待确认', committed: '已执行', undone: '已撤销', cancelled: '已取消', expired: '已过期' };
+const statuses: Record<Plan['status'], string> = { pending: 'assistant.status.pending', committed: 'assistant.status.committed', undone: 'assistant.status.undone', cancelled: 'assistant.status.cancelled', expired: 'assistant.status.expired' };
 
 export function AssistantChat({ items, currentPlanId, actions, edits, selected, dirty, busy, blocked, uncertainPlanId, openChange,
   onEdit, onSelect, onRevise, onConfirm, onCancel, onUndo, onRecover, onOpenChange, onOpenRecord }: AssistantChatProps) {
-  if (!items.length) return <p className="assistant-chat-empty">今天还没有对话。</p>;
+  const { t, language } = useTranslation();
+  if (!items.length) return <p className="assistant-chat-empty">{t('assistant.text1')}</p>;
 
-  return <ol className="assistant-chat" aria-label="当前聊天消息">
+  return <ol className="assistant-chat" aria-label={t('assistant.text2')}>
     {items.map(item => {
       if (item.kind === 'message') return <li className="assistant-chat-message" data-role={item.role}
-        aria-label={item.role === 'user' ? '你说' : 'Nowly 回复'} key={item.id}>
+        aria-label={item.role === 'user' ? t('assistant.text3') : t('assistant.text4')} key={item.id}>
         <p>{item.content}</p>
       </li>;
       if (item.kind === 'status') return <li className="assistant-chat-card assistant-system-card" data-tone={item.tone} key={item.id}>
-        <p role={item.tone === 'error' ? 'alert' : 'status'}>{item.content}</p>
+        <p role={item.tone === 'error' ? 'alert' : 'status'}>{translateAssistantNotice(item.content)}</p>
       </li>;
       if (item.kind === 'records') return <li className="assistant-chat-card" key={item.id}>
-        <section className="assistant-records" aria-label={`查询记录 · ${item.records.length} 项`}>
-          <strong>查询记录 · {item.records.length} 项</strong>
+        <section className="assistant-records" aria-label={t('assistant.records', { count: item.records.length })}>
+          <strong>{t('assistant.records', { count: item.records.length })}</strong>
           {item.records.map(record => <div className="assistant-record" key={record.key}>
             <button className="assistant-record-link" onClick={e => onOpenRecord?.(record, e.currentTarget)}>{record.title}</button>
-            <span>{record.source}{record.readOnly ? ' · 只读' : ''}</span>
+            <span>{record.source}{record.readOnly ? t('assistant.text5') : ''}</span>
             <span>{displayField(record.domain === 'calendar' ? 'startAt' : 'dueDate', record.data[record.domain === 'calendar' ? 'startAt' : 'dueDate'])}</span>
-            {record.data.lastSyncedAt != null && <span>同步：{displayField('lastSyncedAt', record.data.lastSyncedAt)}</span>}
+            {record.data.lastSyncedAt != null && <span>{t('assistant.synced', { value: displayField('lastSyncedAt', record.data.lastSyncedAt) })}</span>}
           </div>)}
         </section>
       </li>;
@@ -55,17 +58,17 @@ export function AssistantChat({ items, currentPlanId, actions, edits, selected, 
       if (plan.status === 'pending' && plan.id === currentPlanId) return <li className="assistant-chat-card" key={item.id}>
         <PlanCard plan={plan} actions={actions} edits={edits} selected={selected} dirty={dirty} busy={busy} blocked={blocked}
           onEdit={onEdit} onSelect={onSelect} onRevise={onRevise} onConfirm={onConfirm} onCancel={onCancel} />
-        {uncertain && <div className="assistant-card-status" data-tone="error"><p role="alert">执行状态尚未核实，请勿重复操作。</p>
-          <button className="btn" disabled={busy} onClick={onRecover}>核实操作状态</button></div>}
+        {uncertain && <div className="assistant-card-status" data-tone="error"><p role="alert">{t('assistant.text6')}</p>
+          <button className="btn" disabled={busy} onClick={onRecover}>{t('assistant.text7')}</button></div>}
       </li>;
       const changeId = `${plan.id}:details`;
-      const operationTitle = plan.changes.map(change => change.title).join('、');
-      const operationKind = [...new Set(plan.actions.map(action => kinds[action.kind]))].join('、');
+      const operationTitle = plan.changes.map(change => change.title).join(t('assistant.separator'));
+      const operationKind = [...new Set(plan.actions.map(action => t(kinds[action.kind])))].join(t('assistant.separator'));
       const expanded = openChange === changeId;
       return <li className="assistant-chat-card" key={item.id}>
-        <section className="assistant-operation" aria-label={`操作状态：${statuses[plan.status]}`}>
+        <section className="assistant-operation" aria-label={t('assistant.operationStatus', { status: t(statuses[plan.status]) })}>
           <button className="assistant-operation-trigger"
-            aria-label={`${operationKind} ${operationTitle} ${statuses[plan.status]}`}
+            aria-label={t('assistant.details')}
             aria-expanded={expanded} aria-controls={`assistant-chat-${changeId}`}
             onClick={() => onOpenChange(expanded ? null : changeId)}>
             <span className="assistant-operation-summary">
@@ -73,23 +76,23 @@ export function AssistantChat({ items, currentPlanId, actions, edits, selected, 
               <strong>{operationTitle}</strong>
             </span>
             <span className="assistant-operation-meta">
-              <span className="assistant-operation-status">{statuses[plan.status]}</span>
+              <span className="assistant-operation-status">{t(statuses[plan.status])}</span>
               {expanded ? <ChevronUp aria-hidden="true" size={17} /> : <ChevronDown aria-hidden="true" size={17} />}
             </span>
           </button>
+          {plan.status === 'committed' && <p className="assistant-caption">{t('assistant.text8')}</p>}
           {expanded && <div className="assistant-operation-details" id={`assistant-chat-${changeId}`}>
             {plan.changes.map(change => <ChangeDetails change={change} plan={plan} key={change.key} />)}
             {plan.warnings.map((warning, index) => <p key={index}>{warning}</p>)}
             {plan.status === 'committed' && <div className="assistant-operation-actions">
-              <p className="assistant-caption">日程已保存不代表系统通知已送达；提醒仍由现有通知机制处理。</p>
               {/* A committed operation is independent of the current preview, so its
                   undo is gated on work in flight and on an unverified operation,
                   not on `blocked`, which describes that preview. */}
-              <button className="btn" aria-label={`撤销${operationTitle}`} disabled={busy || uncertainPlanId !== null} onClick={() => onUndo(plan)}>撤销这次操作</button>
+              <button className="btn" aria-label={t('assistant.undoTitle', { title: operationTitle })} disabled={busy || uncertainPlanId !== null} onClick={() => onUndo(plan)}>{t('assistant.text9')}</button>
             </div>}
           </div>}
-          {uncertain && <div className="assistant-card-status" data-tone="error"><p role="alert">执行状态尚未核实，请勿重复操作。</p>
-            <button className="btn" disabled={busy} onClick={onRecover}>核实操作状态</button></div>}
+          {uncertain && <div className="assistant-card-status" data-tone="error"><p role="alert">{t('assistant.text6')}</p>
+            <button className="btn" disabled={busy} onClick={onRecover}>{t('assistant.text7')}</button></div>}
         </section>
       </li>;
     })}

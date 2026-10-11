@@ -588,7 +588,7 @@ pub fn start_status_island_focus(
     if !(1..=720).contains(&minutes) {
         return Err(CommandError::validation(
             "minutes",
-            "专注时长必须在 1 到 720 分钟之间。",
+            "Focus duration must be between 1 and 720 minutes.",
         ));
     }
     let now = Local::now();
@@ -596,8 +596,8 @@ pub fn start_status_island_focus(
         id: uuid::Uuid::new_v4().to_string(),
         planned_seconds: minutes * 60,
         started_at: now.to_rfc3339(),
-        notification_title: "专注完成".into(),
-        notification_body: format!("你已完成 {minutes} 分钟专注。"),
+        notification_title: "Focus complete".into(),
+        notification_body: format!("You completed {minutes} minutes of focus."),
     };
     timer.lock().map_err(CommandError::system)?.start(
         snapshot.clone(),

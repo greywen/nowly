@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
+import { t } from '../i18n';
 import type { MatrixTask, Quadrant, TaskDraft as MatrixTaskDraft } from '../matrix/matrix-model';
 import { matrixDraftToWorkspace, matrixTasksFromWorkspace, taskToMatrixTask } from './task-projections';
 import { useTaskWorkspace } from './TaskWorkspaceContext';
@@ -24,7 +25,7 @@ export function useWorkspaceTasks() {
       matrixDraftToWorkspace(draft, undefined, workspace.workspace.data)
     );
     const projected = taskToMatrixTask(saved, workspace.workspace.data.tags);
-    if (!projected) throw new Error('创建的任务没有四象限成员关系。');
+    if (!projected) throw new Error(t('taskWorkspace.createdNotVisible'));
     return projected;
   }, [workspace]);
 
@@ -35,7 +36,7 @@ export function useWorkspaceTasks() {
       matrixDraftToWorkspace(draft, current, workspace.workspace.data)
     );
     const projected = taskToMatrixTask(saved, workspace.workspace.data.tags);
-    if (!projected) throw new Error('更新后的任务不再显示在四象限。');
+    if (!projected) throw new Error(t('taskWorkspace.updatedNotVisible'));
     return projected;
   }, [workspace]);
 
@@ -52,7 +53,7 @@ export function useWorkspaceTasks() {
       setFailedCompletion({
         taskId: task.id,
         targetCompleted: completed,
-        message: error instanceof Error ? error.message : '完成状态保存失败'
+        message: error instanceof Error ? error.message : t('taskWorkspace.completionFailed')
       });
     }
   }, [workspace]);
@@ -72,7 +73,7 @@ export function useWorkspaceTasks() {
     try {
       await workspace.moveTaskToPriority(task.id, quadrant);
     } catch (error) {
-      setDragError(error instanceof Error ? error.message : '任务移动失败');
+      setDragError(error instanceof Error ? error.message : t('taskWorkspace.moveFailed'));
     }
   }, [workspace]);
 

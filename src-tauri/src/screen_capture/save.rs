@@ -22,7 +22,7 @@ use super::output::{ExportError, FileSink};
 /// Takes the timestamp rather than reading the clock, so the name is a pure
 /// function of it and can be asserted exactly.
 pub(crate) fn default_file_name(now: DateTime<Local>) -> String {
-    format!("Nowly-截图-{}.png", now.format("%Y%m%d-%H%M%S"))
+    format!("Nowly-Screenshot-{}.png", now.format("%Y%m%d-%H%M%S"))
 }
 
 /// What the target looked like when the user chose it.
@@ -148,7 +148,7 @@ mod tests {
             .single()
             .expect("a valid local time");
 
-        assert_eq!(default_file_name(when), "Nowly-截图-20260925-140307.png");
+        assert_eq!(default_file_name(when), "Nowly-Screenshot-20260925-140307.png");
     }
 
     #[test]
@@ -158,7 +158,7 @@ mod tests {
             .single()
             .expect("a valid local time");
 
-        assert_eq!(default_file_name(when), "Nowly-截图-20260102-030405.png");
+        assert_eq!(default_file_name(when), "Nowly-Screenshot-20260102-030405.png");
     }
 
     #[test]

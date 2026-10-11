@@ -34,12 +34,12 @@ pub fn credentials(provider: &str) -> Result<ClientCredentials, CommandError> {
             },
         ),
         "microsoft" => (MICROSOFT_CLIENT_ID, None),
-        _ => return Err(CommandError::validation("provider", "不支持的日历来源。")),
+        _ => return Err(CommandError::validation("provider", "Unsupported calendar provider.")),
     };
     if client_id.is_empty() {
         return Err(CommandError::validation(
             "provider",
-            "该来源尚未配置凭证，暂不可用。",
+            "Credentials are not configured for this provider.",
         ));
     }
     Ok(ClientCredentials {

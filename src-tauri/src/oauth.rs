@@ -49,7 +49,7 @@ fn endpoints_for(provider: &str) -> Result<ProviderEndpoints, CommandError> {
             scope: "openid email offline_access https://graph.microsoft.com/Calendars.ReadWrite",
             userinfo_uri: "https://graph.microsoft.com/v1.0/me",
         }),
-        _ => Err(CommandError::validation("provider", "不支持的日历来源。")),
+        _ => Err(CommandError::validation("provider", "Unsupported calendar provider.")),
     }
 }
 
@@ -104,10 +104,10 @@ fn code_challenge(verifier: &str) -> String {
 /// 在 127.0.0.1 上绑定一个临时端口的监听器。返回监听器与其实际端口。
 fn bind_loopback() -> Result<(TcpListener, u16), CommandError> {
     let listener = TcpListener::bind("127.0.0.1:0")
-        .map_err(|_| CommandError::system("无法启动本地回调服务。"))?;
+        .map_err(|_| CommandError::system("Unable to start the local callback server."))?;
     let port = listener
         .local_addr()
-        .map_err(|_| CommandError::system("无法获取回调端口。"))?
+        .map_err(|_| CommandError::system("Unable to obtain the callback port."))?
         .port();
     Ok((listener, port))
 }
@@ -189,11 +189,11 @@ fn url_encode(input: &str) -> String {
 fn wait_for_callback(listener: &TcpListener) -> Result<Vec<(String, String)>, CommandError> {
     listener
         .set_nonblocking(true)
-        .map_err(|_| CommandError::system("回调服务配置失败。"))?;
+        .map_err(|_| CommandError::system("Unable to configure the callback server."))?;
     let started = Instant::now();
     loop {
         if started.elapsed() > AUTH_TIMEOUT {
-            return Err(CommandError::validation("oauth", "授权超时，请重试。"));
+            return Err(CommandError::validation("oauth", "Authorization timed out. Please try again."));
         }
         match listener.accept() {
             Ok((mut stream, _)) => {
@@ -209,7 +209,7 @@ fn wait_for_callback(listener: &TcpListener) -> Result<Vec<(String, String)>, Co
             Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                 std::thread::sleep(StdDuration::from_millis(120));
             }
-            Err(_) => return Err(CommandError::system("回调服务读取失败。")),
+            Err(_) => return Err(CommandError::system("Unable to read from the callback server.")),
         }
     }
 }
@@ -262,13 +262,13 @@ fn read_request_query(stream: &mut TcpStream) -> Option<Vec<(String, String)>> {
 }
 
 /// 给浏览器回一个简单的成功页，提示用户可以关闭并回到 Nowly。
+fn oauth_success_html() -> &'static str {
+    "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>Nowly</title></head><body style=\"font-family:sans-serif;text-align:center;margin-top:15vh;color:#333\"><h2>Authorization complete</h2><p>Calendar connected. Return to Nowly; you may close this page.</p></body></html>"
+}
+
 fn respond_done(stream: &mut TcpStream) {
     let _ = stream.set_write_timeout(Some(StdDuration::from_secs(2)));
-    let body = "<!DOCTYPE html><html lang=\"zh\"><head><meta charset=\"utf-8\">\
-        <title>Nowly</title></head><body style=\"font-family:sans-serif;\
-        text-align:center;margin-top:15vh;color:#333\">\
-        <h2>授权完成</h2><p>已连接日历，请回到 Nowly。可以关闭此页面。</p>\
-        </body></html>";
+    let body = oauth_success_html();
     let response = format!(
         "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n\
          Content-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -314,13 +314,13 @@ fn open_in_browser(url: &str) -> Result<(), CommandError> {
     if result.0 as isize > 32 {
         Ok(())
     } else {
-        Err(CommandError::system("无法打开系统浏览器。"))
+        Err(CommandError::system("Unable to open the default browser."))
     }
 }
 
 #[cfg(not(target_os = "windows"))]
 fn open_in_browser(_url: &str) -> Result<(), CommandError> {
-    Err(CommandError::system("当前平台不支持打开浏览器。"))
+    Err(CommandError::system("Opening a browser is not supported on this platform."))
 }
 
 // ---- token 交换与刷新 -----------------------------------------------------
@@ -370,17 +370,17 @@ fn exchange_code(
 
 fn parse_token_response(body: &str) -> Result<TokenSet, CommandError> {
     let parsed: TokenResponse = serde_json::from_str(body)
-        .map_err(|_| CommandError::validation("oauth", "无法解析授权响应。"))?;
+        .map_err(|_| CommandError::validation("oauth", "Unable to parse the authorization response."))?;
     if let Some(error) = parsed.error {
         let detail = parsed.error_description.unwrap_or(error);
         return Err(CommandError::validation(
             "oauth",
-            format!("授权失败：{detail}"),
+            format!("Authorization failed: {detail}"),
         ));
     }
     let access_token = parsed
         .access_token
-        .ok_or_else(|| CommandError::validation("oauth", "授权响应缺少令牌。"))?;
+        .ok_or_else(|| CommandError::validation("oauth", "The authorization response is missing a token."))?;
     Ok(TokenSet {
         access_token,
         refresh_token: parsed.refresh_token,
@@ -429,9 +429,9 @@ fn fetch_account_label(
     access_token: &str,
 ) -> String {
     let fallback = || match provider {
-        "google" => "Google 日历".to_owned(),
-        "microsoft" => "Outlook 日历".to_owned(),
-        _ => "日历账户".to_owned(),
+        "google" => "Google Calendar".to_owned(),
+        "microsoft" => "Outlook Calendar".to_owned(),
+        _ => "Calendar account".to_owned(),
     };
     let Ok((status, body)) = crate::net::get_with_bearer(endpoints.userinfo_uri, access_token)
     else {
@@ -474,7 +474,7 @@ pub fn start_login(db: &AppDb, provider: &str) -> Result<OAuthAccount, CommandEr
     if creds.client_id.is_empty() {
         return Err(CommandError::validation(
             "provider",
-            "该来源尚未配置凭证，暂不可用。",
+            "Credentials are not configured for this provider.",
         ));
     }
 
@@ -504,20 +504,20 @@ pub fn start_login(db: &AppDb, provider: &str) -> Result<OAuthAccount, CommandEr
     if returned_state.map(String::as_str) != Some(state.as_str()) {
         return Err(CommandError::validation(
             "oauth",
-            "授权状态校验失败，请重试。",
+            "Authorization state verification failed. Please try again.",
         ));
     }
     if let Some((_, err)) = query.iter().find(|(k, _)| k == "error") {
         return Err(CommandError::validation(
             "oauth",
-            format!("授权被拒绝：{err}"),
+            format!("Authorization denied: {err}"),
         ));
     }
     let code = query
         .iter()
         .find(|(k, _)| k == "code")
         .map(|(_, v)| v.clone())
-        .ok_or_else(|| CommandError::validation("oauth", "未收到授权码。"))?;
+        .ok_or_else(|| CommandError::validation("oauth", "No authorization code was received."))?;
 
     let mut tokens = exchange_code(provider, &endpoints, &code, &verifier, &redirect_uri)?;
     tokens.scopes = endpoints.scope.to_owned();
@@ -556,7 +556,7 @@ pub fn ensure_valid_access_token(db: &AppDb, account_id: &str) -> Result<String,
     let Some(refresh) = account.refresh_token.as_deref() else {
         return Err(CommandError::validation(
             "oauth",
-            "登录已过期，请重新连接该账户。",
+            "Your session has expired. Please reconnect this account.",
         ));
     };
     // ② 锁外刷新。
@@ -589,7 +589,7 @@ pub async fn start_oauth_login<R: tauri::Runtime>(
         start_login(db.inner(), &provider)
     })
     .await
-    .map_err(|_| CommandError::system("授权任务执行失败。"))?
+    .map_err(|_| CommandError::system("The authorization task failed."))?
 }
 
 #[tauri::command]
@@ -711,6 +711,20 @@ mod tests {
         assert_eq!(base64url(b"foob"), "Zm9vYg");
         assert_eq!(base64url(b"fooba"), "Zm9vYmE");
         assert_eq!(base64url(b"foobar"), "Zm9vYmFy");
+    }
+
+    #[test]
+    fn oauth_success_page_uses_english_user_visible_copy() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let mut client = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        let (mut server, _) = listener.accept().unwrap();
+        respond_done(&mut server);
+        drop(server);
+        let mut body = String::new();
+        client.read_to_string(&mut body).unwrap();
+        assert!(body.contains("Authorization complete"));
+        assert!(body.contains("Calendar connected"));
+        assert!(!body.chars().any(|character| ('\u{4e00}'..='\u{9fff}').contains(&character)));
     }
 
     #[test]

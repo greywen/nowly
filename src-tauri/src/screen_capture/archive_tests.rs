@@ -23,5 +23,5 @@ fn screen_capture_archives_before_copy_and_saves_without_dialog() {
     assert!(save.contains("history::archive"));
     assert!(!save.contains("choose_png_path"));
     assert!(copy.contains("archived_copy_error"));
-    assert!(source.contains("图片已保存，但复制失败"));
+    assert!(source.contains("The image was saved, but copying failed"));
 }

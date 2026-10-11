@@ -31,12 +31,12 @@ impl CommandError {
 
     pub fn database(error: impl std::fmt::Display) -> Self {
         eprintln!("database operation failed: {error}");
-        Self::public("database_error", "无法读取本地数据，请重试。", None)
+        Self::public("database_error", "Unable to read local data. Please try again.", None)
     }
 
     pub fn system(error: impl std::fmt::Display) -> Self {
         eprintln!("system operation failed: {error}");
-        Self::public("system_error", "系统操作失败，请重试。", None)
+        Self::public("system_error", "The system operation failed. Please try again.", None)
     }
 
     /// A system failure whose message was written for the user.
@@ -45,7 +45,7 @@ impl CommandError {
     /// raw OS message. That redaction is the right default, but it also means a
     /// command that has already composed a specific, user-facing reason cannot
     /// report it: the caller's message is logged and thrown away, and the user
-    /// gets "系统操作失败，请重试。" no matter what actually went wrong.
+    /// gets "The system operation failed. Please try again." no matter what actually went wrong.
     ///
     /// This constructor is for that case only. The caller guarantees the message is
     /// a fixed, translated string it authored — never an error's own `Display`, and
@@ -63,7 +63,7 @@ mod tests {
     fn database_error_hides_internal_details() {
         let error = CommandError::database("SQLITE_BUSY at C:\\private\\nowly.sqlite");
         assert_eq!(error.code, "database_error");
-        assert_eq!(error.message, "无法读取本地数据，请重试。");
+        assert_eq!(error.message, "Unable to read local data. Please try again.");
         assert_eq!(error.field, None);
         assert!(!error.message.contains("SQLITE"));
     }
@@ -71,10 +71,10 @@ mod tests {
     #[test]
     fn business_errors_have_stable_public_payloads() {
         assert_eq!(
-            CommandError::validation("title", "请输入日程标题。"),
+            CommandError::validation("title", "Please enter an event title."),
             CommandError {
                 code: "validation_error".into(),
-                message: "请输入日程标题。".into(),
+                message: "Please enter an event title.".into(),
                 field: Some("title".into()),
             }
         );

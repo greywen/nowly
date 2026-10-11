@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
+import { t } from '../i18n';
 import type { KanbanLaneDraft } from '../kanban/kanban-model';
 import { useTaskWorkspace } from './TaskWorkspaceContext';
 import { kanbanSnapshotFromWorkspace } from './task-projections';
@@ -30,7 +31,7 @@ export function useWorkspaceKanban() {
       setDragError(
         typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string'
           ? error.message
-          : '移动任务失败，请重试。'
+          : t('kanbanWidget.moveFailed')
       );
     }
   }, [workspace]);
@@ -43,7 +44,7 @@ export function useWorkspaceKanban() {
       setDragError(
         typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string'
           ? error.message
-          : '调整泳道顺序失败，请重试。'
+          : t('kanbanWidget.reorderFailed')
       );
     }
   }, [workspace]);

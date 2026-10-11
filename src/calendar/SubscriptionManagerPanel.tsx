@@ -13,7 +13,7 @@ import type {
 } from './subscription-model';
 import type { Category, CategoryDraft } from './calendar-model';
 import { DESIGN_COLORS, isHexColor, type HexColor } from '../lib/color';
-import { t } from '../i18n';
+import { t, useTranslation } from '../i18n';
 
 // Backend caps subscriptions at 50; the UI mirrors that so the add controls
 // disable at the same point the command would reject.
@@ -55,6 +55,7 @@ export function SubscriptionManagerPanel({
   subscriptions, onChanged, onCreate, onUpdate, onDelete, onRefresh,
   categories, onCreateCategory, onUpdateCategory, onDeleteCategory, onOverlayOpenChange
 }: Props) {
+  useTranslation();
   const repository = useNowlyRepository();
   // Which source the creation flow targets. Editing reuses the form but keeps
   // the row's own provider, tracked separately in `editing`.

@@ -1,10 +1,12 @@
 import type { Language } from './store';
+import { assistantTranslations } from './assistant-translations';
 
 // Flat key -> string dictionaries per language. Keys use dot-namespaces by
 // feature for readability. Interpolation uses `{name}` placeholders resolved by
 // the `t()` helper.
 export const translations: Record<Language, Record<string, string>> = {
   zh: {
+    ...assistantTranslations.zh,
     // Common
     'common.cancel': '取消',
     'common.save': '保存',
@@ -58,6 +60,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'statusIsland.openTask': '打开任务：{title}',
     'statusIsland.dismiss': '暂时隐藏：{title}',
     'statusIsland.retry': '状态读取失败，重试',
+    'statusIsland.readError': '状态读取失败',
     'statusIsland.openPanel': '打开状态详情',
     'statusIsland.collapse': '收起',
     'statusIsland.nowly': 'Nowly',
@@ -575,6 +578,12 @@ export const translations: Record<Language, Record<string, string>> = {
 
     // Kanban widget
     'kanbanWidget.addLane': '添加泳道',
+    'taskWorkspace.createdNotVisible': '创建的任务没有四象限成员关系。',
+    'taskWorkspace.updatedNotVisible': '更新后的任务不再显示在四象限。',
+    'taskWorkspace.completionFailed': '完成状态保存失败',
+    'taskWorkspace.moveFailed': '任务移动失败',
+    'kanbanWidget.moveFailed': '移动任务失败，请重试。',
+    'kanbanWidget.reorderFailed': '调整泳道顺序失败，请重试。',
     'kanbanWidget.boardMenu': '看板设置',
     'kanbanWidget.errorLoad': '无法读取看板数据。',
     'kanbanWidget.retryLoad': '重试读取看板',
@@ -925,6 +934,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'widget.focusTimer.desc': '番茄钟式专注计时，帮助保持节奏。'
   },
   en: {
+    ...assistantTranslations.en,
     // Common
     'common.cancel': 'Cancel',
     'common.save': 'Save',
@@ -978,6 +988,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'statusIsland.openTask': 'Open task: {title}',
     'statusIsland.dismiss': 'Hide for now: {title}',
     'statusIsland.retry': 'Status unavailable, retry',
+    'statusIsland.readError': 'Status could not be read.',
     'statusIsland.openPanel': 'Open status details',
     'statusIsland.collapse': 'Collapse',
     'statusIsland.nowly': 'Nowly',
@@ -1489,6 +1500,12 @@ export const translations: Record<Language, Record<string, string>> = {
 
     // Kanban widget
     'kanbanWidget.addLane': 'Add lane',
+    'taskWorkspace.createdNotVisible': 'The created task is not linked to a matrix quadrant.',
+    'taskWorkspace.updatedNotVisible': 'The updated task is no longer shown in the matrix.',
+    'taskWorkspace.completionFailed': 'Could not save the completion state.',
+    'taskWorkspace.moveFailed': 'Could not move the task.',
+    'kanbanWidget.moveFailed': 'Could not move the task. Please try again.',
+    'kanbanWidget.reorderFailed': 'Could not reorder lanes. Please try again.',
     'kanbanWidget.boardMenu': 'Board settings',
     'kanbanWidget.errorLoad': 'Unable to load board data.',
     'kanbanWidget.retryLoad': 'Retry loading board',
@@ -1704,6 +1721,8 @@ export const translations: Record<Language, Record<string, string>> = {
     'notesWidget.settingsDialogTitle': 'Notes settings',
     'notesWidget.settingsTitle': 'Notes layout',
     'notesWidget.settingsIntro': 'Choose how notes appear in the module.',
+    'notesWidget.viewListDesc': 'Show notes in a compact list.',
+    'notesWidget.viewBoardDesc': 'Arrange notes on a sticky-note board.',
     'notesWidget.switchView': 'Switch notes layout',
     'notesWidget.viewList': 'List view',
     'notesWidget.viewBoard': 'Sticky board view',

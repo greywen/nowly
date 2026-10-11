@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { DEFAULT_BAR_MENU } from '../app/bar-menu';
 import { useStatusIslandSnapshot, type NativeStatusIslandSnapshot } from './useStatusIslandSnapshot';
+import { setLanguage } from '../i18n';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn() }));
@@ -25,6 +26,18 @@ beforeEach(() => {
 });
 
 describe('status island menu snapshot', () => {
+  it('updates derived status text immediately when the UI language changes', async () => {
+    setLanguage('zh');
+    const { result } = renderHook(useStatusIslandSnapshot);
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    try {
+      act(() => setLanguage('en'));
+      expect(JSON.stringify(result.current.model)).not.toMatch(/[\u4e00-\u9fff]/);
+    } finally {
+      act(() => setLanguage('zh'));
+    }
+  });
+
   it('defaults older snapshots to the complete visible feature menu', async () => {
     const { result } = renderHook(useStatusIslandSnapshot);
     await waitFor(() => expect(result.current.status).toBe('ready'));

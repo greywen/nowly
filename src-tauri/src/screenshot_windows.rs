@@ -12,11 +12,11 @@ fn ensure_idle<R: Runtime>(app: &AppHandle<R>) -> Result<(), CommandError> {
         .state::<ScreenshotWindows>()
         .0
         .lock()
-        .map_err(|_| CommandError::system("无法读取截图窗口状态。"))?
+        .map_err(|_| CommandError::system("Unable to read the screenshot window state."))?
         .is_some()
         || crate::screen_capture::is_active(app)
     {
-        return Err(CommandError::system("截图正在进行中。"));
+        return Err(CommandError::system("A screenshot is in progress."));
     }
     Ok(())
 }
@@ -30,10 +30,10 @@ fn on_main_thread<R: Runtime>(
     app.run_on_main_thread(move || {
         let _ = send.send(action(&handle));
     })
-    .map_err(|_| CommandError::system("无法调度截图窗口。"))?;
+    .map_err(|_| CommandError::system("Unable to schedule the screenshot window."))?;
     receive
         .recv()
-        .map_err(|_| CommandError::system("截图窗口操作已中断。"))?
+        .map_err(|_| CommandError::system("The screenshot window operation was interrupted."))?
 }
 
 pub fn open_history<R: Runtime>(app: &AppHandle<R>) -> Result<(), CommandError> {
@@ -50,7 +50,7 @@ fn can_open_history(label: &str) -> bool {
 #[tauri::command(async)]
 pub fn open_screenshot_history(app: AppHandle, window: tauri::Window) -> Result<(), CommandError> {
     if !can_open_history(window.label()) {
-        return Err(CommandError::system("该窗口不能打开截图历史。"));
+        return Err(CommandError::system("This window cannot open screenshot history."));
     }
     open_history(&app)
 }

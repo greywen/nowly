@@ -72,12 +72,12 @@ function interpolate(template: string, params?: Params, language: Language = get
 }
 
 // Translate a key for the current language, with optional `{placeholder}`
-// interpolation. Falls back to the other language, then the raw key, so a
-// missing string never renders blank.
+// interpolation. Falls back to English, then the raw key, so a missing
+// translation never leaks Chinese into another language or renders blank.
 export function translate(key: string, params?: Params): string {
   const language = getLanguage();
   const table = translations[language];
-  const template = table[key] ?? translations.en[key] ?? translations.zh[key] ?? key;
+  const template = table[key] ?? translations.en[key] ?? key;
   return interpolate(template, params, language);
 }
 

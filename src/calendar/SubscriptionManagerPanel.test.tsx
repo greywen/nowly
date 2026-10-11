@@ -1,4 +1,5 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { setLanguage } from '../i18n';
 import { describe, expect, it, vi } from 'vitest';
 import { SubscriptionManagerPanel } from './SubscriptionManagerPanel';
 import type { CalendarSubscription } from './subscription-model';
@@ -25,6 +26,17 @@ function props(overrides = {}) {
 }
 
 describe('SubscriptionManagerPanel', () => {
+  it('updates subscription labels immediately when the language changes', () => {
+    render(<SubscriptionManagerPanel {...props()} />);
+    try {
+      act(() => setLanguage('en'));
+      expect(screen.getByRole('button', { name: 'Add subscription' })).toBeInTheDocument();
+      expect(screen.getByLabelText('Name')).toBeInTheDocument();
+    } finally {
+      act(() => setLanguage('zh'));
+    }
+  });
+
   it('lists existing subscriptions', () => {
     render(<SubscriptionManagerPanel {...props()} />);
     expect(screen.getByText('家庭')).toBeInTheDocument();

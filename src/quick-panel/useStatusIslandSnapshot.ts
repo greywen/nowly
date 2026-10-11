@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { t } from '../i18n';
 import { listen } from '@tauri-apps/api/event';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CalendarEvent } from '../calendar/calendar-model';
@@ -53,7 +54,7 @@ const errorModel = deriveStatusIslandModel({
 });
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : typeof error === 'string' ? error : '状态读取失败';
+  return error instanceof Error ? error.message : typeof error === 'string' ? error : t('statusIsland.readError');
 }
 
 export function useStatusIslandSnapshot(): {
