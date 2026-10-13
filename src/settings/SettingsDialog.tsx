@@ -1,4 +1,3 @@
-import { TimeSettingsDialog } from '../time/TimeSettingsDialog';
 import { X } from '../components/icons';
 import type { IconStyle } from '../components/icon-style';
 import { useEffect, useState } from 'react';
@@ -16,16 +15,15 @@ import { TabPanel, Tabs, type TabItem } from '../components/Tabs';
 import type { AppSettings, MonitorInfo } from '../data/nowly-repository';
 import { t, useTranslation, type Language } from '../i18n';
 
-type Props={settings:AppSettings;monitors?:MonitorInfo[];onClose():void;onSave(settings:AppSettings):Promise<AppSettings>;onOpenTimeSettings?:()=>void};
+type Props={settings:AppSettings;monitors?:MonitorInfo[];onClose():void;onSave(settings:AppSettings):Promise<AppSettings>};
 type SettingsTab='interface'|'desktop'|'notifications'|'model'|'shortcuts';
 function errorMessage(error:unknown){return typeof error==='object'&&error!==null&&'message'in error&&typeof error.message==='string'?error.message:t('settings.saveError')}
 
-export function SettingsDialog({settings,monitors=[],onClose,onSave,onOpenTimeSettings}:Props){
+export function SettingsDialog({settings,monitors=[],onClose,onSave}:Props){
  // Language switches in real time via the i18n store, independent of the save
  // button, so the whole UI updates the moment the user picks a language.
  const {language,setLanguage}=useTranslation();
  const [draft,setDraft]=useState(()=>({...settings, barMenu: normalizeBarMenu(settings.barMenu), notificationMode: settings.notificationMode ?? 'persistent', quickPanelEnabled: true, quickPanelShortcut: settings.quickPanelShortcut ?? 'Ctrl+Space', screenshotShortcut: settings.screenshotShortcut ?? 'Ctrl+Alt+A', screenshotHistoryShortcut: settings.screenshotHistoryShortcut ?? 'Ctrl+Alt+H'})); const [saving,setSaving]=useState(false); const [error,setError]=useState<string|null>(null);
- const [timeOpen,setTimeOpen]=useState(false);
  const [tab,setTab]=useState<SettingsTab>('interface');
  const [shortcutStatus,setShortcutStatus]=useState<ShortcutStatuses|null>(null);
  const [statusError,setStatusError]=useState(false);
@@ -47,7 +45,6 @@ export function SettingsDialog({settings,monitors=[],onClose,onSave,onOpenTimeSe
   setSaving(true);setError(null);try{await onSave({...draft,screenshotShortcut,screenshotHistoryShortcut,quickPanelEnabled:true});onClose();}catch(reason){setError(typeof reason==='object'&&reason!==null&&'field'in reason&&['screenshotShortcut','screenshotHistoryShortcut'].includes(String(reason.field))?t('settings.shortcutConflict'):errorMessage(reason));}finally{setSaving(false)}
  }
  const tabs:TabItem<SettingsTab>[]=[{id:'interface',label:t('settings.interface')},{id:'desktop',label:t('settings.desktopStartup')},{id:'notifications',label:t('settings.notifications')},{id:'shortcuts',label:t('settings.shortcuts')},{id:'model',label:t('settings.model')}];
- if(timeOpen) return <TimeSettingsDialog onClose={()=>setTimeOpen(false)}/>;
  return <Dialog title={t('settings.title')} ariaLabelledBy="settings-title" onRequestClose={onClose} className="settings-dialog" headerActions={<button className="good-icon-button" aria-label={t('settings.close')} onClick={onClose}><X aria-hidden="true"/></button>} footer={<><button className="good-button" onClick={onClose}>{t('common.cancel')}</button><button className="good-button good-button--primary" disabled={saving} onClick={()=>void save()}>{saving?t('common.saving'):t('settings.saveSettings')}</button></>}>
   <div className="settings-form">
    <Tabs idPrefix="settings" label={t('settings.title')} items={tabs} value={tab} onChange={setTab}/>
@@ -59,7 +56,6 @@ export function SettingsDialog({settings,monitors=[],onClose,onSave,onOpenTimeSe
     </div>
     <div className="settings-checks">
      <Check label={t('settings.hideTopbarInWallpaper')} checked={draft.hideTopbarInWallpaper} onChange={toggle('hideTopbarInWallpaper')}/>
-     <button type="button" className="good-button" onClick={()=>{if(onOpenTimeSettings)onOpenTimeSettings();else setTimeOpen(true);}}>{t('settings.time')}</button>
     </div>
    </TabPanel>
    <TabPanel idPrefix="settings" tabId="notifications" active={tab==='notifications'}>

@@ -479,6 +479,7 @@ body:has(.screen-status-island-root),
 .widget-content, .calendar-card-content { min-height: 0; flex: 1; display: flex; flex-direction: column; }
 .card-header { min-height: 56px; padding: 8px 20px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px dashed var(--border-default); }
 .card-header:has(> .heading-group:empty), .card-header.card-header--actions-only { justify-content: flex-end; }
+.app-shell--no-topbar .workspace .module-frame__body > * > .card-header { display: none; }
 .heading-group h1, .heading-group h2 { margin: 0; color: var(--text-primary); font-size: 1.25rem; font-weight: 600; line-height: 1.2; }
 .calendar-card-content .heading-group { min-width: 0; }
 .calendar-card-content .heading-group h1 { font-size: clamp(14px, 1.4vw, 20px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

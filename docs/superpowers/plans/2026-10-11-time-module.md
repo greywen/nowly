@@ -99,7 +99,7 @@ it('preserves quarter-hour offsets', () => {
 - [ ] useTimeSnapshot 测试 fake timer、visibilitychange、卸载清理；隐藏后不刷新，恢复立即从实际时刻取值，不按累计 tick 推算。
 - [ ] 实现 ClockFace 作为内容图形（不是操作图标），使用 CSS 几何表盘与 Token，避免引入图标库或未经规范许可的 SVG 功能图标。ResizeObserver 结合容器查询计算可用正文尺寸。
 - [ ] 注册可选 builtin 时间模块，默认建议 4×3、最小 2×2；不加入默认布局。App 接入 TimeWidget，移除仅移除布局记录，不删除闹钟或配置。
-- [ ] ModuleFrame/Grid 增加可选 onConfigure：仅编辑模式显示标准设置图标按钮，未传时完全保持原行为。全局设置中也提供时间设置入口，模块移除后仍能管理闹钟。
+- [ ] ModuleFrame/Grid 增加可选 onConfigure：仅编辑模式显示标准设置图标按钮，未传时完全保持原行为。时间设置通过时间模块自身入口打开，不在全局「设置 → 界面」中提供重复入口；移除模块不删除闹钟或配置，重新添加时间模块后可继续管理。
 - [ ] 运行 `npm test -- src\time src\app\layout\ModuleFrame.test.tsx src\app\layout\ModuleGrid.test.tsx src\widgets\useModuleLayout.test.tsx`；预期新旧测试全部通过。
 
 ## Task 4：设置、对照与编辑界面

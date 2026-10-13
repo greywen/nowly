@@ -28,8 +28,8 @@ type DesktopShellProps = {
   onWallpaperDoubleClick?: () => void;
   onOpenSettings?: () => void;
   configurations?: Partial<Record<WidgetId, () => void>>;
-  // Hide the topbar while running as the desktop wallpaper. Defaults on so the
-  // wallpaper reads as a clean dashboard; the bar returns in the foreground.
+  // Hide the topbar and module headers as wallpaper. Defaults on; all headers
+  // return in the foreground.
   hideTopbarInWallpaper?: boolean;
   overlay?: ReactNode;
   // The launch-time update check result. When it reports a newer release the
@@ -61,8 +61,8 @@ export function DesktopShell({
   update
 }: DesktopShellProps) {
   const foreground = mode === 'foreground';
-  // In wallpaper mode the topbar is optional: hiding it leaves a clean
-  // dashboard, while a double-click anywhere still returns to the foreground.
+  // The no-topbar shell state also hides module headers via workspace CSS.
+  // A double-click anywhere in wallpaper mode still returns to the foreground.
   const showTopbar = foreground || !hideTopbarInWallpaper;
   const { layout, move, resize, addWidget, removeWidget, presentIds } =
     useModuleLayout(definitions);

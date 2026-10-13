@@ -31,6 +31,27 @@ describe('DesktopShell', () => {
     localStorage.clear();
   });
 
+  it.each([
+    ['foreground', true, false],
+    ['foreground', false, false],
+    ['wallpaper', true, true],
+    ['wallpaper', false, false]
+  ] as const)('sets navigation visibility for %s with hiding %s', (mode, hideTopbarInWallpaper, hidden) => {
+    render(<DesktopShell mode={mode} hideTopbarInWallpaper={hideTopbarInWallpaper} time="09:41" dateText="today" summary="" modules={modules()} />);
+    expect(screen.getByTestId('desktop-root').classList.contains('app-shell--no-topbar')).toBe(hidden);
+    expect(screen.queryByRole('banner') !== null).toBe(!hidden);
+    expect(screen.getByText('calendar region')).toBeInTheDocument();
+  });
+
+  it('restores navigation when the wallpaper hiding setting changes', () => {
+    const props = { time: '09:41', dateText: 'today', summary: '', modules: modules() };
+    const { rerender } = render(<DesktopShell {...props} mode="wallpaper" hideTopbarInWallpaper />);
+    expect(screen.getByTestId('desktop-root')).toHaveClass('app-shell--no-topbar');
+    rerender(<DesktopShell {...props} mode="wallpaper" hideTopbarInWallpaper={false} />);
+    expect(screen.getByTestId('desktop-root')).not.toHaveClass('app-shell--no-topbar');
+    expect(screen.getByRole('banner')).toBeInTheDocument();
+  });
+
   it('routes module configuration through edit mode only', async () => {
     const configure = vi.fn();
     render(<DesktopShell time="09:41" dateText="today" summary="" modules={modules()} configurations={{calendar: configure}} />);
