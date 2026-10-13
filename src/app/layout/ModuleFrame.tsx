@@ -1,4 +1,4 @@
-import { GripVertical, X } from '../../components/icons';
+import { GripVertical, Settings, X } from '../../components/icons';
 import type { CSSProperties, PointerEvent, ReactNode } from 'react';
 import type { WidgetDefinition } from '../../widgets/widget-registry';
 import { t } from '../../i18n';
@@ -13,6 +13,7 @@ type ModuleFrameProps = {
   onMovePointerDown?: (event: PointerEvent<HTMLElement>) => void;
   onResizePointerDown?: (event: PointerEvent<HTMLElement>) => void;
   onRemove?: () => void;
+  onConfigure?: () => void;
 };
 
 export function ModuleFrame({
@@ -24,7 +25,8 @@ export function ModuleFrame({
   isDragging = false,
   onMovePointerDown,
   onResizePointerDown,
-  onRemove
+  onRemove,
+  onConfigure
 }: ModuleFrameProps) {
   const className = [
     'card',
@@ -49,6 +51,7 @@ export function ModuleFrame({
             <GripVertical />
           </span>
           <span className="module-frame__title">{definition.name}</span>
+          {onConfigure ? <button type="button" className="good-icon-button" aria-label={t('moduleFrame.configure', { name: definition.name })} onClick={onConfigure}><Settings aria-hidden="true" /></button> : null}
           <button
             type="button"
             className="good-icon-button module-frame__remove"

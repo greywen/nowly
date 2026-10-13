@@ -10,6 +10,12 @@ function invalidating<T>(operation: Promise<T>): Promise<T> {
 }
 
 export const tauriNowlyRepository: NowlyRepository = {
+  getTimeSettings: () => invoke('get_time_settings'),
+  saveTimeSettings: (settings) => invoke('save_time_settings', { settings }),
+  listAlarms: () => invoke('list_alarms'),
+  createAlarm: (draft) => invalidating(invoke('create_alarm', { draft })),
+  updateAlarm: (id, draft) => invalidating(invoke('update_alarm', { id, draft })),
+  deleteAlarm: (id) => invalidating(invoke('delete_alarm', { id })),
   listEventsInRange: (range) => invoke('list_events_in_range', { range }),
   createEvent: (draft) => invalidating(invoke('create_event', { draft })),
   updateEvent: (target, draft, scope) => invalidating(invoke('update_event', { target, draft, scope })),

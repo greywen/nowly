@@ -1,3 +1,4 @@
+import { defaultTimeSettings } from '../time/time-model';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -8,6 +9,12 @@ import { useNotes } from './useNotes';
 const note = { id:'n1', title:'原则', content:'简单', color:'#4F55DA' as const, pinned:true, styleVariant:3, icon:'star' as const, createdAt:'x', updatedAt:'x' };
 function repository(overrides: Partial<NowlyRepository> = {}): NowlyRepository {
   return {
+    getTimeSettings: vi.fn().mockResolvedValue(defaultTimeSettings()),
+    saveTimeSettings: vi.fn().mockImplementation(settings => Promise.resolve(settings)),
+    listAlarms: vi.fn().mockResolvedValue([]),
+    createAlarm: vi.fn().mockRejectedValue(new Error('unexpected alarm write')),
+    updateAlarm: vi.fn().mockRejectedValue(new Error('unexpected alarm write')),
+    deleteAlarm: vi.fn().mockRejectedValue(new Error('unexpected alarm write')),
     listEventsInRange:vi.fn().mockResolvedValue([]), createEvent:vi.fn(), updateEvent:vi.fn(), deleteEvent:vi.fn(),
     listTasks:vi.fn().mockResolvedValue([]), createTask:vi.fn(), updateTask:vi.fn(), deleteTask:vi.fn(), setTaskCompleted:vi.fn(),
     listNotes:vi.fn().mockResolvedValue([note]), createNote:vi.fn().mockResolvedValue(note), updateNote:vi.fn().mockResolvedValue(note), deleteNote:vi.fn().mockResolvedValue(undefined),

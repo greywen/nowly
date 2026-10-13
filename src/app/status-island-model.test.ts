@@ -77,6 +77,33 @@ function input(options: {
   };
 }
 
+describe('alarm notices', () => {
+  const notice = { id: 'notice-1', kind: 'alarm' as const, title: 'Tea', dueAt: '2026-09-12T14:18:00Z', alarmId: 'alarm-1', count: 1, rangeStart: '2026-09-12T14:18:00Z', rangeEnd: '2026-09-12T14:18:00Z' };
+  it('shows an alarm on an otherwise empty rail with its own stable context', () => {
+    const model = deriveStatusIslandModel({ ...input(), alarmNotices: [notice] });
+    expect(model.surface.mode).toBe('detail');
+    expect(model.attentionQueue[0].identity).toBe('alarm:notice-1');
+    expect(model.panelContext).toEqual({ kind: 'alarm', notice });
+  });
+  it('keeps missed summaries distinct and resolves a pinned alarm behind focus', () => {
+    const summary = { ...notice, id: 'summary-1', kind: 'missedSummary' as const, count: 8, alarmId: null };
+    const model = deriveStatusIslandModel({ ...input({ focusStatus: 'running' }), alarmNotices: [notice, summary] });
+    expect(model.attentionQueue[0].subject.kind).toBe('focus');
+    expect(reminderPanelContext(model.reminders.find(item => item.identity === 'alarm:notice-1'), null)).toEqual({ kind: 'alarm', notice });
+    expect(model.reminders.find(item => item.identity === 'missedSummary:summary-1')?.subject).toEqual({ kind: 'missedSummary', notice: summary });
+  });
+  it('keeps pending notices actionable after generic panel-open acknowledgement', () => {
+    const model = deriveStatusIslandModel({ ...input(), alarmNotices: [notice], reminderStates: [{ identity: 'alarm:notice-1', consumed: false, dismissed: false, acknowledgedAt: '2026-09-12T14:18:00Z' }] });
+    expect(model.attentionQueue[0]?.identity).toBe('alarm:notice-1');
+  });
+  it('consuming an alarm identity leaves calendar and focus reminders intact', () => {
+    const base = { ...input({ focusStatus: 'completed', events: [event('meeting', '2026-09-12T14:00', '2026-09-12T15:00')] }), alarmNotices: [notice] };
+    const model = deriveStatusIslandModel({ ...base, reminderStates: [{ identity: 'alarm:notice-1', consumed: true, dismissed: false, acknowledgedAt: null }] });
+    expect(model.attentionQueue.map(item => item.subject.kind)).toEqual(['focus', 'event']);
+    expect(deriveStatusIslandModel({ ...base, alarmNotices: [] }).reminders.some(item => item.subject.kind === 'alarm')).toBe(false);
+  });
+});
+
 describe('deriveStatusIslandModel', () => {
   it('shows a static loading state before the first event snapshot is ready', () => {
     const model = deriveStatusIslandModel({ ...input(), loading: true });

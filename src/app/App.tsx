@@ -28,6 +28,8 @@ import { useUpdateCheck } from '../settings/useUpdateCheck';
 import { useNowlyRepository } from '../data/RepositoryContext';
 import { useCurrentTime } from './useCurrentTime';
 import { t, useTranslation, getLanguage } from '../i18n';
+import { TimeWidget } from '../time/TimeWidget';
+import { TimeSettingsDialog } from '../time/TimeSettingsDialog';
 import { FocusTimerWidget } from '../focus/FocusTimerWidget';
 import { useFocusTimer } from '../focus/FocusTimerContext';
 import { FocusStatisticsDialog } from '../focus/FocusStatisticsDialog';
@@ -87,6 +89,7 @@ function AppContent() {
     onSubscriptionsChanged();
   }, [subscriptions, repository, onSubscriptionsChanged]);
   const [focusStatisticsOpen, setFocusStatisticsOpen] = useState(false);
+  const [timeDialog, setTimeDialog] = useState<{ createAlarm: boolean; trigger: HTMLElement | null } | null>(null);
   const [windowMode, setWindowMode] = useState<WindowMode>('foreground');
   const [isSwitchingWindowMode, setIsSwitchingWindowMode] = useState(false);
   const isSwitchingWindowModeRef = useRef(false);
@@ -218,6 +221,7 @@ function AppContent() {
       onRememberCustomColor={rememberCustomColor}
     />
   );
+  modules.time = <TimeWidget onOpenSettings={() => openTimeDialog()} onCreateAlarm={() => openTimeDialog(true)} />;
   modules.focusTimer = <FocusTimerWidget mode={windowMode} onOpenStatistics={() => setFocusStatisticsOpen(true)} onEnterWallpaper={() => void runWindowModeSwitch(switchToWallpaper)} />;
 
 
@@ -283,6 +287,14 @@ function AppContent() {
     }).catch(() => undefined);
   }
 
+  function openTimeDialog(createAlarm = false) {
+    const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    void runWindowModeSwitch(async () => {
+      if (windowMode === 'wallpaper') await switchToForeground().catch(() => undefined);
+      setTimeDialog({ createAlarm, trigger });
+    });
+  }
+
   const onboardingSteps: GuideStep[] = [
     { title: t('onboarding.welcome.title'), body: t('onboarding.welcome.body') },
     { target: 'workspace', title: t('onboarding.workspace.title'), body: t('onboarding.workspace.body') },
@@ -309,6 +321,7 @@ function AppContent() {
         overlay={windowMode === 'wallpaper' ? <FocusWallpaperOverlay /> : null}
         update={update}
       />
+      {timeDialog ? <TimeSettingsDialog createAlarm={timeDialog.createAlarm} trigger={timeDialog.trigger} onClose={() => setTimeDialog(null)} /> : null}
       {focusStatisticsOpen ? <FocusStatisticsDialog onClose={() => setFocusStatisticsOpen(false)} /> : null}
       <OnboardingGuide
         open={onboarding.shouldShow && windowMode === 'foreground'}

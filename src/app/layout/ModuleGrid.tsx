@@ -26,6 +26,7 @@ type ModuleGridProps = {
   onMove: (id: WidgetId, position: { x: number; y: number }) => void;
   onResize: (id: WidgetId, size: { w: number; h: number }) => void;
   onRemove?: (id: WidgetId) => void;
+  configurations?: Partial<Record<WidgetId, () => void>>;
 };
 
 type DragMode = 'move' | 'resize';
@@ -50,7 +51,8 @@ export function ModuleGrid({
   definitions = builtinDefinitions,
   onMove,
   onResize,
-  onRemove
+  onRemove,
+  configurations
 }: ModuleGridProps) {
   const gridRef = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
@@ -157,6 +159,7 @@ export function ModuleGrid({
             onMovePointerDown={(event) => beginDrag('move', item.id, event)}
             onResizePointerDown={(event) => beginDrag('resize', item.id, event)}
             onRemove={onRemove ? () => onRemove(item.id) : undefined}
+            onConfigure={configurations?.[item.id]}
           >
             {item.content}
           </ModuleFrame>

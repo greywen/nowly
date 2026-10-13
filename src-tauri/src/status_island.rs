@@ -317,6 +317,8 @@ pub struct StatusIslandSnapshot {
     pub tasks: Vec<Task>,
     pub focus: FocusStatusSnapshot,
     pub reminders: Vec<ReminderSnapshotState>,
+    #[serde(default)]
+    pub alarm_notices: Vec<crate::time::types::AlarmNotice>,
     pub notification_mode: String,
     pub bar_menu: Vec<crate::models::BarMenuItem>,
 }
@@ -390,6 +392,8 @@ pub fn get_status_island_snapshot(
         crate::settings::read_app_settings(&connection).map_err(CommandError::database)?;
     let notification_mode = settings.notification_mode;
     let bar_menu = settings.bar_menu;
+    let alarm_notices =
+        crate::time::scheduler::list_alarm_notices(&connection, chrono::Utc::now())?;
     drop(connection);
     let focus = timer
         .lock()
@@ -417,6 +421,7 @@ pub fn get_status_island_snapshot(
         tasks,
         focus,
         reminders: states,
+        alarm_notices,
         notification_mode,
         bar_menu,
     })
@@ -444,6 +449,9 @@ pub fn acknowledge_status_island_reminder(
     reminders: State<'_, ManagedReminders>,
     identity: String,
 ) -> Result<(), CommandError> {
+    if is_alarm_identity(&identity) {
+        return Ok(());
+    }
     {
         let mut lifecycle = reminders.lock().map_err(CommandError::system)?;
         lifecycle.roll_local_date(&today_local());
@@ -454,6 +462,36 @@ pub fn acknowledge_status_island_reminder(
     }
     // Only records that the reminder has been seen. Nothing collapses on a timer
     // any more, so there is no second re-derive to schedule.
+    invalidate(&app)
+}
+
+fn is_alarm_identity(identity: &str) -> bool {
+    identity.starts_with("alarm:") || identity.starts_with("missedSummary:")
+}
+
+#[tauri::command]
+pub fn acknowledge_alarm_notice(
+    app: AppHandle,
+    db: State<'_, AppDb>,
+    id: String,
+) -> Result<(), CommandError> {
+    {
+        let mut connection = db.0.lock().map_err(CommandError::database)?;
+        crate::time::scheduler::acknowledge_notice(&mut connection, &id, chrono::Utc::now())?;
+    }
+    invalidate(&app)
+}
+
+#[tauri::command]
+pub fn snooze_alarm_notice(
+    app: AppHandle,
+    db: State<'_, AppDb>,
+    id: String,
+) -> Result<(), CommandError> {
+    {
+        let mut connection = db.0.lock().map_err(CommandError::database)?;
+        crate::time::scheduler::snooze_notice(&mut connection, &id, chrono::Utc::now())?;
+    }
     invalidate(&app)
 }
 
@@ -606,9 +644,11 @@ mod tests {
     use super::{
         legacy_reminder_store_path, load_reminders, remove_legacy_reminder_store, save_reminders,
         should_apply_visibility, snapshot_range, PresenceSurface, ReminderLifecycle, ReminderState,
-        StatusIslandEventNavigation,
+        StatusIslandEventNavigation, StatusIslandSnapshot,
     };
+    use crate::focus_timer::FocusStatusSnapshot;
     use crate::models::EventTarget;
+    use crate::time::types::{AlarmNotice, AlarmNoticeKind};
     use chrono::{Local, NaiveDate, TimeZone};
 
     fn lifecycle() -> ReminderLifecycle {
@@ -886,5 +926,52 @@ mod tests {
         // No hold deadline is published any more: there is nothing to count down
         // to, so neither window can drift on it.
         assert!(value.get("hideEligibleAt").is_none());
+    }
+
+    #[test]
+    fn generic_status_acknowledgement_ignores_alarm_identities() {
+        assert!(super::is_alarm_identity("alarm:alarm:a1:2026-10-11T08:00"));
+        assert!(super::is_alarm_identity("missedSummary:missedSummary:1:2"));
+        assert!(!super::is_alarm_identity("event:a:reminder:15"));
+    }
+
+    #[test]
+    fn snapshot_serializes_alarm_notices_as_an_always_present_list() {
+        let snapshot = StatusIslandSnapshot {
+            sampled_at: "2026-10-11T08:00:00+08:00".into(),
+            local_date: "2026-10-11".into(),
+            events: Vec::new(),
+            external_events: Vec::new(),
+            tasks: Vec::new(),
+            focus: FocusStatusSnapshot {
+                status: "idle".into(),
+                remaining_seconds: 0,
+                planned_seconds: 0,
+                focused_seconds: 0,
+                started_at: None,
+                session_id: None,
+                stage_sequence: 0,
+                stage_changed_at: None,
+            },
+            reminders: Vec::new(),
+            alarm_notices: vec![AlarmNotice {
+                id: "alarm:a1:2026-10-11T08:00".into(),
+                kind: AlarmNoticeKind::Alarm,
+                title: "Standup".into(),
+                due_at: "2026-10-11T00:00:00Z".into(),
+                alarm_id: Some("a1".into()),
+                count: 1,
+                range_start: "2026-10-11T00:00:00Z".into(),
+                range_end: "2026-10-11T00:00:00Z".into(),
+            }],
+            notification_mode: "persistent".into(),
+            bar_menu: crate::models::default_bar_menu(),
+        };
+
+        let value = serde_json::to_value(snapshot).unwrap();
+
+        assert_eq!(value["alarmNotices"][0]["kind"], "alarm");
+        assert_eq!(value["alarmNotices"][0]["alarmId"], "a1");
+        assert!(value.get("alarm_notices").is_none());
     }
 }

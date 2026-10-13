@@ -1,9 +1,7 @@
 import { Check, Minus, Plus, X } from '../components/icons';
 import { Dialog } from '../components/Dialog';
 import {
-  builtinDefinitions,
-  extensionDefinitions,
-  kanbanDefinition,
+  buildDefinitions,
   type WidgetDefinition,
   type WidgetId
 } from './widget-registry';
@@ -62,7 +60,7 @@ function ModuleCard({
 // Every module Nowly offers is built in, so the picker is a single list: add a
 // module to the canvas or take it off again.
 export function TemplatePickerDialog({ presentIds, onClose, onAdd, onRemove }: Props) {
-  const builtinModules = [...builtinDefinitions, kanbanDefinition, ...extensionDefinitions];
+  const builtinModules = buildDefinitions();
 
   function toggle(id: WidgetId) {
     if (presentIds.has(id)) onRemove(id);

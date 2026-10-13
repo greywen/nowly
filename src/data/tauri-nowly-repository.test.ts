@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EditScope, EventDraft } from '../calendar/calendar-model';
+import type { AlarmDraft, TimeSettings } from '../time/time-model';
 import { tauriNowlyRepository } from './tauri-nowly-repository';
 
 const invokeMock = vi.hoisted(() => vi.fn());
@@ -12,6 +13,33 @@ describe('tauriNowlyRepository', () => {
     invokeMock.mockReset();
     emitMock.mockReset();
     emitMock.mockResolvedValue(undefined);
+  });
+
+  it('maps the time settings and alarm commands and invalidates successful alarm writes', async () => {
+    const settings: TimeSettings = { clocks: [{ id: 'local', timeZone: 'local', label: '', mode: 'digital', hourCycle: 'h23', showSeconds: false, showLabel: false, showDate: false, showDifference: false }] };
+    const draft: AlarmDraft = { title: 'Stand up', hour: 9, minute: 7, repeat: { kind: 'weekly', weekdays: [1, 5] }, enabled: true };
+    invokeMock.mockResolvedValue(settings);
+    expect(await tauriNowlyRepository.getTimeSettings()).toBe(settings);
+    expect(await tauriNowlyRepository.saveTimeSettings(settings)).toBe(settings);
+    invokeMock.mockResolvedValue([]);
+    expect(await tauriNowlyRepository.listAlarms()).toEqual([]);
+    const alarm = { ...draft, id: 'a1', createdAt: 'stamp', updatedAt: 'stamp' };
+    invokeMock.mockResolvedValue(alarm);
+    expect(await tauriNowlyRepository.createAlarm(draft)).toBe(alarm);
+    expect(await tauriNowlyRepository.updateAlarm('a1', draft)).toBe(alarm);
+    await tauriNowlyRepository.deleteAlarm('a1');
+    expect(invokeMock.mock.calls).toEqual([
+      ['get_time_settings'], ['save_time_settings', { settings }], ['list_alarms'],
+      ['create_alarm', { draft }], ['update_alarm', { id: 'a1', draft }], ['delete_alarm', { id: 'a1' }]
+    ]);
+    expect(emitMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('propagates alarm write errors without invalidating the snapshot', async () => {
+    const error = { code: 'not_found', message: 'Missing alarm' };
+    invokeMock.mockRejectedValue(error);
+    await expect(tauriNowlyRepository.deleteAlarm('missing')).rejects.toBe(error);
+    expect(emitMock).not.toHaveBeenCalled();
   });
 
   it('invalidates the screen status snapshot after event and task writes', async () => {

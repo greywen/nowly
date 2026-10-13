@@ -71,6 +71,28 @@ function panelActions(overrides: Partial<React.ComponentProps<typeof StatusIslan
   };
 }
 
+describe('alarm notice panels', () => {
+  const notice = { id: 'n1', kind: 'alarm' as const, title: 'Tea', dueAt: '2026-10-11T00:00:00Z', alarmId: 'a1', count: 1, rangeStart: '2026-10-10T00:00:00Z', rangeEnd: '2026-10-11T00:00:00Z' };
+  it('exposes ordinary notice acknowledgement and snooze as keyboard buttons', () => {
+    const actions = panelActions({ onAcknowledgeAlarmNotice: vi.fn(), onSnoozeAlarmNotice: vi.fn() });
+    render(<StatusIslandPanel context={{ kind: 'alarm', notice }} actions={actions} />);
+    const acknowledge = screen.getByRole('button', { name: '确认' });
+    acknowledge.focus();
+    expect(acknowledge).toHaveFocus();
+    fireEvent.click(acknowledge);
+    fireEvent.click(screen.getByRole('button', { name: '稍后 5 分钟' }));
+    expect(actions.onAcknowledgeAlarmNotice).toHaveBeenCalledWith('n1');
+    expect(actions.onSnoozeAlarmNotice).toHaveBeenCalledWith('n1');
+    expect(actions.onOpenEvent).not.toHaveBeenCalled();
+  });
+  it('renders summary count and local date range without a snooze action', () => {
+    render(<StatusIslandPanel compact context={{ kind: 'missedSummary', notice: { ...notice, kind: 'missedSummary', count: 8 } }} actions={panelActions({ onAcknowledgeAlarmNotice: vi.fn() })} />);
+    expect(screen.getByText('错过 8 次闹钟')).toBeInTheDocument();
+    expect(screen.getByText(/2026\/10\/10/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '稍后 5 分钟' })).toBeNull();
+  });
+});
+
 describe('TopRail', () => {
   it('keeps the status control and Nowly control inside one continuous status shell', () => {
     const { container } = render(

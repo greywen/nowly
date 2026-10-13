@@ -31,6 +31,16 @@ describe('DesktopShell', () => {
     localStorage.clear();
   });
 
+  it('routes module configuration through edit mode only', async () => {
+    const configure = vi.fn();
+    render(<DesktopShell time="09:41" dateText="today" summary="" modules={modules()} configurations={{calendar: configure}} />);
+    await screen.findByText('calendar region');
+    expect(screen.queryByRole('button', {name: '设置日历'})).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', {name: '编辑布局'}));
+    fireEvent.click(screen.getByRole('button', {name: '设置日历'}));
+    expect(configure).toHaveBeenCalledOnce();
+  });
+
   it('renders a fixed viewport shell with calendar, matrix, and notes regions', () => {
     render(
       <DesktopShell

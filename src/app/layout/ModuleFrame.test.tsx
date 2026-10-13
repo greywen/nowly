@@ -6,6 +6,14 @@ import { ModuleFrame } from './ModuleFrame';
 const calendar = getWidgetDefinition('calendar')!;
 
 describe('ModuleFrame', () => {
+  it('offers optional configuration only while editing', () => {
+    const onConfigure = vi.fn();
+    const { rerender } = render(<ModuleFrame definition={calendar} editing onConfigure={onConfigure}>clock</ModuleFrame>);
+    fireEvent.click(screen.getByRole('button', { name: '设置日历' }));
+    expect(onConfigure).toHaveBeenCalledOnce();
+    rerender(<ModuleFrame definition={calendar} editing={false} onConfigure={onConfigure}>clock</ModuleFrame>);
+    expect(screen.queryByRole('button', { name: '设置日历' })).not.toBeInTheDocument();
+  });
   it('renders module content and no edit affordances when not editing', () => {
     render(
       <ModuleFrame definition={calendar} editing={false}>

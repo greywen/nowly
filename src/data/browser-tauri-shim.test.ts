@@ -24,6 +24,105 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+const clock = { id: 'local', timeZone: 'local', label: '', mode: 'digital', hourCycle: 'h23', showSeconds: false, showLabel: false, showDate: false, showDifference: false };
+const alarmDraft = { title: 'Break', hour: 9, minute: 7, repeat: { kind: 'weekly', weekdays: [1, 5] }, enabled: true };
+
+describe('browser time persistence', () => {
+  it('defaults to one minimal local digital clock and no alarms or notices', async () => {
+    installBrowserTauriBackend();
+    expect(await invoke()('get_time_settings')).toEqual({ clocks: [clock] });
+    expect(await invoke()('list_alarms')).toEqual([]);
+    expect(await invoke()('get_status_island_snapshot')).toHaveProperty('alarmNotices', []);
+  });
+
+  it('round trips settings and alarm CRUD across reinstall without altering calendar events', async () => {
+    installBrowserTauriBackend();
+    const settings = { clocks: [{ ...clock, id: 'tokyo', timeZone: 'Asia/Tokyo', mode: 'mixed', showDate: true }] };
+    expect(await invoke()('save_time_settings', { settings })).toEqual(settings);
+    const alarm = await invoke()('create_alarm', { draft: alarmDraft }) as Record<string, unknown>;
+    expect(alarm).toEqual({ ...alarmDraft, id: expect.any(String), createdAt: expect.any(String), updatedAt: expect.any(String) });
+    const updated = await invoke()('update_alarm', { id: alarm.id, draft: { ...alarmDraft, title: 'Edited', enabled: false } });
+    Reflect.deleteProperty(window, '__TAURI_INTERNALS__');
+    installBrowserTauriBackend();
+    expect(await invoke()('get_time_settings')).toEqual(settings);
+    expect(await invoke()('list_alarms')).toEqual([updated]);
+    expect(await invoke()('list_events_in_range', { range: { startAt: '2000', endAtExclusive: '2100' } })).toEqual([]);
+    await invoke()('delete_alarm', { id: alarm.id });
+    Reflect.deleteProperty(window, '__TAURI_INTERNALS__');
+    installBrowserTauriBackend();
+    expect(await invoke()('list_alarms')).toEqual([]);
+  });
+
+  it.each([
+    { clocks: [] },
+    { clocks: [{ ...clock, timeZone: 'Not/AZone' }] },
+    { clocks: [{ ...clock, mode: 'invalid' }] },
+    { clocks: [{ ...clock, hourCycle: 'h24' }] },
+    { clocks: [{ ...clock, showSeconds: 'yes' }] },
+    { clocks: [clock, clock] }
+  ])('rejects invalid clock settings without persisting them: %j', async settings => {
+    installBrowserTauriBackend();
+    await expect(invoke()('save_time_settings', { settings })).rejects.toMatchObject({ code: 'validation_error' });
+    expect(await invoke()('get_time_settings')).toEqual({ clocks: [clock] });
+  });
+
+  it.each([
+    { ...alarmDraft, title: ' ' }, { ...alarmDraft, hour: 24 }, { ...alarmDraft, minute: 1.5 },
+    { ...alarmDraft, repeat: { kind: 'weekly', weekdays: [] } },
+    { ...alarmDraft, repeat: { kind: 'weekly', weekdays: [0, 8] } },
+    { ...alarmDraft, repeat: { kind: 'weekly', weekdays: [1, 1] } },
+    { ...alarmDraft, repeat: { kind: 'once', date: '2000-01-01' } },
+    { ...alarmDraft, repeat: { kind: 'once', date: '2099-02-30' } }
+  ])('rejects invalid alarm drafts without storing them: %j', async draft => {
+    installBrowserTauriBackend();
+    await expect(invoke()('create_alarm', { draft })).rejects.toMatchObject({ code: 'validation_error' });
+    expect(await invoke()('list_alarms')).toEqual([]);
+  });
+
+  it('validates once alarms against the local minute, and supports future dates', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 9, 11, 9, 7, 30));
+    try {
+      installBrowserTauriBackend();
+      await expect(invoke()('create_alarm', { draft: { ...alarmDraft, repeat: { kind: 'once', date: '2026-10-11' } } })).rejects.toMatchObject({ code: 'validation_error' });
+      expect(await invoke()('create_alarm', { draft: { ...alarmDraft, minute: 8, repeat: { kind: 'once', date: '2026-10-11' } } })).toMatchObject({ minute: 8 });
+    } finally { vi.useRealTimers(); }
+  });
+
+  it.each(['update_alarm', 'delete_alarm'])('rejects missing alarm ids for %s', async command => {
+    installBrowserTauriBackend();
+    await expect(invoke()(command, { id: 'missing', draft: alarmDraft })).rejects.toMatchObject({ code: 'not_found' });
+  });
+
+  it('uses only explicit persisted notice fixtures and consumes ack/snooze idempotently', async () => {
+    const notice = { id: 'notice-1', kind: 'alarm', title: 'Break', alarmId: 'a1', dueAt: '2026-10-11T09:07:00Z', count: 1, rangeStart: '2026-10-11T09:07:00Z', rangeEnd: '2026-10-11T09:07:00Z' };
+    const summary = { ...notice, id: 'summary', kind: 'missedSummary', alarmId: null, count: 4 };
+    localStorage.setItem(storageKey, JSON.stringify({ alarmNotices: [notice, summary] }));
+    installBrowserTauriBackend();
+    expect(await invoke()('get_status_island_snapshot')).toHaveProperty('alarmNotices', [notice, summary]);
+    await expect(invoke()('snooze_alarm_notice', { id: 'summary' })).rejects.toMatchObject({ code: 'validation_error' });
+    await invoke()('snooze_alarm_notice', { id: notice.id });
+    await invoke()('snooze_alarm_notice', { id: notice.id });
+    expect(await invoke()('get_status_island_snapshot')).toHaveProperty('alarmNotices', [summary]);
+    await invoke()('acknowledge_alarm_notice', { id: 'summary' });
+    await invoke()('acknowledge_alarm_notice', { id: 'summary' });
+    Reflect.deleteProperty(window, '__TAURI_INTERNALS__');
+    installBrowserTauriBackend();
+    expect(await invoke()('get_status_island_snapshot')).toHaveProperty('alarmNotices', []);
+  });
+
+  it('never synthesizes notices from alarms as time advances in the browser', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 9, 11, 9, 0));
+    try {
+      installBrowserTauriBackend();
+      await invoke()('create_alarm', { draft: { ...alarmDraft, repeat: { kind: 'once', date: '2026-10-11' } } });
+      await vi.advanceTimersByTimeAsync(24 * 60 * 60 * 1000);
+      expect(await invoke()('get_status_island_snapshot')).toHaveProperty('alarmNotices', []);
+    } finally { vi.useRealTimers(); }
+  });
+});
+
 describe('browser focus coordinator', () => {
   it('broadcasts the same seconds it exposes in both snapshots and freezes on pause', async () => {
     vi.useFakeTimers();

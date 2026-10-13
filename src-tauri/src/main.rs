@@ -30,14 +30,15 @@ mod remote_events;
 mod rrule_bridge;
 mod rrule_engine;
 mod screen_capture;
-mod screenshot_windows;
 mod screenshot_shortcuts;
+mod screenshot_windows;
 mod settings;
 mod shell;
 mod status_island;
 mod subscription_sync;
 mod subscriptions;
 mod task_workspace;
+mod time;
 mod timezone;
 mod token_store;
 mod update;
@@ -436,6 +437,30 @@ fn main() {
                 }
             });
 
+            // Time module alarms are independent from calendar reminders and
+            // surface through Nowly Bar only. They do not play sounds or depend
+            // on any React widget/settings window being visible.
+            let alarm_handle = app.handle().clone();
+            std::thread::spawn(move || loop {
+                std::thread::sleep(std::time::Duration::from_secs(1));
+                let changed = match alarm_handle.state::<AppDb>().0.lock() {
+                    Ok(mut connection) => match time::scheduler::poll(&mut connection, chrono::Utc::now()) {
+                        Ok(outcome) => outcome.changed,
+                        Err(error) => {
+                            eprintln!("failed to poll time alarms: {error:?}");
+                            false
+                        }
+                    },
+                    Err(error) => {
+                        eprintln!("failed to lock database for time alarms: {error}");
+                        false
+                    }
+                };
+                if changed {
+                    let _ = status_island::invalidate_registered();
+                }
+            });
+
             // 订阅刷新：启动即全刷一次，之后每 60 秒检查各源是否到期（按各自间隔）。
             // 网络拉取在数据库锁外执行（见 subscription_sync 阶段锁），不会拖垮其它操作。
             let subscription_handle = app.handle().clone();
@@ -797,6 +822,8 @@ fn main() {
             status_island::set_status_island_visibility,
             status_island::dismiss_status_island_reminder,
             status_island::consume_status_island_reminder,
+            status_island::acknowledge_alarm_notice,
+            status_island::snooze_alarm_notice,
             status_island::set_status_island_presence,
             quick_panel::get_status_island_presentation,
             quick_panel::finish_status_island_presentation,
@@ -807,7 +834,13 @@ fn main() {
             status_island::start_status_island_focus,
             status_island::pause_status_island_focus,
             status_island::resume_status_island_focus,
-            window_lifecycle::get_window_mode
+            window_lifecycle::get_window_mode,
+            time::commands::get_time_settings,
+            time::commands::save_time_settings,
+            time::commands::list_alarms,
+            time::commands::create_alarm,
+            time::commands::update_alarm,
+            time::commands::delete_alarm
         ])
         .run(tauri::generate_context!())
         .expect("failed to run Nowly");

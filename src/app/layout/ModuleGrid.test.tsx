@@ -24,6 +24,13 @@ function frameOf(text: string) {
 }
 
 describe('ModuleGrid', () => {
+  it('exposes configuration only for configured modules', () => {
+    const configure = vi.fn();
+    render(<ModuleGrid items={items} editing onMove={vi.fn()} onResize={vi.fn()} configurations={{calendar: configure}} />);
+    fireEvent.click(screen.getByRole('button', {name: '设置日历'}));
+    expect(configure).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('button', {name: '设置便签'})).not.toBeInTheDocument();
+  });
   it('places each module at its grid rect', () => {
     render(<ModuleGrid items={items} editing={false} onMove={vi.fn()} onResize={vi.fn()} />);
 
