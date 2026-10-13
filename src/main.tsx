@@ -34,7 +34,7 @@ if (browserOnly) {
 function currentWindowLabel(): string {
   if (browserOnly) {
     const surface = new URLSearchParams(window.location.search).get('surface');
-    return surface === 'screenshot-history' ? surface : 'main';
+    return surface === 'screenshot-history' || surface === 'quick-panel-handle' ? surface : 'main';
   }
   try {
     return getCurrentWindow().label;

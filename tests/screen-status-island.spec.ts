@@ -94,6 +94,7 @@ async function installRail(page: Page, data: unknown = snapshot, open: OpenPaylo
         },
         invoke: async (command: string, args?: { event?: string; handler?: number }) => {
           if (command === 'get_status_island_snapshot') return snapshot;
+          if (command === 'get_focus_timer_snapshot') return (snapshot as { focus: unknown }).focus;
           if (command === 'begin_status_island_drag') return draggable;
           if (open && command === 'plugin:event|listen'
             && args?.event === 'status-island-details-open' && args.handler) {
@@ -124,6 +125,93 @@ function lastArgs(page: Page, command: string) {
     name => window.__statusArgs.filter(entry => entry.command === name).pop()?.args,
     command
   );
+}
+
+for (const scale of [1, 1.25, 1.5, 2]) {
+test.describe(`notification-only strip through the browser backend at ${scale}x`, () => {
+  test.use({ viewport: { width: 432, height: 288 }, deviceScaleFactor: scale });
+
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('nowly:browser-backend', JSON.stringify({
+        settings: { notificationMode: 'notification' }
+      }));
+    });
+    await page.goto('/?surface=quick-panel-handle', { waitUntil: 'domcontentloaded' });
+  });
+
+  async function nativeCommand(page: Page, command: string, args: Record<string, unknown> = {}) {
+    await page.evaluate(async ({ command, args }) => {
+      const internals = Reflect.get(window, '__TAURI_INTERNALS__');
+      await internals.invoke(command, args);
+    }, { command, args });
+  }
+
+  test('continuously morphs the same shell between the exact strip and Bar geometry', async ({ page }) => {
+    const entry = page.getByRole('button', { name: '显示 Nowly Bar' });
+    const shell = page.locator('.status-rail__status-presence');
+    await expect(entry).toBeVisible();
+    await expect.poll(() => shell.boundingBox()).toEqual({ x: 168, y: 4, width: 96, height: 4 });
+    await entry.hover();
+    await expect.poll(() => shell.boundingBox()).toEqual({ x: 72, y: 0, width: 288, height: 40 });
+    await expect(page.getByRole('button', { name: 'Nowly', exact: true })).toBeVisible();
+    await expect(page.locator('.status-rail')).toHaveAttribute('data-open', 'false');
+    await page.mouse.move(10, 120);
+    await expect.poll(() => shell.boundingBox()).toEqual({ x: 168, y: 4, width: 96, height: 4 });
+    await expect(page.getByRole('button', { name: 'Nowly', exact: true })).toHaveCount(0);
+  });
+
+  test('holds an open menu and notifications rather than dismissing them on pointer leave', async ({ page }) => {
+    await page.getByRole('button', { name: '显示 Nowly Bar' }).hover();
+    await page.getByRole('button', { name: 'Nowly', exact: true }).click();
+    await page.mouse.move(10, 287);
+    await expect(page.getByRole('menu', { name: '功能菜单' })).toBeVisible();
+    await nativeCommand(page, 'set_status_island_presence', { surface: 'keyboard', present: false });
+    await nativeCommand(page, 'set_status_island_visibility', { visible: true });
+    await nativeCommand(page, 'close_status_island_details');
+    await expect(page.locator('.status-rail')).toHaveAttribute('data-open', 'false');
+    await expect(page.locator('.status-rail')).toHaveAttribute('data-strip', 'false');
+    await expect(page.locator('.status-rail')).not.toHaveAttribute('data-frame-anim', 'shrink');
+    await page.getByRole('button', { name: 'Nowly', exact: true }).evaluate(element => element.blur());
+    await page.mouse.move(10, 120);
+    await nativeCommand(page, 'set_status_island_visibility', { visible: false });
+    await expect(page.locator('.status-rail')).toHaveAttribute('data-strip', 'true');
+  });
+
+  test('keeps the full entry hittable and reverses from the current shape without jumping', async ({ page }) => {
+    const entry = page.getByRole('button', { name: '显示 Nowly Bar' });
+    const shell = page.locator('.status-rail__status-presence');
+    await expect.poll(() => shell.boundingBox()).toEqual({ x: 168, y: 4, width: 96, height: 4 });
+    await entry.hover({ position: { x: 64, y: 14 } });
+    await expect.poll(() => shell.boundingBox()).toEqual({ x: 72, y: 0, width: 288, height: 40 });
+    await page.mouse.move(10, 120);
+    await page.waitForTimeout(70);
+    const before = await shell.boundingBox();
+    expect(before!.width).toBeGreaterThan(96);
+    expect(before!.width).toBeLessThan(288);
+    await page.mouse.move(216, 12);
+    const after = await shell.boundingBox();
+    expect(Math.abs(after!.width - before!.width)).toBeLessThan(48);
+    await expect.poll(() => shell.boundingBox()).toEqual({ x: 72, y: 0, width: 288, height: 40 });
+    await page.mouse.move(10, 120);
+    await expect.poll(() => shell.boundingBox()).toEqual({ x: 168, y: 4, width: 96, height: 4 });
+  });
+
+  test('reveals through keyboard focus and respects reduced motion without a completion delay', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    const entry = page.getByRole('button', { name: '显示 Nowly Bar' });
+    await expect(entry).toBeVisible();
+    await page.keyboard.press('Tab');
+    await expect(page.locator('.status-rail')).toHaveAttribute('data-strip', 'false');
+    await expect(page.locator('.status-rail__status-presence')).toHaveCSS('transition-duration', '0s, 0s, 0s, 0s, 0s');
+    await expect(page.locator('.status-rail__reveal')).toHaveCSS('transition-duration', '0s');
+    await page.getByRole('button', { name: 'Nowly' }).focus();
+    await page.mouse.move(10, 120);
+    await expect(page.locator('.status-rail')).toHaveAttribute('data-strip', 'false');
+    await page.getByRole('button', { name: 'Nowly' }).evaluate(element => element.blur());
+    await expect(page.locator('.status-rail')).toHaveAttribute('data-strip', 'true');
+  });
+});
 }
 
 for (const scale of [1, 1.5, 2]) {
@@ -334,7 +422,7 @@ test.describe('closing one notification', () => {
     const trigger = page.getByRole('button', { name: /^产品发布评审 ·/ });
     await trigger.focus();
     await expect(dismiss).toHaveCSS('opacity', '1');
-    await expect(trigger).toHaveCSS('box-shadow', /inset/);
+    await expect(trigger).toHaveCSS('box-shadow', 'none');
     await dismiss.click();
 
     const dismissed = await page.evaluate(() =>

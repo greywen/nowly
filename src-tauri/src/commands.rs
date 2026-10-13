@@ -152,6 +152,8 @@ fn update_settings_blocking(app: tauri::AppHandle, settings: AppSettings) -> Res
             }
         }
     }
+    app.state::<crate::quick_panel::PanelController>().set_notification_mode(&saved.notification_mode);
+    crate::quick_panel::sync_bar_presentation(&app).map_err(CommandError::system)?;
     if saved.notification_mode != previous_settings.notification_mode {
         crate::status_island::invalidate(&app)?;
     }

@@ -85,14 +85,99 @@ function localMinute(date: Date): string {
     + `T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+beforeEach(() => {
+  vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+    matches: query.includes('pointer: fine'), addEventListener: vi.fn(), removeEventListener: vi.fn()
+  })));
+});
+afterEach(() => vi.unstubAllGlobals());
+
 describe('screen status island windows', () => {
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
   beforeEach(() => {
     invokeMock.mockReset();
     listenMock.mockReset();
     listenMock.mockResolvedValue(() => undefined);
     respondWith(snapshot);
+  });
+
+  it('keeps a keyboard-accessible strip instead of an interactive hidden Bar in notification mode', async () => {
+    respondWith(snapshotWith({ notificationMode: 'notification' }));
+    render(<StatusIslandApp />);
+    await act(async () => { await Promise.resolve(); });
+    await emitPanelEvent('status-island-presentation', { generation: 1, strip: true });
+    const strip = screen.getByRole('button', { name: '显示 Nowly Bar' });
+    expect(strip).toHaveAttribute('aria-expanded', 'false');
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-strip', 'true');
+    expect(screen.queryByRole('button', { name: 'Nowly' })).not.toBeInTheDocument();
+    fireEvent.pointerEnter(strip);
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith('set_status_island_presence', { surface: 'island', present: true }));
+    expect(invocations('toggle_status_island_details')).toHaveLength(0);
+    await emitPanelEvent('status-island-presentation', { generation: 2, strip: false });
+    expect(screen.getByRole('button', { name: 'Nowly' })).toBeVisible();
+    expect(invocations('acknowledge_status_island_reminder')).toHaveLength(0);
+  });
+
+  it('ignores obsolete presentation events and finishes only the current strip transition', async () => {
+    vi.useFakeTimers();
+    respondWith(snapshotWith({ notificationMode: 'notification' }));
+    render(<StatusIslandApp />);
+    await act(async () => { await Promise.resolve(); });
+    await emitPanelEvent('status-island-presentation', { generation: 3, strip: true });
+    await emitPanelEvent('status-island-presentation', { generation: 4, strip: false });
+    await emitPanelEvent('status-island-presentation', { generation: 2, strip: true });
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-strip', 'false');
+    await act(async () => { await vi.advanceTimersByTimeAsync(330); });
+    expect(invokeMock).toHaveBeenCalledWith('finish_status_island_presentation', { generation: 4 });
+    expect(invokeMock).not.toHaveBeenCalledWith('finish_status_island_presentation', { generation: 3 });
+  });
+
+  it('finishes native panel collapse immediately when reduced motion is enabled', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({
+      matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn()
+    })));
+    render(<StatusIslandApp />);
+    await emitPanelEvent('status-island-details-open', { generation: 1, source: 'menu', identity: null });
+    await emitPanelEvent('status-island-details-close', { generation: 2 });
+    expect(invokeMock).toHaveBeenCalledWith('finish_status_island_details', { generation: 2 });
+  });
+
+  it('surfaces native presence failures with their command error message', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    invokeMock.mockImplementation((command: string) => {
+      if (command === 'get_status_island_snapshot') return Promise.resolve(snapshotWith({ notificationMode: 'notification' }));
+      if (command === 'set_status_island_presence') return Promise.reject({ code: 'system_error', message: 'Region update failed' });
+      return Promise.resolve(null);
+    });
+    render(<StatusIslandApp />);
+    await act(async () => { await Promise.resolve(); });
+    fireEvent.pointerEnter(screen.getByRole('button', { name: '显示 Nowly Bar' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Region update failed');
+    expect(logged).toHaveBeenCalled();
+    logged.mockRestore();
+  });
+
+  it('does not treat a coarse pointer entering the strip as a mouse hover', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({
+      matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn()
+    })));
+    respondWith(snapshotWith({ notificationMode: 'notification' }));
+    render(<StatusIslandApp />);
+    await act(async () => { await Promise.resolve(); });
+    fireEvent.pointerEnter(screen.getByRole('button', { name: '显示 Nowly Bar' }));
+    expect(invocations('set_status_island_presence')).toHaveLength(0);
+  });
+
+  it('releases the notification collapse hold as soon as native reports completion', async () => {
+    vi.useFakeTimers();
+    respondWith(snapshotWith({ notificationMode: 'notification' }));
+    render(<StatusIslandApp />);
+    await emitPanelEvent('status-island-details-open', { generation: 1, source: 'island', identity: null });
+    await emitPanelEvent('status-island-details-close', { generation: 2, hideAfterCollapse: true });
+    await emitPanelEvent('status-island-details-closed', { generation: 2 });
+    await emitPanelEvent('status-island-presentation', { generation: 1, strip: true });
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-strip', 'true');
   });
 
   it('opens the function menu from the only Logo entry rather than opening AI directly', async () => {

@@ -62,6 +62,12 @@ focusing. All data stays on your machine in a local SQLite database.
 - **Exit Nowly** in the tray menu is the only action that terminates the
   process.
 
+### Nowly Bar visibility
+
+Set Nowly Bar to **Notification only** in **Settings → Notifications** to keep a thin top-edge entry when no notification needs attention, rather than hiding the Bar completely. Hovering continuously unfolds the same shell down into the full Bar; leaving folds it back up. Hover only reveals the Bar; click its status area or Logo to open a panel.
+
+Pending notifications, open reminder/menu/AI/history panels, keyboard focus within the Bar, and actions in progress keep the surface available without acknowledging notifications or interrupting input. After a panel closes, the current state determines whether it folds back. Tab can enter the strip; reduced-motion preferences make the transition immediate. Persistent mode is unchanged. Disabling the Bar or suppressing it for capture also hides the strip, and transparent areas do not intercept desktop clicks.
+
 ### Screenshots and history
 
 Click the **Nowly Bar Logo** to open the function menu, then choose **Screenshot**, **Screenshot history**, or **AI assistant**. Configure visibility and order under **Settings → Notifications → Nowly Bar → Function menu**. All three functions are visible by default, including after upgrading from the old app-button settings. Hiding a function only removes its menu entry; shortcuts continue to work. You may hide every function; the menu then explains how to enable them again. Global shortcuts default to **Ctrl+Alt+A** for screenshots and **Ctrl+Alt+H** for screenshot history; change them under **Settings → Shortcuts**. Conflicts are reported without preventing app startup.

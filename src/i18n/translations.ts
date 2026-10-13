@@ -66,6 +66,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'statusIsland.nowly': 'Nowly',
     'statusIsland.nowlyBrand': 'Nowly 品牌标识',
     'statusIsland.rootLabel': 'Nowly Bar',
+    'statusIsland.reveal': '显示 Nowly Bar',
     // Configurable app buttons in the bar.
     'barMenu.screenshot': '截图',
     'barMenu.screenshotHistory': '截图历史',
@@ -994,6 +995,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'statusIsland.nowly': 'Nowly',
     'statusIsland.nowlyBrand': 'Nowly brand mark',
     'statusIsland.rootLabel': 'Nowly Bar',
+    'statusIsland.reveal': 'Show Nowly Bar',
     'barMenu.screenshot': 'Screenshot',
     'barMenu.screenshotHistory': 'Screenshot history',
     'barMenu.assistant': 'AI assistant',

@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   StatusIslandIdleView,
   StatusIslandPanel,
@@ -11,6 +11,7 @@ import {
 import { reminderPanelContext } from '../app/status-island-model';
 import { useStatusIslandSnapshot } from './useStatusIslandSnapshot';
 import { useStatusIslandDrag } from './useStatusIslandDrag';
+import { useBarPresentation, type BarPresentation } from './useBarPresentation';
 import { useTransparentSurfaces } from './useTransparentSurfaces';
 import { useTranslation } from '../i18n';
 import { AssistantDock } from '../assistant/AssistantDock';
@@ -45,6 +46,7 @@ export function StatusIslandApp() {
   useTransparentSurfaces();
   const { t } = useTranslation();
   const { model, status, refresh, notificationMode, barMenu } = useStatusIslandSnapshot();
+  const bar = useBarPresentation(status === 'ready');
   const drag = useStatusIslandDrag();
   const surfaceState = model.surface;
   const [open, setOpen] = useState(false);
@@ -105,10 +107,10 @@ export function StatusIslandApp() {
   const visibilityRequest = useRef<Promise<void>>(Promise.resolve());
   const requestVisibility = useCallback((visible: boolean) => {
     visibilityRequest.current = visibilityRequest.current
-      .catch(() => undefined)
-      .then(() => invoke('set_status_island_visibility', { visible }))
-      .then(() => undefined);
-  }, []);
+      .then(() => invoke<BarPresentation>('set_status_island_visibility', { visible }))
+      .then(bar.accept)
+      .catch(bar.failed);
+  }, [bar.accept, bar.failed]);
   const collapse = useCallback(() => void invoke('close_status_island_details'), []);
 
   useEffect(() => {
@@ -187,6 +189,9 @@ export function StatusIslandApp() {
       setOpen(false);
       assistantSheetRequested.current = false;
       if (closingAssistant) setAssistantSurface(null);
+      if (generation !== undefined && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        void invoke('finish_status_island_details', { generation }).catch(bar.failed);
+      }
     }).then(keep);
     void listen<{ generation: number }>('status-island-details-closed', event => {
       if (closingGeneration.current !== event.payload.generation) {
@@ -199,6 +204,7 @@ export function StatusIslandApp() {
         assistantSheetRequested.current = false;
       }
       closingGeneration.current = null;
+      setNativeHidePending(false);
       setStatusAnim(null);
       if (assistantSurfaceRef.current === null) setAssistantAnim(null);
       setAssistantClosing(false);
@@ -259,13 +265,8 @@ export function StatusIslandApp() {
     }
   }, [open, source, assistantAnim, assistantClosing]);
 
-  const focusEnter = useCallback(() => reportPresence('keyboard', true), []);
-  const focusLeave = useCallback(() => reportPresence('keyboard', false), []);
-
   const surface = {
     onActivate: activate,
-    onFocusEnter: focusEnter,
-    onFocusLeave: focusLeave,
     onGrab: drag.onGrab,
     onNudge: drag.nudge,
     dragging: drag.dragging,
@@ -273,6 +274,14 @@ export function StatusIslandApp() {
   };
   const retry = status === 'error' ? { onRetryStatus: () => void refresh() } : {};
   const railSurface: RailSurface = open && (source === 'history' || source === 'menu') ? source : assistantSurface ?? 'status';
+  const strip = notificationMode === 'notification'
+    && !open && statusAnim === null && assistantAnim === null && !nativeHidePending
+    && (bar.presentation?.strip ?? (status === 'ready' && unseenNotificationKey === ''));
+  useLayoutEffect(() => {
+    if (!strip && document.activeElement?.matches('.status-rail__strip-entry')) {
+      document.querySelector<HTMLButtonElement>('.status-island__trigger')?.focus();
+    }
+  }, [strip]);
 
   const context = useMemo(() => {
     if (displayedSurface.mode === 'summary') {
@@ -325,9 +334,20 @@ export function StatusIslandApp() {
     <main
       className="screen-status-island-root"
       aria-label={t('statusIsland.rootLabel')}
+      onPointerEnter={() => {
+        if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) bar.presence('island', true);
+      }}
+      onPointerLeave={() => bar.presence('island', false)}
+      onFocusCapture={() => bar.presence('keyboard', true)}
+      onBlurCapture={event => {
+        if (!event.currentTarget.contains(event.relatedTarget)) bar.presence('keyboard', false);
+      }}
     >
       <TopRail
         open={open}
+        notificationOnly={notificationMode === 'notification'}
+        strip={strip}
+        onReveal={() => bar.presence('keyboard', true)}
         source={source}
         surface={railSurface}
         assistantClosing={assistantClosing}
@@ -396,6 +416,9 @@ export function StatusIslandApp() {
           <StatusIslandIdleView {...retry} {...surface} />
         )}
       </TopRail>
+      {bar.error && <button type="button" className="status-rail__action-error" onClick={bar.refresh}>
+        <span role="alert">{bar.error}</span> {t('common.retry')}
+      </button>}
       {activationError && <button type="button" className="status-rail__action-error" onClick={activateNowly}>
         <span role="alert">{activationError}</span> {t('common.retry')}
       </button>}

@@ -99,6 +99,22 @@ struct DetailsClosed {
     generation: u64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+pub struct BarPresentation {
+    pub generation: u64,
+    pub strip: bool,
+}
+
+fn strip_region(scale: f64) -> SurfaceRegion {
+    SurfaceRegion {
+        left: physical_pixels((PANEL_WIDTH - 128.0) / 2.0, scale),
+        top: 0,
+        right: physical_pixels((PANEL_WIDTH + 128.0) / 2.0, scale),
+        bottom: physical_pixels(16.0, scale),
+        radius: 0,
+    }
+}
+
 pub fn screen_top(monitor_y: i32, _work_area_y: i32) -> i32 {
     monitor_y
 }
@@ -334,6 +350,13 @@ struct PanelState {
     capture_suppressed: bool,
     capture_startup_succeeded: bool,
     restore_visible: bool,
+    notification_only: bool,
+    notification_visible: bool,
+    bar_presence: [bool; 4],
+    bar_strip: bool,
+    bar_generation: u64,
+    bar_transitioning: bool,
+    details_closing: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -353,6 +376,21 @@ struct Drag {
 }
 
 impl PanelState {
+    fn refresh_bar_presentation(&mut self) -> BarPresentation {
+        let strip = self.notification_only
+            && !self.notification_visible
+            && !self.bar_presence.iter().any(|present| *present)
+            && self.details_source.is_none()
+            && !self.details_closing
+            && self.drag.is_none();
+        if strip != self.bar_strip {
+            self.bar_strip = strip;
+            self.bar_generation += 1;
+            self.bar_transitioning = true;
+        }
+        BarPresentation { generation: self.bar_generation, strip }
+    }
+
     /// A drag in progress refuses to open the sheet: the sheet *is* the rail
     /// grown, and growing it mid-drag would resize the window under the pointer.
     fn allows_details(&self) -> bool {
@@ -377,6 +415,13 @@ impl Default for PanelController {
                 capture_suppressed: false,
                 capture_startup_succeeded: false,
                 restore_visible: false,
+                notification_only: false,
+                notification_visible: false,
+                bar_presence: [false; 4],
+                bar_strip: false,
+                bar_generation: 0,
+                bar_transitioning: false,
+                details_closing: false,
             }),
             positioning: Mutex::new(()),
             visibility: Mutex::new(()),
@@ -385,6 +430,57 @@ impl Default for PanelController {
 }
 
 impl PanelController {
+    pub fn set_notification_mode(&self, mode: &str) {
+        self.state.lock().unwrap().notification_only = mode == "notification";
+    }
+
+    pub fn set_notification_visible(&self, visible: bool) {
+        self.state.lock().unwrap().notification_visible = visible;
+    }
+
+    pub fn set_bar_presence(&self, surface: crate::status_island::PresenceSurface, present: bool) {
+        use crate::status_island::PresenceSurface;
+        let index = match surface {
+            PresenceSurface::Island => 0,
+            PresenceSurface::Keyboard => 1,
+            PresenceSurface::Details => 2,
+            PresenceSurface::Action => 3,
+        };
+        self.state.lock().unwrap().bar_presence[index] = present;
+    }
+
+    pub fn bar_presentation(&self) -> BarPresentation {
+        self.state.lock().unwrap().refresh_bar_presentation()
+    }
+
+    pub fn finish_bar_presentation(&self, generation: u64) -> bool {
+        let mut state = self.state.lock().unwrap();
+        state.refresh_bar_presentation();
+        if state.bar_generation != generation {
+            return false;
+        }
+        state.bar_transitioning = false;
+        true
+    }
+
+    pub fn finish_details_collapse(&self, generation: u64) -> bool {
+        let mut state = self.state.lock().unwrap();
+        if state.details_generation != generation || !state.details_closing {
+            return false;
+        }
+        state.details_closing = false;
+        true
+    }
+
+    fn bar_region(&self, source: Option<PanelSource>, scale: f64) -> SurfaceRegion {
+        let state = self.state.lock().unwrap();
+        if source.is_none() && state.bar_strip && !state.bar_transitioning {
+            strip_region(scale)
+        } else {
+            surface_region(source, scale)
+        }
+    }
+
     pub fn is_enabled(&self) -> bool {
         self.state.lock().unwrap().enabled
     }
@@ -489,6 +585,7 @@ impl PanelController {
         } else {
             None
         };
+        state.details_closing = state.details_source.is_none();
         DetailsTransition {
             generation: state.details_generation,
             source: state.details_source,
@@ -527,6 +624,7 @@ impl PanelController {
         state.details_generation += 1;
         state.details_source = None;
         state.hover_source = None;
+        state.details_closing = true;
         DetailsTransition {
             generation: state.details_generation,
             source: None,
@@ -581,6 +679,8 @@ impl PanelController {
         state.details_source = None;
         state.hover_source = None;
         state.drag = None;
+        state.details_closing = false;
+        state.bar_presence = [false; 4];
         let details_generation = state.details_generation;
         let suppression = CaptureSuppression {
             generation: state.capture_suppression_generation,
@@ -667,6 +767,8 @@ impl PanelController {
         state.hover_source = None;
         if !enabled {
             state.details_source = None;
+            state.details_closing = false;
+            state.bar_presence = [false; 4];
         }
     }
 }
@@ -676,6 +778,9 @@ pub fn initialize<R: Runtime>(app: &AppHandle<R>, notification_mode: &str) -> Re
         .get_webview_window("quick-panel-handle")
         .ok_or_else(|| "quick-panel-handle window not found".to_owned())?;
     let initialized = (|| {
+        let controller = app.state::<PanelController>();
+        controller.set_notification_mode(notification_mode);
+        controller.bar_presentation();
         normalize_handle_window_style(&handle)
             .map_err(|error| format!("failed to normalize popup window style: {error}"))?;
         configure_transparent_webview(&handle)
@@ -755,7 +860,7 @@ fn configure_transparent_webview<R: Runtime>(
 }
 
 fn starts_visible(notification_mode: &str) -> bool {
-    notification_mode == "persistent"
+    matches!(notification_mode, "persistent" | "notification")
 }
 
 fn target_monitor<R: Runtime>(window: &tauri::WebviewWindow<R>) -> Result<tauri::Monitor, String> {
@@ -1058,7 +1163,11 @@ fn set_handle_bounds<R: Runtime>(
 }
 
 pub fn reposition_handle<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
-    if !app.state::<PanelController>().is_enabled() {
+    let controller = app.state::<PanelController>();
+    let state = controller.state.lock().unwrap();
+    let can_reposition = state.enabled && !state.details_closing && !state.capture_suppressed;
+    drop(state);
+    if !can_reposition {
         return Ok(());
     }
     let handle = app
@@ -1069,6 +1178,7 @@ pub fn reposition_handle<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
     let work_area = monitor_work_area(&monitor)?;
     let top = screen_top(monitor.position().y, work_area.y);
     let source = app.state::<PanelController>().details_source();
+    let region = app.state::<PanelController>().bar_region(source, monitor.scale_factor());
     let desired_size = top_surface_size(source, monitor.scale_factor());
     let physical_size = PhysicalSize::new(desired_size.0, desired_size.1);
     let handle_x = surface_x(
@@ -1087,14 +1197,14 @@ pub fn reposition_handle<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
             &handle,
             handle_position,
             physical_size,
-            surface_region(source, monitor.scale_factor()),
+            region,
         )?;
     } else {
         // Also initialize the region when startup bounds already match.
         #[cfg(target_os = "windows")]
         set_handle_region(
             &handle,
-            surface_region(source, monitor.scale_factor()),
+            region,
         )?;
     }
     Ok(())
@@ -1112,7 +1222,7 @@ fn reconcile_positions_if_current<R: Runtime>(
 ) -> Result<bool, String> {
     let controller = app.state::<PanelController>();
     let _positioning = controller.positioning.lock().unwrap();
-    if !controller.is_details_current(generation) {
+    if !controller.finish_details_collapse(generation) {
         return Ok(false);
     }
     reposition_handle(app)?;
@@ -1125,6 +1235,47 @@ pub fn request_position_reconcile<R: Runtime>(app: AppHandle<R>) {
             eprintln!("failed to reposition status island windows: {error}");
         }
     });
+}
+
+pub fn sync_bar_presentation<R: Runtime>(app: &AppHandle<R>) -> Result<BarPresentation, String> {
+    let controller = app.state::<PanelController>();
+    let _positioning = controller.positioning.lock().unwrap();
+    let presentation = controller.bar_presentation();
+    let state = controller.state.lock().unwrap();
+    let available = state.enabled && !state.capture_suppressed;
+    let closing = state.details_closing;
+    drop(state);
+    if available {
+        if !closing {
+            reposition_handle(app)?;
+        }
+        let handle = app.get_webview_window("quick-panel-handle")
+            .ok_or_else(|| "quick-panel-handle window not found".to_owned())?;
+        controller.show_serialized(|| handle.show()).unwrap_or(Ok(()))
+            .map_err(|error| error.to_string())?;
+        handle.emit("status-island-presentation", presentation).map_err(|error| error.to_string())?;
+    }
+    Ok(presentation)
+}
+
+#[tauri::command]
+pub fn get_status_island_presentation(app: AppHandle) -> Result<BarPresentation, crate::error::CommandError> {
+    sync_bar_presentation(&app).map_err(crate::error::CommandError::system)
+}
+
+#[tauri::command]
+pub fn finish_status_island_presentation(app: AppHandle, generation: u64) -> Result<(), crate::error::CommandError> {
+    let controller = app.state::<PanelController>();
+    let _positioning = controller.positioning.lock().unwrap();
+    if controller.finish_bar_presentation(generation) {
+        let state = controller.state.lock().unwrap();
+        let available = state.enabled && !state.capture_suppressed && !state.details_closing;
+        drop(state);
+        if available {
+            reposition_handle(&app).map_err(crate::error::CommandError::system)?;
+        }
+    }
+    Ok(())
 }
 
 pub fn start_monitor_watch<R: Runtime>(app: AppHandle<R>) {
@@ -1204,7 +1355,7 @@ fn show_details<R: Runtime>(
     let handle = app
         .get_webview_window("quick-panel-handle")
         .ok_or_else(|| "quick-panel-handle window not found".to_owned())?;
-    reconcile_positions(app)?;
+    sync_bar_presentation(app)?;
     let acknowledged_identity = controller
         .run_if_details_current(generation, || {
             // The island sheet is opened *for* one reminder. Sending that identity lets
@@ -1250,7 +1401,6 @@ fn hide_details_with_action<R: Runtime>(
     let Some(handle) = app.get_webview_window("quick-panel-handle") else {
         return Ok(());
     };
-    let visibility_generation = app.state::<PanelController>().visibility_generation();
     let _ = handle.emit(
         "status-island-details-close",
         DetailsClose {
@@ -1262,31 +1412,27 @@ fn hide_details_with_action<R: Runtime>(
     let app = app.clone();
     std::thread::spawn(move || {
         std::thread::sleep(COLLAPSE_ANIMATION);
-        match reconcile_positions_if_current(&app, generation) {
-            Ok(true) => {}
-            Ok(false) => return,
-            Err(error) => {
-                eprintln!("failed to shrink the status island rail: {error}");
-                return;
-            }
-        }
-        if let Some(handle) = app.get_webview_window("quick-panel-handle") {
-            let _ = handle.emit("status-island-details-closed", DetailsClosed { generation });
-        }
-        if action == OutsideClickAction::CollapseThenHide {
-            if let Some(handle) = app.get_webview_window("quick-panel-handle") {
-                let hidden = app.state::<PanelController>().hide_if_current(
-                    generation,
-                    visibility_generation,
-                    || handle.hide(),
-                );
-                if let Some(Err(error)) = hidden {
-                    eprintln!("failed to hide notification-only status island: {error}");
-                }
-            }
+        if let Err(error) = complete_details_collapse(&app, generation) {
+            eprintln!("failed to complete status island collapse: {error}");
         }
     });
     Ok(())
+}
+
+fn complete_details_collapse<R: Runtime>(app: &AppHandle<R>, generation: u64) -> Result<(), String> {
+    if !reconcile_positions_if_current(app, generation)? {
+        return Ok(());
+    }
+    if let Some(handle) = app.get_webview_window("quick-panel-handle") {
+        handle.emit("status-island-details-closed", DetailsClosed { generation }).map_err(|error| error.to_string())?;
+    }
+    sync_bar_presentation(app)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn finish_status_island_details(app: AppHandle, generation: u64) -> Result<(), crate::error::CommandError> {
+    complete_details_collapse(&app, generation).map_err(crate::error::CommandError::system)
 }
 
 fn hide_details<R: Runtime>(app: &AppHandle<R>, generation: u64) -> Result<(), String> {
@@ -1739,6 +1885,132 @@ pub fn restore_after_capture<R: Runtime>(app: &AppHandle<R>, suppression: Captur
 
 #[cfg(test)]
 mod tests {
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn native_reconcile_preserves_a_closing_panel_and_strip_click_through() {
+        use tauri::Manager;
+        use windows::Win32::Graphics::Gdi::{CreateRectRgn, DeleteObject, GetWindowRgn, PtInRegion};
+        let app = tauri::Builder::default()
+            .any_thread()
+            .manage(PanelController::default())
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .unwrap();
+        let handle = tauri::WebviewWindowBuilder::new(
+            &app, "quick-panel-handle", tauri::WebviewUrl::App("index.html".into()),
+        ).visible(false).decorations(false).shadow(false).transparent(true).build().unwrap();
+        let controller = app.state::<PanelController>();
+        controller.toggle_details(PanelSource::Menu);
+        super::reconcile_positions(app.handle()).unwrap();
+        let expanded_size = handle.outer_size().unwrap();
+        let closed = controller.close_details();
+        super::reconcile_positions(app.handle()).unwrap();
+        assert_eq!(handle.outer_size().unwrap(), expanded_size, "monitor reconciliation must not clip a closing panel");
+        controller.finish_details_collapse(closed.generation);
+        super::reconcile_positions(app.handle()).unwrap();
+        assert!(handle.outer_size().unwrap().height < expanded_size.height);
+        for scale in [1.0_f64, 1.25, 1.5, 2.0] {
+            let region = super::strip_region(scale);
+            super::set_handle_region(&handle, region).unwrap();
+            unsafe {
+                let actual = CreateRectRgn(0, 0, 0, 0);
+                assert!(!actual.is_invalid());
+                let _ = GetWindowRgn(handle.hwnd().unwrap(), actual);
+                assert!(PtInRegion(actual, (216.0 * scale).round() as i32, (8.0 * scale).round() as i32).as_bool());
+                assert!(!PtInRegion(actual, (140.0 * scale).round() as i32, (8.0 * scale).round() as i32).as_bool());
+                assert!(!PtInRegion(actual, (216.0 * scale).round() as i32, (24.0 * scale).round() as i32).as_bool());
+                let _ = DeleteObject(actual.into());
+            }
+        }
+    }
+
+    #[test]
+    fn notification_only_keeps_a_strip_and_hover_never_opens_details() {
+        let controller = PanelController::default();
+        controller.set_notification_mode("notification");
+        assert!(controller.bar_presentation().strip);
+        controller.set_bar_presence(crate::status_island::PresenceSurface::Island, true);
+        assert!(!controller.bar_presentation().strip);
+        assert_eq!(controller.details_source(), None);
+        controller.set_bar_presence(crate::status_island::PresenceSurface::Island, false);
+        assert!(controller.bar_presentation().strip);
+        controller.set_notification_visible(true);
+        assert!(!controller.bar_presentation().strip);
+        controller.set_notification_visible(false);
+        assert!(controller.bar_presentation().strip);
+    }
+
+    #[test]
+    fn panels_focus_and_actions_hold_the_bar_until_released() {
+        use crate::status_island::PresenceSurface;
+        let controller = PanelController::default();
+        controller.set_notification_mode("notification");
+        for surface in [PresenceSurface::Keyboard, PresenceSurface::Action] {
+            controller.set_bar_presence(surface, true);
+            assert!(!controller.bar_presentation().strip);
+            controller.set_bar_presence(surface, false);
+            assert!(controller.bar_presentation().strip);
+        }
+        for source in [PanelSource::Island, PanelSource::Menu, PanelSource::Nowly, PanelSource::History] {
+            controller.toggle_details(source);
+            assert!(!controller.bar_presentation().strip);
+            let closed = controller.close_details();
+            assert!(!controller.bar_presentation().strip);
+            assert!(controller.finish_details_collapse(closed.generation));
+            assert!(controller.bar_presentation().strip);
+        }
+        controller.set_notification_mode("persistent");
+        assert!(!controller.bar_presentation().strip);
+    }
+
+    #[test]
+    fn strip_completion_cannot_clip_a_reopened_bar() {
+        let controller = PanelController::default();
+        controller.set_notification_mode("notification");
+        let closed = controller.bar_presentation();
+        controller.set_bar_presence(crate::status_island::PresenceSurface::Island, true);
+        let opened = controller.bar_presentation();
+        assert!(opened.generation > closed.generation);
+        assert!(!controller.finish_bar_presentation(closed.generation));
+        assert!(controller.finish_bar_presentation(opened.generation));
+        assert!(!controller.bar_presentation().strip);
+    }
+
+    #[test]
+    fn pending_presence_invalidates_completion_before_the_next_presentation_sync() {
+        let controller = PanelController::default();
+        controller.set_notification_mode("notification");
+        let closed = controller.bar_presentation();
+        controller.set_bar_presence(crate::status_island::PresenceSurface::Island, true);
+        assert!(!controller.finish_bar_presentation(closed.generation));
+    }
+
+    #[test]
+    fn disabling_clears_stale_collapse_and_presence_holds_before_reenable() {
+        let controller = PanelController::default();
+        controller.set_notification_mode("notification");
+        controller.set_bar_presence(crate::status_island::PresenceSurface::Keyboard, true);
+        controller.toggle_details(PanelSource::Menu);
+        let closed = controller.close_details();
+        controller.set_enabled(false);
+        controller.set_enabled(true);
+        assert!(!controller.finish_details_collapse(closed.generation));
+        assert!(controller.bar_presentation().strip);
+    }
+
+    #[test]
+    fn strip_region_matches_its_small_entry_at_fractional_dpi() {
+        for scale in [1.0, 1.25, 1.5, 2.0] {
+            let region = super::strip_region(scale);
+            assert_eq!(region.left, (152.0 * scale).round() as i32);
+            assert_eq!(region.right, (280.0 * scale).round() as i32);
+            assert_eq!(region.top, 0);
+            assert_eq!(region.bottom, (16.0 * scale).round() as i32);
+            assert!(super::point_is_inside_rounded_surface(region.left + 1, 1, region));
+            assert!(!super::point_is_inside_rounded_surface(region.left - 1, 1, region));
+            assert_eq!(super::top_surface_size(None, scale).1, (40.0 * scale).round() as u32);
+        }
+    }
+
     #[test]
     fn failed_capture_startup_restores_menu_with_a_new_generation() {
         let controller = PanelController::default();
@@ -2092,9 +2364,9 @@ mod tests {
     }
 
     #[test]
-    fn notification_only_startup_stays_hidden_until_the_webview_finds_an_unseen_reminder() {
+    fn notification_only_startup_keeps_the_strip_window_visible() {
         assert!(starts_visible("persistent"));
-        assert!(!starts_visible("notification"));
+        assert!(starts_visible("notification"));
         assert!(!starts_visible("unexpected"));
     }
 

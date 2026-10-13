@@ -84,7 +84,7 @@ test('all expanded panels measure 432px while the collapsed Logo Bar is 288px', 
   await expect(status).toHaveCSS('width', '432px');
   await expect(status).toHaveCSS('height', '288px');
   expect((await status.boundingBox())!.x).toBe(0);
-  expect((await title.boundingBox())!.x).toBe(titleX);
+  expect((await title.boundingBox())!.x).toBe(titleX - 72);
   await page.keyboard.press('Escape');
   await expect(status).toHaveCSS('width', '288px');
   await page.getByRole('button', { name: 'Nowly', exact: true }).click();

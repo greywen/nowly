@@ -484,6 +484,9 @@ export function StatusIslandSummaryView({
  * control and animation. AI transitions must never animate the status sheet.
  */export function TopRail({
   open,
+   notificationOnly = false,
+   strip = false,
+   onReveal,
   source,
   surface,
   assistantClosing,
@@ -499,6 +502,9 @@ export function StatusIslandSummaryView({
   children
 }: {
   open: boolean;
+  notificationOnly?: boolean;
+  strip?: boolean;
+  onReveal?: () => void;
   source: 'island' | 'nowly' | 'history' | 'menu';
   surface: 'status' | 'assistant' | 'history' | 'menu';
   assistantClosing: boolean;
@@ -518,6 +524,7 @@ export function StatusIslandSummaryView({
   const statusOpen = open && source === 'island' && !statusHidden;
   const assistantOpen = open && source === 'nowly' && surface === 'assistant';
   const nowlyAvailable = surface === 'status'
+    && !strip
     && !statusOpen
     && statusAnim !== 'shrink'
     && !assistantClosing;
@@ -525,6 +532,9 @@ export function StatusIslandSummaryView({
     <div
       className="status-rail"
       data-open={open}
+      data-strip={strip}
+      data-notification-only={notificationOnly}
+      data-bar-morph={notificationOnly && !open && statusAnim === null && assistantAnim === null && !assistantClosing}
       data-source={source}
       data-surface={surface}
       data-assistant-closing={assistantClosing}
@@ -533,11 +543,16 @@ export function StatusIslandSummaryView({
       data-mode={mode}
       {...(assistantAnim ? { 'data-frame-anim': assistantAnim } : {})}
     >
+      <button type="button" className="status-rail__strip-entry"
+        aria-label={t('statusIsland.reveal')} aria-expanded={!strip}
+        aria-hidden={!strip} tabIndex={strip ? 0 : -1}
+        onClick={onReveal} />
+      <div className="status-rail__reveal">
       <div
         className="status-rail__status-presence"
         {...(statusAnim ? { 'data-anim': statusAnim } : {})}
       >
-        <div className="status-rail__sheet" aria-hidden={statusHidden} inert={statusHidden}>
+        <div className="status-rail__sheet" aria-hidden={statusHidden || strip} inert={statusHidden || strip}>
           <div className="status-rail__content">
             <div className="status-rail__header">
               {children}
@@ -586,6 +601,7 @@ export function StatusIslandSummaryView({
           >
             <X aria-hidden="true" />
           </button>
+        </div>
         </div>
       </div>
       <div className="status-rail__menu status-rail__feature-panel" aria-hidden={surface !== 'menu'} inert={surface !== 'menu'}

@@ -423,55 +423,17 @@ pub fn get_status_island_snapshot(
 }
 
 #[tauri::command]
-pub fn set_status_island_visibility(app: AppHandle, visible: bool) -> Result<(), CommandError> {
-    let Some(window) = app.get_webview_window("quick-panel-handle") else {
-        return Ok(());
-    };
-    let enabled = app
-        .try_state::<crate::quick_panel::PanelController>()
-        .is_none_or(|controller| controller.is_enabled());
-    if !should_apply_visibility(enabled, visible) {
-        return Ok(());
-    }
-    if !visible {
-        let Some(db) = app.try_state::<AppDb>() else {
-            return Ok(());
-        };
-        // Settings saves use DB -> visibility as well. Keep this guard alive
-        // through hide so a persistent-mode save cannot show between our
-        // notification-mode check and the actual hide.
-        let connection = db.0.lock().map_err(CommandError::database)?;
-        let settings =
-            crate::settings::read_app_settings(&connection).map_err(CommandError::database)?;
-        if settings.notification_mode != "notification" {
-            return Ok(());
-        }
-        let result =
-            if let Some(controller) = app.try_state::<crate::quick_panel::PanelController>() {
-                controller.hide_serialized(|| window.hide())
-            } else {
-                window.hide()
-            };
-        return result.map_err(CommandError::system);
-    }
-    if let Some(controller) = app.try_state::<crate::quick_panel::PanelController>() {
-        if visible {
-            if let Some(result) = controller.show_serialized(|| window.show()) {
-                result.map_err(CommandError::system)?;
-            }
-            Ok(())
-        } else {
-            controller
-                .hide_serialized(|| window.hide())
-                .map_err(CommandError::system)
-        }
-    } else if visible {
-        window.show().map_err(CommandError::system)
-    } else {
-        window.hide().map_err(CommandError::system)
-    }
+pub fn set_status_island_visibility(app: AppHandle, visible: bool) -> Result<crate::quick_panel::BarPresentation, CommandError> {
+    let db = app.state::<AppDb>();
+    let connection = db.0.lock().map_err(CommandError::database)?;
+    let settings = crate::settings::read_app_settings(&connection).map_err(CommandError::database)?;
+    let controller = app.state::<crate::quick_panel::PanelController>();
+    controller.set_notification_mode(&settings.notification_mode);
+    controller.set_notification_visible(visible);
+    crate::quick_panel::sync_bar_presentation(&app).map_err(CommandError::system)
 }
 
+#[cfg(test)]
 fn should_apply_visibility(enabled: bool, visible: bool) -> bool {
     enabled || !visible
 }
@@ -544,18 +506,17 @@ pub fn set_status_island_primary(
 
 #[tauri::command]
 pub fn set_status_island_presence(
+    app: AppHandle,
     reminders: State<'_, ManagedReminders>,
     surface: PresenceSurface,
     present: bool,
-) -> Result<(), CommandError> {
-    // Presence is now only read by the hover-open delay, which checks it 300ms
-    // after the pointer arrived. Nothing expires on a timer, so leaving a surface
-    // no longer has to schedule anything.
+) -> Result<crate::quick_panel::BarPresentation, CommandError> {
     reminders
         .lock()
         .map_err(CommandError::system)?
         .set_presence(surface, present);
-    Ok(())
+    app.state::<crate::quick_panel::PanelController>().set_bar_presence(surface, present);
+    crate::quick_panel::sync_bar_presentation(&app).map_err(CommandError::system)
 }
 
 #[tauri::command]

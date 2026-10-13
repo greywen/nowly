@@ -226,14 +226,40 @@ export function installBrowserTauriBackend() {
     focus.status = 'running';
     markFocusStage();
   };
-  let panelSource: 'menu' | 'nowly' | 'history' | null = null;
+  let panelSource: 'island' | 'menu' | 'nowly' | 'history' | null = null;
   let panelGeneration = 0;
+  let panelClosing = false;
+  let notificationVisible = false;
+  const barPresence = new Set<string>();
+  let barGeneration = 0;
+  let barStrip = false;
+  const barPresentation = () => {
+    const strip = store.settings.notificationMode === 'notification'
+      && !notificationVisible && barPresence.size === 0 && panelSource === null && !panelClosing;
+    if (strip !== barStrip) {
+      barStrip = strip;
+      barGeneration += 1;
+    }
+    const presentation = { generation: barGeneration, strip };
+    emit('status-island-presentation', presentation);
+    return presentation;
+  };
   const closePanel = () => {
     panelSource = null;
-    emit('status-island-details-close', { generation: ++panelGeneration });
+    panelClosing = true;
+    const generation = ++panelGeneration;
+    emit('status-island-details-close', { generation });
+    setTimeout(() => {
+      if (panelGeneration !== generation) return;
+      panelClosing = false;
+      emit('status-island-details-closed', { generation });
+      barPresentation();
+    }, matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 260);
   };
   const openPanel = (source: Exclude<typeof panelSource, null>) => {
     panelSource = source;
+    panelClosing = false;
+    barPresentation();
     emit('status-island-details-open', { generation: ++panelGeneration, source, identity: null });
   };
 
@@ -841,6 +867,7 @@ export function installBrowserTauriBackend() {
       store.settings.barMenu = normalizeBarMenu(store.settings.barMenu);
       Reflect.deleteProperty(store.settings, 'barButtons');
       persist();
+      barPresentation();
       return store.settings;
     },
     get_status_island_snapshot: () => ({
@@ -1118,8 +1145,31 @@ export function installBrowserTauriBackend() {
     open_screenshot_folder: () => { throw new Error('Screenshot folder requires the desktop application.'); },
     open_screenshot_history: () => openPanel('history'),
     toggle_bar_menu: () => panelSource === 'menu' ? closePanel() : openPanel('menu'),
+    toggle_status_island_details: () => panelSource === 'island' ? closePanel() : openPanel('island'),
     toggle_nowly_panel: () => panelSource === 'nowly' ? closePanel() : openPanel('nowly'),
     close_status_island_details: closePanel,
+    get_status_island_presentation: barPresentation,
+    finish_status_island_presentation: () => undefined,
+    finish_status_island_details: (a) => {
+      if (Number(a.generation) !== panelGeneration || !panelClosing) return;
+      panelClosing = false;
+      emit('status-island-details-closed', { generation: panelGeneration });
+      barPresentation();
+    },
+    set_status_island_primary: () => undefined,
+    set_status_island_visibility: (a) => {
+      notificationVisible = a.visible === true;
+      return barPresentation();
+    },
+    set_status_island_presence: (a) => {
+      const surface = String(a.surface);
+      if (!['island', 'details', 'keyboard', 'action'].includes(surface)) {
+        throw { code: 'system_error', message: `Invalid Bar presence surface: ${surface}` };
+      }
+      if (a.present === true) barPresence.add(surface);
+      else barPresence.delete(surface);
+      return barPresentation();
+    },
 
     // Window mode & shell — no desktop window to switch in the browser.
     enter_wallpaper_mode: () => 'ok',

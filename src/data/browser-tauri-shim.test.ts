@@ -19,6 +19,7 @@ function invoke(): BrowserInvoke {
 afterEach(() => {
   Reflect.deleteProperty(window, '__TAURI_INTERNALS__');
   Reflect.deleteProperty(window, '__TAURI_EVENT_PLUGIN_INTERNALS__');
+  vi.unstubAllGlobals();
   localStorage.clear();
   vi.restoreAllMocks();
 });
@@ -47,7 +48,26 @@ describe('browser focus coordinator', () => {
 });
 
 describe('browser Bar shell commands', () => {
+  it('coordinates notification-only strip, pointer, notification and panel holds', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true })));
+    installBrowserTauriBackend();
+    await invoke()('update_app_settings', { settings: { notificationMode: 'notification' } });
+    expect(await invoke()('get_status_island_presentation')).toEqual(expect.objectContaining({ strip: true }));
+    await invoke()('set_status_island_presence', { surface: 'island', present: true });
+    expect(await invoke()('get_status_island_presentation')).toEqual(expect.objectContaining({ strip: false }));
+    await invoke()('toggle_bar_menu');
+    await invoke()('set_status_island_presence', { surface: 'island', present: false });
+    expect(await invoke()('get_status_island_presentation')).toEqual(expect.objectContaining({ strip: false }));
+    await invoke()('set_status_island_visibility', { visible: true });
+    await invoke()('close_status_island_details');
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(await invoke()('get_status_island_presentation')).toEqual(expect.objectContaining({ strip: false }));
+    await invoke()('set_status_island_visibility', { visible: false });
+    expect(await invoke()('get_status_island_presentation')).toEqual(expect.objectContaining({ strip: true }));
+  });
+
   it('opens and closes the current menu through shell events without opening a removed route', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true })));
     const openWindow = vi.spyOn(window, 'open').mockReturnValue(null);
     installBrowserTauriBackend();
     const opened = vi.fn();
