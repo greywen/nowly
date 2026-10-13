@@ -87,6 +87,19 @@ describe('Dialog', () => {
     expect(closeLower).not.toHaveBeenCalled();
   });
 
+  it('keeps the settings dialog open when dismissing a nested confirmation', async () => {
+    const user = userEvent.setup();
+    const closeSettings = vi.fn();
+    const closeConfirmation = vi.fn();
+    render(<>
+      <Dialog title="时间设置" ariaLabelledBy="settings" onRequestClose={closeSettings}><button>设置</button></Dialog>
+      <Dialog title="删除闹钟" ariaLabelledBy="confirmation" onRequestClose={closeConfirmation}><button>取消</button></Dialog>
+    </>);
+    await user.keyboard('{Escape}');
+    expect(closeConfirmation).toHaveBeenCalledOnce();
+    expect(closeSettings).not.toHaveBeenCalled();
+  });
+
   it('restores focus to the supplied trigger when unmounted', () => {
     const trigger = document.createElement('button');
     trigger.textContent = '打开日程';

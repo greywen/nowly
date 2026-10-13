@@ -12,6 +12,12 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn().mockRejectedValue(new E
 const settings:AppSettings={wallpaperEnabled:false,launchAtLogin:false,targetMonitorId:null,density:'balanced',weekStart:'monday',dateFormat:'localized',showWeekends:true,iconStyle:'duotone',hideTopbarInWallpaper:true};
 
 describe('SettingsDialog',()=>{
+  it('opens time settings independently of the desktop widget', () => {
+    const openTime = vi.fn();
+    render(<SettingsDialog settings={settings} onClose={vi.fn()} onSave={vi.fn()} onOpenTimeSettings={openTime}/>);
+    fireEvent.click(screen.getByRole('button', { name: '时间设置' }));
+    expect(openTime).toHaveBeenCalledOnce();
+  });
   it('provides default screenshot recorders and saves both shortcuts', async () => {
     const save = vi.fn(async value => value);
     render(<SettingsDialog settings={settings} onClose={vi.fn()} onSave={save}/>);

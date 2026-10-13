@@ -9,6 +9,7 @@ import {
   TopRail
 } from '../app/layout/StatusIsland';
 import { reminderPanelContext } from '../app/status-island-model';
+import { timeBarText } from '../time/time-bar-translations';
 import { useStatusIslandSnapshot } from './useStatusIslandSnapshot';
 import { useStatusIslandDrag } from './useStatusIslandDrag';
 import { useTransparentSurfaces } from './useTransparentSurfaces';
@@ -58,6 +59,9 @@ export function StatusIslandApp() {
   const transitionGeneration = useRef(0);
   const assistantSheetRequested = useRef(false);
   const [activationError, setActivationError] = useState('');
+  const [alarmActionPending, setAlarmActionPending] = useState(false);
+  const [alarmActionError, setAlarmActionError] = useState('');
+  const alarmActionInFlight = useRef(false);
   // Null until the first transition, so the rail does not animate itself into
   // existence on mount.
   const [statusAnim, setStatusAnim] = useState<'grow' | 'shrink' | null>(null);
@@ -81,7 +85,10 @@ export function StatusIslandApp() {
     .join('\0');
   const unseenNotificationKeyRef = useRef(unseenNotificationKey);
   unseenNotificationKeyRef.current = unseenNotificationKey;
-  const collapsedToSummary = collapsedNotificationKey !== null
+  const pendingAlarmDetail = surfaceState.mode === 'detail'
+    && (surfaceState.reminder.subject.kind === 'alarm' || surfaceState.reminder.subject.kind === 'missedSummary');
+  const collapsedToSummary = !pendingAlarmDetail
+    && collapsedNotificationKey !== null
     && collapsedNotificationKey === unseenNotificationKey;
   const notificationModeRef = useRef(notificationMode);
   notificationModeRef.current = notificationMode;
@@ -99,7 +106,9 @@ export function StatusIslandApp() {
   // Native records acknowledgement against whatever the capsule is showing. In
   // summary and idle mode it is showing no single reminder, so there is nothing
   // to acknowledge.
-  const primaryIdentity = surfaceState.mode === 'detail' ? surfaceState.reminder.identity : null;
+  const primaryIdentity = open && source === 'island' && pinnedIdentity !== null
+    ? pinnedIdentity
+    : surfaceState.mode === 'detail' ? surfaceState.reminder.identity : null;
   const [nativeHidePending, setNativeHidePending] = useState(false);
   const lastStatusActivationSource = useRef<'pointer' | 'keyboard' | null>(null);
   const visibilityRequest = useRef<Promise<void>>(Promise.resolve());
@@ -321,6 +330,27 @@ export function StatusIslandApp() {
     }
   }, []);
 
+  const runAlarmAction = useCallback(async (command: 'acknowledge_alarm_notice' | 'snooze_alarm_notice', id: string) => {
+    if (alarmActionInFlight.current) return;
+    alarmActionInFlight.current = true;
+    setAlarmActionPending(true);
+    setAlarmActionError('');
+    try {
+      await withActionHold(async () => {
+        await invoke(command, { id });
+        await invoke('close_status_island_details');
+        await refresh();
+      });
+    } catch (reason) {
+      setAlarmActionError(reason instanceof Error ? reason.message : typeof reason === 'string' ? reason : timeBarText('timeBar.actionFailed'));
+    } finally {
+      alarmActionInFlight.current = false;
+      setAlarmActionPending(false);
+    }
+  }, [refresh]);
+
+  useEffect(() => { setAlarmActionError(''); }, [pinnedIdentity]);
+
   return (
     <main
       className="screen-status-island-root"
@@ -350,6 +380,10 @@ export function StatusIslandApp() {
             compact
             context={panelContext}
             actions={{
+              onAcknowledgeAlarmNotice: id => runAlarmAction('acknowledge_alarm_notice', id),
+              onSnoozeAlarmNotice: id => runAlarmAction('snooze_alarm_notice', id),
+              alarmActionPending,
+              alarmActionError,
               onOpenEvent: event => void withActionHold(async () => {
                 await acknowledgeEvent(event);
                 await invoke('open_status_island_event', {

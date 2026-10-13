@@ -1,6 +1,7 @@
 import type { CalendarEvent } from '../calendar/calendar-model';
 import type { FocusStatus } from '../focus/focus-model';
 import type { Task } from '../tasks/task-model';
+import type { AlarmNotice } from '../time/time-model';
 
 export type StatusIslandPrimary =
   | { kind: 'loading' }
@@ -33,6 +34,8 @@ export type StatusIslandReminderSubject =
   | { kind: 'conflict'; events: CalendarEvent[] }
   | { kind: 'focus'; status: Exclude<FocusStatus, 'idle'>; remainingSeconds: number; plannedSeconds: number; sessionId: string | null }
   | { kind: 'event'; event: CalendarEvent; stage: 'reminder' | 'start'; reminderMinutes: number | null }
+  | { kind: 'alarm'; notice: AlarmNotice }
+  | { kind: 'missedSummary'; notice: AlarmNotice }
   | { kind: 'task'; task: Task };
 
 export type StatusIslandReminder = {
@@ -106,6 +109,8 @@ export type StatusIslandOverviewGroup = {
 };
 
 export type StatusIslandPanelContext =
+  | { kind: 'alarm'; notice: AlarmNotice }
+  | { kind: 'missedSummary'; notice: AlarmNotice }
   | { kind: 'empty' }
   | { kind: 'focus'; focus: StatusIslandFocusIndicator }
   | { kind: 'conflict'; events: CalendarEvent[] }
@@ -245,6 +250,7 @@ type StatusIslandInput = {
   loading?: boolean;
   dismissedPrimaryKeys?: readonly string[];
   reminderStates?: readonly StatusIslandReminderState[];
+  alarmNotices?: readonly AlarmNotice[];
 };
 
 function localDate(date: Date): string {
@@ -589,6 +595,7 @@ export function reminderPanelContext(
       ? { kind: 'ongoingEvent', event: subject.event }
       : { kind: 'eventReminder', event: subject.event, reminderMinutes: subject.reminderMinutes };
   }
+  if (subject.kind === 'alarm' || subject.kind === 'missedSummary') return { kind: subject.kind, notice: subject.notice };
   return { kind: 'urgentTask', task: subject.task };
 }
 
@@ -620,7 +627,8 @@ export function deriveStatusIslandModel({
   focus,
   loading = false,
   dismissedPrimaryKeys = [],
-  reminderStates = []
+  reminderStates = [],
+  alarmNotices = []
 }: StatusIslandInput): StatusIslandModel {
   const nowMs = now.getTime();
   const today = localDate(now);
@@ -683,7 +691,18 @@ export function deriveStatusIslandModel({
 
   const conflict = conflictGroup(events, nowMs);
   const states = new Map(reminderStates.map(state => [state.identity, state]));
-  const drafts: ReminderDraft[] = [];
+  const drafts: ReminderDraft[] = alarmNotices.map(notice => ({
+    triggerMs: Date.parse(notice.dueAt),
+    autoAcknowledgedAt: null,
+    reminder: {
+      identity: `${notice.kind}:${notice.id}`,
+      reminderClass: 'system',
+      priority: 4,
+      triggerAt: notice.dueAt,
+      expiresAt: null,
+      subject: { kind: notice.kind, notice }
+    }
+  }));
   if (conflict) {
     const identity = `conflict:${conflict.events.map(eventIdentity).join('|')}`
       + `:${localMinuteString(new Date(conflict.startsAtMs))}`;
@@ -738,7 +757,10 @@ export function deriveStatusIslandModel({
         ?? (draft.reminder.subject.kind === 'task'
           ? priorTaskState(states, draft.reminder.subject.task.id, today)
           : undefined);
-      return { draft, reminder: resolveLifecycle(draft, state) };
+      const resolvedState = draft.reminder.subject.kind === 'alarm' || draft.reminder.subject.kind === 'missedSummary'
+        ? state && { ...state, acknowledgedAt: null }
+        : state;
+      return { draft, reminder: resolveLifecycle(draft, resolvedState) };
     })
     .sort((left, right) =>
       left.reminder.priority - right.reminder.priority
@@ -749,7 +771,7 @@ export function deriveStatusIslandModel({
     .filter(reminder => reminder.lifecycle === 'unseen');
   const buckets = todayBuckets(events, tasks, nowMs, today, conflict);
   const indicatorFocus = focusIndicator(focus);
-  const hasBusinessState = indicatorFocus !== null || buckets.markers.length > 0;
+  const hasBusinessState = indicatorFocus !== null || buckets.markers.length > 0 || attentionQueue.length > 0;
   const summary: StatusIslandSummary = {
     lead: buckets.markers[0] ?? null,
     focus: indicatorFocus,

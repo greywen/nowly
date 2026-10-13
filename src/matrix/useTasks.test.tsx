@@ -1,3 +1,4 @@
+import { defaultTimeSettings } from '../time/time-model';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -40,6 +41,12 @@ function task(id: string, overrides: Partial<MatrixTask> = {}): MatrixTask {
 
 function createRepository(overrides: Partial<NowlyRepository> = {}): NowlyRepository {
   return {
+    getTimeSettings: vi.fn().mockResolvedValue(defaultTimeSettings()),
+    saveTimeSettings: vi.fn().mockImplementation(settings => Promise.resolve(settings)),
+    listAlarms: vi.fn().mockResolvedValue([]),
+    createAlarm: vi.fn().mockRejectedValue(new Error('unexpected alarm write')),
+    updateAlarm: vi.fn().mockRejectedValue(new Error('unexpected alarm write')),
+    deleteAlarm: vi.fn().mockRejectedValue(new Error('unexpected alarm write')),
     listEventsInRange: vi.fn().mockResolvedValue([]),
     createEvent: vi.fn().mockRejectedValue(new Error('unexpected event write')),
     updateEvent: vi.fn().mockRejectedValue(new Error('unexpected event write')),

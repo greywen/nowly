@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { TemplatePickerDialog } from './TemplatePickerDialog';
 import type { WidgetId } from './widget-registry';
@@ -16,6 +16,13 @@ function renderPicker(overrides: Partial<Parameters<typeof TemplatePickerDialog>
 }
 
 describe('TemplatePickerDialog', () => {
+  it('adds the optional time module from the picker', () => {
+    const onAdd = vi.fn();
+    renderPicker({onAdd});
+    fireEvent.click(screen.getByRole('button', {name:'添加时间'}));
+    expect(onAdd).toHaveBeenCalledWith('time');
+  });
+
   it('lists the always-on built-in modules', () => {
     renderPicker();
     expect(screen.getByText('日历')).toBeInTheDocument();

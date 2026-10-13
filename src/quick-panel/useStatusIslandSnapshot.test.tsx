@@ -38,6 +38,16 @@ describe('status island menu snapshot', () => {
     }
   });
 
+  it('derives notices and removes them after native invalidation without replay', async () => {
+    const notice = { id: 'n1', kind: 'alarm' as const, title: 'Tea', dueAt: new Date().toISOString(), alarmId: 'a1', count: 1, rangeStart: '', rangeEnd: '' };
+    vi.mocked(invoke).mockImplementation(async command => command === 'get_focus_timer_snapshot' ? null : { ...snapshot, alarmNotices: [notice] });
+    const { result } = renderHook(useStatusIslandSnapshot);
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    expect(result.current.model.panelContext).toEqual({ kind: 'alarm', notice });
+    vi.mocked(invoke).mockImplementation(async command => command === 'get_focus_timer_snapshot' ? null : snapshot);
+    await act(async () => invalidated?.());
+    await waitFor(() => expect(result.current.model.attentionQueue).toEqual([]));
+  });
   it('defaults older snapshots to the complete visible feature menu', async () => {
     const { result } = renderHook(useStatusIslandSnapshot);
     await waitFor(() => expect(result.current.status).toBe('ready'));

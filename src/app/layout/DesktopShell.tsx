@@ -27,6 +27,7 @@ type DesktopShellProps = {
   onSetWallpaper?: () => void;
   onWallpaperDoubleClick?: () => void;
   onOpenSettings?: () => void;
+  configurations?: Partial<Record<WidgetId, () => void>>;
   // Hide the topbar while running as the desktop wallpaper. Defaults on so the
   // wallpaper reads as a clean dashboard; the bar returns in the foreground.
   hideTopbarInWallpaper?: boolean;
@@ -54,6 +55,7 @@ export function DesktopShell({
   onSetWallpaper,
   onWallpaperDoubleClick,
   onOpenSettings,
+  configurations,
   hideTopbarInWallpaper = true,
   overlay,
   update
@@ -157,6 +159,7 @@ export function DesktopShell({
           onMove={move}
           onResize={resize}
           onRemove={removeWidget}
+          configurations={configurations}
         />
       </main>
       {overlay}

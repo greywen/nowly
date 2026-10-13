@@ -12,6 +12,7 @@ import {
   X
 } from '../../components/icons';
 import { useTranslation } from '../../i18n';
+import { alarmLocalTime, timeBarText } from '../../time/time-bar-translations';
 import type { CalendarEvent } from '../../calendar/calendar-model';
 import type { Task } from '../../tasks/task-model';
 import type {
@@ -162,6 +163,14 @@ function reminderCopy(reminder: StatusIslandReminder, t: Translate): { title: st
       meta: `${t('statusIsland.eventStartsAt', { time: formatTime(subject.event.startAt) })}${lead}`
     };
   }
+  if (subject.kind === 'alarm' || subject.kind === 'missedSummary') {
+    return {
+      title: subject.notice.title || timeBarText(subject.kind === 'alarm' ? 'timeBar.alarm' : 'timeBar.missedSummary'),
+      meta: subject.kind === 'alarm'
+        ? timeBarText('timeBar.dueAt', { time: alarmLocalTime(subject.notice.dueAt) })
+        : timeBarText('timeBar.missedCount', { count: subject.notice.count })
+    };
+  }
   return {
     title: subject.task.title,
     meta: subject.task.dueDate
@@ -175,6 +184,7 @@ function ReminderIcon({ reminder }: { reminder: StatusIslandReminder }) {
   if (kind === 'conflict') return <AlertTriangle aria-hidden="true" />;
   if (kind === 'focus') return <Timer aria-hidden="true" />;
   if (kind === 'event') return <CalendarDays aria-hidden="true" />;
+  if (kind === 'alarm' || kind === 'missedSummary') return <Clock3 aria-hidden="true" />;
   return <Check aria-hidden="true" />;
 }
 
@@ -618,6 +628,10 @@ type PanelActions = {
   onResumeFocus: () => void;
   onEndFocus: () => void;
   onCompleteTask: (id: string) => void;
+  onAcknowledgeAlarmNotice?: (id: string) => void | Promise<void>;
+  onSnoozeAlarmNotice?: (id: string) => void | Promise<void>;
+  alarmActionPending?: boolean;
+  alarmActionError?: string;
   onRetryStatus?: () => void;
 };
 
@@ -682,6 +696,7 @@ function OverviewGroup({
 }
 
 function panelTitle(context: StatusIslandPanelContext, t: Translate): string {
+  if (context.kind === 'alarm' || context.kind === 'missedSummary') return timeBarText(context.kind === 'alarm' ? 'timeBar.alarm' : 'timeBar.missedSummary');
   const keys = {
     empty: 'statusIsland.emptyPanel',
     focus: 'statusIsland.focusPanel',
@@ -738,6 +753,8 @@ export function StatusIslandPanel({
 }
 
 function panelSummary(context: StatusIslandPanelContext, t: Translate): string {
+  if (context.kind === 'alarm') return timeBarText('timeBar.dueAt', { time: alarmLocalTime(context.notice.dueAt) });
+  if (context.kind === 'missedSummary') return timeBarText('timeBar.missedCount', { count: context.notice.count });
   if (context.kind === 'focus') return focusStatusText(context.focus, t);
   if (context.kind === 'conflict') return t('statusIsland.markerConflict', { count: context.events.length });
   if (context.kind === 'eventReminder') {
@@ -757,6 +774,25 @@ function panelSummary(context: StatusIslandPanelContext, t: Translate): string {
 }
 
 function panelBody(context: StatusIslandPanelContext, actions: PanelActions, t: Translate) {
+  if (context.kind === 'alarm' || context.kind === 'missedSummary') {
+    const notice = context.notice;
+    return <>
+      <div className="status-island__row">
+        <Clock3 aria-hidden="true" />
+        <span><small>{panelTitle(context, t)}</small><strong>{notice.title}</strong></span>
+        {context.kind === 'alarm' ? <time dateTime={notice.dueAt}>{alarmLocalTime(notice.dueAt)}</time> : null}
+      </div>
+      {context.kind === 'missedSummary' ? <>
+        <p className="status-island__empty">{timeBarText('timeBar.missedCount', { count: notice.count })}</p>
+        <p className="status-island__empty"><time dateTime={notice.rangeStart}>{alarmLocalTime(notice.rangeStart, true)}</time> – <time dateTime={notice.rangeEnd}>{alarmLocalTime(notice.rangeEnd, true)}</time></p>
+      </> : null}
+      <div className="status-island__actions">
+        {actions.onAcknowledgeAlarmNotice ? <button type="button" disabled={actions.alarmActionPending} onClick={() => void actions.onAcknowledgeAlarmNotice?.(notice.id)}><Check aria-hidden="true" />{timeBarText('timeBar.acknowledge')}</button> : null}
+        {context.kind === 'alarm' && actions.onSnoozeAlarmNotice ? <button type="button" disabled={actions.alarmActionPending} onClick={() => void actions.onSnoozeAlarmNotice?.(notice.id)}><Clock3 aria-hidden="true" />{timeBarText('timeBar.snooze')}</button> : null}
+      </div>
+      {actions.alarmActionError ? <p className="status-island__empty" role="alert">{actions.alarmActionError}</p> : null}
+    </>;
+  }
   if (context.kind === 'focus') {
     const focus = context.focus;
     return (

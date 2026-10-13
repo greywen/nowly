@@ -17,6 +17,10 @@ import {
 } from './widget-registry';
 
 describe('widget definitions', () => {
+  it('offers a pure-display time module without changing the default layout', () => {
+    expect(getWidgetDefinition('time', buildDefinitions())).toMatchObject({name: '时间', category: 'builtin', minW: 2, minH: 2});
+    expect(defaultLayout.map(item => item.id)).not.toContain('time');
+  });
   it('defines built-in calendar, matrix, and notes with valid geometry', () => {
     expect(builtinDefinitions.map((definition) => definition.id)).toEqual(['calendar', 'matrix', 'notes']);
     for (const definition of [...builtinDefinitions, ...extensionDefinitions]) {
@@ -54,8 +58,8 @@ describe('widget definitions', () => {
 
   it('merges built-ins and extensions into the full placeable set', () => {
     const all = buildDefinitions();
-    // Built-in count is 4: calendar, matrix, notes, plus the picker-only kanban.
-    expect(all.filter((definition) => definition.category === 'builtin')).toHaveLength(4);
+    // Time and kanban are picker-only built-ins.
+    expect(all.filter((definition) => definition.category === 'builtin')).toHaveLength(5);
     expect(all.filter((definition) => definition.category === 'extension')).toHaveLength(1);
   });
 });

@@ -87,8 +87,18 @@ export const extensionDefinitions: WidgetDefinition[] = [
 
 // The full set of placeable modules: the built-ins plus the optional extension
 // modules. Every module Nowly offers is built in, so this set is static.
+export const timeDefinition: WidgetDefinition = {
+  id: 'time',
+  get name() { return t('widget.time.name'); },
+  get description() { return t('widget.time.desc'); },
+  category: 'builtin',
+  minW: 2,
+  minH: 2,
+  default: { x: 0, y: 0, w: 4, h: 3 }
+};
+
 export function buildDefinitions(): WidgetDefinition[] {
-  return [...builtinDefinitions, kanbanDefinition, ...extensionDefinitions];
+  return [...builtinDefinitions, kanbanDefinition, timeDefinition, ...extensionDefinitions];
 }
 
 // The default layout the app ships with (built-in modules tiling the grid).

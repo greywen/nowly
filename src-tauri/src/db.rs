@@ -37,7 +37,52 @@ const MIGRATIONS: &[(i64, Migration)] = &[
     (28, migration_28_categories),
     (29, crate::screen_capture::history::migrate),
     (30, migration_30_bar_menu),
+    (31, migration_31_time_module),
 ];
+
+fn migration_31_time_module(transaction: &Transaction<'_>) -> Result<()> {
+    transaction.execute_batch(
+        "CREATE TABLE time_settings (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            value TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+         );
+         CREATE TABLE alarms (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            hour INTEGER NOT NULL CHECK (hour BETWEEN 0 AND 23),
+            minute INTEGER NOT NULL CHECK (minute BETWEEN 0 AND 59),
+            repeat TEXT NOT NULL,
+            enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+            effective_from_utc TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+         );
+         CREATE INDEX idx_alarms_enabled ON alarms(enabled, hour, minute);
+         CREATE TABLE alarm_notices (
+            id TEXT PRIMARY KEY,
+            kind TEXT NOT NULL CHECK (kind IN ('alarm', 'missedSummary')),
+            alarm_id TEXT,
+            instance_key TEXT,
+            title TEXT NOT NULL,
+            due_at_utc TEXT NOT NULL,
+            range_start_utc TEXT NOT NULL,
+            range_end_utc TEXT NOT NULL,
+            count INTEGER NOT NULL CHECK (count >= 1),
+            created_at_utc TEXT NOT NULL,
+            acknowledged_at_utc TEXT,
+            snoozed_until_utc TEXT,
+            UNIQUE(alarm_id, instance_key)
+         );
+         CREATE INDEX idx_alarm_notices_visible
+            ON alarm_notices(acknowledged_at_utc, snoozed_until_utc, due_at_utc);
+         CREATE TABLE alarm_scheduler_state (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            checkpoint_utc TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+         );",
+    )
+}
 
 fn migration_30_bar_menu(transaction: &Transaction<'_>) -> Result<()> {
     let defaults = serde_json::to_string(&crate::models::default_bar_menu())
@@ -1443,23 +1488,33 @@ mod tests {
         for old_buttons in ["[]", "[\"screenshot\"]"] {
             let mut connection = Connection::open_in_memory().unwrap();
             migrate_through(&mut connection, 29).unwrap();
-            connection.execute(
-                "INSERT INTO settings(key,value,updated_at) VALUES ('bar_buttons',?1,'old')",
-                [old_buttons],
-            ).unwrap();
+            connection
+                .execute(
+                    "INSERT INTO settings(key,value,updated_at) VALUES ('bar_buttons',?1,'old')",
+                    [old_buttons],
+                )
+                .unwrap();
 
             migrate(&mut connection).unwrap();
 
-            let value: String = connection.query_row(
-                "SELECT value FROM settings WHERE key='bar_menu'", [], |row| row.get(0),
-            ).unwrap();
+            let value: String = connection
+                .query_row(
+                    "SELECT value FROM settings WHERE key='bar_menu'",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap();
             assert_eq!(
                 serde_json::from_str::<Vec<crate::models::BarMenuItem>>(&value).unwrap(),
                 crate::models::default_bar_menu(),
             );
-            let old_rows: i64 = connection.query_row(
-                "SELECT COUNT(*) FROM settings WHERE key='bar_buttons'", [], |row| row.get(0),
-            ).unwrap();
+            let old_rows: i64 = connection
+                .query_row(
+                    "SELECT COUNT(*) FROM settings WHERE key='bar_buttons'",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap();
             assert_eq!(old_rows, 0);
         }
     }

@@ -45,14 +45,15 @@ export function Dialog({
   }, [initialFocusRef]);
 
   useEffect(() => {
-    const restoreTarget = restoreFocusRef?.current;
-    return () => restoreTarget?.focus();
+    return () => restoreFocusRef?.current?.focus();
   }, [restoreFocusRef]);
 
   useEffect(() => {
     if (!isTopLayer) return;
 
     function handleKeyDown(event: KeyboardEvent) {
+      const overlays = document.querySelectorAll('.overlay');
+      if (event.defaultPrevented || dialogRef.current?.parentElement !== overlays[overlays.length - 1]) return;
       if (event.key === 'Escape') {
         event.preventDefault();
         onRequestClose();

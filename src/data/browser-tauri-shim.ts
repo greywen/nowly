@@ -22,12 +22,17 @@
 // above means it needs no Tauri runtime, not that it avoids imports.)
 import { isAllowedAttachmentName } from '../lib/attachment';
 import { normalizeBarMenu } from '../app/bar-menu';
+import type { Alarm, AlarmDraft, AlarmNotice, TimeSettings, WorldClock } from '../time/time-model';
 
 type Dict = Record<string, unknown>;
 
 const STORAGE_KEY = 'nowly:browser-backend';
 
 type Store = {
+  timeSettings: TimeSettings;
+  alarms: Alarm[];
+  // Explicit E2E fixtures only: the Rust backend owns real alarm scheduling.
+  alarmNotices: AlarmNotice[];
   events: Dict[];
   categories: Dict[];
   subscriptions: Dict[];
@@ -67,6 +72,9 @@ const defaultSettings: Dict = {
 
 function emptyStore(): Store {
   return {
+    timeSettings: { clocks: [{ id: 'local', timeZone: 'local', label: '', mode: 'digital', hourCycle: 'h23', showSeconds: false, showLabel: false, showDate: false, showDifference: false }] },
+    alarms: [],
+    alarmNotices: [],
     events: [],
     categories: [],
     subscriptions: [],
@@ -159,6 +167,52 @@ function ensureTaskWorkspace(store: Store) {
 // limitation.
 function inRange(startAt: unknown, range: { startAt: string; endAtExclusive: string }) {
   return typeof startAt === 'string' && startAt >= range.startAt && startAt < range.endAtExclusive;
+}
+
+function timeValidation(field: string, message: string): never {
+  throw { code: 'validation_error', field, message };
+}
+
+function validateTimeSettings(settings: TimeSettings) {
+  if (!Array.isArray(settings?.clocks) || !settings.clocks.length) timeValidation('clocks', 'At least one clock is required.');
+  const ids = new Set<string>();
+  for (const clock of settings.clocks as WorldClock[]) {
+    if (!clock || typeof clock.id !== 'string' || !clock.id.trim() || ids.has(clock.id)) timeValidation('clocks', 'Clock IDs must be nonempty and unique.');
+    ids.add(clock.id);
+    if (typeof clock.timeZone !== 'string' || !clock.timeZone) timeValidation('timeZone', 'A valid time zone is required.');
+    if (clock.timeZone !== 'local') {
+      try { new Intl.DateTimeFormat('en', { timeZone: clock.timeZone }).format(0); }
+      catch { timeValidation('timeZone', 'Unsupported time zone.'); }
+    }
+    if (!['digital', 'analog', 'mixed'].includes(clock.mode)) timeValidation('mode', 'Invalid clock mode.');
+    if (!['h12', 'h23'].includes(clock.hourCycle)) timeValidation('hourCycle', 'Invalid hour cycle.');
+    if (typeof clock.label !== 'string') timeValidation('label', 'Clock label must be text.');
+    for (const key of ['showSeconds', 'showLabel', 'showDate', 'showDifference'] as const) {
+      if (typeof clock[key] !== 'boolean') timeValidation(key, 'Clock visibility must be boolean.');
+    }
+  }
+}
+
+function validateAlarmDraft(draft: AlarmDraft, now: Date) {
+  if (!draft || typeof draft.title !== 'string' || !draft.title.trim()) timeValidation('title', 'Alarm title is required.');
+  if (!Number.isInteger(draft.hour) || draft.hour < 0 || draft.hour > 23) timeValidation('hour', 'Hour must be between 0 and 23.');
+  if (!Number.isInteger(draft.minute) || draft.minute < 0 || draft.minute > 59) timeValidation('minute', 'Minute must be between 0 and 59.');
+  if (typeof draft.enabled !== 'boolean') timeValidation('enabled', 'Enabled must be boolean.');
+  if (draft.repeat?.kind === 'weekly') {
+    const days = draft.repeat.weekdays;
+    if (!Array.isArray(days) || !days.length || days.some(day => !Number.isInteger(day) || day < 1 || day > 7) || new Set(days).size !== days.length) {
+      timeValidation('weekdays', 'Select unique ISO weekdays between 1 and 7.');
+    }
+  } else if (draft.repeat?.kind === 'once') {
+    const date = draft.repeat.date;
+    if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) timeValidation('date', 'Use a valid YYYY-MM-DD date.');
+    const [year, month, day] = date.split('-').map(Number);
+    const due = new Date(0);
+    due.setFullYear(year, month - 1, day);
+    due.setHours(draft.hour, draft.minute, 0, 0);
+    if (due.getFullYear() !== year || due.getMonth() !== month - 1 || due.getDate() !== day) timeValidation('date', 'Invalid calendar date.');
+    if (due.getTime() <= now.getTime()) timeValidation('date', 'Once alarms must be in the future.');
+  } else timeValidation('repeat', 'Invalid alarm repeat rule.');
 }
 
 export function installBrowserTauriBackend() {
@@ -272,6 +326,56 @@ export function installBrowserTauriBackend() {
   persist();
 
   const handlers: Record<string, (args: Dict) => unknown> = {
+    get_time_settings: () => store.timeSettings,
+    save_time_settings: (a) => {
+      const settings = a.settings as TimeSettings;
+      validateTimeSettings(settings);
+      store.timeSettings = settings;
+      persist();
+      return settings;
+    },
+    list_alarms: () => [...store.alarms].sort((a, b) => a.hour - b.hour || a.minute - b.minute || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)),
+    create_alarm: (a) => {
+      const draft = a.draft as AlarmDraft;
+      validateAlarmDraft(draft, new Date());
+      const stamp = nowIso();
+      const alarm: Alarm = { ...draft, id: id('alarm'), createdAt: stamp, updatedAt: stamp };
+      store.alarms.push(alarm);
+      persist();
+      emit('status-island-invalidated', null);
+      return alarm;
+    },
+    update_alarm: (a) => {
+      const index = store.alarms.findIndex(alarm => alarm.id === a.id);
+      if (index === -1) throw { code: 'not_found', message: 'Alarm not found.' };
+      const draft = a.draft as AlarmDraft;
+      validateAlarmDraft(draft, new Date());
+      const alarm: Alarm = { ...draft, id: store.alarms[index].id, createdAt: store.alarms[index].createdAt, updatedAt: nowIso() };
+      store.alarms[index] = alarm;
+      persist();
+      emit('status-island-invalidated', null);
+      return alarm;
+    },
+    delete_alarm: (a) => {
+      const index = store.alarms.findIndex(alarm => alarm.id === a.id);
+      if (index === -1) throw { code: 'not_found', message: 'Alarm not found.' };
+      store.alarms.splice(index, 1);
+      persist();
+      emit('status-island-invalidated', null);
+    },
+    acknowledge_alarm_notice: (a) => {
+      store.alarmNotices = store.alarmNotices.filter(notice => notice.id !== a.id);
+      persist();
+      emit('status-island-invalidated', null);
+    },
+    // Fixtures can be dismissed, but are never rescheduled in the browser.
+    snooze_alarm_notice: (a) => {
+      const notice = store.alarmNotices.find(notice => notice.id === a.id);
+      if (notice?.kind === 'missedSummary') timeValidation('id', 'Missed summaries cannot be snoozed.');
+      store.alarmNotices = store.alarmNotices.filter(notice => notice.id !== a.id);
+      persist();
+      emit('status-island-invalidated', null);
+    },
     // Calendar events
     list_events_in_range: (a) =>
       store.events.filter((e) => inRange(e.startAt, a.range as never)),
@@ -850,6 +954,7 @@ export function installBrowserTauriBackend() {
       tasks: store.tasks,
       focus: sampleFocus(),
       reminders: [],
+      alarmNotices: store.alarmNotices,
       notificationMode: store.settings.notificationMode ?? 'persistent',
       barMenu: normalizeBarMenu(store.settings.barMenu)
     }),

@@ -7,6 +7,7 @@ import { externalToCalendarEvent, type ExternalEvent } from '../calendar/subscri
 import type { FocusStatus } from '../focus/focus-model';
 import { useNativeFocusSnapshot } from '../focus/useNativeFocusSnapshot';
 import type { Task } from '../tasks/task-model';
+import type { AlarmNotice } from '../time/time-model';
 import { normalizeBarMenu, type BarMenuItem } from '../app/bar-menu';
 import {
   deriveStatusIslandModel,
@@ -15,6 +16,7 @@ import {
 } from '../app/status-island-model';
 
 export type NativeStatusIslandSnapshot = {
+  alarmNotices?: AlarmNotice[];
   sampledAt: string;
   localDate?: string;
   events: CalendarEvent[];
@@ -120,7 +122,8 @@ export function useStatusIslandSnapshot(): {
       events: [...resource.data.events, ...resource.data.externalEvents.map(externalToCalendarEvent)],
       tasks: resource.data.tasks,
       focus: nativeFocus ?? resource.data.focus,
-      reminderStates: resource.data.reminders ?? []
+      reminderStates: resource.data.reminders ?? [],
+      alarmNotices: resource.data.alarmNotices ?? []
     });
   }, [now, nativeFocus, resource.data, resource.status]);
 

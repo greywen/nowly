@@ -241,6 +241,10 @@ export const translations: Record<Language, Record<string, string>> = {
 
     // ModuleFrame
     'moduleFrame.remove': '移除{name}',
+    'moduleFrame.configure': '设置{name}',
+    'widget.time.name': '时间',
+    'widget.time.desc': '自适应世界时钟与独立闹钟。',
+    'settings.time': '时间设置',
 
     // CalendarSettingsControl
     'calendarSettings.label': '日历设置',
@@ -1163,6 +1167,10 @@ export const translations: Record<Language, Record<string, string>> = {
 
     // ModuleFrame
     'moduleFrame.remove': 'Remove {name}',
+    'moduleFrame.configure': 'Configure {name}',
+    'widget.time.name': 'Time',
+    'widget.time.desc': 'Adaptive world clocks and independent alarms.',
+    'settings.time': 'Time settings',
 
     // CalendarSettingsControl
     'calendarSettings.label': 'Calendar settings',

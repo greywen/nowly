@@ -34,6 +34,28 @@ focusing. All data stays on your machine in a local SQLite database.
 - **Focus timer** — countdown sessions with a distraction-free fullscreen mode
   and session statistics. On desktop, one native timer supplies the same remaining
   time to the dashboard, fullscreen focus, and Nowly Bar; views resync on resume.
+- **World clocks and alarms** — an optional Time module arranges multiple time zones
+  as pure digital clocks, pure analog faces, or mixed displays. City, date, and
+  time-difference labels are hidden by default; layout adapts to the module size.
+  Use the always-visible **Time settings** button in the module header or **Settings → Time settings** for all
+  clock options, date-specific time-zone comparison, and independent alarms.
+  Digital clocks offer horizontal, stacked, and date layouts with automatic sizing
+  or a manual 32–160px font size. Clock appearance, time zones, visibility options,
+  and adding, removing, or reordering clocks apply immediately and save automatically.
+  Failed saves retain edits and offer retry; closing settings does not undo changes.
+  Once saved, settings survive reopening and refreshing. Time-zone comparison remains
+  a query tool and never changes the actual clocks.
+  The module header's **+** icon opens a new alarm requiring one explicit creation
+  confirmation. Valid edits to existing alarms save automatically; ending editing
+  does not undo changes, and deletion still requires confirmation. Incomplete or
+  invalid times and repeat dates are not saved or scheduled. Successful saves update
+  the next reminder directly in the module.
+  Alarms follow the computer's local time with once, daily, weekdays, or selected
+  weekdays; Nowly Bar offers acknowledgment and a five-minute snooze without sound.
+  Keep Nowly running (including in the tray) for on-time reminders. Restarting or
+  resuming after sleep produces one missed-alarm summary, not individual replay.
+  Removing the Time module does not disable alarms. Fully exiting Nowly does not
+  leave a Windows scheduled alarm behind.
 - **Kanban board** — customizable lanes, cards, and fields for lightweight
   project tracking.
 - **Notes** — quick capture with a dedicated manager for organizing entries.

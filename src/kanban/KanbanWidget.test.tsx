@@ -1,3 +1,4 @@
+import { defaultTimeSettings } from '../time/time-model';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
@@ -39,6 +40,12 @@ const emptySnapshot: TaskWorkspaceSnapshot = { ...snapshot, lanes: [], tasks: []
 
 function repository(overrides: Partial<NowlyRepository> = {}): NowlyRepository {
   return {
+    getTimeSettings: vi.fn().mockResolvedValue(defaultTimeSettings()),
+    saveTimeSettings: vi.fn().mockImplementation(settings => Promise.resolve(settings)),
+    listAlarms: vi.fn().mockResolvedValue([]),
+    createAlarm: vi.fn().mockRejectedValue(new Error('unexpected alarm write')),
+    updateAlarm: vi.fn().mockRejectedValue(new Error('unexpected alarm write')),
+    deleteAlarm: vi.fn().mockRejectedValue(new Error('unexpected alarm write')),
     listEventsInRange: vi.fn().mockResolvedValue([]), createEvent: vi.fn(), updateEvent: vi.fn(), deleteEvent: vi.fn(),
     listTasks: vi.fn().mockResolvedValue([]), createTask: vi.fn(), updateTask: vi.fn(), deleteTask: vi.fn(), setTaskCompleted: vi.fn(),
     listNotes: vi.fn().mockResolvedValue([]), createNote: vi.fn(), updateNote: vi.fn(), deleteNote: vi.fn(),

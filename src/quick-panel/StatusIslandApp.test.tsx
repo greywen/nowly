@@ -95,6 +95,90 @@ describe('screen status island windows', () => {
     respondWith(snapshot);
   });
 
+  it('acknowledges only the pinned alarm instance and refreshes after success', async () => {
+    const notice = { id: 'n1', kind: 'alarm' as const, title: 'Tea', dueAt: new Date().toISOString(), alarmId: 'a1', count: 1, rangeStart: '', rangeEnd: '' };
+    respondWith(snapshotWith({ alarmNotices: [notice] }));
+    render(<StatusIslandApp />);
+    await emitPanelEvent('status-island-details-open', { generation: 1, source: 'island', identity: 'alarm:n1' });
+    fireEvent.click(screen.getByRole('button', { name: '确认' }));
+    await waitFor(() => expect(invocations('acknowledge_alarm_notice')).toEqual([['acknowledge_alarm_notice', { id: 'n1' }]]));
+    expect(invocations('acknowledge_status_island_reminder')).toHaveLength(0);
+    expect(invocations('open_status_island_event')).toHaveLength(0);
+    expect(invocations('cancel_focus_timer')).toHaveLength(0);
+  });
+
+  it.each(['alarm', 'missedSummary'] as const)('keeps an unconsumed %s reachable after persistent collapse and reopen', async kind => {
+    const notice = { id: 'n1', kind, title: 'Tea', dueAt: new Date().toISOString(), alarmId: kind === 'alarm' ? 'a1' : null, count: 3, rangeStart: new Date().toISOString(), rangeEnd: new Date().toISOString() };
+    respondWith(snapshotWith({ alarmNotices: [notice], notificationMode: 'persistent' }));
+    render(<StatusIslandApp />);
+    await emitPanelEvent('status-island-details-open', { generation: 1, source: 'island', identity: `${kind}:n1` });
+    expect(screen.getByRole('button', { name: '确认' })).toBeVisible();
+    await emitPanelEvent('status-island-details-close', { generation: 2, collapseToSummary: true });
+    await emitPanelEvent('status-island-details-closed', { generation: 2 });
+    fireEvent.click(document.querySelector('.status-island__trigger')!);
+    await emitPanelEvent('status-island-details-open', { generation: 3, source: 'island', identity: `${kind}:n1` });
+    expect(screen.getByRole('button', { name: '确认' })).toBeVisible();
+    if (kind === 'alarm') expect(screen.getByRole('button', { name: '稍后 5 分钟' })).toBeVisible();
+    expect(invocations('acknowledge_alarm_notice')).toHaveLength(0);
+    expect(invocations('snooze_alarm_notice')).toHaveLength(0);
+  });
+
+  it('disables alarm actions during submission and prevents duplicate dispatch', async () => {
+    const notice = { id: 'n1', kind: 'alarm' as const, title: 'Tea', dueAt: new Date().toISOString(), alarmId: 'a1', count: 1, rangeStart: '', rangeEnd: '' };
+    let finish: (() => void) | undefined;
+    invokeMock.mockImplementation((command: string) => command === 'get_status_island_snapshot'
+      ? Promise.resolve(snapshotWith({ alarmNotices: [notice] }))
+      : command === 'acknowledge_alarm_notice' ? new Promise<void>(resolve => { finish = resolve; }) : Promise.resolve(null));
+    render(<StatusIslandApp />);
+    await emitPanelEvent('status-island-details-open', { generation: 1, source: 'island', identity: 'alarm:n1' });
+    const button = screen.getByRole('button', { name: '确认' });
+    fireEvent.click(button);
+    fireEvent.click(button);
+    expect(button).toBeDisabled();
+    expect(screen.getByRole('button', { name: '稍后 5 分钟' })).toBeDisabled();
+    expect(invocations('acknowledge_alarm_notice')).toHaveLength(1);
+    await act(async () => finish?.());
+    await waitFor(() => expect(button).not.toBeDisabled());
+  });
+
+  it('retains the pinned alarm when a newer notice arrives, and supports snooze retry', async () => {
+    const notice = { id: 'n1', kind: 'alarm' as const, title: 'Tea', dueAt: new Date().toISOString(), alarmId: 'a1', count: 1, rangeStart: '', rangeEnd: '' };
+    let notices = [notice];
+    let fail = true;
+    invokeMock.mockImplementation((command: string) => {
+      if (command === 'get_status_island_snapshot') return Promise.resolve(snapshotWith({ alarmNotices: notices }));
+      if (command === 'snooze_alarm_notice' && fail) return Promise.reject(new Error('retry me'));
+      return Promise.resolve(null);
+    });
+    render(<StatusIslandApp />);
+    await emitPanelEvent('status-island-details-open', { generation: 1, source: 'island', identity: 'alarm:n1' });
+    notices = [{ ...notice, id: 'n2', title: 'New alarm', dueAt: '2000-01-01T00:00:00Z' }, notice];
+    const invalidated = listenMock.mock.calls.find(call => call[0] === 'status-island-invalidated')?.[1];
+    await act(async () => invalidated({}));
+    expect(invocations('set_status_island_primary').slice(-1)[0]).toEqual(['set_status_island_primary', { identity: 'alarm:n1' }]);
+    fireEvent.click(screen.getByRole('button', { name: '稍后 5 分钟' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('retry me');
+    expect(invocations('snooze_alarm_notice')).toEqual([['snooze_alarm_notice', { id: 'n1' }]]);
+    fail = false;
+    fireEvent.click(screen.getByRole('button', { name: '稍后 5 分钟' }));
+    await waitFor(() => expect(invocations('snooze_alarm_notice')).toHaveLength(2));
+    expect(invocations('close_status_island_details')).toHaveLength(1);
+  });
+
+  it.each(['menu', 'nowly', 'history'] as const)('does not let an arriving alarm take over %s', async source => {
+    respondWith(snapshot);
+    if (source === 'history') invokeMock.mockImplementation((command: string) => Promise.resolve(command === 'get_status_island_snapshot' ? snapshot : command === 'list_screenshot_history' ? { items: [], nextCursor: null } : null));
+    render(<StatusIslandApp />);
+    await emitPanelEvent('status-island-details-open', { generation: 1, source, identity: null });
+    respondWith(snapshotWith({ alarmNotices: [{ id: 'n1', kind: 'alarm', title: 'Tea', dueAt: new Date().toISOString(), alarmId: 'a1', count: 1, rangeStart: '', rangeEnd: '' }] }));
+    const invalidated = listenMock.mock.calls.find(call => call[0] === 'status-island-invalidated')?.[1];
+    await act(async () => invalidated({}));
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-source', source);
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-status-open', 'false');
+    expect(invocations('toggle_status_island_details')).toHaveLength(0);
+    expect(invocations('acknowledge_alarm_notice')).toHaveLength(0);
+  });
+
   it('opens the function menu from the only Logo entry rather than opening AI directly', async () => {
     render(<StatusIslandApp />);
     await act(async () => { await Promise.resolve(); });

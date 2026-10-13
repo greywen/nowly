@@ -40,6 +40,8 @@ import type {
 import type { HexColor } from '../lib/color';
 import type { IconStyle } from '../components/icon-style';
 import type { BarMenuItem } from '../app/bar-menu';
+import type { WorldClock, TimeSettings, Alarm, AlarmDraft } from '../time/time-model';
+export type { WorldClock, TimeSettings, Alarm, AlarmDraft };
 
 export type AppSettings = {
   wallpaperEnabled: boolean;
@@ -114,6 +116,12 @@ export type RepositoryError = {
 };
 
 export type NowlyRepository = {
+  getTimeSettings(): Promise<TimeSettings>;
+  saveTimeSettings(settings: TimeSettings): Promise<TimeSettings>;
+  listAlarms(): Promise<Alarm[]>;
+  createAlarm(draft: AlarmDraft): Promise<Alarm>;
+  updateAlarm(id: string, draft: AlarmDraft): Promise<Alarm>;
+  deleteAlarm(id: string): Promise<void>;
   listEventsInRange(range: EventRange): Promise<CalendarEvent[]>;
   createEvent(draft: EventDraft): Promise<CalendarEvent>;
   updateEvent(target: EventTarget, draft: EventDraft, scope: EditScope): Promise<void>;

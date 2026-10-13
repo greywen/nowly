@@ -1,3 +1,4 @@
+import { defaultTimeSettings } from '../time/time-model';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -17,6 +18,9 @@ vi.mock('@tauri-apps/api/event', () => ({
   listen: listenMock
 }));
 
+vi.mock('../time/TimeWidget', () => ({ TimeWidget: ({ onOpenSettings }: { onOpenSettings: () => void }) => <div data-testid="pure-time-widget"><button onClick={onOpenSettings}>时间设置</button>time display</div> }));
+vi.mock('../time/TimeSettingsDialog', () => ({ TimeSettingsDialog: ({onClose}: {onClose: () => void}) => <div role="dialog" aria-label="时间设置"><button onClick={onClose}>关闭时间设置</button></div> }));
+
 const settings: AppSettings = {
   wallpaperEnabled: false,
   launchAtLogin: false,
@@ -31,6 +35,12 @@ const settings: AppSettings = {
 
 function createRepository(overrides: Partial<NowlyRepository> = {}): NowlyRepository {
   return {
+    getTimeSettings: vi.fn().mockResolvedValue(defaultTimeSettings()),
+    saveTimeSettings: vi.fn().mockImplementation(settings => Promise.resolve(settings)),
+    listAlarms: vi.fn().mockResolvedValue([]),
+    createAlarm: vi.fn().mockRejectedValue(new Error('unexpected alarm write')),
+    updateAlarm: vi.fn().mockRejectedValue(new Error('unexpected alarm write')),
+    deleteAlarm: vi.fn().mockRejectedValue(new Error('unexpected alarm write')),
     listEventsInRange: vi.fn().mockResolvedValue([]),
     createEvent: vi.fn().mockRejectedValue(new Error('unexpected write')),
     updateEvent: vi.fn().mockRejectedValue(new Error('unexpected write')),
@@ -84,6 +94,28 @@ describe('App startup and window behavior', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it('opens persisted time module settings without editing the layout or duplicating configuration in edit mode', async () => {
+    renderApp(createRepository({listModuleLayout: vi.fn().mockResolvedValue([{id:'time',x:0,y:0,w:4,h:3}])}));
+    expect(await screen.findByTestId('pure-time-widget')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', {name:'时间设置'}));
+    expect(await screen.findByRole('dialog', {name:'时间设置'})).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', {name:'关闭时间设置'}));
+    fireEvent.click(screen.getByRole('button', {name:'编辑布局'}));
+    expect(screen.queryByRole('button', {name:'设置时间'})).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button', {name:'时间设置'})).toHaveLength(1);
+  });
+
+  it('opens time settings from global settings even without a time widget', async () => {
+    renderApp();
+    await screen.findByText('本月暂无日程');
+    fireEvent.click(screen.getByRole('button', {name:'打开设置'}));
+    fireEvent.click(await screen.findByRole('button', {name:'时间设置'}));
+    expect(await screen.findByRole('dialog', {name:'时间设置'})).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', {name:'设置'})).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', {name:'关闭时间设置'}));
+    expect(await screen.findByRole('dialog', {name:'设置'})).toBeInTheDocument();
   });
 
   it('renders persisted empty startup data instead of samples', async () => {
