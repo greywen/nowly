@@ -38,7 +38,67 @@ const MIGRATIONS: &[(i64, Migration)] = &[
     (29, crate::screen_capture::history::migrate),
     (30, migration_30_bar_menu),
     (31, migration_31_time_module),
+    (32, migration_32_unified_time),
 ];
+
+fn migration_32_unified_time(transaction: &Transaction<'_>) -> Result<()> {
+    // Development and release share a database location. Schema upgrades must
+    // never assume that an existing time/focus row is disposable development data.
+    transaction.execute_batch(
+        "CREATE TABLE time_schema_resets (
+            version INTEGER PRIMARY KEY CHECK (version = 32),
+            applied_at TEXT NOT NULL
+         );",
+    )
+}
+
+#[cfg(any(debug_assertions, test))]
+fn development_time_reset_requested(
+    path: &std::path::Path,
+    requested: Option<&std::ffi::OsStr>,
+) -> bool {
+    let Some(requested) = requested else {
+        return false;
+    };
+    let requested = std::path::Path::new(requested);
+    if !requested.is_absolute() {
+        return false;
+    }
+    match (path.canonicalize(), requested.canonicalize()) {
+        (Ok(actual), Ok(requested)) => actual == requested,
+        _ => false,
+    }
+}
+
+#[cfg(any(debug_assertions, test))]
+fn reset_development_time_v32(connection: &mut Connection) -> Result<bool> {
+    let transaction =
+        connection.transaction_with_behavior(rusqlite::TransactionBehavior::Exclusive)?;
+    let applied: bool = transaction.query_row(
+        "SELECT EXISTS(SELECT 1 FROM time_schema_resets WHERE version=32)",
+        [],
+        |row| row.get(0),
+    )?;
+    if applied {
+        return Ok(false);
+    }
+    transaction.execute_batch(
+        "DELETE FROM time_settings;
+         DELETE FROM alarm_notices;
+         DELETE FROM alarm_scheduler_state;
+         DELETE FROM alarms;
+         DELETE FROM focus_sessions;
+         DELETE FROM module_state WHERE module_id IN ('time','focusTimer');
+         DELETE FROM module_layout WHERE id IN ('time','focusTimer');
+         DELETE FROM status_island_reminders
+            WHERE substr(identity,1,6) IN ('focus:','alarm:')
+               OR substr(identity,1,14)='missedSummary:';
+         INSERT INTO time_schema_resets(version,applied_at)
+            VALUES(32,strftime('%Y-%m-%dT%H:%M:%fZ','now'));",
+    )?;
+    transaction.commit()?;
+    Ok(true)
+}
 
 fn migration_31_time_module(transaction: &Transaction<'_>) -> Result<()> {
     transaction.execute_batch(
@@ -208,9 +268,22 @@ pub fn open_database(path: PathBuf) -> Result<Connection> {
     // recovered by restoring the file. The backup only happens once: a database
     // already at version 18+ has no pending destructive migration.
     back_up_before_unified_tasks(&path)?;
-    let mut connection = Connection::open(path)?;
+    let mut connection = Connection::open(&path)?;
     connection.execute_batch("PRAGMA foreign_keys = ON;")?;
     migrate(&mut connection)?;
+    // Explicit debug-only opt-in: set NOWLY_RESET_DEVELOPMENT_TIME_V32 to the
+    // absolute path of the known development nowly.sqlite before launching.
+    // "1", relative paths, other databases and release builds never authorize
+    // deletion. The transactional v32 marker also protects data created later.
+    // This runs before native timers/reminder lifecycle or scheduler startup;
+    // their in-memory focus snapshots therefore begin idle without an API change.
+    #[cfg(debug_assertions)]
+    if development_time_reset_requested(
+        &path,
+        std::env::var_os("NOWLY_RESET_DEVELOPMENT_TIME_V32").as_deref(),
+    ) {
+        reset_development_time_v32(&mut connection)?;
+    }
     Ok(connection)
 }
 
@@ -1465,6 +1538,196 @@ fn migration_22_remove_reminder_dispatch_foreign_key(transaction: &Transaction<'
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn migration_32_only_records_the_reset_capability_without_erasing_data() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        migrate_through(&mut connection, 31).unwrap();
+        seed_time_reset_data(&connection);
+        let before = time_reset_snapshot(&connection);
+        migrate(&mut connection).unwrap();
+        assert_eq!(time_reset_snapshot(&connection), before);
+        assert_eq!(connection.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='time_schema_resets'",
+            [], |row| row.get::<_, i64>(0),
+        ).unwrap(), 1);
+    }
+
+    fn seed_time_reset_data(connection: &Connection) {
+        connection.execute_batch(
+            "INSERT INTO time_settings VALUES(1,'{\"clocks\":[]}','now');
+             INSERT INTO alarms VALUES('old-alarm','Wake',8,0,'{}',1,'now','now','now');
+             INSERT INTO alarm_notices VALUES('n1','alarm','old-alarm','instance','Wake',
+                'now','now','now',1,'now',NULL,NULL);
+             INSERT INTO alarm_notices VALUES('n2','missedSummary',NULL,NULL,'Missed',
+                'now','now','now',1,'now',NULL,NULL);
+             INSERT INTO alarm_scheduler_state VALUES(1,'now','now');
+             INSERT INTO focus_sessions VALUES('old-session',1500,1500,'completed','now','now','now');
+             INSERT INTO module_state VALUES('focusTimer','{\"snapshot\":\"old\"}','now');
+             INSERT INTO module_state VALUES('time','{\"clocks\":[]}','now');
+             INSERT OR IGNORE INTO module_state VALUES('other','{\"snapshot\":\"keep\"}','now');
+             INSERT INTO module_layout VALUES('focusTimer',0,0,4,4,3);
+             INSERT INTO module_layout VALUES('time',4,0,4,4,4);
+             INSERT OR IGNORE INTO status_island_reminders(local_date,identity,updated_at) VALUES
+                ('today','focus:old-session:completed:1','now'),('today','alarm:n1','now'),
+                ('today','missedSummary:n2','now'),('today','event:keep:start','now'),
+                ('today','task:keep:due','now'),('today','focus-copy:keep','now'),
+                ('today','Focus:keep','now');
+             INSERT OR IGNORE INTO reminder_dispatches VALUES('event:keep','now',0,'now');",
+        ).unwrap();
+        connection.execute_batch(
+            "INSERT OR IGNORE INTO events(id,title,start_at,end_at,all_day,category,color,note,created_at,updated_at)
+                VALUES('event:keep','Keep meeting','2026-10-13T10:00','2026-10-13T11:00',0,'','','','now','now');
+             INSERT OR IGNORE INTO tasks(id,title,description,completed,lane_id,board_position,created_at,updated_at)
+                VALUES('task:keep','Keep task','',0,'kanban-lane-todo',0,'now','now');
+             INSERT OR IGNORE INTO notes(id,title,content,color,pinned,style_variant,icon,created_at,updated_at)
+                VALUES('note:keep','Keep note','content','#E8C444',0,0,'','now','now');",
+        ).unwrap();
+    }
+
+    fn time_reset_snapshot(
+        connection: &Connection,
+    ) -> Vec<(String, Vec<Vec<rusqlite::types::Value>>)> {
+        let tables: Vec<String> = connection
+            .prepare(
+                "SELECT name FROM sqlite_master WHERE type='table'
+             AND name NOT IN ('schema_migrations','time_schema_resets') ORDER BY name",
+            )
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<_>>()
+            .unwrap();
+        tables
+            .into_iter()
+            .map(|table| {
+                let mut statement = connection
+                    .prepare(&format!("SELECT * FROM \"{table}\" ORDER BY rowid"))
+                    .unwrap();
+                let columns = statement.column_count();
+                let rows = statement
+                    .query_map([], |row| (0..columns).map(|i| row.get(i)).collect())
+                    .unwrap()
+                    .collect::<Result<_>>()
+                    .unwrap();
+                (table, rows)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn explicit_development_time_reset_is_scoped_atomic_and_one_time() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        connection.execute_batch("PRAGMA foreign_keys=ON;").unwrap();
+        migrate(&mut connection).unwrap();
+        seed_time_reset_data(&connection);
+        let before = time_reset_snapshot(&connection);
+        assert!(super::reset_development_time_v32(&mut connection).unwrap());
+        for table in [
+            "time_settings",
+            "alarms",
+            "alarm_notices",
+            "alarm_scheduler_state",
+            "focus_sessions",
+        ] {
+            assert_eq!(
+                connection
+                    .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r
+                        .get::<_, i64>(0))
+                    .unwrap(),
+                0,
+                "{table}"
+            );
+        }
+        let after = time_reset_snapshot(&connection);
+        for (table, rows) in &before {
+            if !matches!(
+                table.as_str(),
+                "time_settings"
+                    | "alarms"
+                    | "alarm_notices"
+                    | "alarm_scheduler_state"
+                    | "focus_sessions"
+                    | "module_layout"
+                    | "module_state"
+                    | "status_island_reminders"
+            ) {
+                assert_eq!(
+                    &after.iter().find(|(name, _)| name == table).unwrap().1,
+                    rows,
+                    "{table}"
+                );
+            }
+        }
+        assert_eq!(connection.query_row("SELECT COUNT(*) FROM module_state WHERE module_id='other' AND state='{\"snapshot\":\"keep\"}'", [], |r| r.get::<_, i64>(0)).unwrap(), 1);
+        assert_eq!(
+            connection
+                .query_row(
+                    "SELECT COUNT(*) FROM module_layout WHERE id IN ('time','focusTimer')",
+                    [],
+                    |r| r.get::<_, i64>(0)
+                )
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            connection
+                .query_row("SELECT COUNT(*) FROM status_island_reminders", [], |r| r
+                    .get::<_, i64>(0))
+                .unwrap(),
+            4
+        );
+        assert_eq!(
+            crate::time::store::get_time_settings(&connection).unwrap(),
+            crate::time::store::default_time_settings()
+        );
+        seed_time_reset_data(&connection);
+        let newly_created = time_reset_snapshot(&connection);
+        assert!(!super::reset_development_time_v32(&mut connection).unwrap());
+        migrate(&mut connection).unwrap();
+        assert_eq!(time_reset_snapshot(&connection), newly_created);
+    }
+
+    #[test]
+    fn failed_development_time_reset_rolls_back_all_deletions_and_marker() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        migrate(&mut connection).unwrap();
+        seed_time_reset_data(&connection);
+        connection.execute_batch("CREATE TRIGGER block_time_reset BEFORE DELETE ON focus_sessions BEGIN SELECT RAISE(ABORT,'blocked'); END;").unwrap();
+        let before = time_reset_snapshot(&connection);
+        assert!(super::reset_development_time_v32(&mut connection).is_err());
+        assert_eq!(time_reset_snapshot(&connection), before);
+        assert_eq!(
+            connection
+                .query_row("SELECT COUNT(*) FROM time_schema_resets", [], |r| r
+                    .get::<_, i64>(0))
+                .unwrap(),
+            0
+        );
+    }
+
+    #[test]
+    fn development_time_reset_requires_the_exact_explicit_absolute_database_path() {
+        let path = std::env::current_dir().unwrap().join("Cargo.toml");
+        assert!(!super::development_time_reset_requested(&path, None));
+        assert!(!super::development_time_reset_requested(
+            &path,
+            Some(std::ffi::OsStr::new("1"))
+        ));
+        assert!(!super::development_time_reset_requested(
+            &path,
+            Some(std::ffi::OsStr::new("Cargo.toml"))
+        ));
+        let other = std::env::current_dir().unwrap().join("Cargo.lock");
+        assert!(!super::development_time_reset_requested(
+            &path,
+            Some(other.as_os_str())
+        ));
+        assert!(super::development_time_reset_requested(
+            &path,
+            Some(path.as_os_str())
+        ));
+    }
+
     use super::{migrate, open_database, MIGRATIONS};
     use rusqlite::{Connection, Result};
     use std::time::{SystemTime, UNIX_EPOCH};

@@ -10,8 +10,7 @@ const layouts = [
   ],
   [
     { id: 'kanban', x: 0, y: 0, w: 6, h: 8 },
-    { id: 'time', x: 6, y: 0, w: 6, h: 4 },
-    { id: 'focusTimer', x: 6, y: 4, w: 6, h: 4 }
+    { id: 'time', x: 6, y: 0, w: 6, h: 8 }
   ]
 ];
 

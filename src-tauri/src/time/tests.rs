@@ -3,9 +3,7 @@ use super::scheduler::{acknowledge_notice, list_alarm_notices, poll, poll_in_zon
 use super::store::{
     create_alarm, delete_alarm, get_time_settings, list_alarms, save_time_settings, update_alarm,
 };
-use super::types::{
-    Alarm, AlarmDraft, AlarmNoticeKind, AlarmRepeat, ClockMode, TimeSettings, WorldClock,
-};
+use super::types::{Alarm, AlarmDraft, AlarmNoticeKind, AlarmRepeat, TimeSettings};
 use chrono::{DateTime, TimeZone, Utc};
 use chrono_tz::Tz;
 use rusqlite::Connection;
@@ -72,64 +70,117 @@ fn default_time_settings_are_one_local_digital_clock() {
 
     assert_eq!(settings.clocks.len(), 1);
     assert_eq!(settings.clocks[0].time_zone, "local");
-    assert_eq!(settings.clocks[0].mode, ClockMode::Digital);
-    assert!(!settings.clocks[0].show_label);
-    assert!(!settings.clocks[0].show_date);
-    assert!(!settings.clocks[0].show_difference);
+    assert_eq!(
+        serde_json::to_value(settings).unwrap(),
+        unified_settings_json()
+    );
+}
+
+fn unified_settings_json() -> serde_json::Value {
+    json!({
+        "displayContent": "clocks",
+        "appearance": {
+            "mode": "digital", "hourCycle": "h23", "showSeconds": false,
+            "showLabel": false, "showDate": false, "showDifference": false,
+            "layout": "horizontal", "fontMode": "auto", "fontSize": 96
+        },
+        "focusPreferences": {"defaultMinutes": 25},
+        "clocks": [{"id": "local", "timeZone": "local", "label": "本地"}]
+    })
 }
 
 #[test]
-fn legacy_clock_appearance_defaults_and_invalid_font_sizes() {
+fn legacy_per_clock_settings_are_not_accepted() {
     let legacy = r#"{"clocks":[{"id":"local","timeZone":"local","label":"","mode":"digital","hourCycle":"h23","showSeconds":false,"showLabel":false,"showDate":false,"showDifference":false}]}"#;
-    let mut settings: TimeSettings = serde_json::from_str(legacy).unwrap();
-    assert_eq!(settings.clocks[0].layout, "horizontal");
-    assert_eq!(settings.clocks[0].font_mode, "auto");
-    assert_eq!(settings.clocks[0].font_size, 96);
+    assert!(serde_json::from_str::<TimeSettings>(legacy).is_err());
+}
+
+#[test]
+fn unified_settings_validate_enums_and_numeric_ranges_without_overwriting() {
     let mut connection = db();
-    for size in [31, 161] {
-        settings.clocks[0].font_size = size;
-        assert_eq!(
-            save_time_settings(&mut connection, settings.clone())
-                .unwrap_err()
-                .field
-                .as_deref(),
-            Some("fontSize")
-        );
+    let original = get_time_settings(&connection).unwrap();
+    save_time_settings(&mut connection, original.clone()).unwrap();
+    for (pointer, value) in [
+        ("/displayContent", json!("alarms")),
+        ("/appearance/mode", json!("unknown")),
+        ("/appearance/hourCycle", json!("h24")),
+        ("/appearance/layout", json!("date")),
+        ("/appearance/fontMode", json!("unknown")),
+        ("/appearance/fontSize", json!(31)),
+        ("/appearance/fontSize", json!(161)),
+        ("/focusPreferences/defaultMinutes", json!(0)),
+        ("/focusPreferences/defaultMinutes", json!(721)),
+    ] {
+        let mut invalid = unified_settings_json();
+        *invalid.pointer_mut(pointer).unwrap() = value;
+        if let Ok(settings) = serde_json::from_value::<TimeSettings>(invalid) {
+            assert!(
+                save_time_settings(&mut connection, settings).is_err(),
+                "{pointer}"
+            );
+        }
+        assert_eq!(get_time_settings(&connection).unwrap(), original);
     }
+    for (size, minutes) in [(32, 1), (160, 720)] {
+        let mut valid = unified_settings_json();
+        valid["appearance"]["fontSize"] = json!(size);
+        valid["focusPreferences"]["defaultMinutes"] = json!(minutes);
+        let settings = serde_json::from_value(valid).unwrap();
+        save_time_settings(&mut connection, settings).unwrap();
+    }
+}
+
+#[test]
+fn corrupt_persisted_unified_settings_are_rejected_on_read() {
+    let connection = db();
+    let mut invalid = unified_settings_json();
+    invalid["focusPreferences"]["defaultMinutes"] = json!(721);
+    connection
+        .execute(
+            "INSERT INTO time_settings VALUES (1,?1,'now')",
+            [invalid.to_string()],
+        )
+        .unwrap();
+    assert_eq!(
+        get_time_settings(&connection).unwrap_err().field.as_deref(),
+        Some("defaultMinutes")
+    );
 }
 
 #[test]
 fn time_settings_round_trip_and_validate_clocks() {
     let mut connection = db();
-    let settings = TimeSettings {
-        clocks: vec![WorldClock {
-            id: "shanghai".into(),
-            time_zone: "Asia/Shanghai".into(),
-            label: "Shanghai".into(),
-            mode: ClockMode::Mixed,
-            hour_cycle: "h23".into(),
-            show_seconds: true,
-            show_label: true,
-            show_date: true,
-            show_difference: false,
-            layout: "stacked".into(),
-            font_mode: "manual".into(),
-            font_size: 128,
-        }],
-    };
+    let mut value = unified_settings_json();
+    value["displayContent"] = json!("focus");
+    value["appearance"] = json!({
+        "mode": "mixed", "hourCycle": "h12", "showSeconds": true,
+        "showLabel": true, "showDate": true, "showDifference": true,
+        "layout": "stacked", "fontMode": "manual", "fontSize": 128
+    });
+    value["focusPreferences"]["defaultMinutes"] = json!(45);
+    value["clocks"] = json!([
+        {"id": "shanghai", "timeZone": "Asia/Shanghai", "label": "Shanghai"},
+        {"id": "local", "timeZone": "local", "label": ""}
+    ]);
+    let settings: TimeSettings = serde_json::from_value(value).unwrap();
 
     let saved = save_time_settings(&mut connection, settings.clone()).unwrap();
     assert_eq!(saved, settings);
     assert_eq!(get_time_settings(&connection).unwrap(), settings);
 
-    let empty =
-        save_time_settings(&mut connection, TimeSettings { clocks: Vec::new() }).unwrap_err();
+    let mut empty_settings = settings.clone();
+    empty_settings.clocks.clear();
+    let empty = save_time_settings(&mut connection, empty_settings).unwrap_err();
     assert_eq!(empty.field.as_deref(), Some("clocks"));
 
     let mut invalid = settings;
     invalid.clocks[0].time_zone = "Mars/Olympus".into();
     let timezone = save_time_settings(&mut connection, invalid).unwrap_err();
     assert_eq!(timezone.field.as_deref(), Some("timeZone"));
+
+    let mut invalid = get_time_settings(&connection).unwrap();
+    invalid.clocks[1].id = invalid.clocks[0].id.clone();
+    assert!(save_time_settings(&mut connection, invalid).is_err());
 }
 
 #[test]

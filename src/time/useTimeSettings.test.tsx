@@ -17,7 +17,7 @@ function setup(save = vi.fn(async (settings: TimeSettings) => settings)) {
   const wrapper = ({ children }: { children: React.ReactNode }) => <RepositoryProvider repository={repository}>{children}</RepositoryProvider>;
   return { repository, wrapper };
 }
-function changed(label: string): TimeSettings { return { clocks: [{ ...defaultTimeSettings().clocks[0], label, showLabel: true }] }; }
+function changed(label: string): TimeSettings { return { ...defaultTimeSettings(), appearance: { ...defaultTimeSettings().appearance, showLabel: true }, clocks: [{ ...defaultTimeSettings().clocks[0], label }] }; }
 
 describe('shared time settings', () => {
   it('publishes edits to every subscriber before persistence completes', async () => {

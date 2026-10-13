@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { listen } from '@tauri-apps/api/event';
 import { installBrowserTauriBackend } from './browser-tauri-shim';
+import { defaultTimeSettings } from '../time/time-model';
 
 const storageKey = 'nowly:browser-backend';
 const defaultMenu = [
@@ -24,20 +25,34 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const clock = { id: 'local', timeZone: 'local', label: '', mode: 'digital', hourCycle: 'h23', showSeconds: false, showLabel: false, showDate: false, showDifference: false };
+const clock = { id: 'local', timeZone: 'local', label: '本地' };
 const alarmDraft = { title: 'Break', hour: 9, minute: 7, repeat: { kind: 'weekly', weekdays: [1, 5] }, enabled: true };
 
 describe('browser time persistence', () => {
+  it('resets legacy development time data without removing unrelated content', async () => {
+    const note = { id: 'note', title: 'Keep this', body: 'content' };
+    localStorage.setItem(storageKey, JSON.stringify({
+      timeSettings: { clocks: [clock] }, alarms: [{ ...alarmDraft, id: 'old' }],
+      alarmNotices: [{ id: 'old-notice' }], focusSessions: [{ id: 'old-focus' }],
+      notes: [note], moduleLayout: [{ id: 'time' }, { id: 'focusTimer' }, { id: 'notes' }]
+    }));
+    installBrowserTauriBackend();
+    expect(await invoke()('get_time_settings')).toEqual(defaultTimeSettings());
+    expect(await invoke()('list_alarms')).toEqual([]);
+    expect(await invoke()('list_focus_sessions')).toEqual([]);
+    expect(await invoke()('list_notes')).toEqual([note]);
+    expect(await invoke()('list_module_layout')).toEqual([{ id: 'notes' }]);
+  });
   it('defaults to one minimal local digital clock and no alarms or notices', async () => {
     installBrowserTauriBackend();
-    expect(await invoke()('get_time_settings')).toEqual({ clocks: [clock] });
+    expect(await invoke()('get_time_settings')).toEqual(defaultTimeSettings());
     expect(await invoke()('list_alarms')).toEqual([]);
     expect(await invoke()('get_status_island_snapshot')).toHaveProperty('alarmNotices', []);
   });
 
   it('round trips settings and alarm CRUD across reinstall without altering calendar events', async () => {
     installBrowserTauriBackend();
-    const settings = { clocks: [{ ...clock, id: 'tokyo', timeZone: 'Asia/Tokyo', mode: 'mixed', showDate: true }] };
+    const settings = { ...defaultTimeSettings(), appearance: { ...defaultTimeSettings().appearance, mode: 'mixed', showDate: true }, clocks: [{ ...clock, id: 'tokyo', timeZone: 'Asia/Tokyo' }] };
     expect(await invoke()('save_time_settings', { settings })).toEqual(settings);
     const alarm = await invoke()('create_alarm', { draft: alarmDraft }) as Record<string, unknown>;
     expect(alarm).toEqual({ ...alarmDraft, id: expect.any(String), createdAt: expect.any(String), updatedAt: expect.any(String) });
@@ -54,16 +69,19 @@ describe('browser time persistence', () => {
   });
 
   it.each([
-    { clocks: [] },
-    { clocks: [{ ...clock, timeZone: 'Not/AZone' }] },
-    { clocks: [{ ...clock, mode: 'invalid' }] },
-    { clocks: [{ ...clock, hourCycle: 'h24' }] },
-    { clocks: [{ ...clock, showSeconds: 'yes' }] },
-    { clocks: [clock, clock] }
+    { ...defaultTimeSettings(), clocks: [] },
+    { ...defaultTimeSettings(), clocks: [{ ...clock, timeZone: 'Not/AZone' }] },
+    { ...defaultTimeSettings(), appearance: { ...defaultTimeSettings().appearance, mode: 'invalid' } },
+    { ...defaultTimeSettings(), appearance: { ...defaultTimeSettings().appearance, hourCycle: 'h24' } },
+    { ...defaultTimeSettings(), appearance: { ...defaultTimeSettings().appearance, showSeconds: 'yes' } },
+    { ...defaultTimeSettings(), appearance: { ...defaultTimeSettings().appearance, fontSize: 161 } },
+    { ...defaultTimeSettings(), focusPreferences: { defaultMinutes: 0 } },
+    { ...defaultTimeSettings(), displayContent: 'alarms' },
+    { ...defaultTimeSettings(), clocks: [clock, clock] }
   ])('rejects invalid clock settings without persisting them: %j', async settings => {
     installBrowserTauriBackend();
     await expect(invoke()('save_time_settings', { settings })).rejects.toMatchObject({ code: 'validation_error' });
-    expect(await invoke()('get_time_settings')).toEqual({ clocks: [clock] });
+    expect(await invoke()('get_time_settings')).toEqual(defaultTimeSettings());
   });
 
   it.each([

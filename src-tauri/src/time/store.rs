@@ -1,5 +1,8 @@
 use super::schedule::next_occurrence;
-use super::types::{Alarm, AlarmDraft, AlarmRepeat, ClockMode, TimeSettings, WorldClock};
+use super::types::{
+    Alarm, AlarmDraft, AlarmRepeat, ClockMode, FocusPreferences, TimeAppearance, TimeSettings,
+    WorldClock,
+};
 use crate::error::CommandError;
 use chrono::{DateTime, NaiveDate, SecondsFormat, Utc};
 use rusqlite::{params, Connection, OptionalExtension};
@@ -7,10 +10,8 @@ use std::collections::HashSet;
 
 pub fn default_time_settings() -> TimeSettings {
     TimeSettings {
-        clocks: vec![WorldClock {
-            id: "local".to_owned(),
-            time_zone: "local".to_owned(),
-            label: String::new(),
+        display_content: "clocks".to_owned(),
+        appearance: TimeAppearance {
             mode: ClockMode::Digital,
             hour_cycle: "h23".to_owned(),
             show_seconds: false,
@@ -20,6 +21,14 @@ pub fn default_time_settings() -> TimeSettings {
             layout: "horizontal".to_owned(),
             font_mode: "auto".to_owned(),
             font_size: 96,
+        },
+        focus_preferences: FocusPreferences {
+            default_minutes: 25,
+        },
+        clocks: vec![WorldClock {
+            id: "local".to_owned(),
+            time_zone: "local".to_owned(),
+            label: "本地".to_owned(),
         }],
     }
 }
@@ -218,6 +227,34 @@ pub(crate) fn format_utc(value: DateTime<Utc>) -> String {
 }
 
 fn validate_settings(settings: &TimeSettings) -> Result<(), CommandError> {
+    if !matches!(settings.display_content.as_str(), "clocks" | "focus") {
+        return Err(CommandError::validation(
+            "displayContent",
+            "Invalid time display content.",
+        ));
+    }
+    let appearance = &settings.appearance;
+    if !matches!(appearance.layout.as_str(), "horizontal" | "stacked") {
+        return Err(CommandError::validation("layout", "Invalid clock layout."));
+    }
+    if !matches!(appearance.font_mode.as_str(), "auto" | "manual") {
+        return Err(CommandError::validation("fontMode", "Invalid font mode."));
+    }
+    if !(32..=160).contains(&appearance.font_size) {
+        return Err(CommandError::validation(
+            "fontSize",
+            "Clock font size must be between 32 and 160.",
+        ));
+    }
+    if !matches!(appearance.hour_cycle.as_str(), "h12" | "h23") {
+        return Err(CommandError::validation("hourCycle", "Invalid hour cycle."));
+    }
+    if !(1..=720).contains(&settings.focus_preferences.default_minutes) {
+        return Err(CommandError::validation(
+            "defaultMinutes",
+            "Focus duration must be between 1 and 720 minutes.",
+        ));
+    }
     if settings.clocks.is_empty() {
         return Err(CommandError::validation(
             "clocks",
@@ -237,20 +274,6 @@ fn validate_settings(settings: &TimeSettings) -> Result<(), CommandError> {
                 "timeZone",
                 "Please choose a valid time zone.",
             ));
-        }
-        if !matches!(clock.layout.as_str(), "horizontal" | "stacked" | "date") {
-            return Err(CommandError::validation("layout", "Invalid clock layout."));
-        }
-        if !matches!(clock.font_mode.as_str(), "auto" | "manual")
-            || !(32..=160).contains(&clock.font_size)
-        {
-            return Err(CommandError::validation(
-                "fontSize",
-                "Clock font size must be between 32 and 160.",
-            ));
-        }
-        if !matches!(clock.hour_cycle.as_str(), "h12" | "h23") {
-            return Err(CommandError::validation("hourCycle", "Invalid hour cycle."));
         }
     }
     Ok(())

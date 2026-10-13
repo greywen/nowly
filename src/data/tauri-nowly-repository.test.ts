@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EditScope, EventDraft } from '../calendar/calendar-model';
 import type { AlarmDraft, TimeSettings } from '../time/time-model';
+import { defaultTimeSettings } from '../time/time-model';
 import { tauriNowlyRepository } from './tauri-nowly-repository';
 
 const invokeMock = vi.hoisted(() => vi.fn());
@@ -16,7 +17,7 @@ describe('tauriNowlyRepository', () => {
   });
 
   it('maps the time settings and alarm commands and invalidates successful alarm writes', async () => {
-    const settings: TimeSettings = { clocks: [{ id: 'local', timeZone: 'local', label: '', mode: 'digital', hourCycle: 'h23', showSeconds: false, showLabel: false, showDate: false, showDifference: false }] };
+    const settings: TimeSettings = defaultTimeSettings();
     const draft: AlarmDraft = { title: 'Stand up', hour: 9, minute: 7, repeat: { kind: 'weekly', weekdays: [1, 5] }, enabled: true };
     invokeMock.mockResolvedValue(settings);
     expect(await tauriNowlyRepository.getTimeSettings()).toBe(settings);

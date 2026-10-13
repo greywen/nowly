@@ -3,34 +3,39 @@ import { describe, expect, it, vi } from 'vitest';
 import { WorldClockSettings } from './WorldClockSettings';
 import { defaultTimeSettings } from './time-model';
 
-describe('WorldClockSettings appearance', () => {
-  it('adds a named clock without hiding its editable label', () => {
+describe('WorldClockSettings global appearance', () => {
+  it('adds cities without duplicating appearance controls or changing appearance', () => {
+    const settings = defaultTimeSettings();
     const onChange = vi.fn();
-    const { rerender } = render(<WorldClockSettings settings={defaultTimeSettings()} onChange={onChange} />);
+    const { rerender } = render(<WorldClockSettings settings={settings} onChange={onChange} />);
     fireEvent.click(screen.getByRole('button', { name: '添加时钟' }));
-    expect(onChange.mock.calls[0][0].clocks[1].showLabel).toBe(true);
-    rerender(<WorldClockSettings settings={onChange.mock.calls[0][0]} onChange={onChange} />);
-    expect(screen.getByDisplayValue('新时钟')).toBeVisible();
+    const next = onChange.mock.calls[0][0];
+    expect(next.appearance).toEqual(settings.appearance);
+    expect(Object.keys(next.clocks[1]).sort()).toEqual(['id', 'label', 'timeZone']);
+    rerender(<WorldClockSettings settings={next} onChange={onChange} />);
+    expect(screen.getAllByRole('combobox', { name: '显示模式' })).toHaveLength(1);
+    expect(screen.getAllByRole('combobox', { name: '时区' })).toHaveLength(2);
   });
 
-  it('offers a manual font slider using the approved bounds', () => {
+  it('updates one global font slider using the approved bounds', () => {
     const settings = defaultTimeSettings();
-    settings.clocks[0].fontMode = 'manual';
+    settings.appearance = { ...settings.appearance, fontMode: 'manual' };
     const onChange = vi.fn();
     render(<WorldClockSettings settings={settings} onChange={onChange} />);
-    expect(screen.getByText('字号（32–160px）: 96px')).toBeVisible();
     const slider = screen.getByRole('slider');
     expect(slider).toHaveAttribute('min', '32');
     expect(slider).toHaveAttribute('max', '160');
+    expect(slider).toHaveAttribute('aria-valuetext', '96px');
     fireEvent.change(slider, { target: { value: '128' } });
-    expect(onChange.mock.calls[0][0].clocks[0].fontSize).toBe(128);
+    expect(onChange.mock.calls[0][0].appearance.fontSize).toBe(128);
   });
 
-  it('exposes details with native keyboard-accessible disclosure semantics', () => {
-    const { container } = render(<WorldClockSettings settings={defaultTimeSettings()} onChange={vi.fn()} />);
-    expect(container.querySelector('details summary')).toHaveTextContent('详细设置');
-    expect(screen.getByText('外观')).toBeVisible();
-    expect(screen.getByText('布局')).toBeVisible();
-    expect(container.querySelector('details')).not.toHaveAttribute('open');
+  it('disables numeric layout and font controls for analog clocks', () => {
+    const settings = defaultTimeSettings();
+    settings.appearance = { ...settings.appearance, mode: 'analog' };
+    render(<WorldClockSettings settings={settings} onChange={vi.fn()} />);
+    expect(screen.getByRole('combobox', { name: '布局' })).toBeDisabled();
+    expect(screen.getByRole('combobox', { name: '字号模式' })).toBeDisabled();
+    expect(screen.queryByRole('slider')).not.toBeInTheDocument();
   });
 });

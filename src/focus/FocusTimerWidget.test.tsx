@@ -11,6 +11,28 @@ beforeEach(()=>{setLanguage('zh');vi.clearAllMocks()});
 afterEach(()=>setLanguage('zh'));
 
 describe('FocusTimerWidget',()=>{
+  it('uses the configured default and updates the next idle session',async()=>{
+    const user=userEvent.setup();
+    const {rerender}=render(<FocusTimerWidget mode="foreground" embedded defaultMinutes={40} onOpenStatistics={vi.fn()}/>);
+    expect(screen.getByText('40:00')).toBeInTheDocument();
+    expect(screen.queryByRole('button',{name:'查看统计'})).not.toBeInTheDocument();
+    rerender(<FocusTimerWidget mode="foreground" embedded defaultMinutes={45} onOpenStatistics={vi.fn()}/>);
+    expect(screen.getByText('45:00')).toBeInTheDocument();
+    await user.click(screen.getByRole('button',{name:'开始专注'}));
+    expect(api.start).toHaveBeenCalledWith(45);
+  });
+
+  it('does not change a running countdown when the next-session default changes',()=>{
+    api.state.status='running';api.remainingSeconds=1200;
+    try{
+      const {rerender}=render(<FocusTimerWidget mode="foreground" embedded defaultMinutes={40} onOpenStatistics={vi.fn()}/>);
+      rerender(<FocusTimerWidget mode="foreground" embedded defaultMinutes={45} onOpenStatistics={vi.fn()}/>);
+      expect(screen.getByText('20:00')).toBeInTheDocument();
+      expect(api.start).not.toHaveBeenCalled();
+      expect(api.pause).not.toHaveBeenCalled();
+      expect(api.interrupt).not.toHaveBeenCalled();
+    }finally{api.state.status='idle';api.remainingSeconds=1500;}
+  });
   it('renders a simplified foreground card with icon-only secondary actions',()=>{
     render(<FocusTimerWidget mode="foreground" onOpenStatistics={vi.fn()}/>);
     expect(screen.getByText('25:00')).toBeInTheDocument();

@@ -11,7 +11,19 @@ type TimeTranslationKey =
   | 'time.saveError'
   | 'time.saved'
   | 'time.tabs.clocks'
-  | 'time.tabs.compare'
+  | 'time.tabs.focus'
+  | 'time.display.switch'
+  | 'time.appearance.title'
+  | 'time.appearance.hint'
+  | 'time.appearance.info'
+  | 'time.appearance.differenceHint'
+  | 'time.focus.defaultMinutes'
+  | 'time.focus.minutesError'
+  | 'time.focus.settingsHint'
+  | 'time.focus.running'
+  | 'time.focus.paused'
+  | 'time.focus.showFocus'
+  | 'time.focus.statistics'
   | 'time.tabs.alarms'
   | 'time.clocks.add'
   | 'time.clocks.delete'
@@ -30,9 +42,6 @@ type TimeTranslationKey =
   | 'time.mode.mixed'
   | 'time.hourCycle.h23'
   | 'time.hourCycle.h12'
-  | 'time.compare.localInput'
-  | 'time.compare.now'
-  | 'time.compare.invalid'
   | 'time.alarms.add'
   | 'time.alarms.empty'
   | 'time.alarms.title'
@@ -77,8 +86,20 @@ export const timeTranslations: Record<Language, Record<TimeTranslationKey, strin
     'time.save': '保存时间设置',
     'time.saveError': '保存失败',
     'time.saved': '已保存',
-    'time.tabs.clocks': '时钟',
-    'time.tabs.compare': '时差对照',
+    'time.tabs.clocks': '世界时钟',
+    'time.tabs.focus': '专注时段',
+    'time.display.switch': '切换显示内容',
+    'time.appearance.title': '全局显示设置',
+    'time.appearance.hint': '以下设置统一应用于所有世界时钟。',
+    'time.appearance.info': '附加信息',
+    'time.appearance.differenceHint': '时差以电脑本地时区为基准；容器不足时数字字号自动缩小。',
+    'time.focus.defaultMinutes': '默认时长（1–720 分钟）',
+    'time.focus.minutesError': '请输入 1–720 的整数分钟。',
+    'time.focus.settingsHint': '默认时长用于下一次专注，不改变正在运行的时段。开始、暂停与结束在模块正文操作。',
+    'time.focus.running': '专注中 · {remaining}',
+    'time.focus.paused': '专注已暂停 · {remaining}',
+    'time.focus.showFocus': '显示专注时段',
+    'time.focus.statistics': '专注统计',
     'time.tabs.alarms': '闹钟',
     'time.clocks.add': '添加时钟',
     'time.clocks.delete': '删除 {label}',
@@ -97,9 +118,6 @@ export const timeTranslations: Record<Language, Record<TimeTranslationKey, strin
     'time.mode.mixed': '混合',
     'time.hourCycle.h23': '24 小时',
     'time.hourCycle.h12': '12 小时',
-    'time.compare.localInput': '本地日期时间',
-    'time.compare.now': '回到现在',
-    'time.compare.invalid': '请输入有效的本地日期时间',
     'time.alarms.add': '添加闹钟',
     'time.alarms.empty': '还没有闹钟',
     'time.alarms.title': '标题',
@@ -143,8 +161,20 @@ export const timeTranslations: Record<Language, Record<TimeTranslationKey, strin
     'time.save': 'Save time settings',
     'time.saveError': 'Save failed',
     'time.saved': 'Saved',
-    'time.tabs.clocks': 'Clocks',
-    'time.tabs.compare': 'Compare',
+    'time.tabs.clocks': 'World clocks',
+    'time.tabs.focus': 'Focus sessions',
+    'time.display.switch': 'Switch display',
+    'time.appearance.title': 'Global display settings',
+    'time.appearance.hint': 'These settings apply to all world clocks.',
+    'time.appearance.info': 'Additional information',
+    'time.appearance.differenceHint': 'Differences use the computer’s local time zone. Digits shrink to fit smaller containers.',
+    'time.focus.defaultMinutes': 'Default duration (1–720 minutes)',
+    'time.focus.minutesError': 'Enter a whole number from 1 to 720 minutes.',
+    'time.focus.settingsHint': 'The default applies to the next session, not a running session. Start, pause and end sessions in the module.',
+    'time.focus.running': 'Focusing · {remaining}',
+    'time.focus.paused': 'Focus paused · {remaining}',
+    'time.focus.showFocus': 'Show focus',
+    'time.focus.statistics': 'Focus statistics',
     'time.tabs.alarms': 'Alarms',
     'time.clocks.add': 'Add clock',
     'time.clocks.delete': 'Delete {label}',
@@ -163,9 +193,6 @@ export const timeTranslations: Record<Language, Record<TimeTranslationKey, strin
     'time.mode.mixed': 'Mixed',
     'time.hourCycle.h23': '24-hour',
     'time.hourCycle.h12': '12-hour',
-    'time.compare.localInput': 'Local date and time',
-    'time.compare.now': 'Use now',
-    'time.compare.invalid': 'Enter a valid local date and time',
     'time.alarms.add': 'Add alarm',
     'time.alarms.empty': 'No alarms yet',
     'time.alarms.title': 'Title',

@@ -43,7 +43,7 @@ export class TimeSettingsStore {
   };
   save = (settings: TimeSettings) => {
     const normalized = normalizeTimeSettings(settings);
-    const data = { clocks: normalized.clocks.map((clock, index) => ({ ...clock, label: settings.clocks[index]?.label ?? clock.label })) };
+    const data = { ...normalized, clocks: normalized.clocks.map((clock, index) => ({ ...clock, label: settings.clocks[index]?.label ?? clock.label })) };
     ++this.revision;
     this.pending = data;
     this.publish({ state: { status: 'ready', data, error: null }, writeError: null, saveStatus: 'saving' });

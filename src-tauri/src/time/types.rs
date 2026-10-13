@@ -9,38 +9,39 @@ pub enum ClockMode {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct WorldClock {
     pub id: String,
     pub time_zone: String,
     pub label: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TimeAppearance {
     pub mode: ClockMode,
     pub hour_cycle: String,
     pub show_seconds: bool,
     pub show_label: bool,
     pub show_date: bool,
     pub show_difference: bool,
-    #[serde(default = "default_clock_layout")]
     pub layout: String,
-    #[serde(default = "default_font_mode")]
     pub font_mode: String,
-    #[serde(default = "default_font_size")]
     pub font_size: u16,
 }
 
-fn default_clock_layout() -> String {
-    "horizontal".to_owned()
-}
-fn default_font_mode() -> String {
-    "auto".to_owned()
-}
-fn default_font_size() -> u16 {
-    96
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct FocusPreferences {
+    pub default_minutes: u16,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TimeSettings {
+    pub display_content: String,
+    pub appearance: TimeAppearance,
+    pub focus_preferences: FocusPreferences,
     pub clocks: Vec<WorldClock>,
 }
 

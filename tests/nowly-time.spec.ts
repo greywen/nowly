@@ -1,16 +1,16 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import type { Alarm, AlarmNotice, ClockMode, WorldClock } from '../src/time/time-model';
+import { defaultTimeSettings, type Alarm, type AlarmNotice, type ClockMode, type TimeSettings, type WorldClock } from '../src/time/time-model';
 
 const storageKey = 'nowly:browser-backend';
 test.setTimeout(60_000);
 test.use({ timezoneId: 'UTC' });
-const clock = (id: string, mode: ClockMode = 'digital', timeZone = 'UTC'): WorldClock => ({
-  id, label: `城市 ${id}`, timeZone, mode, hourCycle: 'h23', showSeconds: false,
-  showLabel: false, showDate: false, showDifference: false
+const clock = (id: string, timeZone = 'UTC'): WorldClock => ({
+  id, label: `城市 ${id}`, timeZone
 });
 
 type Fixture = {
   clocks?: WorldClock[];
+  mode?: ClockMode;
   density?: string;
   rect?: { w: number; h: number };
   alarmNotices?: AlarmNotice[];
@@ -25,9 +25,9 @@ async function boot(page: Page, fixture: Fixture = {}, bar = false) {
     localStorage.setItem(key, JSON.stringify({
       settings: { wallpaperEnabled: false, density: fixture.density ?? 'balanced' },
       moduleLayout: [{ id: 'time', x: 0, y: 0, w: fixture.rect?.w ?? 4, h: fixture.rect?.h ?? 3 }],
-      timeSettings: { clocks: fixture.clocks }, alarms: [], alarmNotices: fixture.alarmNotices ?? []
+      timeSettings: { ...fixture.timeSettings, clocks: fixture.clocks }, alarms: [], alarmNotices: fixture.alarmNotices ?? []
     }));
-  }, { key: storageKey, fixture: { ...fixture, clocks: fixture.clocks ?? [clock('local', 'digital', 'local')] } });
+  }, { key: storageKey, fixture: { ...fixture, clocks: fixture.clocks ?? [clock('local', 'local')], timeSettings: { ...defaultTimeSettings(), appearance: { ...defaultTimeSettings().appearance, mode: fixture.mode ?? 'digital' } } } });
   if (bar) {
     // Keep the actual browser backend, changing only the native window identity.
     await page.route('**/src/main.tsx*', async route => {
@@ -60,12 +60,12 @@ async function boot(page: Page, fixture: Fixture = {}, bar = false) {
 
 async function stored(page: Page) {
   return page.evaluate(key => JSON.parse(localStorage.getItem(key)!), storageKey) as Promise<{
-    timeSettings: { clocks: WorldClock[] }; alarms: Alarm[]; alarmNotices: AlarmNotice[];
+    timeSettings: TimeSettings; alarms: Alarm[]; alarmNotices: AlarmNotice[];
   }>;
 }
 
 async function openTimeSettings(page: Page) {
-  await page.getByTestId('time-widget').getByRole('button', { name: '时间设置', exact: true }).click();
+  await page.getByTestId('time-module').getByRole('button', { name: '时间设置', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '时间设置', exact: true });
   await expect(dialog).toBeVisible();
   await expect(dialog.locator('.time-clock-settings-card')).toHaveCount((await stored(page)).timeSettings.clocks.length);
@@ -83,8 +83,8 @@ async function saveClocks(dialog: Locator) {
 }
 
 for (const mode of ['digital', 'analog', 'mixed'] as const) {
-  test(`pure ${mode} hides optional information and exposes the module add icon`, async ({ page }) => {
-    await boot(page, { clocks: [clock('东京', mode, 'Asia/Tokyo')] });
+  test(`pure ${mode} hides optional information and keeps tabs in settings`, async ({ page }) => {
+    await boot(page, { mode, clocks: [clock('东京', 'Asia/Tokyo')] });
     const widget = page.getByTestId('time-widget');
     await expect(widget).toHaveAttribute('data-clock-count', '1');
     const tile = widget.getByTestId('time-clock');
@@ -93,15 +93,9 @@ for (const mode of ['digital', 'analog', 'mixed'] as const) {
     await expect(widget.getByTestId('time-clock-digital')).toHaveCount(mode === 'analog' ? 0 : 1);
     await expect(widget.getByTestId('time-clock-face')).toHaveCount(mode === 'digital' ? 0 : 1);
     await expect(widget.locator('.time-clock__label, .time-clock__meta')).toHaveCount(0);
-    await expect(widget.getByRole('button')).toHaveCount(2);
-    await expect(widget.getByRole('button', { name: '时间设置', exact: true })).toBeVisible();
-    const add = widget.getByRole('button', { name: '添加闹钟', exact: true });
-    await expect(add).toHaveCSS('background-color', 'rgb(248, 246, 242)');
-    await expect(add).toHaveCSS('width', '40px');
-    await expect(add).toHaveCSS('height', '40px');
-    await expect(add.locator('svg')).toHaveCSS('width', '18px');
-    await add.hover();
-    await expect(add).toHaveCSS('background-color', 'rgb(246, 241, 233)');
+    const module = page.getByTestId('time-module');
+    await expect(module.getByRole('button', { name: '时间设置', exact: true })).toBeVisible();
+    await expect(module.getByRole('button', { name: '专注统计', exact: true })).toHaveCount(0);
     await expect(widget.getByRole('tab')).toHaveCount(0);
     if (mode !== 'analog') {
       await expect(widget.getByTestId('time-clock-digital')).toHaveText(/^\d{2}:\d{2}$/);
@@ -124,8 +118,8 @@ test('multiple clocks remain readable at 2x2, 4x3, wide and short sizes in every
       await page.evaluate(({ key, density, rect, clocks }) => {
         const fixture = JSON.parse(localStorage.getItem(key)!);
         localStorage.setItem(key, JSON.stringify({ ...fixture, settings: { ...fixture.settings, density },
-          moduleLayout: [{ id: 'time', x: 0, y: 0, ...rect }], timeSettings: { clocks } }));
-      }, { key: storageKey, density, rect, clocks: [clock('UTC', 'digital'), clock('Tokyo', 'analog', 'Asia/Tokyo'), clock('Kathmandu', 'mixed', 'Asia/Kathmandu'), clock('NewYork', 'mixed', 'America/New_York')].map(item => ({ ...item, showLabel: true, showDate: true, showDifference: true })) });
+          moduleLayout: [{ id: 'time', x: 0, y: 0, ...rect }], timeSettings: { ...fixture.timeSettings, appearance: { ...fixture.timeSettings.appearance, mode: 'mixed', showLabel: true, showDate: true, showDifference: true }, clocks } }));
+      }, { key: storageKey, density, rect, clocks: [clock('UTC'), clock('Tokyo', 'Asia/Tokyo'), clock('Kathmandu', 'Asia/Kathmandu'), clock('NewYork', 'America/New_York')] });
       await page.reload({ waitUntil: 'domcontentloaded' });
       const widget = page.getByTestId('time-widget');
       await expect(widget).toHaveAttribute('data-clock-count', '4');
@@ -169,11 +163,10 @@ test('clock settings add, reorder, remove, save dynamically and survive reload',
   await cards.nth(1).getByRole('combobox', { name: '时区', exact: true }).click();
   await cards.nth(1).getByRole('searchbox', { name: '搜索时区', exact: true }).fill('伦敦');
   await cards.nth(1).getByRole('option', { name: '伦敦', exact: true }).click();
-  await select(cards.nth(1), '显示模式', '混合');
-  await cards.nth(1).locator('summary').click();
-  await select(cards.nth(1), '小时制', '12 小时');
-  await cards.nth(1).getByRole('checkbox', { name: '显示秒', exact: true }).check();
-  await cards.nth(1).getByRole('checkbox', { name: '显示城市', exact: true }).check();
+  await select(dialog, '显示模式', '混合');
+  await select(dialog, '小时制', '12 小时');
+  await dialog.getByRole('checkbox', { name: '显示秒', exact: true }).check();
+  await dialog.getByRole('checkbox', { name: '显示城市', exact: true }).check();
   await cards.nth(1).getByRole('button', { name: '上移 伦敦', exact: true }).click();
   await saveClocks(dialog);
   await expect(page.getByTestId('time-widget')).toHaveAttribute('data-clock-count', '2');
@@ -190,40 +183,37 @@ test('clock settings add, reorder, remove, save dynamically and survive reload',
   await page.reload();
   await expect(widget.getByTestId('time-clock').first()).toHaveAttribute('data-time-zone', 'Europe/London');
   expect((await stored(page)).timeSettings.clocks).toHaveLength(1);
-  await page.getByRole('button', { name: '打开设置', exact: true }).click();
-  await page.getByRole('dialog', { name: '设置', exact: true }).getByRole('button', { name: '时间设置', exact: true }).click();
-  await expect(page.getByRole('dialog', { name: '时间设置', exact: true })).toBeVisible();
+  await openTimeSettings(page);
   await expect(page.getByRole('textbox', { name: '显示名称', exact: true })).toHaveValue('伦敦');
 });
 
-test('clock appearance controls persist stacked manual sizing and date layout', async ({ page }) => {
+test('global appearance controls persist stacked manual sizing and independent dates', async ({ page }) => {
   await boot(page, { rect: { w: 6, h: 5 } });
   const dialog = await openTimeSettings(page);
-  const card = dialog.locator('.time-clock-settings-card').first();
-  await select(card, '布局', '上下排列');
-  await select(card, '字号模式', '手动字号');
-  await card.getByRole('slider').fill('128');
+  await select(dialog, '布局', '上下排列');
+  await select(dialog, '字号模式', '手动字号');
+  await dialog.getByRole('slider').fill('128');
   await expect(page.getByTestId('time-clock')).toHaveAttribute('data-clock-layout', 'stacked');
   await expect(page.getByTestId('time-clock-digital').locator('span')).toHaveCount(2);
   await expect(dialog).toBeVisible();
   await saveClocks(dialog);
-  expect((await stored(page)).timeSettings.clocks[0]).toMatchObject({ layout: 'stacked', fontMode: 'manual', fontSize: 128 });
+  expect((await stored(page)).timeSettings.appearance).toMatchObject({ layout: 'stacked', fontMode: 'manual', fontSize: 128 });
   await dialog.getByRole('button', { name: '关闭', exact: true }).click();
   await page.reload();
   const reopened = await openTimeSettings(page);
-  const savedCard = reopened.locator('.time-clock-settings-card').first();
-  await expect(savedCard.getByRole('slider')).toHaveValue('128');
-  await select(savedCard, '布局', '时间与日期');
+  await expect(reopened.getByRole('slider')).toHaveValue('128');
+  await reopened.getByRole('checkbox', { name: '显示日期', exact: true }).check();
   await saveClocks(reopened);
-  expect((await stored(page)).timeSettings.clocks[0].layout).toBe('date');
+  expect((await stored(page)).timeSettings.appearance).toMatchObject({ layout: 'stacked', showDate: true });
 });
 
-test('module add icon opens a new alarm and enabled indicators update immediately', async ({ page }) => {
+test('settings alarm tab creates alarms and enabled indicators update immediately', async ({ page }) => {
   await boot(page);
   const widget = page.getByTestId('time-widget');
-  const add = widget.getByRole('button', { name: '添加闹钟', exact: true });
-  await add.click();
-  const dialog = page.getByRole('dialog', { name: '时间设置', exact: true });
+  const settings = page.getByTestId('time-module').getByRole('button', { name: '时间设置', exact: true });
+  const dialog = await openTimeSettings(page);
+  await dialog.getByRole('tab', { name: /^闹钟/ }).click();
+  await dialog.getByRole('button', { name: '添加闹钟', exact: true }).click();
   await expect(dialog.getByRole('tab', { name: /^闹钟/ })).toHaveAttribute('aria-selected', 'true');
   const editor = dialog.locator('.time-alarm-editor');
   await expect(editor).toBeVisible();
@@ -239,23 +229,91 @@ test('module add icon opens a new alarm and enabled indicators update immediatel
   await dialog.locator('.time-alarm-row').getByRole('checkbox').uncheck();
   await expect(widget.locator('.time-widget__alarm')).toHaveCount(0);
   await dialog.getByRole('button', { name: '关闭', exact: true }).click();
-  await expect(add).toBeFocused();
+  await expect(settings).toBeFocused();
 });
 
-test('time comparison converts a local instant without changing saved clocks', async ({ page }) => {
-  await boot(page, { clocks: [clock('UTC'), clock('Kathmandu', 'mixed', 'Asia/Kathmandu')] });
+test('settings tabs never change display, focus continues when switching and display persists across reload', async ({ page }) => {
+  await boot(page);
   const dialog = await openTimeSettings(page);
-  await dialog.getByRole('tab', { name: '时差对照', exact: true }).click();
-  const input = dialog.getByLabel('本地日期时间', { exact: true });
-  await input.fill('2026-01-15T23:30');
-  await expect(dialog.locator('.time-comparison-row')).toHaveCount(2);
-  await expect(dialog.locator('.time-comparison-row').first()).toContainText('23:30');
-  await expect(dialog.locator('.time-comparison-row').nth(1)).toContainText('05:15');
-  await expect(dialog.locator('.time-comparison-row').nth(1)).toContainText('2026-01-16');
-  await expect(dialog).toContainText('UTC+05:45');
-  expect((await stored(page)).timeSettings.clocks.map(item => item.timeZone)).toEqual(['UTC', 'Asia/Kathmandu']);
-  await dialog.getByRole('button', { name: '回到现在', exact: true }).click();
-  await expect(input).not.toHaveValue('2026-01-15T23:30');
+  await expect(dialog.getByRole('tab')).toHaveCount(3);
+  await expect(dialog.getByRole('tab', { name: '时差对照' })).toHaveCount(0);
+  await dialog.getByRole('tab', { name: '专注时段', exact: true }).click();
+  await expect(dialog.getByRole('radio', { name: '时间', exact: true })).toBeChecked();
+  await expect(dialog.getByRole('button', { name: /统计/ })).toHaveCount(0);
+  const duration = dialog.getByRole('spinbutton');
+  await duration.fill('45');
+  await dialog.getByRole('radio', { name: '专注时段', exact: true }).check();
+  await saveClocks(dialog);
+  await dialog.getByRole('button', { name: '关闭', exact: true }).click();
+  const module = page.getByTestId('time-module');
+  await expect(module).toHaveAttribute('data-display-content', 'focus');
+  await expect(module.getByRole('button', { name: '专注统计', exact: true })).toBeVisible();
+  await expect(module).toContainText('45:00');
+  expect(await module.locator('.focus-timer').evaluate(element => element.getBoundingClientRect().height)).toBeGreaterThan(150);
+  await module.getByRole('button', { name: '开始专注', exact: true }).click();
+  await expect(module.getByRole('button', { name: '暂停', exact: true })).toBeVisible();
+  const settings = await openTimeSettings(page);
+  await settings.getByRole('radio', { name: '时间', exact: true }).check();
+  await saveClocks(settings);
+  await settings.getByRole('button', { name: '关闭', exact: true }).click();
+  await expect(module.locator('.time-module__focus-status')).toContainText('专注中');
+  await expect(module.getByRole('button', { name: '专注统计' })).toHaveCount(0);
+  await page.reload();
+  await expect(module).toHaveAttribute('data-display-content', 'clocks');
+  expect((await stored(page)).timeSettings.focusPreferences.defaultMinutes).toBe(45);
+});
+
+test('focus body fills the module and keeps timer controls visible at minimum and default sizes', async ({ page }) => {
+  await boot(page);
+  const dialog = await openTimeSettings(page);
+  await dialog.getByRole('radio', { name: '专注时段', exact: true }).check();
+  await saveClocks(dialog);
+  await dialog.getByRole('button', { name: '关闭', exact: true }).click();
+  for (const rect of [{ w: 4, h: 3 }, { w: 2, h: 2 }]) {
+    await page.evaluate(({ key, rect }) => {
+      const store = JSON.parse(localStorage.getItem(key)!);
+      store.moduleLayout = [{ id: 'time', x: 0, y: 0, ...rect }];
+      localStorage.setItem(key, JSON.stringify(store));
+    }, { key: storageKey, rect });
+    await page.reload();
+    const module = page.getByTestId('time-module');
+    await expect(module.getByRole('button', { name: '开始专注', exact: true })).toBeVisible();
+    const geometry = await module.evaluate(element => {
+      const content = element.querySelector('.time-module__content:not([hidden])')!.getBoundingClientRect();
+      const focus = element.querySelector('.focus-timer')!.getBoundingClientRect();
+      const bounds = element.getBoundingClientRect();
+      const controls = [...element.querySelectorAll('.focus-timer__body button, .focus-timer__display')].filter(control => control.getBoundingClientRect().height > 0);
+      return { height: focus.height, delta: Math.abs(content.height - focus.height), clipped: controls.some(control => {
+        const rect = control.getBoundingClientRect();
+        return rect.top < bounds.top || rect.bottom > bounds.bottom + 1 || rect.left < bounds.left || rect.right > bounds.right + 1;
+      }) };
+    });
+    expect(geometry.height).toBeGreaterThan(50);
+    expect(geometry.delta).toBeLessThanOrEqual(1);
+    expect(geometry.clipped).toBe(false);
+  }
+});
+
+test('compact settings uses global controls, a 760px dialog and responds on narrow screens', async ({ page }) => {
+  await boot(page);
+  const dialog = await openTimeSettings(page);
+  expect(await dialog.evaluate(element => element.getBoundingClientRect().width)).toBe(760);
+  await expect(dialog.locator('.time-settings-grid--appearance')).toHaveCSS('grid-template-columns', /.+ .+ .+/);
+  await dialog.getByRole('button', { name: '添加时钟', exact: true }).click();
+  await expect(dialog.getByRole('combobox', { name: '显示模式', exact: true })).toHaveCount(1);
+  await expect(dialog.locator('.time-clock-settings-card').getByRole('combobox', { name: '显示模式' })).toHaveCount(0);
+  await select(dialog, '字号模式', '手动字号');
+  const slider = dialog.getByRole('slider');
+  const sliderWidthRatio = await slider.evaluate(element => element.getBoundingClientRect().width / element.parentElement!.getBoundingClientRect().width);
+  expect(sliderWidthRatio).toBeGreaterThan(0.9);
+  await expect(slider).toHaveAttribute('min', '32');
+  await expect(slider).toHaveAttribute('max', '160');
+  await slider.focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(slider).toHaveValue('97');
+  await page.setViewportSize({ width: 420, height: 800 });
+  const overflow = await dialog.evaluate(element => element.scrollWidth - element.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(1);
 });
 
 test('local alarms support all repeat rules, editing, disable, delete and reload independently of calendar', async ({ page }) => {

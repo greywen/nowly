@@ -22,7 +22,7 @@
 // above means it needs no Tauri runtime, not that it avoids imports.)
 import { isAllowedAttachmentName } from '../lib/attachment';
 import { normalizeBarMenu } from '../app/bar-menu';
-import type { Alarm, AlarmDraft, AlarmNotice, TimeSettings, WorldClock } from '../time/time-model';
+import { defaultTimeSettings, type Alarm, type AlarmDraft, type AlarmNotice, type TimeSettings } from '../time/time-model';
 
 type Dict = Record<string, unknown>;
 
@@ -72,7 +72,7 @@ const defaultSettings: Dict = {
 
 function emptyStore(): Store {
   return {
-    timeSettings: { clocks: [{ id: 'local', timeZone: 'local', label: '', mode: 'digital', hourCycle: 'h23', showSeconds: false, showLabel: false, showDate: false, showDifference: false }] },
+    timeSettings: defaultTimeSettings(),
     alarms: [],
     alarmNotices: [],
     events: [],
@@ -97,6 +97,15 @@ function loadStore(): Store {
     const base = emptyStore();
     const settings = { ...base.settings, ...(parsed.settings ?? {}), barMenu: normalizeBarMenu(parsed.settings?.barMenu) };
     Reflect.deleteProperty(settings, 'barButtons');
+    if (parsed.timeSettings && !parsed.timeSettings.appearance) {
+      console.info('Resetting legacy development time and focus data.');
+      parsed.timeSettings = base.timeSettings;
+      parsed.alarms = [];
+      parsed.alarmNotices = [];
+      parsed.focusSessions = [];
+      parsed.moduleLayout = parsed.moduleLayout?.filter(item => item.id !== 'time' && item.id !== 'focusTimer');
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...parsed, settings }));
+    }
     return {
       ...base,
       ...parsed,
@@ -175,8 +184,20 @@ function timeValidation(field: string, message: string): never {
 
 function validateTimeSettings(settings: TimeSettings) {
   if (!Array.isArray(settings?.clocks) || !settings.clocks.length) timeValidation('clocks', 'At least one clock is required.');
+  if (!['clocks', 'focus'].includes(settings.displayContent)) timeValidation('displayContent', 'Invalid module display.');
+  const appearance = settings.appearance;
+  if (!appearance || !['digital', 'analog', 'mixed'].includes(appearance.mode)) timeValidation('mode', 'Invalid clock mode.');
+  if (!['h12', 'h23'].includes(appearance.hourCycle)) timeValidation('hourCycle', 'Invalid hour cycle.');
+  if (!['horizontal', 'stacked'].includes(appearance.layout)) timeValidation('layout', 'Invalid digital layout.');
+  if (!['auto', 'manual'].includes(appearance.fontMode)) timeValidation('fontMode', 'Invalid font mode.');
+  if (!Number.isInteger(appearance.fontSize) || appearance.fontSize < 32 || appearance.fontSize > 160) timeValidation('fontSize', 'Font size must be between 32 and 160.');
+  const minutes = settings.focusPreferences?.defaultMinutes;
+  if (!Number.isInteger(minutes) || minutes < 1 || minutes > 720) timeValidation('defaultMinutes', 'Focus duration must be between 1 and 720 minutes.');
+  for (const key of ['showSeconds', 'showLabel', 'showDate', 'showDifference'] as const) {
+    if (typeof appearance[key] !== 'boolean') timeValidation(key, 'Clock visibility must be boolean.');
+  }
   const ids = new Set<string>();
-  for (const clock of settings.clocks as WorldClock[]) {
+  for (const clock of settings.clocks) {
     if (!clock || typeof clock.id !== 'string' || !clock.id.trim() || ids.has(clock.id)) timeValidation('clocks', 'Clock IDs must be nonempty and unique.');
     ids.add(clock.id);
     if (typeof clock.timeZone !== 'string' || !clock.timeZone) timeValidation('timeZone', 'A valid time zone is required.');
@@ -184,12 +205,7 @@ function validateTimeSettings(settings: TimeSettings) {
       try { new Intl.DateTimeFormat('en', { timeZone: clock.timeZone }).format(0); }
       catch { timeValidation('timeZone', 'Unsupported time zone.'); }
     }
-    if (!['digital', 'analog', 'mixed'].includes(clock.mode)) timeValidation('mode', 'Invalid clock mode.');
-    if (!['h12', 'h23'].includes(clock.hourCycle)) timeValidation('hourCycle', 'Invalid hour cycle.');
     if (typeof clock.label !== 'string') timeValidation('label', 'Clock label must be text.');
-    for (const key of ['showSeconds', 'showLabel', 'showDate', 'showDifference'] as const) {
-      if (typeof clock[key] !== 'boolean') timeValidation(key, 'Clock visibility must be boolean.');
-    }
   }
 }
 

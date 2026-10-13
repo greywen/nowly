@@ -1,20 +1,23 @@
 export type ClockMode = 'digital' | 'analog' | 'mixed';
-export type ClockLayout = 'horizontal' | 'stacked' | 'date';
+export type ClockLayout = 'horizontal' | 'stacked';
 export type ClockFontMode = 'auto' | 'manual';
 
 export type WorldClock = {
   id: string;
   timeZone: string;
   label: string;
+};
+
+export type ClockAppearance = {
   mode: ClockMode;
   hourCycle: 'h12' | 'h23';
   showSeconds: boolean;
   showLabel: boolean;
   showDate: boolean;
   showDifference: boolean;
-  layout?: ClockLayout;
-  fontMode?: ClockFontMode;
-  fontSize?: number;
+  layout: ClockLayout;
+  fontMode: ClockFontMode;
+  fontSize: number;
 };
 
 export type AlarmRepeat =
@@ -35,6 +38,9 @@ export type Alarm = {
 export type AlarmDraft = Omit<Alarm, 'id' | 'createdAt' | 'updatedAt'>;
 
 export type TimeSettings = {
+  displayContent: 'clocks' | 'focus';
+  appearance: ClockAppearance;
+  focusPreferences: { defaultMinutes: number };
   clocks: WorldClock[];
 };
 
@@ -61,7 +67,10 @@ export type TimeRepository = {
 export const defaultWorldClock = (): WorldClock => ({
   id: 'local',
   timeZone: 'local',
-  label: timeLocalLabel(),
+  label: timeLocalLabel()
+});
+
+export const defaultClockAppearance = (): ClockAppearance => ({
   mode: 'digital',
   hourCycle: 'h23',
   showSeconds: false,
@@ -74,26 +83,30 @@ export const defaultWorldClock = (): WorldClock => ({
 });
 
 export const defaultTimeSettings = (): TimeSettings => ({
+  displayContent: 'clocks',
+  appearance: defaultClockAppearance(),
+  focusPreferences: { defaultMinutes: 25 },
   clocks: [defaultWorldClock()]
 });
 
 export function normalizeTimeSettings(value: TimeSettings | null | undefined): TimeSettings {
   const clocks = Array.isArray(value?.clocks) ? value.clocks.filter(Boolean) : [];
-  if (clocks.length === 0) return defaultTimeSettings();
+  const appearance = value?.appearance ?? defaultClockAppearance();
+  const minutes = value?.focusPreferences?.defaultMinutes;
   return {
-    clocks: clocks.map((clock, index) => ({
+    displayContent: value?.displayContent === 'focus' ? 'focus' : 'clocks',
+    focusPreferences: { defaultMinutes: typeof minutes === 'number' && Number.isFinite(minutes) ? Math.min(720, Math.max(1, Math.round(minutes))) : 25 },
+    appearance: {
+      ...defaultClockAppearance(),
+      ...appearance,
+      layout: appearance.layout === 'stacked' ? 'stacked' : 'horizontal',
+      fontMode: appearance.fontMode === 'manual' ? 'manual' : 'auto',
+      fontSize: clampFontSize(appearance.fontSize)
+    },
+    clocks: (clocks.length ? clocks : [defaultWorldClock()]).map((clock, index) => ({
       id: clock.id || `clock-${index + 1}`,
       timeZone: clock.timeZone || 'local',
-      label: normalizeClockLabel(clock.label, clock.timeZone),
-      mode: clock.mode ?? 'digital',
-      hourCycle: clock.hourCycle ?? 'h23',
-      showSeconds: clock.showSeconds === true,
-      showLabel: clock.showLabel === true,
-      showDate: clock.showDate === true,
-      showDifference: clock.showDifference === true,
-      layout: clock.layout === 'stacked' || clock.layout === 'date' ? clock.layout : 'horizontal',
-      fontMode: clock.fontMode === 'manual' ? 'manual' : 'auto',
-      fontSize: clampFontSize(clock.fontSize)
+      label: normalizeClockLabel(clock.label, clock.timeZone)
     }))
   };
 }

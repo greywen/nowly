@@ -1,16 +1,32 @@
 import { describe, expect, it } from 'vitest';
-import { defaultWorldClock, normalizeTimeSettings } from './time-model';
+import { defaultTimeSettings, normalizeTimeSettings } from './time-model';
 
-describe('time-model visual settings', () => {
-  it('normalizes visual layout and manual font settings while preserving legacy clocks', () => {
-    const [clock] = normalizeTimeSettings({ clocks: [{ ...defaultWorldClock(), id: 'legacy' }] }).clocks;
-    expect(clock.layout).toBe('horizontal');
-    expect(clock.fontMode).toBe('auto');
-    expect(clock.fontSize).toBe(96);
+describe('global time settings', () => {
+  it('stores appearance once and keeps cities independent of appearance', () => {
+    const settings = defaultTimeSettings();
+    expect(settings.displayContent).toBe('clocks');
+    expect(settings.focusPreferences).toEqual({ defaultMinutes: 25 });
+    expect(settings.appearance).toMatchObject({ layout: 'horizontal', fontMode: 'auto', fontSize: 96 });
+    expect(Object.keys(settings.clocks[0]).sort()).toEqual(['id', 'label', 'timeZone']);
   });
 
-  it('clamps manual font sizes to the approved range', () => {
-    const [clock] = normalizeTimeSettings({ clocks: [{ ...defaultWorldClock(), fontMode: 'manual', fontSize: 999 }] }).clocks;
-    expect(clock.fontSize).toBe(160);
+  it('normalizes the global font range without changing the chosen display', () => {
+    const settings = defaultTimeSettings();
+    const normalized = normalizeTimeSettings({
+      ...settings, displayContent: 'focus',
+      appearance: { ...settings.appearance, fontMode: 'manual', fontSize: 999 }
+    });
+    expect(normalized.appearance.fontSize).toBe(160);
+    expect(normalized.displayContent).toBe('focus');
+  });
+
+  it('keeps global preferences when an empty clock list is repaired', () => {
+    const settings = defaultTimeSettings();
+    const normalized = normalizeTimeSettings({
+      ...settings, displayContent: 'focus', focusPreferences: { defaultMinutes: 45 }, clocks: []
+    });
+    expect(normalized.clocks).toHaveLength(1);
+    expect(normalized.focusPreferences.defaultMinutes).toBe(45);
+    expect(normalized.displayContent).toBe('focus');
   });
 });

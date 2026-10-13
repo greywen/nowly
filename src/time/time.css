@@ -165,13 +165,14 @@
   background: var(--color-primary);
 }
 
-.time-settings-dialog {
-  width: min(720px, calc(100vw - 32px));
+.good-dialog.time-settings-dialog {
+  width: min(760px, calc(100vw - 32px));
 }
 
 .time-settings {
   display: grid;
-  gap: var(--space-5);
+  gap: var(--space-4);
+  container: time-settings / inline-size;
 }
 
 .time-settings-section {
@@ -184,29 +185,12 @@
   gap: var(--space-3);
 }
 
-.time-settings-group__title,
-.time-settings-details summary {
+.time-settings-group__title {
+  margin: 0;
   color: var(--text-primary);
   font-size: 1.15rem;
   font-weight: 600;
   line-height: 1.2;
-}
-
-.time-settings-details {
-  display: block;
-}
-
-.time-settings-details[open] summary,
-.time-settings-details .time-settings-grid {
-  margin-bottom: var(--space-4);
-}
-
-.time-settings-details summary {
-  cursor: pointer;
-}
-
-.time-settings-details summary:focus-visible {
-  box-shadow: var(--shadow-focus);
 }
 
 .time-settings-grid {
@@ -225,7 +209,6 @@
 }
 
 .time-field .good-input,
-.time-comparison-inputs .good-input,
 .time-alarm-editor .good-input {
   box-sizing: border-box;
   width: 100%;
@@ -240,13 +223,11 @@
 }
 
 .time-field .good-input:hover,
-.time-comparison-inputs .good-input:hover,
 .time-alarm-editor .good-input:hover {
   background: var(--bg-secondary);
 }
 
 .time-field .good-input:focus,
-.time-comparison-inputs .good-input:focus,
 .time-alarm-editor .good-input:focus {
   border-color: var(--color-primary);
 }
@@ -295,15 +276,13 @@
 }
 
 .time-clock-settings-list,
-.time-alarm-list,
-.time-comparison-list {
+.time-alarm-list {
   display: grid;
   gap: var(--space-3);
 }
 
 .time-clock-settings-card,
 .time-alarm-row,
-.time-comparison-row,
 .time-alarm-editor {
   padding: var(--space-4);
   border: 1px solid var(--border-default);
@@ -313,13 +292,15 @@
 
 .time-clock-settings-card {
   display: grid;
-  gap: var(--space-4);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto;
+  align-items: end;
+  gap: var(--space-3);
+  padding: var(--space-3);
 }
 
 .time-clock-settings-card__header,
 .time-dialog-footer,
 .time-dialog-actions,
-.time-comparison-inputs,
 .time-alarm-row,
 .time-alarm-row__actions {
   display: flex;
@@ -328,8 +309,7 @@
 }
 
 .time-clock-settings-card__header,
-.time-dialog-footer,
-.time-comparison-inputs {
+.time-dialog-footer {
   justify-content: space-between;
 }
 
@@ -351,8 +331,98 @@
 
 .time-check-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--space-3);
+}
+
+.time-module {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.time-module__content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.time-module__content[hidden] { display: none; }
+
+.time-module__focus-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-top: 1px solid var(--border-default);
+  color: var(--text-strong);
+  background: var(--color-primary-light);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.focus-timer__summary {
+  display: flex;
+  align-items: center;
+  padding: var(--space-3) var(--space-6);
+}
+
+.time-settings-checks {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.time-settings-checks legend {
+  margin-bottom: var(--space-2);
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.time-settings-grid--appearance {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.time-settings-font {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  align-items: end;
+  gap: var(--space-4);
+}
+
+.time-settings-font .time-field {
+  min-height: 75px;
+  align-content: space-between;
+}
+
+.time-settings-font .good-slider {
+  margin-block: var(--space-4);
+}
+
+.time-settings-group--cities {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-default);
+}
+
+@container time-settings (max-width: 580px) {
+  .time-settings-grid--appearance,
+  .time-check-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .time-clock-settings-card { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .time-clock-settings-card__actions { grid-column: 1 / -1; justify-content: end; }
+}
+
+@container time-settings (max-width: 400px) {
+  .time-settings-grid--appearance,
+  .time-settings-font,
+  .time-clock-settings-card { grid-template-columns: minmax(0, 1fr); }
 }
 
 .time-error {
@@ -382,35 +452,6 @@
   gap: var(--space-3);
   border-radius: var(--radius-default);
   background: var(--color-danger-light);
-}
-
-.time-comparison-inputs .time-field {
-  flex: 1 1 auto;
-}
-
-.time-comparison-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: var(--space-1) var(--space-4);
-}
-
-.time-comparison-row strong {
-  color: var(--text-primary);
-  font-size: 0.95rem;
-  font-weight: 600;
-}
-
-.time-comparison-row span {
-  color: var(--text-primary);
-  font-size: 1.075rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
-.time-comparison-row small {
-  grid-column: 1 / -1;
-  color: var(--text-muted);
-  font-size: 0.85rem;
 }
 
 .time-chip-row {

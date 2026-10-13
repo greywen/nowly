@@ -73,17 +73,7 @@ export const kanbanDefinition: WidgetDefinition = {
 };
 
 // Optional extension modules the user can add or remove from the layout.
-export const extensionDefinitions: WidgetDefinition[] = [
-  {
-    id: 'focusTimer',
-    get name() { return t('widget.focusTimer.name'); },
-    get description() { return t('widget.focusTimer.desc'); },
-    category: 'extension',
-    minW: 2,
-    minH: 2,
-    default: { x: 0, y: 0, w: 4, h: 4 }
-  }
-];
+export const extensionDefinitions: WidgetDefinition[] = [];
 
 // The full set of placeable modules: the built-ins plus the optional extension
 // modules. Every module Nowly offers is built in, so this set is static.

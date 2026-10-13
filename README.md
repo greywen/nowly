@@ -37,15 +37,20 @@ focusing. All data stays on your machine in a local SQLite database.
 - **World clocks and alarms** — an optional Time module arranges multiple time zones
   as pure digital clocks, pure analog faces, or mixed displays. City, date, and
   time-difference labels are hidden by default; layout adapts to the module size.
-  Use the always-visible **Time settings** button in the module header or **Settings → Time settings** for all
-  clock options, date-specific time-zone comparison, and independent alarms.
-  Digital clocks offer horizontal, stacked, and date layouts with automatic sizing
-  or a manual 32–160px font size. Clock appearance, time zones, visibility options,
+  Use the always-visible **Time settings** button in the module header for the
+  settings-only **World clocks / Focus / Alarms** tabs. A separate display choice
+  switches the module between clocks and focus; browsing tabs never changes it.
+  All cities share display mode, horizontal/stacked layout, hour cycle, visibility
+  and automatic or slider-controlled 32–160px font sizing. Dates have an independent
+  visibility toggle; each city only has a name, time zone and order. Appearance, time zones, visibility options,
   and adding, removing, or reordering clocks apply immediately and save automatically.
   Failed saves retain edits and offer retry; closing settings does not undo changes.
-  Once saved, settings survive reopening and refreshing. Time-zone comparison remains
-  a query tool and never changes the actual clocks.
-  The module header's **+** icon opens a new alarm requiring one explicit creation
+  Once saved, settings survive reopening and refreshing. The comparison tool has
+  been removed; optional difference labels still compare cities with local time.
+  Focus settings only configure the default duration (1–720 minutes). **Focus statistics**
+  is available in the module header only when focus is displayed. Switching the
+  displayed content does not interrupt an active session.
+  The **Alarms** settings tab creates a new alarm requiring one explicit creation
   confirmation. Valid edits to existing alarms save automatically; ending editing
   does not undo changes, and deletion still requires confirmation. Incomplete or
   invalid times and repeat dates are not saved or scheduled. Successful saves update
@@ -132,6 +137,14 @@ cargo test --manifest-path src-tauri/Cargo.toml     # Rust tests
 npm run tauri build                                 # build the Windows executable
 ```
 
+The unified time/focus settings are a development-only breaking change; the old
+per-clock configuration is not migrated. Back up the development database before
+resetting it. Debug builds can perform the one-time, scoped reset by setting
+`NOWLY_RESET_DEVELOPMENT_TIME_V32` to the database's exact absolute path. It resets
+only time/focus settings, alarms and related notices, focus records and old module
+entries; unrelated data is preserved. Release builds never execute this reset.
+The browser development backend resets legacy time/focus data separately in local storage.
+
 ## Project Structure
 
 ```text
@@ -142,6 +155,7 @@ src/                 React frontend
   kanban/            Kanban board
   notes/             Notes
   focus/             Focus timer and statistics
+  time/              Unified time/focus module, world clocks and alarm settings
   widgets/           Module registry, picker, and grid layout
   components/        Shared UI (Dialog, Select, DatePicker, ...)
   data/              Repository interface and Tauri implementation

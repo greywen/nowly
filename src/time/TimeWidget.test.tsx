@@ -4,7 +4,7 @@ import { RepositoryProvider } from '../data/RepositoryContext';
 import { setLanguage } from '../i18n';
 import type { NowlyRepository } from '../data/nowly-repository';
 import { TimeWidget } from './TimeWidget';
-import type { TimeSettings } from './time-model';
+import { defaultTimeSettings, type TimeSettings } from './time-model';
 
 class ResizeObserverMock {
   constructor(private callback: ResizeObserverCallback) {}
@@ -29,7 +29,7 @@ function repository(settings: TimeSettings): NowlyRepository {
 describe('TimeWidget', () => {
   it('renders a module header with title and alarm action', async () => {
     const onCreateAlarm = vi.fn();
-    render(<RepositoryProvider repository={repository({ clocks: [] })}><TimeWidget onCreateAlarm={onCreateAlarm} settings={{ clocks: [] }} /></RepositoryProvider>);
+    render(<RepositoryProvider repository={repository(defaultTimeSettings())}><TimeWidget onCreateAlarm={onCreateAlarm} settings={defaultTimeSettings()} /></RepositoryProvider>);
     expect(screen.getByRole('heading', { name: '时间' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '添加闹钟' })).toBeInTheDocument();
     screen.getByRole('button', { name: /添加闹钟|新建闹钟|alarm/i }).click();
@@ -39,7 +39,7 @@ describe('TimeWidget', () => {
 
   it('keeps settings in the module header and uses the default icon-button surface for adding alarms', async () => {
     const onOpenSettings = vi.fn();
-    render(<RepositoryProvider repository={repository({ clocks: [] })}><TimeWidget onOpenSettings={onOpenSettings} onCreateAlarm={vi.fn()} settings={{ clocks: [] }} /></RepositoryProvider>);
+    render(<RepositoryProvider repository={repository(defaultTimeSettings())}><TimeWidget onOpenSettings={onOpenSettings} onCreateAlarm={vi.fn()} settings={defaultTimeSettings()} /></RepositoryProvider>);
     const settingsButton = screen.getByRole('button', { name: '时间设置' });
     expect(settingsButton.closest('.card-header')).not.toBeNull();
     settingsButton.click();
@@ -51,22 +51,22 @@ describe('TimeWidget', () => {
 
   it('shows the next enabled alarm and refreshes on alarm changes', async () => {
     const alarms = [{ id: 'a', title: '晨会', hour: 14, minute: 30, repeat: { kind: 'once', date: '2026-10-12' }, enabled: true, createdAt: '', updatedAt: '' }];
-    const repo = repository({ clocks: [] });
+    const repo = repository(defaultTimeSettings());
     repo.listAlarms = vi.fn().mockResolvedValue(alarms);
-    render(<RepositoryProvider repository={repo}><TimeWidget settings={{ clocks: [] }} now={() => new Date(2026, 9, 12, 13, 0)} /></RepositoryProvider>);
+    render(<RepositoryProvider repository={repo}><TimeWidget settings={defaultTimeSettings()} now={() => new Date(2026, 9, 12, 13, 0)} /></RepositoryProvider>);
     expect(await screen.findByTestId('time-widget-alarm')).toHaveTextContent('14:30');
     repo.listAlarms = vi.fn().mockResolvedValue([]);
     act(() => window.dispatchEvent(new Event('nowly:alarms-changed')));
     await waitFor(() => expect(screen.queryByTestId('time-widget-alarm')).not.toBeInTheDocument());
   });
   it('ignores disabled and expired once alarms and selects the next weekly occurrence', async () => {
-    const repo = repository({ clocks: [] });
+    const repo = repository(defaultTimeSettings());
     repo.listAlarms = vi.fn().mockResolvedValue([
       { id: 'disabled', title: 'Disabled', hour: 13, minute: 1, repeat: { kind: 'once', date: '2026-10-12' }, enabled: false },
       { id: 'expired', title: 'Expired', hour: 12, minute: 1, repeat: { kind: 'once', date: '2026-10-12' }, enabled: true },
       { id: 'weekly', title: 'Weekly', hour: 14, minute: 30, repeat: { kind: 'weekly', weekdays: [1] }, enabled: true }
     ]);
-    render(<RepositoryProvider repository={repo}><TimeWidget settings={{ clocks: [] }} now={() => new Date(2026, 9, 12, 13, 0)} /></RepositoryProvider>);
+    render(<RepositoryProvider repository={repo}><TimeWidget settings={defaultTimeSettings()} now={() => new Date(2026, 9, 12, 13, 0)} /></RepositoryProvider>);
     expect(await screen.findByTestId('time-widget-alarm')).toHaveTextContent('Weekly');
     expect(screen.queryByText('Disabled')).not.toBeInTheDocument();
     expect(screen.queryByText('Expired')).not.toBeInTheDocument();
@@ -75,8 +75,8 @@ describe('TimeWidget', () => {
   it('re-reads alarms every minute and cleans up its subscription', async () => {
     vi.useFakeTimers();
     try {
-      const repo = repository({ clocks: [] });
-      const { unmount } = render(<RepositoryProvider repository={repo}><TimeWidget settings={{ clocks: [] }} now={() => new Date(2026, 9, 12, 13, 0)} /></RepositoryProvider>);
+      const repo = repository(defaultTimeSettings());
+      const { unmount } = render(<RepositoryProvider repository={repo}><TimeWidget settings={defaultTimeSettings()} now={() => new Date(2026, 9, 12, 13, 0)} /></RepositoryProvider>);
       await act(async () => {});
       expect(repo.listAlarms).toHaveBeenCalledTimes(1);
       await act(async () => { vi.advanceTimersByTime(60_000); });
@@ -87,17 +87,17 @@ describe('TimeWidget', () => {
     } finally { vi.useRealTimers(); }
   });
 
-  it('renders stacked segments and a date layout with per-clock rem font sizing', async () => {
-    const settings: TimeSettings = { clocks: [
-      { id: 'stacked', timeZone: 'UTC', label: 'A', mode: 'digital', hourCycle: 'h12', showSeconds: true, showLabel: false, showDate: false, showDifference: false, layout: 'stacked', fontMode: 'manual', fontSize: 96 },
-      { id: 'date', timeZone: 'UTC', label: 'B', mode: 'digital', hourCycle: 'h23', showSeconds: false, showLabel: false, showDate: false, showDifference: false, layout: 'date', fontMode: 'manual', fontSize: 32 }
+  it('applies stacked segments, dates and the same font size to every clock', async () => {
+    const settings: TimeSettings = { ...defaultTimeSettings(), appearance: { ...defaultTimeSettings().appearance, hourCycle: 'h12', showSeconds: true, showDate: true, layout: 'stacked', fontMode: 'manual', fontSize: 32 }, clocks: [
+      { id: 'stacked', timeZone: 'UTC', label: 'A' },
+      { id: 'second', timeZone: 'UTC', label: 'B' }
     ] };
     render(<RepositoryProvider repository={repository(settings)}><TimeWidget settings={settings} now={() => new Date('2026-10-12T23:59:59Z')} /></RepositoryProvider>);
     const stacked = screen.getAllByTestId('time-clock-digital')[0];
     expect(stacked.querySelectorAll('span')).toHaveLength(3);
     expect(stacked).toHaveTextContent('59 PM');
     expect(screen.getAllByTestId('time-clock')[1].style.getPropertyValue('--time-font-size')).toBe(`${32 / 13}rem`);
-    expect(document.querySelector('.time-clock--date .time-clock__meta')).toBeInTheDocument();
+    expect(document.querySelectorAll('.time-clock__meta')).toHaveLength(2);
     await waitFor(() => expect(screen.queryByTestId('time-widget-alarm')).not.toBeInTheDocument());
   });
 
@@ -112,8 +112,8 @@ describe('TimeWidget', () => {
 
   it('renders pure time with header actions but without tabs, city or date', async () => {
     const { container } = render(
-      <RepositoryProvider repository={repository({ clocks: [] })}>
-        <TimeWidget settings={{ clocks: [] }} now={() => new Date(2026, 9, 11, 13, 5, 9)} />
+      <RepositoryProvider repository={repository(defaultTimeSettings())}>
+        <TimeWidget settings={defaultTimeSettings()} now={() => new Date(2026, 9, 11, 13, 5, 9)} />
       </RepositoryProvider>
     );
     expect(screen.getByText('13:05')).toBeInTheDocument();
@@ -127,8 +127,9 @@ describe('TimeWidget', () => {
   it('omits the default repository label from DOM text while retaining the accessible name', async () => {
     const { container } = render(
       <RepositoryProvider repository={repository({
+        ...defaultTimeSettings(),
         clocks: [
-          { id: 'local', timeZone: 'local', label: '本地', mode: 'digital', hourCycle: 'h23', showSeconds: false, showLabel: false, showDate: false, showDifference: false }
+          { id: 'local', timeZone: 'local', label: '本地' }
         ]
       })}>
         <TimeWidget now={() => new Date(2026, 9, 11, 13, 5, 9)} />
@@ -140,24 +141,13 @@ describe('TimeWidget', () => {
     expect(screen.getByLabelText(/本地 13:05/)).toBeInTheDocument();
   });
 
-  it('localizes the default local clock name and never renders hidden labels visibly even with legacy truthy strings', () => {
+  it('localizes the default local clock name without rendering hidden labels', () => {
     setLanguage('en');
     render(
       <RepositoryProvider
         repository={repository({
-          clocks: [
-            {
-              id: 'local',
-              timeZone: 'local',
-              label: '',
-              mode: 'digital',
-              hourCycle: 'h23',
-              showSeconds: false,
-              showLabel: 'false',
-              showDate: 'false',
-              showDifference: 'false'
-            } as unknown as TimeSettings['clocks'][number]
-          ]
+          ...defaultTimeSettings(),
+          clocks: [{ id: 'local', timeZone: 'local', label: '' }]
         })}
       >
         <TimeWidget now={() => new Date(2026, 9, 11, 13, 5, 9)} />
@@ -171,8 +161,8 @@ describe('TimeWidget', () => {
 
   it('updates the accessible local label when the global language changes after mount', () => {
     render(
-      <RepositoryProvider repository={repository({ clocks: [] })}>
-        <TimeWidget settings={{ clocks: [] }} now={() => new Date(2026, 9, 11, 13, 5, 9)} />
+      <RepositoryProvider repository={repository(defaultTimeSettings())}>
+        <TimeWidget settings={defaultTimeSettings()} now={() => new Date(2026, 9, 11, 13, 5, 9)} />
       </RepositoryProvider>
     );
     expect(screen.getByRole('region', { name: '时间' })).toBeInTheDocument();
@@ -183,13 +173,15 @@ describe('TimeWidget', () => {
     expect(screen.queryByLabelText(/本地 13:05/)).not.toBeInTheDocument();
   });
 
-  it('supports analog and mixed clocks while keeping hidden labels available to assistive tech', async () => {
+  it('applies mixed mode to all clocks while keeping hidden labels available to assistive tech', async () => {
     const { container } = render(
       <RepositoryProvider
         repository={repository({
+          ...defaultTimeSettings(),
+          appearance: { ...defaultTimeSettings().appearance, mode: 'mixed' },
           clocks: [
-            { id: 'analog', timeZone: 'UTC', label: '伦敦', mode: 'analog', hourCycle: 'h23', showSeconds: true, showLabel: false, showDate: false, showDifference: false },
-            { id: 'mixed', timeZone: 'Asia/Shanghai', label: '上海', mode: 'mixed', hourCycle: 'h23', showSeconds: false, showLabel: true, showDate: false, showDifference: false }
+            { id: 'analog', timeZone: 'UTC', label: '伦敦' },
+            { id: 'mixed', timeZone: 'Asia/Shanghai', label: '上海' }
           ]
         })}
       >
@@ -197,11 +189,11 @@ describe('TimeWidget', () => {
       </RepositoryProvider>
     );
     expect(await screen.findByRole('img', { name: /伦敦/ })).toBeInTheDocument();
-    expect(screen.getByText('上海')).toBeInTheDocument();
+    expect(screen.queryByText('上海')).not.toBeInTheDocument();
     expect(screen.getByText('21:05')).toBeInTheDocument();
     expect(screen.queryByText('13:05:09')).not.toBeInTheDocument();
     const analogTile = container.querySelector('[data-testid="time-clock"][data-clock-id="analog"]');
-    expect(analogTile).toHaveAttribute('data-clock-mode', 'analog');
+    expect(analogTile).toHaveAttribute('data-clock-mode', 'mixed');
     expect(analogTile).toHaveAttribute('data-time-zone', 'UTC');
     const face = container.querySelector('[data-testid="time-clock-face"][data-time-zone="UTC"]');
     expect(face).toHaveAttribute('role', 'img');
@@ -214,9 +206,8 @@ describe('TimeWidget', () => {
   });
 
   it('reduces columns for full 12-hour seconds strings and gives the grid a readable minimum width', async () => {
-    const settings: TimeSettings = { clocks: Array.from({ length: 4 }, (_, index) => ({
-      id: String(index), timeZone: 'UTC', label: String(index), mode: 'digital', hourCycle: 'h12',
-      showSeconds: true, showLabel: false, showDate: false, showDifference: false
+    const settings: TimeSettings = { ...defaultTimeSettings(), appearance: { ...defaultTimeSettings().appearance, hourCycle: 'h12', showSeconds: true }, clocks: Array.from({ length: 4 }, (_, index) => ({
+      id: String(index), timeZone: 'UTC', label: String(index)
     })) };
     render(<RepositoryProvider repository={repository(settings)}>
       <TimeWidget settings={settings} now={() => new Date('2026-10-11T23:59:59Z')} />
@@ -231,9 +222,10 @@ describe('TimeWidget', () => {
     const { container } = render(
       <RepositoryProvider
         repository={repository({
+          ...defaultTimeSettings(),
           clocks: [
-            { id: 'a', timeZone: 'UTC', label: 'A', mode: 'digital', hourCycle: 'h23', showSeconds: false, showLabel: false, showDate: false, showDifference: false },
-            { id: 'b', timeZone: 'Asia/Kathmandu', label: 'B', mode: 'digital', hourCycle: 'h23', showSeconds: false, showLabel: false, showDate: false, showDifference: false }
+            { id: 'a', timeZone: 'UTC', label: 'A' },
+            { id: 'b', timeZone: 'Asia/Kathmandu', label: 'B' }
           ]
         })}
       >

@@ -17,7 +17,7 @@ import {
 } from './widget-registry';
 
 describe('widget definitions', () => {
-  it('offers a pure-display time module without changing the default layout', () => {
+  it('offers the unified time module without changing the default layout', () => {
     expect(getWidgetDefinition('time', buildDefinitions())).toMatchObject({name: '时间', category: 'builtin', minW: 2, minH: 2});
     expect(defaultLayout.map(item => item.id)).not.toContain('time');
   });
@@ -32,9 +32,7 @@ describe('widget definitions', () => {
   });
 
   it('exposes the extension modules as an addable set', () => {
-    expect(extensionDefinitions.map((definition) => definition.id)).toEqual([
-      'focusTimer'
-    ]);
+    expect(extensionDefinitions).toEqual([]);
     for (const definition of extensionDefinitions) {
       expect(definition.category).toBe('extension');
     }
@@ -44,7 +42,8 @@ describe('widget definitions', () => {
     expect(getWidgetDefinition('calendar')?.name).toBe('日历');
     expect(getWidgetDefinition('focusTimer')).toBeUndefined();
     const all = buildDefinitions();
-    expect(getWidgetDefinition('focusTimer', all)?.name).toBe('专注计时');
+    expect(getWidgetDefinition('focusTimer', all)).toBeUndefined();
+    expect(getWidgetDefinition('time', all)?.name).toBe('时间');
   });
 
   it('exposes kanban as an addable built-in that is not in the default layout', () => {
@@ -60,7 +59,7 @@ describe('widget definitions', () => {
     const all = buildDefinitions();
     // Time and kanban are picker-only built-ins.
     expect(all.filter((definition) => definition.category === 'builtin')).toHaveLength(5);
-    expect(all.filter((definition) => definition.category === 'extension')).toHaveLength(1);
+    expect(all.filter((definition) => definition.category === 'extension')).toHaveLength(0);
   });
 });
 
@@ -176,8 +175,8 @@ describe('normalizeLayout', () => {
     expect(normalizeLayout(stored)).toEqual(stored);
   });
 
-  it('accepts extension module ids when their definitions are provided', () => {
-    const stored = [{ id: 'focusTimer', x: 0, y: 0, w: 4, h: 4 }];
+  it('accepts optional unified time ids when their definitions are provided', () => {
+    const stored = [{ id: 'time', x: 0, y: 0, w: 4, h: 4 }];
     expect(normalizeLayout(stored, buildDefinitions())).toEqual(stored);
     // Without the extension definition in scope, the entry is dropped.
     expect(normalizeLayout(stored)).toEqual([]);

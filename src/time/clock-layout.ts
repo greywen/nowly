@@ -1,6 +1,6 @@
-import type { ClockMode, WorldClock } from './time-model';
+import type { ClockMode, ClockAppearance } from './time-model';
 
-type ClockFormat = Pick<WorldClock, 'mode' | 'hourCycle' | 'showSeconds'> & Partial<Pick<WorldClock, 'layout' | 'fontMode' | 'fontSize' | 'showLabel' | 'showDate' | 'showDifference'>>;
+type ClockFormat = Pick<ClockAppearance, 'mode' | 'hourCycle' | 'showSeconds'> & Partial<Pick<ClockAppearance, 'layout' | 'fontMode' | 'fontSize' | 'showLabel' | 'showDate' | 'showDifference'>>;
 
 export type ClockLayoutInput = {
   width: number;
@@ -50,12 +50,12 @@ export function computeClockLayout({ width, height, count, mode, formats = [{ mo
 function scoreCandidate(width: number, height: number, containerHeight: number, count: number, columns: number, rows: number, mode: ClockMode, formats: readonly ClockFormat[]): ClockLayout & { score: number } {
   const hasFace = mode !== 'digital';
   const hasTime = mode !== 'analog';
-  const digitalMinRow = formats.some((format) => format.mode === 'digital' && format.layout === 'stacked') ? MIN_MIXED_ROW : formats.some((format) => format.mode === 'digital' && format.layout === 'date') ? MIN_ANALOG_ROW : MIN_DIGITAL_ROW;
+  const digitalMinRow = formats.some((format) => format.mode === 'digital' && format.layout === 'stacked') ? MIN_MIXED_ROW : MIN_DIGITAL_ROW;
   const baseRowHeight = mode === 'digital' ? digitalMinRow : mode === 'analog' ? MIN_ANALOG_ROW : MIN_MIXED_ROW;
   const optionalReserve = Math.max(height, baseRowHeight) > (mode === 'mixed' ? 150 : 104);
   const content = formats.map((format) => {
     const labelHeight = format.showLabel ? 0.95 * 13 * 1.5 : 0;
-    const metadataCount = Number((format.mode === 'digital' && format.layout === 'date') || (optionalReserve && format.showDate === true)) + Number(optionalReserve && format.showDifference === true);
+    const metadataCount = Number(optionalReserve && format.showDate === true) + Number(optionalReserve && format.showDifference === true);
     const timeLines = format.mode === 'digital' && format.layout === 'stacked' ? (format.showSeconds ? 3 : 2) : 1;
     const timeHeight = format.mode === 'analog' ? 0 : (format.mode === 'mixed' ? 1.15 : 1.5) * 13 * 1.25 * timeLines;
     const elements = Number(format.mode !== 'digital') + Number(timeHeight > 0) + Number(labelHeight > 0) + metadataCount;
@@ -101,7 +101,7 @@ function scoreCandidate(width: number, height: number, containerHeight: number, 
   };
 }
 
-export function computeDigitalFontSize(width: number, height: number, text: string, clock: Pick<WorldClock, 'fontMode' | 'fontSize'>, layout: WorldClock['layout']): number {
+export function computeDigitalFontSize(width: number, height: number, text: string, clock: Pick<ClockAppearance, 'fontMode' | 'fontSize'>, layout: ClockAppearance['layout']): number {
   const lines = layout === 'stacked' ? text.split(':') : [text];
   const characters = Math.max(...lines.map((line) => line.length), 1);
   const preferred = clock.fontMode === 'manual' ? Math.min(160, Math.max(32, clock.fontSize ?? 96)) : 160;

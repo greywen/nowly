@@ -1,4 +1,4 @@
-import type { ClockMode, WorldClock } from './time-model';
+import type { ClockAppearance } from './time-model';
 import { timeLocalLabel } from './time-translations';
 
 export type ClockParts = {
@@ -129,7 +129,7 @@ export function clockParts(now: Date, zone: string): ClockParts {
 export function formatClockTime(
   now: Date,
   zone: string,
-  options: Pick<WorldClock, 'hourCycle' | 'showSeconds'>
+  options: Pick<ClockAppearance, 'hourCycle' | 'showSeconds'>
 ) {
   return getDisplayFormatter(zone, options.hourCycle, options.showSeconds).format(now);
 }
@@ -177,12 +177,4 @@ export function formatDifference(now: Date, zone: string, baseZone = 'local') {
 function offsetMinutes(now: Date, zone: string) {
   const parts = clockParts(now, zone);
   return Math.round((Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second) - now.getTime()) / 60_000);
-}
-
-export function primaryModeForClocks(clocks: readonly Pick<WorldClock, 'mode'>[]): ClockMode {
-  return clocks.some((clock) => clock.mode === 'mixed')
-    ? 'mixed'
-    : clocks.some((clock) => clock.mode === 'analog')
-      ? 'analog'
-      : 'digital';
 }

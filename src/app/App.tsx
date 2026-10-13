@@ -28,9 +28,8 @@ import { useUpdateCheck } from '../settings/useUpdateCheck';
 import { useNowlyRepository } from '../data/RepositoryContext';
 import { useCurrentTime } from './useCurrentTime';
 import { t, useTranslation, getLanguage } from '../i18n';
-import { TimeWidget } from '../time/TimeWidget';
+import { TimeModule } from '../time/TimeModule';
 import { TimeSettingsDialog } from '../time/TimeSettingsDialog';
-import { FocusTimerWidget } from '../focus/FocusTimerWidget';
 import { useFocusTimer } from '../focus/FocusTimerContext';
 import { FocusStatisticsDialog } from '../focus/FocusStatisticsDialog';
 import { FocusWallpaperOverlay } from '../focus/FocusWallpaperOverlay';
@@ -221,8 +220,7 @@ function AppContent() {
       onRememberCustomColor={rememberCustomColor}
     />
   );
-  modules.time = <TimeWidget onOpenSettings={() => openTimeDialog()} onCreateAlarm={() => openTimeDialog(true)} />;
-  modules.focusTimer = <FocusTimerWidget mode={windowMode} onOpenStatistics={() => setFocusStatisticsOpen(true)} onEnterWallpaper={() => void runWindowModeSwitch(switchToWallpaper)} />;
+  modules.time = <TimeModule mode={windowMode} onOpenSettings={() => openTimeDialog()} onOpenStatistics={() => setFocusStatisticsOpen(true)} onEnterWallpaper={() => void runWindowModeSwitch(switchToWallpaper)} />;
 
 
   useEffect(() => {

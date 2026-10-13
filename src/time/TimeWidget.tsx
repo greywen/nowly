@@ -3,8 +3,8 @@ import { getLanguage, useTranslation } from '../i18n';
 import { Bell, Plus, Settings } from '../components/icons';
 import { computeClockLayout, computeDigitalFontSize, type ClockLayout } from './clock-layout';
 import { ClockFace } from './ClockFace';
-import { normalizeTimeSettings, type Alarm, type TimeSettings, type WorldClock } from './time-model';
-import { formatClockDate, formatClockTime, formatDifference, primaryModeForClocks } from './time-format';
+import { normalizeTimeSettings, type Alarm, type TimeSettings, type WorldClock, type ClockAppearance } from './time-model';
+import { formatClockDate, formatClockTime, formatDifference } from './time-format';
 import { tt, timeLocalLabel } from './time-translations';
 import { useTimeSettings } from './useTimeSettings';
 import { useTimeSnapshot } from './useTimeSnapshot';
@@ -15,11 +15,12 @@ type TimeWidgetProps = {
   onCreateAlarm?: () => void;
   settings?: TimeSettings;
   now?: () => Date;
+  embedded?: boolean;
 };
 
 const DEFAULT_SIZE = { width: 360, height: 220 };
 
-export function TimeWidget({ settings: providedSettings, now, onOpenSettings, onCreateAlarm }: TimeWidgetProps) {
+export function TimeWidget({ settings: providedSettings, now, onOpenSettings, onCreateAlarm, embedded = false }: TimeWidgetProps) {
   const { t } = useTranslation();
   const { repository, state } = useTimeSettings();
   const settings = providedSettings ? normalizeTimeSettings(providedSettings) : state.data;
@@ -52,15 +53,15 @@ export function TimeWidget({ settings: providedSettings, now, onOpenSettings, on
     return () => observer.disconnect();
   }, []);
 
-  const mode = primaryModeForClocks(settings.clocks);
+  const mode = settings.appearance.mode;
   const layout = useMemo(
-    () => computeClockLayout({ width: size.width, height: Math.max(1, size.height - (nextAlarm ? 48 : 0)), count: settings.clocks.length, mode, formats: settings.clocks }),
-    [mode, settings.clocks, size.height, size.width, Boolean(nextAlarm)]
+    () => computeClockLayout({ width: size.width, height: Math.max(1, size.height - (nextAlarm ? 48 : 0)), count: settings.clocks.length, mode, formats: [settings.appearance] }),
+    [mode, settings.clocks, settings.appearance, size.height, size.width, Boolean(nextAlarm)]
   );
 
   return (
     <div className="widget-content time-widget-content" data-testid="time-widget" data-clock-count={settings.clocks.length} data-layout-columns={layout.columns} data-layout-scroll={layout.scroll ? 'true' : 'false'}>
-      <div className="card-header">
+      {!embedded ? <div className="card-header">
         <div className="heading-group"><h1>{t('widget.time.name')}</h1></div>
         <div className="toolbar-actions">
           <button type="button" className="btn btn-icon" aria-label={tt('time.title')} disabled={!onOpenSettings} onClick={onOpenSettings}>
@@ -70,7 +71,7 @@ export function TimeWidget({ settings: providedSettings, now, onOpenSettings, on
             <Plus aria-hidden="true" />
           </button>
         </div>
-      </div>
+      </div> : null}
     <section
       ref={rootRef}
       className={`time-widget${layout.scroll ? ' time-widget--scroll' : ''}`}
@@ -92,7 +93,7 @@ export function TimeWidget({ settings: providedSettings, now, onOpenSettings, on
         } as CSSProperties}
       >
         {settings.clocks.map((clock) => (
-          <ClockTile key={clock.id} clock={clock} now={snapshot} layout={layout} size={{ ...size, height: Math.max(1, size.height - (nextAlarm ? 48 : 0)), count: settings.clocks.length }} />
+          <ClockTile key={clock.id} clock={{ ...clock, ...settings.appearance }} now={snapshot} layout={layout} size={{ ...size, height: Math.max(1, size.height - (nextAlarm ? 48 : 0)), count: settings.clocks.length }} />
         ))}
       </div>
     </section>
@@ -100,7 +101,7 @@ export function TimeWidget({ settings: providedSettings, now, onOpenSettings, on
   );
 }
 
-function ClockTile({ clock, now, layout, size }: { clock: WorldClock; now: Date; layout: ClockLayout; size: { width: number; height: number; count: number } }) {
+function ClockTile({ clock, now, layout, size }: { clock: WorldClock & ClockAppearance; now: Date; layout: ClockLayout; size: { width: number; height: number; count: number } }) {
   const label = displayClockLabel(clock);
   const time = formatClockTime(now, clock.timeZone, clock);
   const showFace = clock.mode !== 'digital';
@@ -110,7 +111,7 @@ function ClockTile({ clock, now, layout, size }: { clock: WorldClock; now: Date;
   const cellWidth = (size.width - (layout.columns - 1) * 12) / layout.columns;
   const rows = Math.ceil(size.count / layout.columns);
   const cellHeight = Math.max(layout.rowMinHeight, (size.height - (rows - 1) * 12) / rows);
-  const metadataRows = Number(digitalLayout === 'date' || (optionalVisible && clock.showDate)) + Number(optionalVisible && clock.showDifference);
+  const metadataRows = Number(optionalVisible && clock.showDate) + Number(optionalVisible && clock.showDifference);
   const fontSize = computeDigitalFontSize(cellWidth, cellHeight - (clock.showLabel ? 28 : 0) - metadataRows * 28, time, clock, digitalLayout);
 
   return (
@@ -130,7 +131,7 @@ function ClockTile({ clock, now, layout, size }: { clock: WorldClock; now: Date;
       {clock.showLabel ? <div className="time-clock__label">{label}</div> : null}
       {showFace ? <ClockFace now={now} timeZone={clock.timeZone} label={label} showSeconds={clock.showSeconds} size={layout.faceSize} /> : null}
       {showTime ? <div className="time-clock__time" data-testid="time-clock-digital">{clock.mode === 'digital' && digitalLayout === 'stacked' ? time.split(':').map((part, index) => <span key={index}>{part}</span>) : time}</div> : null}
-      {((clock.mode === 'digital' && digitalLayout === 'date') || (optionalVisible && clock.showDate)) ? <div className="time-clock__meta">{formatClockDate(now, clock.timeZone)}</div> : null}
+      {optionalVisible && clock.showDate ? <div className="time-clock__meta">{formatClockDate(now, clock.timeZone)}</div> : null}
       {optionalVisible && clock.showDifference ? <div className="time-clock__meta">{formatDifference(now, clock.timeZone)}</div> : null}
     </article>
   );

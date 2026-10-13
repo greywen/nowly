@@ -7,9 +7,9 @@ import type { NowlyRepository } from '../data/nowly-repository';
 import { setLanguage } from '../i18n';
 import { TimeWidget } from './TimeWidget';
 import { TimeSettingsDialog } from './TimeSettingsDialog';
-import type { Alarm, TimeSettings } from './time-model';
+import { defaultTimeSettings, type Alarm, type TimeSettings } from './time-model';
 
-const baseClock = { id: 'local', timeZone: 'local', label: '本地', mode: 'digital' as const, hourCycle: 'h23' as const, showSeconds: false, showLabel: false, showDate: false, showDifference: false };
+const baseClock = { id: 'local', timeZone: 'local', label: '本地' };
 const alarm: Alarm = {
   id: 'alarm-1',
   title: '喝水',
@@ -32,7 +32,7 @@ const secondAlarm: Alarm = {
 };
 
 function repository({
-  settings = { clocks: [baseClock] },
+  settings = defaultTimeSettings(),
   alarms = [alarm],
   saveTimeSettings = vi.fn().mockResolvedValue(settings)
 }: {
@@ -71,6 +71,31 @@ function deferred<T>() {
 describe('TimeSettingsDialog', () => {
   afterEach(() => setLanguage('zh'));
 
+  it('keeps settings navigation independent from the persisted module display', async () => {
+    const user = userEvent.setup();
+    const repo = repository({ saveTimeSettings: vi.fn().mockImplementation(async value => value) });
+    renderDialog(repo);
+    const focusTab = await screen.findByRole('tab', { name: '专注时段' });
+    await user.click(focusTab);
+    expect(screen.queryByRole('radio', { name: '时间' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: '模块显示内容' })).not.toBeInTheDocument();
+    expect(repo.saveTimeSettings).not.toHaveBeenCalled();
+    expect(screen.queryByText('专注记录')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /统计/ })).not.toBeInTheDocument();
+  });
+
+  it('validates and saves the default duration without exposing statistics in settings', async () => {
+    const user = userEvent.setup();
+    const repo = repository({ saveTimeSettings: vi.fn().mockImplementation(async value => value) });
+    renderDialog(repo);
+    await user.click(await screen.findByRole('tab', { name: '专注时段' }));
+    const duration = screen.getByRole('spinbutton', { name: '默认时长（1–720 分钟）' });
+    fireEvent.change(duration, { target: { value: '0' } });
+    expect(screen.getByRole('alert')).toHaveTextContent('请输入 1–720');
+    expect(repo.saveTimeSettings).not.toHaveBeenCalled();
+    fireEvent.change(duration, { target: { value: '45' } });
+    await waitFor(() => expect(repo.saveTimeSettings).toHaveBeenCalledWith(expect.objectContaining({ focusPreferences: { defaultMinutes: 45 } })));
+  });
   it('opens the alarm editor directly when launched from the module add icon', async () => {
     render(<RepositoryProvider repository={repository({ alarms: [] })}>
       <TimeSettingsDialog onClose={vi.fn()} createAlarm />
@@ -99,7 +124,7 @@ describe('TimeSettingsDialog', () => {
     setLanguage('en');
     renderDialog(repository());
     expect(await screen.findByRole('dialog', { name: 'Time settings' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Clocks' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'World clocks' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Add clock' })).toBeInTheDocument();
   });
 
@@ -152,20 +177,18 @@ describe('TimeSettingsDialog', () => {
     expect(await screen.findByRole('dialog', { name: '时间设置' })).toBeInTheDocument();
     expect(document.body.querySelector('[data-testid="time-settings-dialog"]')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '添加时钟' }));
-    const clockDetails = document.querySelectorAll<HTMLDetailsElement>('.time-clock-settings-card details');
-    clockDetails.forEach((details) => { details.open = true; });
     expect(screen.getByDisplayValue('新时钟')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '上移 新时钟' }));
     await user.click(screen.getByRole('button', { name: '删除 本地' }));
     expect(screen.queryByDisplayValue('本地')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '删除 新时钟' })).toBeDisabled();
-    await waitFor(() => expect(repo.saveTimeSettings).toHaveBeenLastCalledWith({ clocks: [expect.objectContaining({ label: '新时钟' })] }));
+    await waitFor(() => expect(repo.saveTimeSettings).toHaveBeenLastCalledWith(expect.objectContaining({ clocks: [expect.objectContaining({ label: '新时钟' })] })));
     expect(screen.queryByRole('button', { name: '保存时间设置' })).not.toBeInTheDocument();
   });
 
   it('refreshes an already mounted widget immediately when clock settings change', async () => {
     const user = userEvent.setup();
-    let stored: TimeSettings = { clocks: [baseClock] };
+    let stored: TimeSettings = { ...defaultTimeSettings(), clocks: [baseClock] };
     const repo = {
       ...repository(),
       getTimeSettings: vi.fn().mockImplementation(async () => stored),
@@ -200,7 +223,7 @@ describe('TimeSettingsDialog', () => {
     expect(slider).toHaveValue('33');
     expect(screen.getByTestId('time-clock').style.getPropertyValue('--time-font-size')).toBe(`${33 / 13}rem`);
     expect(screen.getByRole('status')).toHaveTextContent('自动保存中');
-    await act(async () => pending.resolve({ clocks: [baseClock] }));
+    await act(async () => pending.resolve({ ...defaultTimeSettings(), clocks: [baseClock] }));
   });
 
   it('disables clock configuration and saving until settings load successfully', async () => {
@@ -216,7 +239,7 @@ describe('TimeSettingsDialog', () => {
     expect(screen.queryByRole('button', { name: '添加时钟' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '保存时间设置' })).not.toBeInTheDocument();
     expect(saveTimeSettings).not.toHaveBeenCalled();
-    await act(async () => pending.resolve({ clocks: [baseClock] }));
+    await act(async () => pending.resolve({ ...defaultTimeSettings(), clocks: [baseClock] }));
     expect(await screen.findByRole('button', { name: '添加时钟' })).toBeInTheDocument();
   });
 
@@ -235,23 +258,11 @@ describe('TimeSettingsDialog', () => {
     expect(await screen.findByText('已保存')).toBeInTheDocument();
   });
 
-  it('compares local input across zones without saving the real clock configuration', async () => {
-    const user = userEvent.setup();
-    const repo = repository({
-      settings: {
-        clocks: [
-          baseClock,
-          { ...baseClock, id: 'ktm', timeZone: 'Asia/Kathmandu', label: '加德满都', showLabel: true }
-        ]
-      }
-    });
-    renderDialog(repo);
-    await user.click(await screen.findByRole('tab', { name: '时差对照' }));
-    await user.clear(screen.getByLabelText('本地日期时间'));
-    await user.type(screen.getByLabelText('本地日期时间'), '2026-10-11T00:00');
-    expect(screen.getByText(/加德满都/)).toBeInTheDocument();
-    expect(screen.getByText(/UTC\+05:45/)).toBeInTheDocument();
-    expect(repo.saveTimeSettings).not.toHaveBeenCalled();
+  it('only exposes the three approved settings tabs without a time comparison tool', async () => {
+    renderDialog(repository());
+    await screen.findByRole('button', { name: '添加时钟' });
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['世界时钟', '专注时段', '闹钟(0)']);
+    expect(screen.queryByRole('tab', { name: '时差对照' })).not.toBeInTheDocument();
   });
 
   it('creates, toggles and deletes local-time alarms with arbitrary minute validation inside time files', async () => {

@@ -1,5 +1,5 @@
 import { BarChart3, Bell, Pause, Pencil, Play, RotateCcw, Timer } from '../components/icons';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from '../i18n';
 import { useFocusTimer } from './FocusTimerContext';
 
@@ -55,18 +55,21 @@ function FocusRing({ fraction, tone, children }: { fraction: number; tone: Tone;
   );
 }
 
-type Props = { mode: 'foreground' | 'wallpaper'; onOpenStatistics: () => void; onEnterWallpaper?: () => void };
+type Props = { mode: 'foreground' | 'wallpaper'; onOpenStatistics: () => void; onEnterWallpaper?: () => void; embedded?: boolean; defaultMinutes?: number };
 
-export function FocusTimerWidget({ mode, onOpenStatistics, onEnterWallpaper }: Props) {
+export function FocusTimerWidget({ mode, onOpenStatistics, onEnterWallpaper, embedded = false, defaultMinutes }: Props) {
   const { t } = useTranslation();
   const timer = useFocusTimer();
-  const [minutes, setMinutes] = useState(timer.state.plannedSeconds / 60);
+  const [minutes, setMinutes] = useState(defaultMinutes ?? timer.state.plannedSeconds / 60);
   const [customOpen, setCustomOpen] = useState(false);
   const [custom, setCustom] = useState('');
   // Remember the most recent custom duration so it stays available as a preset
   // chip, sparing the user from reopening the input to reuse it.
   const [lastCustom, setLastCustom] = useState<number | null>(null);
   const [autoWallpaper, setAutoWallpaper] = useState(false);
+  useEffect(() => {
+    if (defaultMinutes !== undefined) setMinutes(defaultMinutes);
+  }, [defaultMinutes]);
 
   const customValue = Number(custom);
   const customValid = Number.isInteger(customValue) && customValue >= 1 && customValue <= 720;
@@ -121,14 +124,14 @@ export function FocusTimerWidget({ mode, onOpenStatistics, onEnterWallpaper }: P
 
   return (
     <div className="widget-content focus-timer">
-      <div className="card-header focus-timer__header">
+      <div className={embedded ? 'focus-timer__summary' : 'card-header focus-timer__header'}>
         <div className="focus-timer__today">
           <span className="focus-timer__today-label">{t('focusTimer.todayFocusLabel')}</span>
           <span className="focus-timer__today-value">{formatTodayFocus(timer.todayFocusedSeconds, t)}</span>
         </div>
-        <button className="btn btn-icon" aria-label={t('focusTimer.statistics')} onClick={onOpenStatistics}>
+        {!embedded ? <button className="btn btn-icon" aria-label={t('focusTimer.statistics')} onClick={onOpenStatistics}>
           <BarChart3 aria-hidden="true" />
-        </button>
+        </button> : null}
       </div>
       <div className="panel-body focus-timer__body">
         <FocusRing fraction={fraction} tone={tone}>

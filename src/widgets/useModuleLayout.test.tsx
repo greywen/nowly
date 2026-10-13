@@ -97,24 +97,24 @@ describe('useModuleLayout', () => {
 
   it('adds an extension module into the first free slot and persists it', async () => {
     const { result, saved } = await mountLoaded(sparse);
-    act(() => result.current.addWidget('focusTimer'));
-    expect(rectOf(result.current.layout, 'focusTimer')).toBeDefined();
-    expect(rectOf(saved(), 'focusTimer')).toBeDefined();
+    act(() => result.current.addWidget('time'));
+    expect(rectOf(result.current.layout, 'time')).toBeDefined();
+    expect(rectOf(saved(), 'time')).toBeDefined();
   });
 
   it('falls back to the minimum size when the default size does not fit', async () => {
     // Fill the grid so only a small pocket of free cells remains: a 3x3 hole
-    // at the bottom-right. focusTimer's default is 4x4 (too big) but its
+    // at the bottom-right. The time default is 4x3 (too big) but its
     // minimum is 2x2 (fits), so it should still be placed at its smallest size.
     const packed: LayoutState = [
       { id: 'calendar', x: 0, y: 0, w: 12, h: 5 },
       { id: 'matrix', x: 0, y: 5, w: 9, h: 3 }
     ];
     const { result, saved } = await mountLoaded(packed);
-    act(() => result.current.addWidget('focusTimer'));
-    const placed = rectOf(result.current.layout, 'focusTimer');
+    act(() => result.current.addWidget('time'));
+    const placed = rectOf(result.current.layout, 'time');
     expect(placed).toMatchObject({ w: 2, h: 2 });
-    expect(rectOf(saved(), 'focusTimer')).toMatchObject({ w: 2, h: 2 });
+    expect(rectOf(saved(), 'time')).toMatchObject({ w: 2, h: 2 });
   });
 
   it('ignores adding a module that is already present', async () => {
