@@ -29,12 +29,16 @@ export function useBarPresentation(ready: boolean) {
 
   useEffect(() => {
     let disposed = false;
-    let remove: (() => void) | undefined;
+    const removers: Array<() => void> = [];
+    const keep = (remove: () => void) => disposed ? remove() : removers.push(remove);
     void listen<BarPresentation>('status-island-presentation', event => {
       if (!disposed) accept(event.payload);
-    }).then(unlisten => { if (disposed) unlisten(); else remove = unlisten; }).catch(failed);
-    return () => { disposed = true; remove?.(); };
-  }, [accept, failed]);
+    }).then(keep).catch(failed);
+    void listen('tauri://blur', () => {
+      if (!disposed) presence('keyboard', false);
+    }, { target: { kind: 'Window', label: 'quick-panel-handle' } }).then(keep).catch(failed);
+    return () => { disposed = true; removers.forEach(remove => remove()); };
+  }, [accept, failed, presence]);
 
   useEffect(() => { if (ready) refresh(); }, [ready, refresh]);
 

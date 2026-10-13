@@ -180,6 +180,30 @@ describe('screen status island windows', () => {
     expect(document.querySelector('.status-rail')).toHaveAttribute('data-strip', 'true');
   });
 
+  it('releases keyboard presence when the native Bar loses focus after a reminder closes', async () => {
+    respondWith(snapshotWith({ notificationMode: 'notification' }));
+    render(<StatusIslandApp />);
+    await emitPanelEvent('status-island-presentation', { generation: 1, strip: false });
+    await emitPanelEvent('status-island-details-open', { generation: 1, source: 'island', identity: null });
+    await emitPanelEvent('status-island-details-close', { generation: 2 });
+    await emitPanelEvent('status-island-details-closed', { generation: 2 });
+    fireEvent.focus(screen.getByRole('button', { name: 'Nowly' }));
+    expect(invokeMock).toHaveBeenCalledWith('set_status_island_presence', { surface: 'keyboard', present: true });
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-strip', 'false');
+    invokeMock.mockClear();
+    invokeMock.mockImplementation((command: string) => Promise.resolve(
+      command === 'set_status_island_presence' ? { generation: 2, strip: true } : null
+    ));
+
+    await emitPanelEvent('tauri://blur', null);
+
+    expect(invokeMock).toHaveBeenCalledWith('set_status_island_presence', { surface: 'keyboard', present: false });
+    expect(listenMock).toHaveBeenCalledWith('tauri://blur', expect.any(Function), {
+      target: { kind: 'Window', label: 'quick-panel-handle' }
+    });
+    expect(document.querySelector('.status-rail')).toHaveAttribute('data-strip', 'true');
+  });
+
   it('acknowledges only the pinned alarm instance and refreshes after success', async () => {
     const notice = { id: 'n1', kind: 'alarm' as const, title: 'Tea', dueAt: new Date().toISOString(), alarmId: 'a1', count: 1, rangeStart: '', rangeEnd: '' };
     respondWith(snapshotWith({ alarmNotices: [notice] }));
