@@ -496,7 +496,7 @@ pub fn snooze_alarm_notice(
     invalidate(&app)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn dismiss_status_island_reminder(
     app: AppHandle,
     reminders: State<'_, ManagedReminders>,
@@ -558,7 +558,7 @@ pub fn set_status_island_presence(
     crate::quick_panel::sync_bar_presentation(&app).map_err(CommandError::system)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn open_status_island_event(
     app: AppHandle,
     target: EventTarget,
@@ -572,7 +572,7 @@ pub fn open_status_island_event(
         .map_err(CommandError::system)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn open_status_island_task(app: AppHandle, id: String) -> Result<(), CommandError> {
     show_main_window(&app)?
         .emit("status-island-open-task", id)

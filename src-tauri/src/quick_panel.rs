@@ -2023,6 +2023,9 @@ mod tests {
                 super::close_status_island_details,
                 super::finish_status_island_details,
                 crate::status_island::set_status_island_presence,
+                crate::status_island::open_status_island_event,
+                crate::status_island::open_status_island_task,
+                crate::status_island::dismiss_status_island_reminder,
             ])
             .build(tauri::test::mock_context(tauri::test::noop_assets()))
             .unwrap();
@@ -2041,6 +2044,12 @@ mod tests {
             ("close_status_island_details", serde_json::json!({})),
             ("finish_status_island_details", serde_json::json!({ "generation": 0 })),
             ("set_status_island_presence", serde_json::json!({ "surface": "keyboard", "present": true })),
+            ("open_status_island_event", serde_json::json!({
+                "target": { "id": "regression-event", "occurrenceStartAt": null },
+                "startAt": "2026-10-13T09:00"
+            })),
+            ("open_status_island_task", serde_json::json!({ "id": "regression-task" })),
+            ("dismiss_status_island_reminder", serde_json::json!({ "identity": "regression-reminder" })),
         ] {
             let (locked_tx, locked_rx) = mpsc::channel();
             let (dispatch_returned_tx, dispatch_returned_rx) = mpsc::channel();
@@ -2074,10 +2083,22 @@ mod tests {
             if !worker.join().unwrap() {
                 blocked.push(command);
             }
-            assert!(
-                matches!(response_rx.recv_timeout(Duration::from_secs(5)).unwrap(), InvokeResponse::Ok(_)),
-                "{command} should still complete after the worker releases the lock"
-            );
+            let response = response_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+            if matches!(command, "open_status_island_event" | "open_status_island_task") {
+                match response {
+                    InvokeResponse::Err(error) => assert!(
+                        error.0["code"] == "system_error",
+                        "{command} must reach navigation after releasing the positioning lock: {:?}",
+                        error.0
+                    ),
+                    _ => panic!("{command} should report the missing main window"),
+                }
+            } else {
+                assert!(
+                    matches!(response, InvokeResponse::Ok(_)),
+                    "{command} should still complete after the worker releases the lock"
+                );
+            }
         }
         assert!(blocked.is_empty(), "native IPC blocked the UI dispatcher: {blocked:?}");
     }
@@ -2099,6 +2120,9 @@ mod tests {
             (include_str!("status_island.rs"), &[
                 "set_status_island_presence",
                 "set_status_island_visibility",
+                "open_status_island_event",
+                "open_status_island_task",
+                "dismiss_status_island_reminder",
             ][..]),
         ] {
             for command in commands {
