@@ -263,14 +263,15 @@ mod platform {
     use windows::Win32::UI::WindowsAndMessaging::{
         CallNextHookEx, DispatchMessageW, EnumChildWindows, EnumWindows, FindWindowExW,
         FindWindowW, GetAncestor, GetClassNameW, GetClientRect, GetMessageW, GetSystemMetrics,
-        GetWindowLongPtrW, GetWindowRect, GetWindowThreadProcessId, IsWindowVisible,
-        PostThreadMessageW, SendMessageTimeoutW, SendMessageW, SetForegroundWindow,
-        SetLayeredWindowAttributes, SetParent, SetWindowLongPtrW, SetWindowPos, SetWindowsHookExW,
-        ShowWindow, TranslateMessage, UnhookWindowsHookEx, WindowFromPoint, EVENT_OBJECT_HIDE,
-        EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_SHOW, GA_ROOT, GWL_EXSTYLE, GWL_STYLE,
-        HWND_BOTTOM, LWA_ALPHA, MSG, MSLLHOOKSTRUCT, SEND_MESSAGE_TIMEOUT_FLAGS, SMTO_NORMAL,
-        SM_CXDOUBLECLK, SM_CYDOUBLECLK, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
-        SWP_SHOWWINDOW, SW_RESTORE, WH_MOUSE_LL, WINEVENT_OUTOFCONTEXT, WM_LBUTTONDOWN, WM_QUIT,
+        GetWindowLongPtrW, GetWindowPlacement, GetWindowRect, GetWindowThreadProcessId, IsIconic,
+        IsWindowVisible, PostThreadMessageW, SendMessageTimeoutW, SendMessageW,
+        SetForegroundWindow, SetLayeredWindowAttributes, SetParent, SetWindowLongPtrW,
+        SetWindowPlacement, SetWindowPos, SetWindowsHookExW, ShowWindow, TranslateMessage,
+        UnhookWindowsHookEx, WindowFromPoint, EVENT_OBJECT_HIDE, EVENT_OBJECT_LOCATIONCHANGE,
+        EVENT_OBJECT_SHOW, GA_ROOT, GWL_EXSTYLE, GWL_STYLE, HWND_BOTTOM, LWA_ALPHA, MSG,
+        MSLLHOOKSTRUCT, SEND_MESSAGE_TIMEOUT_FLAGS, SMTO_NORMAL, SM_CXDOUBLECLK, SM_CYDOUBLECLK,
+        SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, SW_RESTORE,
+        WH_MOUSE_LL, WINDOWPLACEMENT, WINEVENT_OUTOFCONTEXT, WM_LBUTTONDOWN, WM_QUIT,
         WS_EX_LAYERED, WS_EX_NOREDIRECTIONBITMAP,
     };
 
@@ -820,6 +821,10 @@ mod platform {
     }
 
     pub fn notify_window_destroyed(hwnd: HWND) {
+        foreground_placements()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .remove(&(hwnd.0 as isize));
         let matches = {
             let state = listener()
                 .lock()
@@ -962,6 +967,38 @@ mod platform {
         ))
     }
 
+    static FOREGROUND_PLACEMENTS: OnceLock<
+        Mutex<std::collections::HashMap<isize, WINDOWPLACEMENT>>,
+    > = OnceLock::new();
+
+    fn foreground_placements() -> &'static Mutex<std::collections::HashMap<isize, WINDOWPLACEMENT>>
+    {
+        FOREGROUND_PLACEMENTS.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
+    }
+
+    pub fn capture_foreground_placement(hwnd: HWND) -> Result<(), String> {
+        let key = hwnd.0 as isize;
+        if foreground_placements()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .contains_key(&key)
+        {
+            return Ok(());
+        }
+        let mut placement = WINDOWPLACEMENT {
+            length: std::mem::size_of::<WINDOWPLACEMENT>() as u32,
+            ..Default::default()
+        };
+        unsafe { GetWindowPlacement(hwnd, &mut placement) }
+            .map_err(|error| format!("failed to capture foreground window placement: {error}"))?;
+        foreground_placements()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .entry(key)
+            .or_insert(placement);
+        Ok(())
+    }
+
     pub fn enter_foreground(hwnd: HWND) -> Result<String, String> {
         stop_listener();
         stop_desktop_watch();
@@ -969,6 +1006,20 @@ mod platform {
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         unsafe {
+            let placement = foreground_placements()
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .get(&(hwnd.0 as isize))
+                .copied();
+            if placement.is_none()
+                && GetWindowLongPtrW(hwnd, GWL_STYLE) as u32 & super::WS_CHILD_STYLE == 0
+            {
+                if IsIconic(hwnd).as_bool() {
+                    let _ = ShowWindow(hwnd, SW_RESTORE);
+                }
+                let _ = SetForegroundWindow(hwnd);
+                return Ok(format!("foreground mode ok hwnd={hwnd:?}"));
+            }
             SetParent(hwnd, None)
                 .map_err(|error| format!("failed to detach window from desktop parent: {error}"))?;
             let style = GetWindowLongPtrW(hwnd, GWL_STYLE) as u32;
@@ -989,7 +1040,17 @@ mod platform {
                 SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW | SWP_FRAMECHANGED,
             )
             .map_err(|error| format!("failed to restore foreground window frame: {error}"))?;
-            let _ = ShowWindow(hwnd, SW_RESTORE);
+            if let Some(placement) = placement {
+                SetWindowPlacement(hwnd, &placement).map_err(|error| {
+                    format!("failed to restore foreground window placement: {error}")
+                })?;
+                foreground_placements()
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .remove(&(hwnd.0 as isize));
+            } else if IsIconic(hwnd).as_bool() {
+                let _ = ShowWindow(hwnd, SW_RESTORE);
+            }
             let _ = SetForegroundWindow(hwnd);
         }
         Ok(format!("foreground mode ok hwnd={hwnd:?}"))
@@ -1306,6 +1367,221 @@ mod platform {
         }
     }
 
+    #[cfg(test)]
+    mod placement_tests {
+        use super::*;
+        use windows::Win32::UI::WindowsAndMessaging::{
+            CreateWindowExW, DestroyWindow, GetWindowPlacement, IsZoomed, SW_MAXIMIZE,
+            WINDOWPLACEMENT, WINDOW_EX_STYLE, WS_OVERLAPPEDWINDOW,
+        };
+
+        struct TestWindow(HWND);
+
+        impl TestWindow {
+            fn new() -> Self {
+                Self(unsafe {
+                    CreateWindowExW(
+                        WINDOW_EX_STYLE::default(),
+                        w!("STATIC"),
+                        w!("Nowly placement test"),
+                        WS_OVERLAPPEDWINDOW,
+                        120,
+                        100,
+                        640,
+                        480,
+                        None,
+                        None,
+                        None,
+                        None,
+                    )
+                    .unwrap()
+                })
+            }
+
+            fn placement(&self) -> WINDOWPLACEMENT {
+                let mut value = WINDOWPLACEMENT {
+                    length: std::mem::size_of::<WINDOWPLACEMENT>() as u32,
+                    ..Default::default()
+                };
+                unsafe { GetWindowPlacement(self.0, &mut value).unwrap() };
+                value
+            }
+
+            fn embed(&self, parent: HWND) {
+                capture_foreground_placement(self.0).unwrap();
+                unsafe {
+                    SetWindowPos(self.0, None, 0, 0, 1200, 800, SWP_NOACTIVATE).unwrap();
+                    let style = GetWindowLongPtrW(self.0, GWL_STYLE) as u32;
+                    SetWindowLongPtrW(self.0, GWL_STYLE, borderless_child_style(style) as isize);
+                    SetParent(self.0, Some(parent)).unwrap();
+                    SetWindowPos(
+                        self.0,
+                        None,
+                        0,
+                        0,
+                        1200,
+                        800,
+                        SWP_NOACTIVATE | SWP_FRAMECHANGED,
+                    )
+                    .unwrap();
+                }
+            }
+        }
+
+        impl Drop for TestWindow {
+            fn drop(&mut self) {
+                notify_window_destroyed(self.0);
+                unsafe { DestroyWindow(self.0).unwrap() };
+            }
+        }
+
+        #[test]
+        fn foreground_restores_native_size_and_position_after_wallpaper() {
+            let parent = TestWindow::new();
+            let window = TestWindow::new();
+            let original = window.placement();
+            window.embed(parent.0);
+            enter_foreground(window.0).unwrap();
+            assert_eq!(
+                window.placement().rcNormalPosition,
+                original.rcNormalPosition
+            );
+            let mut outer = RECT::default();
+            unsafe { GetWindowRect(window.0, &mut outer).unwrap() };
+            assert_eq!(
+                (outer.right - outer.left, outer.bottom - outer.top),
+                (640, 480)
+            );
+        }
+
+        #[test]
+        fn capture_precedes_monitor_move_and_repeated_capture_preserves_origin() {
+            let parent = TestWindow::new();
+            let window = TestWindow::new();
+            let original = window.placement();
+            capture_foreground_placement(window.0).unwrap();
+            unsafe {
+                SetWindowPos(window.0, None, 300, 200, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE).unwrap();
+            }
+            window.embed(parent.0);
+            enter_foreground(window.0).unwrap();
+            assert_eq!(
+                window.placement().rcNormalPosition,
+                original.rcNormalPosition
+            );
+        }
+
+        #[test]
+        fn placements_are_isolated_and_destroyed_windows_are_cleared() {
+            let parent = TestWindow::new();
+            let first = TestWindow::new();
+            let second = TestWindow::new();
+            unsafe {
+                SetWindowPos(second.0, None, 240, 160, 720, 520, SWP_NOACTIVATE).unwrap();
+            }
+            let first_original = first.placement();
+            let second_original = second.placement();
+            first.embed(parent.0);
+            second.embed(parent.0);
+            enter_foreground(first.0).unwrap();
+            assert_eq!(
+                first.placement().rcNormalPosition,
+                first_original.rcNormalPosition
+            );
+            enter_foreground(second.0).unwrap();
+            assert_eq!(
+                second.placement().rcNormalPosition,
+                second_original.rcNormalPosition
+            );
+            capture_foreground_placement(first.0).unwrap();
+            let key = first.0 .0 as isize;
+            drop(first);
+            assert!(!foreground_placements().lock().unwrap().contains_key(&key));
+        }
+
+        #[test]
+        fn failed_restore_keeps_snapshot_for_retry() {
+            let window = TestWindow::new();
+            capture_foreground_placement(window.0).unwrap();
+            let key = window.0 .0 as isize;
+            let invalid = HWND(-1isize as *mut std::ffi::c_void);
+            let saved = foreground_placements()
+                .lock()
+                .unwrap()
+                .get(&key)
+                .copied()
+                .unwrap();
+            foreground_placements()
+                .lock()
+                .unwrap()
+                .insert(invalid.0 as isize, saved);
+            assert!(enter_foreground(invalid).is_err());
+            assert!(foreground_placements()
+                .lock()
+                .unwrap()
+                .contains_key(&(invalid.0 as isize)));
+            notify_window_destroyed(invalid);
+            enter_foreground(window.0).unwrap();
+            assert!(!foreground_placements().lock().unwrap().contains_key(&key));
+        }
+
+        #[test]
+        fn foreground_preserves_maximized_state_after_wallpaper() {
+            let parent = TestWindow::new();
+            let window = TestWindow::new();
+            unsafe {
+                let _ = ShowWindow(window.0, SW_MAXIMIZE);
+            }
+            let original = window.placement();
+            window.embed(parent.0);
+            enter_foreground(window.0).unwrap();
+            assert!(unsafe { IsZoomed(window.0).as_bool() });
+            enter_foreground(window.0).unwrap();
+            assert!(unsafe { IsZoomed(window.0).as_bool() });
+            assert_eq!(
+                window.placement().rcNormalPosition,
+                original.rcNormalPosition
+            );
+        }
+
+        #[test]
+        fn repeated_wallpaper_entry_does_not_replace_original_placement() {
+            let parent = TestWindow::new();
+            let window = TestWindow::new();
+            let original = window.placement();
+            window.embed(parent.0);
+            window.embed(parent.0);
+            enter_foreground(window.0).unwrap();
+            assert_eq!(
+                window.placement().rcNormalPosition,
+                original.rcNormalPosition
+            );
+        }
+
+        #[test]
+        fn later_switch_uses_new_size_and_foreground_open_does_not_replay_snapshot() {
+            let parent = TestWindow::new();
+            let window = TestWindow::new();
+            window.embed(parent.0);
+            enter_foreground(window.0).unwrap();
+            unsafe {
+                SetWindowPos(window.0, None, 220, 180, 720, 520, SWP_NOACTIVATE).unwrap();
+            }
+            let resized = window.placement();
+            enter_foreground(window.0).unwrap();
+            assert_eq!(
+                window.placement().rcNormalPosition,
+                resized.rcNormalPosition
+            );
+            window.embed(parent.0);
+            enter_foreground(window.0).unwrap();
+            assert_eq!(
+                window.placement().rcNormalPosition,
+                resized.rcNormalPosition
+            );
+        }
+    }
+
     pub fn stop_desktop_watch() {
         let thread_id = {
             let mut watch = desktop_watch()
@@ -1383,6 +1659,7 @@ pub fn enter_wallpaper_webview<R: tauri::Runtime>(
     let hwnd = window
         .hwnd()
         .map_err(|error| format!("failed to get webview window handle: {error}"))?;
+    platform::capture_foreground_placement(hwnd)?;
     // Capture the target monitor's scale before reparenting freezes detection.
     let scale = current_scale_factor(window);
     let message = platform::enter_wallpaper(hwnd)?;
@@ -1455,6 +1732,9 @@ pub fn enter_wallpaper_mode(
                         .map_err(crate::error::CommandError::database)
                 })?
                 .target_monitor_id;
+        let hwnd = window.hwnd().map_err(crate::error::CommandError::system)?;
+        // Monitor positioning must not replace the user's foreground placement.
+        platform::capture_foreground_placement(hwnd).map_err(crate::error::CommandError::system)?;
         crate::monitors::position_target(&window, target_monitor_id.as_deref())?;
         let webview = window
             .get_webview_window("main")

@@ -74,7 +74,8 @@ focusing. All data stays on your machine in a local SQLite database.
 
 - Use the top-right button to set Nowly as your wallpaper.
 - Double-click the wallpaper or click the tray icon to return to foreground
-  mode.
+  mode. Within the same running session, this restores the window size, position,
+  and maximized state from before entering wallpaper mode.
 - Open **Settings** to control wallpaper close behavior, login startup, calendar
   formatting, density, and module visibility.
 - Disabling login startup and saving removes the current user's startup entry;
