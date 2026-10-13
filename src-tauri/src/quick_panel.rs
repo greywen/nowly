@@ -1258,12 +1258,12 @@ pub fn sync_bar_presentation<R: Runtime>(app: &AppHandle<R>) -> Result<BarPresen
     Ok(presentation)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_status_island_presentation(app: AppHandle) -> Result<BarPresentation, crate::error::CommandError> {
     sync_bar_presentation(&app).map_err(crate::error::CommandError::system)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn finish_status_island_presentation(app: AppHandle, generation: u64) -> Result<(), crate::error::CommandError> {
     let controller = app.state::<PanelController>();
     let _positioning = controller.positioning.lock().unwrap();
@@ -1430,7 +1430,7 @@ fn complete_details_collapse<R: Runtime>(app: &AppHandle<R>, generation: u64) ->
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn finish_status_island_details(app: AppHandle, generation: u64) -> Result<(), crate::error::CommandError> {
     complete_details_collapse(&app, generation).map_err(crate::error::CommandError::system)
 }
@@ -1474,7 +1474,7 @@ pub fn close_details_after_outside_click<R: Runtime>(app: &AppHandle<R>) -> Resu
     hide_details_with_action(app, transition.generation, action, source == Some(PanelSource::Island))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn toggle_status_island_details(
     app: AppHandle,
     identity: Option<String>,
@@ -1504,12 +1504,12 @@ pub fn open_history_panel<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> 
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn toggle_bar_menu(app: AppHandle) -> Result<(), crate::error::CommandError> {
     toggle_panel(app, PanelSource::Menu, None)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn toggle_nowly_panel(app: AppHandle) -> Result<(), crate::error::CommandError> {
     toggle_panel(app, PanelSource::Nowly, None)
 }
@@ -1566,12 +1566,12 @@ fn hover_panel(app: AppHandle, source: PanelSource) -> Result<(), crate::error::
 }
 
 /// Opening is deferred so a quick pass opens neither half of the rail.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn hover_status_island_details(app: AppHandle) -> Result<(), crate::error::CommandError> {
     hover_panel(app, PanelSource::Island)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn close_status_island_details(app: AppHandle) -> Result<(), crate::error::CommandError> {
     close_details_for_navigation(&app).map_err(crate::error::CommandError::system)
 }
@@ -1779,7 +1779,7 @@ fn drag_anchor<R: Runtime>(app: &AppHandle<R>) -> Result<DragAnchor, String> {
 
 /// Long press on the rail. The sheet cannot stay open across a drag: it is the
 /// rail grown, so moving the rail would resize the window under the pointer.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn begin_status_island_drag(app: AppHandle) -> Result<bool, crate::error::CommandError> {
     if !app.state::<PanelController>().is_enabled() {
         return Ok(false);
@@ -1885,6 +1885,244 @@ pub fn restore_after_capture<R: Runtime>(app: &AppHandle<R>, suppression: Captur
 
 #[cfg(test)]
 mod tests {
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn native_revealed_bar_opens_panels_with_a_running_ui_dispatcher() {
+        use std::sync::mpsc;
+        use std::time::{Duration, Instant};
+        use tauri::ipc::{CallbackFn, InvokeBody, InvokeResponse};
+        use tauri::Manager;
+
+        const CHILD: &str = "NOWLY_BAR_NATIVE_CLICK_CHILD";
+        if std::env::var(CHILD).as_deref() != Ok("1") {
+            let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "quick_panel::tests::native_revealed_bar_opens_panels_with_a_running_ui_dispatcher",
+                    "--nocapture",
+                    "--test-threads=1",
+                ])
+                .env(CHILD, "1")
+                .spawn()
+                .unwrap();
+            let deadline = Instant::now() + Duration::from_secs(30);
+            loop {
+                if let Some(status) = child.try_wait().unwrap() {
+                    assert!(status.success(), "native Bar event-loop verification failed");
+                    return;
+                }
+                if Instant::now() >= deadline {
+                    child.kill().unwrap();
+                    child.wait().unwrap();
+                    panic!("native Bar click deadlocked the UI dispatcher");
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        }
+
+        let handler: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool = tauri::generate_handler![
+            super::get_status_island_presentation,
+            super::finish_status_island_presentation,
+            crate::status_island::set_status_island_presence,
+            super::toggle_status_island_details,
+            super::toggle_bar_menu,
+            super::toggle_nowly_panel,
+            crate::screenshot_windows::open_screenshot_history,
+        ];
+        let app = tauri::Builder::default()
+            .any_thread()
+            .manage(PanelController::default())
+            .manage(std::sync::Mutex::new(crate::status_island::ReminderLifecycle::default()))
+            .manage(crate::screenshot_windows::ScreenshotWindows::default())
+            .manage(crate::screen_capture::ActiveCapture::default())
+            .invoke_handler(move |invoke| {
+                if invoke.message.command().starts_with("toggle_")
+                    || invoke.message.command() == "open_screenshot_history"
+                {
+                    let worker_app = invoke.message.webview().app_handle().clone();
+                    let (locked_tx, locked_rx) = mpsc::channel();
+                    std::thread::spawn(move || {
+                        let controller = worker_app.state::<PanelController>();
+                        let _positioning = controller.positioning.lock().unwrap();
+                        locked_tx.send(()).unwrap();
+                        // This real window query cannot finish until the UI
+                        // callback returns and services its native message.
+                        worker_app.get_webview_window("quick-panel-handle")
+                            .unwrap().outer_size().unwrap();
+                    });
+                    locked_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+                }
+                handler(invoke)
+            })
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .unwrap();
+        let handle = tauri::WebviewWindowBuilder::new(
+            &app, "quick-panel-handle", tauri::WebviewUrl::App("index.html".into()),
+        ).visible(false).decorations(false).shadow(false).transparent(true).build().unwrap();
+        app.state::<PanelController>().set_notification_mode("notification");
+        let worker_app = app.handle().clone();
+        let worker = std::thread::spawn(move || {
+            for (command, body, source) in [
+                ("get_status_island_presentation", serde_json::json!({}), None),
+                ("finish_status_island_presentation", serde_json::json!({ "generation": 1 }), None),
+                ("set_status_island_presence", serde_json::json!({ "surface": "island", "present": true }), None),
+                ("toggle_bar_menu", serde_json::json!({}), Some(PanelSource::Menu)),
+                ("toggle_status_island_details", serde_json::json!({ "identity": null }), Some(PanelSource::Island)),
+                ("toggle_nowly_panel", serde_json::json!({}), Some(PanelSource::Nowly)),
+                ("open_screenshot_history", serde_json::json!({}), Some(PanelSource::History)),
+            ] {
+                let (response_tx, response_rx) = mpsc::channel();
+                let request = tauri::webview::InvokeRequest {
+                    cmd: command.into(),
+                    callback: CallbackFn(0),
+                    error: CallbackFn(1),
+                    url: "http://tauri.localhost".parse().unwrap(),
+                    body: InvokeBody::Json(body),
+                    headers: Default::default(),
+                    invoke_key: worker_app.invoke_key().into(),
+                };
+                let window = handle.clone();
+                worker_app.run_on_main_thread(move || {
+                    window.on_message(request, Box::new(move |_, _, response, _, _| {
+                        response_tx.send(response).unwrap();
+                    }));
+                }).unwrap();
+                assert!(
+                    matches!(response_rx.recv_timeout(Duration::from_secs(10)).unwrap(), InvokeResponse::Ok(_)),
+                    "{command} failed"
+                );
+                assert_eq!(worker_app.state::<PanelController>().details_source(), source);
+                let size = super::top_surface_size(source, handle.scale_factor().unwrap());
+                assert_eq!(handle.outer_size().unwrap(), tauri::PhysicalSize::new(size.0, size.1));
+                eprintln!("{command} completed with native bounds {size:?}");
+            }
+            worker_app.exit(0);
+        });
+        assert_eq!(app.run_return(|_, _| {}), 0);
+        worker.join().unwrap();
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn native_bar_ipc_dispatch_does_not_wait_for_the_positioning_worker() {
+        use std::sync::mpsc;
+        use std::time::Duration;
+        use tauri::ipc::{CallbackFn, InvokeBody, InvokeResponse};
+        use tauri::Manager;
+
+        let app = tauri::Builder::default()
+            .any_thread()
+            .manage(PanelController::default())
+            .manage(std::sync::Mutex::new(crate::status_island::ReminderLifecycle::default()))
+            .invoke_handler(tauri::generate_handler![
+                super::get_status_island_presentation,
+                super::finish_status_island_presentation,
+                super::toggle_status_island_details,
+                super::toggle_bar_menu,
+                super::toggle_nowly_panel,
+                super::close_status_island_details,
+                super::finish_status_island_details,
+                crate::status_island::set_status_island_presence,
+            ])
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .unwrap();
+        let handle = tauri::WebviewWindowBuilder::new(
+            &app, "quick-panel-handle", tauri::WebviewUrl::App("index.html".into()),
+        ).visible(false).build().unwrap();
+        app.state::<PanelController>().set_enabled(false);
+        let mut blocked = Vec::new();
+
+        for (command, body) in [
+            ("get_status_island_presentation", serde_json::json!({})),
+            ("finish_status_island_presentation", serde_json::json!({ "generation": 0 })),
+            ("toggle_status_island_details", serde_json::json!({ "identity": null })),
+            ("toggle_bar_menu", serde_json::json!({})),
+            ("toggle_nowly_panel", serde_json::json!({})),
+            ("close_status_island_details", serde_json::json!({})),
+            ("finish_status_island_details", serde_json::json!({ "generation": 0 })),
+            ("set_status_island_presence", serde_json::json!({ "surface": "keyboard", "present": true })),
+        ] {
+            let (locked_tx, locked_rx) = mpsc::channel();
+            let (dispatch_returned_tx, dispatch_returned_rx) = mpsc::channel();
+            let worker_app = app.handle().clone();
+            let worker = std::thread::spawn(move || {
+                let controller = worker_app.state::<PanelController>();
+                let _positioning = controller.positioning.lock().unwrap();
+                locked_tx.send(()).unwrap();
+                // A window query on the reconciliation worker needs the UI
+                // dispatcher to return before its lock can be released.
+                dispatch_returned_rx.recv_timeout(Duration::from_secs(2)).is_ok()
+            });
+            locked_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+            let (response_tx, response_rx) = mpsc::channel();
+            eprintln!("dispatching {command} with the positioning lock held");
+            handle.clone().on_message(
+                tauri::webview::InvokeRequest {
+                    cmd: command.into(),
+                    callback: CallbackFn(0),
+                    error: CallbackFn(1),
+                    url: "http://tauri.localhost".parse().unwrap(),
+                    body: InvokeBody::Json(body),
+                    headers: Default::default(),
+                    invoke_key: app.invoke_key().into(),
+                },
+                Box::new(move |_, _, response, _, _| {
+                    response_tx.send(response).unwrap();
+                }),
+            );
+            let _ = dispatch_returned_tx.send(());
+            if !worker.join().unwrap() {
+                blocked.push(command);
+            }
+            assert!(
+                matches!(response_rx.recv_timeout(Duration::from_secs(5)).unwrap(), InvokeResponse::Ok(_)),
+                "{command} should still complete after the worker releases the lock"
+            );
+        }
+        assert!(blocked.is_empty(), "native IPC blocked the UI dispatcher: {blocked:?}");
+    }
+
+    #[test]
+    fn positioning_commands_are_dispatched_off_the_ui_thread() {
+        for (source, commands) in [
+            (include_str!("quick_panel.rs"), &[
+                "get_status_island_presentation",
+                "finish_status_island_presentation",
+                "finish_status_island_details",
+                "toggle_status_island_details",
+                "toggle_bar_menu",
+                "toggle_nowly_panel",
+                "hover_status_island_details",
+                "close_status_island_details",
+                "begin_status_island_drag",
+            ][..]),
+            (include_str!("status_island.rs"), &[
+                "set_status_island_presence",
+                "set_status_island_visibility",
+            ][..]),
+        ] {
+            for command in commands {
+                let function = source.find(&format!("pub fn {command}(")).unwrap();
+                let attribute = source[..function].rfind("#[tauri::command").unwrap();
+                assert!(
+                    source[attribute..].starts_with("#[tauri::command(async)]"),
+                    "{command} must not wait for positioning while blocking the UI dispatcher"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn focus_loss_defers_positioning_work_to_a_worker() {
+        let source = include_str!("main.rs");
+        let start = source.find("tauri::WindowEvent::Focused(false)").unwrap();
+        let end = start + source[start..].find("return;").unwrap();
+        assert!(
+            source[start..end].contains("std::thread::spawn(move ||"),
+            "native focus callbacks must not wait for the positioning worker on the UI thread"
+        );
+    }
+
     #[cfg(target_os = "windows")]
     #[test]
     fn native_reconcile_preserves_a_closing_panel_and_strip_click_through() {

@@ -161,6 +161,23 @@ test.describe(`notification-only strip through the browser backend at ${scale}x`
     await expect(page.getByRole('button', { name: 'Nowly', exact: true })).toHaveCount(0);
   });
 
+  test('keeps the entry hit area covered on the first reveal frame', async ({ page }) => {
+    await expect.poll(() => page.locator('.status-rail__status-presence').boundingBox())
+      .toEqual({ x: 168, y: 4, width: 96, height: 4 });
+    await nativeCommand(page, 'set_status_island_presence', { surface: 'island', present: true });
+    await expect(page.locator('.status-rail')).toHaveAttribute('data-strip', 'false');
+    const covered = await page.evaluate(() => {
+      document.querySelector('.status-rail')!.getAnimations({ subtree: true }).forEach(animation => {
+        animation.pause();
+        animation.currentTime = 0;
+      });
+      return [[153, 1], [279, 1], [153, 15], [279, 15], [216, 8]].map(([x, y]) =>
+        Boolean(document.elementFromPoint(x, y)?.closest('.screen-status-island-root'))
+      );
+    });
+    expect(covered).toEqual([true, true, true, true, true]);
+  });
+
   test('holds an open menu and notifications rather than dismissing them on pointer leave', async ({ page }) => {
     await page.getByRole('button', { name: '显示 Nowly Bar' }).hover();
     await page.getByRole('button', { name: 'Nowly', exact: true }).click();

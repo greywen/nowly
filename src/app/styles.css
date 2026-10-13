@@ -202,7 +202,9 @@ button:disabled { cursor: default; opacity: .65; }
 .status-rail[data-surface="history"], .status-rail[data-source="history"] { --sheet-h: 560px; }
 .status-rail:not([data-surface="status"]) { --rail-frame-w: var(--bar-panel-w); }
 .status-rail__reveal { position: absolute; inset: 0; }
-.status-rail__strip-entry { position: absolute; z-index: 6; top: 0; left: calc(50% - 64px); width: 128px; height: 16px; padding: 0; border: 0; background: transparent; cursor: pointer; pointer-events: auto; }
+.status-rail__strip-entry, .status-rail[data-notification-only="true"]::before { position: absolute; top: 0; left: calc(50% - 64px); width: 128px; height: 16px; pointer-events: auto; }
+.status-rail[data-notification-only="true"]::before { content: ""; z-index: 0; }
+.status-rail__strip-entry { z-index: 6; padding: 0; border: 0; background: transparent; cursor: pointer; }
 .status-rail__strip-entry[aria-hidden="true"] { visibility: hidden; pointer-events: none; }
 .status-rail__strip-entry:focus, .status-rail__strip-entry:focus-visible { outline: 0; box-shadow: none; }
 .status-rail[data-notification-only="true"] .status-rail__reveal { transform: translateY(0); transition: transform var(--rail-grow) var(--rail-ease) !important; }

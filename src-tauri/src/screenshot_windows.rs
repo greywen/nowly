@@ -21,26 +21,9 @@ fn ensure_idle<R: Runtime>(app: &AppHandle<R>) -> Result<(), CommandError> {
     Ok(())
 }
 
-fn on_main_thread<R: Runtime>(
-    app: &AppHandle<R>,
-    action: impl FnOnce(&AppHandle<R>) -> Result<(), CommandError> + Send + 'static,
-) -> Result<(), CommandError> {
-    let (send, receive) = std::sync::mpsc::sync_channel(1);
-    let handle = app.clone();
-    app.run_on_main_thread(move || {
-        let _ = send.send(action(&handle));
-    })
-    .map_err(|_| CommandError::system("Unable to schedule the screenshot window."))?;
-    receive
-        .recv()
-        .map_err(|_| CommandError::system("The screenshot window operation was interrupted."))?
-}
-
 pub fn open_history<R: Runtime>(app: &AppHandle<R>) -> Result<(), CommandError> {
-    on_main_thread(app, |app| {
-        ensure_idle(app)?;
-        crate::quick_panel::open_history_panel(app).map_err(CommandError::system)
-    })
+    ensure_idle(app)?;
+    crate::quick_panel::open_history_panel(app).map_err(CommandError::system)
 }
 
 fn can_open_history(label: &str) -> bool {
@@ -97,6 +80,14 @@ pub fn restore_after_capture<R: Runtime>(app: &AppHandle<R>) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn history_does_not_schedule_positioning_back_onto_the_ui_thread() {
+        let source = include_str!("screenshot_windows.rs");
+        let start = source.find("pub fn open_history<").unwrap();
+        let end = start + source[start..].find("\n}").unwrap();
+        assert!(!source[start..end].contains("on_main_thread"));
+    }
+
     #[test]
     fn only_real_application_surfaces_can_open_history() {
         for label in ["main", "quick-panel-handle", super::HISTORY_LABEL] {

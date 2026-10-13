@@ -427,7 +427,7 @@ pub fn get_status_island_snapshot(
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn set_status_island_visibility(app: AppHandle, visible: bool) -> Result<crate::quick_panel::BarPresentation, CommandError> {
     let db = app.state::<AppDb>();
     let connection = db.0.lock().map_err(CommandError::database)?;
@@ -435,6 +435,7 @@ pub fn set_status_island_visibility(app: AppHandle, visible: bool) -> Result<cra
     let controller = app.state::<crate::quick_panel::PanelController>();
     controller.set_notification_mode(&settings.notification_mode);
     controller.set_notification_visible(visible);
+    drop(connection);
     crate::quick_panel::sync_bar_presentation(&app).map_err(CommandError::system)
 }
 
@@ -542,7 +543,7 @@ pub fn set_status_island_primary(
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn set_status_island_presence(
     app: AppHandle,
     reminders: State<'_, ManagedReminders>,
@@ -641,6 +642,16 @@ pub fn resume_status_island_focus(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn visibility_releases_the_database_before_native_window_work() {
+        let source = include_str!("status_island.rs");
+        let start = source.find("pub fn set_status_island_visibility(").unwrap();
+        let end = start + source[start..].find("\n}").unwrap();
+        let body = &source[start..end];
+        let released = body.find("drop(connection)").expect("release the database before waiting for the UI dispatcher");
+        assert!(released < body.find("sync_bar_presentation").unwrap());
+    }
+
     use super::{
         legacy_reminder_store_path, load_reminders, remove_legacy_reminder_store, save_reminders,
         should_apply_visibility, snapshot_range, PresenceSurface, ReminderLifecycle, ReminderState,

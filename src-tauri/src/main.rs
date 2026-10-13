@@ -641,15 +641,17 @@ fn main() {
                     // The rail only holds focus while its sheet is open, so a
                     // focus loss means the user went elsewhere and the sheet
                     // has to collapse. Collapsed, there is nothing to close.
-                    let app = window.app_handle();
-                    if app
-                        .state::<quick_panel::PanelController>()
-                        .are_details_open()
-                    {
-                        if let Err(error) = quick_panel::close_details_after_outside_click(app) {
-                            eprintln!("failed to close status island details after focus loss: {error}");
+                    let app = window.app_handle().clone();
+                    std::thread::spawn(move || {
+                        if app
+                            .state::<quick_panel::PanelController>()
+                            .are_details_open()
+                        {
+                            if let Err(error) = quick_panel::close_details_after_outside_click(&app) {
+                                eprintln!("failed to close status island details after focus loss: {error}");
+                            }
                         }
-                    }
+                    });
                 }
                 return;
             }
