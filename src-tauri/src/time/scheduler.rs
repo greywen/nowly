@@ -144,7 +144,72 @@ pub(crate) fn poll_in_zone(
         )
         .map_err(CommandError::database)?;
     transaction.commit().map_err(CommandError::database)?;
+    reconcile_superseded_alarms(connection, now)?;
     Ok(SchedulerOutcome { changed })
+}
+
+pub fn read_alarm_notice_lists(
+    connection: &mut Connection,
+    now: DateTime<Utc>,
+) -> Result<(Vec<AlarmNotice>, Vec<AlarmNotice>), CommandError> {
+    reconcile_superseded_alarms(connection, now)?;
+    Ok((
+        list_alarm_notices(connection, now)?,
+        list_expired_alarm_notices(connection, now)?,
+    ))
+}
+
+pub fn reconcile_superseded_alarms(
+    connection: &mut Connection,
+    now: DateTime<Utc>,
+) -> Result<(), CommandError> {
+    let now_text = super::store::format_utc(now);
+    let latest: Option<String> = connection
+        .query_row(
+            "SELECT id FROM alarm_notices
+             WHERE kind = 'alarm'
+               AND acknowledged_at_utc IS NULL
+               AND expired_at_utc IS NULL
+               AND (snoozed_until_utc IS NULL OR snoozed_until_utc <= ?1)
+             ORDER BY due_at_utc DESC, created_at_utc DESC, id DESC
+             LIMIT 1",
+            [&now_text],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(CommandError::database)?;
+    let Some(latest) = latest else {
+        return Ok(());
+    };
+    connection
+        .execute(
+            "UPDATE alarm_notices
+             SET expired_at_utc = ?1
+             WHERE kind = 'alarm'
+               AND acknowledged_at_utc IS NULL
+               AND expired_at_utc IS NULL
+               AND (snoozed_until_utc IS NULL OR snoozed_until_utc <= ?1)
+               AND id != ?2",
+            params![now_text, latest],
+        )
+        .map_err(CommandError::database)?;
+    Ok(())
+}
+
+pub fn list_expired_alarm_notices(
+    connection: &Connection,
+    _now: DateTime<Utc>,
+) -> Result<Vec<AlarmNotice>, CommandError> {
+    query_notices(
+        connection,
+        "SELECT id,kind,title,due_at_utc,alarm_id,count,range_start_utc,range_end_utc
+         FROM alarm_notices
+         WHERE kind = 'alarm'
+           AND acknowledged_at_utc IS NULL
+           AND expired_at_utc IS NOT NULL
+         ORDER BY due_at_utc DESC, created_at_utc DESC, id DESC",
+        [],
+    )
 }
 
 pub fn list_alarm_notices(
@@ -157,39 +222,77 @@ pub fn list_alarm_notices(
             "SELECT id,kind,title,due_at_utc,alarm_id,count,range_start_utc,range_end_utc
              FROM alarm_notices
              WHERE acknowledged_at_utc IS NULL
+               AND expired_at_utc IS NULL
                AND (snoozed_until_utc IS NULL OR snoozed_until_utc <= ?1)
              ORDER BY due_at_utc ASC, id ASC",
         )
         .map_err(CommandError::database)?;
     let notices = statement
-        .query_map([now_text], |row| {
-            let kind_raw: String = row.get(1)?;
-            let kind = match kind_raw.as_str() {
-                "alarm" => super::types::AlarmNoticeKind::Alarm,
-                "missedSummary" => super::types::AlarmNoticeKind::MissedSummary,
-                _ => {
-                    return Err(rusqlite::Error::FromSqlConversionFailure(
-                        1,
-                        rusqlite::types::Type::Text,
-                        "invalid alarm notice kind".into(),
-                    ))
-                }
-            };
-            Ok(AlarmNotice {
-                id: row.get(0)?,
-                kind,
-                title: row.get(2)?,
-                due_at: row.get(3)?,
-                alarm_id: row.get(4)?,
-                count: row.get(5)?,
-                range_start: row.get(6)?,
-                range_end: row.get(7)?,
-            })
-        })
+        .query_map([now_text], notice_from_row)
         .map_err(CommandError::database)?
         .collect::<Result<Vec<_>, _>>()
         .map_err(CommandError::database)?;
     Ok(notices)
+}
+
+fn query_notices(
+    connection: &Connection,
+    sql: &str,
+    params: impl rusqlite::Params,
+) -> Result<Vec<AlarmNotice>, CommandError> {
+    let mut statement = connection.prepare(sql).map_err(CommandError::database)?;
+    let notices = statement
+        .query_map(params, notice_from_row)
+        .map_err(CommandError::database)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(CommandError::database)?;
+    Ok(notices)
+}
+
+fn notice_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AlarmNotice> {
+    let kind_raw: String = row.get(1)?;
+    let kind = match kind_raw.as_str() {
+        "alarm" => super::types::AlarmNoticeKind::Alarm,
+        "missedSummary" => super::types::AlarmNoticeKind::MissedSummary,
+        _ => {
+            return Err(rusqlite::Error::FromSqlConversionFailure(
+                1,
+                rusqlite::types::Type::Text,
+                "invalid alarm notice kind".into(),
+            ))
+        }
+    };
+    Ok(AlarmNotice {
+        id: row.get(0)?,
+        kind,
+        title: row.get(2)?,
+        due_at: row.get(3)?,
+        alarm_id: row.get(4)?,
+        count: row.get(5)?,
+        range_start: row.get(6)?,
+        range_end: row.get(7)?,
+    })
+}
+
+pub fn list_ringing_alarm_notices(
+    connection: &Connection,
+    now: DateTime<Utc>,
+) -> Result<Vec<AlarmNotice>, CommandError> {
+    let start = super::store::format_utc(now - Duration::seconds(60));
+    let end = super::store::format_utc(now);
+    let mut statement = connection.prepare(
+        "SELECT id FROM alarm_notices
+         WHERE kind='alarm' AND acknowledged_at_utc IS NULL
+           AND expired_at_utc IS NULL
+           AND COALESCE(snoozed_until_utc, due_at_utc) > ?1
+           AND COALESCE(snoozed_until_utc, due_at_utc) <= ?2",
+    ).map_err(CommandError::database)?;
+    let ids = statement.query_map(params![start, end], |row| row.get::<_, String>(0))
+        .map_err(CommandError::database)?
+        .collect::<Result<std::collections::HashSet<_>, _>>()
+        .map_err(CommandError::database)?;
+    Ok(list_alarm_notices(connection, now)?.into_iter()
+        .filter(|notice| ids.contains(&notice.id)).collect())
 }
 
 pub fn acknowledge_notice(
@@ -197,12 +300,27 @@ pub fn acknowledge_notice(
     id: &str,
     now: DateTime<Utc>,
 ) -> Result<(), CommandError> {
+    let now_text = super::store::format_utc(now);
     connection
         .execute(
             "UPDATE alarm_notices
              SET acknowledged_at_utc=COALESCE(acknowledged_at_utc, ?2)
              WHERE id=?1",
-            params![id, super::store::format_utc(now)],
+            params![id, now_text],
+        )
+        .map_err(CommandError::database)?;
+    connection
+        .execute(
+            "UPDATE alarm_notices
+             SET acknowledged_at_utc=COALESCE(acknowledged_at_utc, ?2)
+             WHERE kind='alarm'
+               AND expired_at_utc IS NOT NULL
+               AND acknowledged_at_utc IS NULL
+               AND EXISTS (
+                 SELECT 1 FROM alarm_notices
+                 WHERE id=?1 AND kind='alarm' AND expired_at_utc IS NULL
+               )",
+            params![id, now_text],
         )
         .map_err(CommandError::database)?;
     Ok(())

@@ -359,6 +359,8 @@ pub struct AppSettings {
     pub hide_topbar_in_wallpaper: bool,
     #[serde(default = "default_notification_mode")]
     pub notification_mode: String,
+    #[serde(default)]
+    pub sound_settings: crate::sound_settings::SoundSettings,
     #[serde(default = "default_quick_panel_enabled")]
     pub quick_panel_enabled: bool,
     #[serde(default = "default_quick_panel_shortcut")]

@@ -50,7 +50,7 @@ describe('TimeWidget', () => {
   });
 
   it('shows the next enabled alarm and refreshes on alarm changes', async () => {
-    const alarms = [{ id: 'a', title: '晨会', hour: 14, minute: 30, repeat: { kind: 'once', date: '2026-10-12' }, enabled: true, createdAt: '', updatedAt: '' }];
+    const alarms = [{ id: 'a', title: '晨会', hour: 14, minute: 30, repeat: { kind: 'once' }, effectiveFromUtc: new Date(2026, 9, 12, 13, 0).toISOString(), enabled: true, createdAt: '', updatedAt: '' }];
     const repo = repository(defaultTimeSettings());
     repo.listAlarms = vi.fn().mockResolvedValue(alarms);
     render(<RepositoryProvider repository={repo}><TimeWidget settings={defaultTimeSettings()} now={() => new Date(2026, 9, 12, 13, 0)} /></RepositoryProvider>);
@@ -62,8 +62,8 @@ describe('TimeWidget', () => {
   it('ignores disabled and expired once alarms and selects the next weekly occurrence', async () => {
     const repo = repository(defaultTimeSettings());
     repo.listAlarms = vi.fn().mockResolvedValue([
-      { id: 'disabled', title: 'Disabled', hour: 13, minute: 1, repeat: { kind: 'once', date: '2026-10-12' }, enabled: false },
-      { id: 'expired', title: 'Expired', hour: 12, minute: 1, repeat: { kind: 'once', date: '2026-10-12' }, enabled: true },
+      { id: 'disabled', title: 'Disabled', hour: 13, minute: 1, repeat: { kind: 'once' }, effectiveFromUtc: new Date(2026, 9, 12, 12, 0).toISOString(), enabled: false },
+      { id: 'expired', title: 'Expired', hour: 12, minute: 1, repeat: { kind: 'once' }, effectiveFromUtc: new Date(2026, 9, 12, 12, 0).toISOString(), enabled: true },
       { id: 'weekly', title: 'Weekly', hour: 14, minute: 30, repeat: { kind: 'weekly', weekdays: [1] }, enabled: true }
     ]);
     render(<RepositoryProvider repository={repo}><TimeWidget settings={defaultTimeSettings()} now={() => new Date(2026, 9, 12, 13, 0)} /></RepositoryProvider>);

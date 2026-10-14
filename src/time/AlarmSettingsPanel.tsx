@@ -8,12 +8,12 @@ import { type Alarm, type AlarmDraft } from './time-model';
 import { AlarmEditor } from './AlarmEditor';
 import { tt } from './time-translations';
 
-export function AlarmSettingsPanel({ onCountChange, createAlarm = false }: { onCountChange?: (count: number) => void; createAlarm?: boolean }) {
+export function AlarmSettingsPanel({ createAlarm = false }: { createAlarm?: boolean }) {
   const repository = useTimeRepository();
   const store = repository ? alarmAutosave(repository) : null;
   const version = useSyncExternalStore(store?.subscribe ?? (() => () => undefined), store?.version ?? (() => 0));
   const [alarms, setAlarms] = useState<Alarm[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  const editTrigger = useRef<HTMLElement | null>(null);
   const [editing, setEditing] = useState<Alarm | null | 'new'>(createAlarm ? 'new' : null);
   const [error, setError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Alarm | null>(null);
@@ -22,6 +22,14 @@ export function AlarmSettingsPanel({ onCountChange, createAlarm = false }: { onC
   const addTrigger = useRef<HTMLButtonElement | null>(null);
 
   const creating = useRef(false);
+  const focusAddAfterCreate = useRef(false);
+
+  useEffect(() => {
+    if (editing === null && focusAddAfterCreate.current) {
+      focusAddAfterCreate.current = false;
+      addTrigger.current?.focus();
+    }
+  }, [editing]);
 
   function persistedAlarms(items: Alarm[]) {
     const result = new Map(items.map(item => [item.id, item]));
@@ -38,29 +46,37 @@ export function AlarmSettingsPanel({ onCountChange, createAlarm = false }: { onC
 
   useEffect(() => {
     let cancelled = false;
-    repository?.listAlarms()
-      .then((items) => {
-        if (cancelled) return;
-        setAlarms(persistedAlarms(items));
-        setLoaded(true);
-      })
-      .catch((loadError) => {
-        if (!cancelled) setError(loadError instanceof Error ? loadError.message : '闹钟加载失败');
-      });
+    let request = 0;
+    function load() {
+      const currentRequest = ++request;
+      repository?.listAlarms()
+        .then((items) => {
+          if (cancelled || currentRequest !== request) return;
+          store?.reconcile(items);
+          setAlarms(persistedAlarms(items));
+        })
+        .catch((loadError) => {
+          if (!cancelled) setError(loadError instanceof Error ? loadError.message : tt('time.loadError'));
+        });
+    }
+    load();
+    window.addEventListener('nowly:alarms-changed', load);
     return () => {
       cancelled = true;
+      window.removeEventListener('nowly:alarms-changed', load);
     };
-  }, [repository]);
+  }, [repository, store]);
 
-  useEffect(() => {
-    if (loaded) onCountChange?.(alarms.length);
-  }, [alarms.length, loaded, onCountChange]);
+  function closeEditor() {
+    setEditing(null);
+    editTrigger.current?.focus();
+  }
 
-  async function saveAlarm(draft: AlarmDraft) {
+  async function saveAlarm(draft: AlarmDraft, patch?: Partial<AlarmDraft>) {
     if (!repository) throw new Error(tt('time.saveError'));
     if (!store) throw new Error(tt('time.saveError'));
     if (editing && editing !== 'new') {
-      store.update(editing, draft);
+      store.update(editing, patch ?? draft);
       return;
     }
     if (creating.current) return;
@@ -69,7 +85,8 @@ export function AlarmSettingsPanel({ onCountChange, createAlarm = false }: { onC
       const saved = await repository.createAlarm(draft);
       store.created(saved);
       setAlarms(current => persistedAlarms(current));
-      setEditing(saved);
+      focusAddAfterCreate.current = true;
+      setEditing(null);
     } finally {
       creating.current = false;
     }
@@ -106,13 +123,10 @@ export function AlarmSettingsPanel({ onCountChange, createAlarm = false }: { onC
           <button type="button" className="time-action-button" onClick={() => store.retry(state.persisted.id)}>{tt('time.retry')}</button>
         </div>
       ))}
-      {editing ? (
-        <AlarmEditor key={editing === 'new' ? 'new' : editing.id} alarm={editing === 'new' ? null : editing}
-          saveState={editing === 'new' ? undefined : store?.seed(editing)}
-          onRetry={editing === 'new' ? undefined : () => store?.retry(editing.id)}
-          onCancel={() => setEditing(null)} onSave={saveAlarm} />
+      {editing === 'new' ? (
+        <AlarmEditor key="new" onCancel={closeEditor} onSave={saveAlarm} />
       ) : (
-        <button ref={addTrigger} type="button" className="time-action-button" onClick={() => setEditing('new')}>
+        <button ref={addTrigger} type="button" className="time-action-button" onClick={event => { editTrigger.current = event.currentTarget; setEditing('new'); }}>
           <Plus aria-hidden="true" />
           {tt('time.alarms.add')}
         </button>
@@ -121,6 +135,7 @@ export function AlarmSettingsPanel({ onCountChange, createAlarm = false }: { onC
         {alarms.length === 0 ? <p className="time-empty">{tt('time.alarms.empty')}</p> : null}
         {alarms.map((alarm) => (
           <article className="time-alarm-row" key={alarm.id}>
+            <div className="time-alarm-row__header">
             <label className="form-check form-check-custom form-check-solid">
               <input className="form-check-input" type="checkbox" disabled={busy} checked={store?.get(alarm.id)?.draft.enabled ?? alarm.enabled} onChange={(event) => void toggleAlarm(alarm, event.target.checked)} />
               <span className="form-check-label">{tt(alarm.enabled ? 'time.alarms.enabledState' : 'time.alarms.disabledState')}</span>
@@ -130,9 +145,16 @@ export function AlarmSettingsPanel({ onCountChange, createAlarm = false }: { onC
               <span>{String(alarm.hour).padStart(2, '0')}:{String(alarm.minute).padStart(2, '0')} · {repeatText(alarm)}</span>
             </div>
             <div className="time-alarm-row__actions">
-              <button type="button" className="good-icon-button" aria-label={tt('time.alarms.editLabel', { title: alarm.title })} onClick={() => setEditing(alarm)}><Pencil aria-hidden="true" /></button>
+              <button ref={element => { if (element && editing !== 'new' && editing?.id === alarm.id) editTrigger.current = element; }} type="button" className="good-icon-button" aria-label={tt('time.alarms.editLabel', { title: alarm.title })} aria-expanded={editing !== 'new' && editing?.id === alarm.id} aria-controls={`alarm-editor-${alarm.id}`} onClick={event => { editTrigger.current = event.currentTarget; if (editing !== 'new' && editing?.id === alarm.id) closeEditor(); else setEditing(alarm); }}><Pencil aria-hidden="true" /></button>
               <button type="button" className="good-icon-button" aria-label={tt('time.alarms.deleteLabel', { title: alarm.title })} disabled={busy} onClick={(event) => { deleteTrigger.current = event.currentTarget; setError(null); setDeleteTarget(alarm); }}><Trash2 aria-hidden="true" /></button>
             </div>
+            </div>
+            {editing !== 'new' && editing?.id === alarm.id ? (
+              <div id={`alarm-editor-${alarm.id}`}>
+                <AlarmEditor key={alarm.id} alarm={alarm} saveState={store?.seed(alarm)}
+                  onRetry={() => store?.retry(alarm.id)} onCancel={closeEditor} onSave={saveAlarm} />
+              </div>
+            ) : null}
           </article>
         ))}
       </div>
@@ -147,7 +169,7 @@ export function AlarmSettingsPanel({ onCountChange, createAlarm = false }: { onC
 }
 
 function repeatText(alarm: Alarm) {
-  if (alarm.repeat.kind === 'once') return alarm.repeat.date;
+  if (alarm.repeat.kind === 'once') return tt('time.alarms.once');
   if (alarm.repeat.weekdays.length === 7) return tt('time.alarms.daily');
   if (alarm.repeat.weekdays.join(',') === '1,2,3,4,5') return tt('time.alarms.weekdays');
   return alarm.repeat.weekdays.map((weekday) => tt(`time.weekday.${weekday}` as Parameters<typeof tt>[0])).join('、');

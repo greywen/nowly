@@ -34,7 +34,7 @@ export type StatusIslandReminderSubject =
   | { kind: 'conflict'; events: CalendarEvent[] }
   | { kind: 'focus'; status: Exclude<FocusStatus, 'idle'>; remainingSeconds: number; plannedSeconds: number; sessionId: string | null }
   | { kind: 'event'; event: CalendarEvent; stage: 'reminder' | 'start'; reminderMinutes: number | null }
-  | { kind: 'alarm'; notice: AlarmNotice }
+  | { kind: 'alarm'; notice: AlarmNotice; expiredNotices: readonly AlarmNotice[] }
   | { kind: 'missedSummary'; notice: AlarmNotice }
   | { kind: 'task'; task: Task };
 
@@ -109,7 +109,7 @@ export type StatusIslandOverviewGroup = {
 };
 
 export type StatusIslandPanelContext =
-  | { kind: 'alarm'; notice: AlarmNotice }
+  | { kind: 'alarm'; notice: AlarmNotice; expiredNotices: readonly AlarmNotice[] }
   | { kind: 'missedSummary'; notice: AlarmNotice }
   | { kind: 'empty' }
   | { kind: 'focus'; focus: StatusIslandFocusIndicator }
@@ -251,7 +251,18 @@ type StatusIslandInput = {
   dismissedPrimaryKeys?: readonly string[];
   reminderStates?: readonly StatusIslandReminderState[];
   alarmNotices?: readonly AlarmNotice[];
+  expiredAlarmNotices?: readonly AlarmNotice[];
 };
+
+function compareAlarmRecency(left: AlarmNotice, right: AlarmNotice): number {
+  const due = alarmDueMs(right) - alarmDueMs(left);
+  return due || right.id.localeCompare(left.id);
+}
+
+function alarmDueMs(notice: AlarmNotice): number {
+  const due = Date.parse(notice.dueAt);
+  return Number.isFinite(due) ? due : 0;
+}
 
 function localDate(date: Date): string {
   return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
@@ -595,7 +606,8 @@ export function reminderPanelContext(
       ? { kind: 'ongoingEvent', event: subject.event }
       : { kind: 'eventReminder', event: subject.event, reminderMinutes: subject.reminderMinutes };
   }
-  if (subject.kind === 'alarm' || subject.kind === 'missedSummary') return { kind: subject.kind, notice: subject.notice };
+  if (subject.kind === 'alarm') return { kind: 'alarm', notice: subject.notice, expiredNotices: subject.expiredNotices };
+  if (subject.kind === 'missedSummary') return { kind: 'missedSummary', notice: subject.notice };
   return { kind: 'urgentTask', task: subject.task };
 }
 
@@ -628,7 +640,8 @@ export function deriveStatusIslandModel({
   loading = false,
   dismissedPrimaryKeys = [],
   reminderStates = [],
-  alarmNotices = []
+  alarmNotices = [],
+  expiredAlarmNotices = []
 }: StatusIslandInput): StatusIslandModel {
   const nowMs = now.getTime();
   const today = localDate(now);
@@ -691,7 +704,17 @@ export function deriveStatusIslandModel({
 
   const conflict = conflictGroup(events, nowMs);
   const states = new Map(reminderStates.map(state => [state.identity, state]));
-  const drafts: ReminderDraft[] = alarmNotices.map(notice => ({
+  const alarms = alarmNotices.filter(notice => notice.kind === 'alarm');
+  const rankedAlarms = [...alarms].sort(compareAlarmRecency);
+  const latestAlarm = rankedAlarms[0];
+  const expiredNotices = [...rankedAlarms.slice(1), ...expiredAlarmNotices]
+    .filter((notice, index, all) => all.findIndex(item => item.id === notice.id) === index)
+    .sort(compareAlarmRecency);
+  const visibleNotices = [
+    ...(latestAlarm ? [latestAlarm] : []),
+    ...alarmNotices.filter(notice => notice.kind !== 'alarm')
+  ];
+  const drafts: ReminderDraft[] = visibleNotices.map(notice => ({
     triggerMs: Date.parse(notice.dueAt),
     autoAcknowledgedAt: null,
     reminder: {
@@ -700,7 +723,9 @@ export function deriveStatusIslandModel({
       priority: 4,
       triggerAt: notice.dueAt,
       expiresAt: null,
-      subject: { kind: notice.kind, notice }
+      subject: notice.kind === 'alarm'
+        ? { kind: 'alarm', notice, expiredNotices }
+        : { kind: notice.kind, notice }
     }
   }));
   if (conflict) {

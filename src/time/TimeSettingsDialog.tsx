@@ -26,7 +26,6 @@ export function TimeSettingsDialog({ onClose, trigger, restoreFocusRef, createAl
   useEffect(() => () => flush(), [flush]);
   const draft = state.data;
   const [tab, setTab] = useState<TimeTab>(createAlarm ? 'alarms' : 'clocks');
-  const [alarmCount, setAlarmCount] = useState(0);
   const [minutesInput, setMinutesInput] = useState<string | null>(null);
   const minutes = minutesInput ?? String(draft.focusPreferences.defaultMinutes);
   const minutesValid = minutes.trim() !== '' && Number.isInteger(Number(minutes)) && Number(minutes) >= 1 && Number(minutes) <= 720;
@@ -35,7 +34,7 @@ export function TimeSettingsDialog({ onClose, trigger, restoreFocusRef, createAl
   const tabs: TabItem<TimeTab>[] = [
     { id: 'clocks', label: tt('time.tabs.clocks') },
     { id: 'focus', label: tt('time.tabs.focus') },
-    { id: 'alarms', label: `${tt('time.tabs.alarms')}(${alarmCount})` }
+    { id: 'alarms', label: tt('time.tabs.alarms') }
   ];
 
   return (
@@ -90,7 +89,7 @@ export function TimeSettingsDialog({ onClose, trigger, restoreFocusRef, createAl
           </div> : null}
         </TabPanel>
         <TabPanel idPrefix="time-settings" tabId="alarms" active={tab === 'alarms'}>
-          <AlarmSettingsPanel onCountChange={setAlarmCount} createAlarm={createAlarm} />
+          <AlarmSettingsPanel createAlarm={createAlarm} />
         </TabPanel>
       </div>
     </Dialog>

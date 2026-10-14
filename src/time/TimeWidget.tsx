@@ -148,8 +148,17 @@ function formatAlarmDate(date: Date) {
 function earliestAlarm(alarms: Alarm[], now: Date) {
   const candidates = alarms.filter((alarm) => alarm.enabled).flatMap((alarm) => {
     if (alarm.repeat.kind === 'once') {
-      const date = new Date(alarm.repeat.date + 'T' + String(alarm.hour).padStart(2, '0') + ':' + String(alarm.minute).padStart(2, '0') + ':00');
-      return Number.isFinite(date.getTime()) && date > now ? [{ alarm, date }] : [];
+      const anchor = new Date(alarm.effectiveFromUtc);
+      if (!Number.isFinite(anchor.getTime())) return [];
+      const date = new Date(anchor);
+      date.setHours(alarm.hour, alarm.minute, 0, 0);
+      if (date <= anchor || date.getHours() !== alarm.hour || date.getMinutes() !== alarm.minute) {
+        do {
+          date.setDate(date.getDate() + 1);
+          date.setHours(alarm.hour, alarm.minute, 0, 0);
+        } while (date.getHours() !== alarm.hour || date.getMinutes() !== alarm.minute);
+      }
+      return date > now ? [{ alarm, date }] : [];
     }
     for (let offset = 0; offset <= 7; offset += 1) {
       const date = new Date(now);

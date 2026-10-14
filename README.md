@@ -51,12 +51,21 @@ focusing. All data stays on your machine in a local SQLite database.
   is available in the module header only when focus is displayed. Switching the
   displayed content does not interrupt an active session.
   The **Alarms** settings tab creates a new alarm requiring one explicit creation
-  confirmation. Valid edits to existing alarms save automatically; ending editing
-  does not undo changes, and deletion still requires confirmation. Incomplete or
-  invalid times and repeat dates are not saved or scheduled. Successful saves update
-  the next reminder directly in the module.
-  Alarms follow the computer's local time with once, daily, weekdays, or selected
-  weekdays; Nowly Bar offers acknowledgment and a five-minute snooze without sound.
+  confirmation. Existing alarms expand for editing within their own list rows;
+  valid edits save automatically, ending editing does not undo changes, and deletion
+  still requires confirmation. The Alarms tab has no count suffix. Alarms do not
+  accept dates: turn repeat off to ring once at the next selected local time, or
+  select weekdays for repeating alarms (default: 09:00, Monday–Friday).
+  Alarm and calendar time pickers accept any minute from 00 to 59. Input, shortcuts,
+  and Now remain drafts until Confirm or Enter; Escape or an outside click cancels
+  unconfirmed edits. Invalid times or an empty repeat weekday selection are not saved.
+  Upgrading to this date-free alarm format clears old alarms, alarm notices, and
+  alarm scheduler state once; calendar events, tasks, focus records, clocks, and
+  other settings are retained.
+  Nowly Bar offers acknowledgment and a five-minute snooze. Enabled alarm
+  sounds play for up to one minute per occurrence; after the sound stops, Nowly Bar
+  keeps the pending reminder. Dismissal or acknowledgment ends that occurrence;
+  snoozing silences it and rings again after five minutes.
   Keep Nowly running (including in the tray) for on-time reminders. Restarting or
   resuming after sleep produces one missed-alarm summary, not individual replay.
   Removing the Time module does not disable alarms. Fully exiting Nowly does not
@@ -70,6 +79,11 @@ focusing. All data stays on your machine in a local SQLite database.
   or off and resize them freely.
 - **Personalization** — Gaussian blur, a global color picker, calendar
   formatting, density controls, and login-on-startup.
+- **Reminder sounds** — eight bundled sounds for calendar reminders, alarms,
+  missed-alarm summaries, and focus completion. Choose each sound, preview it,
+  adjust volume, or mute all reminders under **Settings → Nowly Bar**. Selecting
+  **None** mutes only that scene. Changes apply after saving; desktop reminders
+  sound in the background while Nowly is running, without duplicate system chimes.
 - **Localization** — English and Simplified Chinese, following your system
   language on startup. Language changes synchronize across screenshot and Bar
   windows. Missing translations fall back to English; native surfaces without

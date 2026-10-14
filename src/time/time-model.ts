@@ -21,7 +21,7 @@ export type ClockAppearance = {
 };
 
 export type AlarmRepeat =
-  | { kind: 'once'; date: string }
+  | { kind: 'once' }
   | { kind: 'weekly'; weekdays: number[] };
 
 export type Alarm = {
@@ -33,9 +33,10 @@ export type Alarm = {
   enabled: boolean;
   createdAt: string;
   updatedAt: string;
+  effectiveFromUtc: string;
 };
 
-export type AlarmDraft = Omit<Alarm, 'id' | 'createdAt' | 'updatedAt'>;
+export type AlarmDraft = Omit<Alarm, 'id' | 'createdAt' | 'updatedAt' | 'effectiveFromUtc'>;
 
 export type TimeSettings = {
   displayContent: 'clocks' | 'focus';
@@ -60,7 +61,7 @@ export type TimeRepository = {
   saveTimeSettings(settings: TimeSettings): Promise<TimeSettings>;
   listAlarms(): Promise<Alarm[]>;
   createAlarm(draft: AlarmDraft): Promise<Alarm>;
-  updateAlarm(id: string, draft: AlarmDraft): Promise<Alarm>;
+  updateAlarm(id: string, draft: Partial<AlarmDraft>): Promise<Alarm>;
   deleteAlarm(id: string): Promise<void>;
 };
 

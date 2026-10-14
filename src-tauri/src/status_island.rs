@@ -319,6 +319,8 @@ pub struct StatusIslandSnapshot {
     pub reminders: Vec<ReminderSnapshotState>,
     #[serde(default)]
     pub alarm_notices: Vec<crate::time::types::AlarmNotice>,
+    #[serde(default)]
+    pub expired_alarm_notices: Vec<crate::time::types::AlarmNotice>,
     pub notification_mode: String,
     pub bar_menu: Vec<crate::models::BarMenuItem>,
 }
@@ -381,7 +383,7 @@ pub fn get_status_island_snapshot(
 ) -> Result<StatusIslandSnapshot, CommandError> {
     let now = Local::now().naive_local();
     let range = snapshot_range(now);
-    let connection = db.0.lock().map_err(CommandError::database)?;
+    let mut connection = db.0.lock().map_err(CommandError::database)?;
     let events = crate::events::list_overlapping(&connection, &range)?;
     let external_events = crate::subscriptions::list_external_in_range(&connection, &range)?;
     let tasks = crate::task_workspace::snapshot(&connection)?.tasks;
@@ -392,8 +394,8 @@ pub fn get_status_island_snapshot(
         crate::settings::read_app_settings(&connection).map_err(CommandError::database)?;
     let notification_mode = settings.notification_mode;
     let bar_menu = settings.bar_menu;
-    let alarm_notices =
-        crate::time::scheduler::list_alarm_notices(&connection, chrono::Utc::now())?;
+    let (alarm_notices, expired_alarm_notices) =
+        crate::time::scheduler::read_alarm_notice_lists(&mut connection, chrono::Utc::now())?;
     drop(connection);
     let focus = timer
         .lock()
@@ -422,6 +424,7 @@ pub fn get_status_island_snapshot(
         focus,
         reminders: states,
         alarm_notices,
+        expired_alarm_notices,
         notification_mode,
         bar_menu,
     })
@@ -496,12 +499,30 @@ pub fn snooze_alarm_notice(
     invalidate(&app)
 }
 
+fn acknowledge_dismissed_notice(
+    connection: &mut rusqlite::Connection,
+    identity: &str,
+    now: chrono::DateTime<chrono::Utc>,
+) -> Result<(), CommandError> {
+    if let Some(id) = identity.strip_prefix("alarm:")
+        .or_else(|| identity.strip_prefix("missedSummary:"))
+    {
+        crate::time::scheduler::acknowledge_notice(connection, id, now)?;
+    }
+    Ok(())
+}
+
 #[tauri::command(async)]
 pub fn dismiss_status_island_reminder(
     app: AppHandle,
     reminders: State<'_, ManagedReminders>,
     identity: String,
 ) -> Result<(), CommandError> {
+    if is_alarm_identity(&identity) {
+        let db = app.state::<AppDb>();
+        let mut connection = db.0.lock().map_err(CommandError::database)?;
+        acknowledge_dismissed_notice(&mut connection, &identity, chrono::Utc::now())?;
+    }
     {
         let mut lifecycle = reminders.lock().map_err(CommandError::system)?;
         lifecycle.roll_local_date(&today_local());
@@ -940,6 +961,44 @@ mod tests {
     }
 
     #[test]
+    fn dismissing_alarm_confirms_only_its_notice() {
+        let mut connection = rusqlite::Connection::open_in_memory().unwrap();
+        crate::db::migrate(&mut connection).unwrap();
+        for (id, kind) in [("alarm:a:2026-10-14T10:00", "alarm"), ("peer", "alarm"), ("missedSummary:1:2", "missedSummary")] {
+            connection.execute("INSERT INTO alarm_notices (id,kind,instance_key,title,due_at_utc,range_start_utc,range_end_utc,count,created_at_utc) VALUES (?1,?2,?1,'Test','2026-10-14T10:00:00Z','2026-10-14T10:00:00Z','2026-10-14T10:00:00Z',1,'2026-10-14T10:00:00Z')", rusqlite::params![id, kind]).unwrap();
+        }
+        let now = chrono::DateTime::parse_from_rfc3339("2026-10-14T10:00:00Z").unwrap().with_timezone(&chrono::Utc);
+        super::acknowledge_dismissed_notice(&mut connection, "alarm:alarm:a:2026-10-14T10:00", now).unwrap();
+        super::acknowledge_dismissed_notice(&mut connection, "alarm:alarm:a:2026-10-14T10:00", now).unwrap();
+        super::acknowledge_dismissed_notice(&mut connection, "task:peer", now).unwrap();
+        super::acknowledge_dismissed_notice(&mut connection, "missedSummary:missedSummary:1:2", now).unwrap();
+        let notices = crate::time::scheduler::list_alarm_notices(&connection, now).unwrap();
+        assert_eq!(notices.len(), 1);
+        assert_eq!(notices[0].id, "peer");
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn bar_dismiss_command_removes_alarm_from_audio_candidates() {
+        use tauri::Manager;
+        let mut connection = rusqlite::Connection::open_in_memory().unwrap();
+        crate::db::migrate(&mut connection).unwrap();
+        let now = chrono::Utc::now();
+        let due = crate::time::store::format_utc(now);
+        connection.execute("INSERT INTO alarm_notices (id,kind,instance_key,title,due_at_utc,range_start_utc,range_end_utc,count,created_at_utc) VALUES ('alarm:ipc','alarm','ipc','Test',?1,?1,?1,1,?1)", [&due]).unwrap();
+        let app = tauri::Builder::default().any_thread()
+            .manage(crate::db::AppDb(std::sync::Mutex::new(connection)))
+            .manage(std::sync::Mutex::new(ReminderLifecycle::default()))
+            .manage(crate::quick_panel::PanelController::default())
+            .build(tauri::test::mock_context(tauri::test::noop_assets())).unwrap();
+        super::dismiss_status_island_reminder(app.handle().clone(), app.state::<super::ManagedReminders>(), "alarm:alarm:ipc".into()).unwrap();
+        let db = app.state::<crate::db::AppDb>();
+        let connection = db.0.lock().unwrap();
+        assert!(crate::time::scheduler::list_alarm_notices(&connection, now).unwrap().is_empty());
+        assert!(crate::time::scheduler::list_ringing_alarm_notices(&connection, now).unwrap().is_empty());
+    }
+
+    #[test]
     fn generic_status_acknowledgement_ignores_alarm_identities() {
         assert!(super::is_alarm_identity("alarm:alarm:a1:2026-10-11T08:00"));
         assert!(super::is_alarm_identity("missedSummary:missedSummary:1:2"));
@@ -975,6 +1034,7 @@ mod tests {
                 range_start: "2026-10-11T00:00:00Z".into(),
                 range_end: "2026-10-11T00:00:00Z".into(),
             }],
+            expired_alarm_notices: Vec::new(),
             notification_mode: "persistent".into(),
             bar_menu: crate::models::default_bar_menu(),
         };
@@ -984,5 +1044,6 @@ mod tests {
         assert_eq!(value["alarmNotices"][0]["kind"], "alarm");
         assert_eq!(value["alarmNotices"][0]["alarmId"], "a1");
         assert!(value.get("alarm_notices").is_none());
+        assert_eq!(value["expiredAlarmNotices"], serde_json::json!([]));
     }
 }

@@ -40,6 +40,7 @@ import type {
 import type { HexColor } from '../lib/color';
 import type { IconStyle } from '../components/icon-style';
 import type { BarMenuItem } from '../app/bar-menu';
+import type { SoundSettings } from '../settings/sound-settings';
 import type { WorldClock, TimeSettings, Alarm, AlarmDraft } from '../time/time-model';
 export type { WorldClock, TimeSettings, Alarm, AlarmDraft };
 
@@ -58,6 +59,7 @@ export type AppSettings = {
   // is brought back to the foreground.
   hideTopbarInWallpaper: boolean;
   notificationMode?: 'persistent' | 'notification';
+  soundSettings?: SoundSettings;
   quickPanelEnabled?: boolean;
   quickPanelShortcut?: string;
   screenshotShortcut?: string;

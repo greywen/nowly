@@ -17,6 +17,7 @@ const alarm: Alarm = {
   minute: 3,
   repeat: { kind: 'weekly', weekdays: [1, 2, 3, 4, 5] },
   enabled: true,
+  effectiveFromUtc: '2026-10-14T00:00:00Z',
   createdAt: '2026-10-11T00:00:00Z',
   updatedAt: '2026-10-11T00:00:00Z'
 };
@@ -27,6 +28,7 @@ const secondAlarm: Alarm = {
   minute: 45,
   repeat: { kind: 'weekly', weekdays: [6, 7] },
   enabled: true,
+  effectiveFromUtc: '2026-10-14T00:00:00Z',
   createdAt: '2026-10-11T00:00:00Z',
   updatedAt: '2026-10-11T00:00:00Z'
 };
@@ -44,8 +46,17 @@ function repository({
     getTimeSettings: vi.fn().mockResolvedValue(settings),
     saveTimeSettings,
     listAlarms: vi.fn().mockResolvedValue(alarms),
-    createAlarm: vi.fn().mockImplementation(async (draft) => ({ id: 'alarm-new', createdAt: '2026-10-11T00:00:00Z', updatedAt: '2026-10-11T00:00:00Z', ...draft })),
-    updateAlarm: vi.fn().mockImplementation(async (id, draft) => ({ id, createdAt: '2026-10-11T00:00:00Z', updatedAt: '2026-10-11T00:00:00Z', ...draft })),
+    createAlarm: vi.fn().mockImplementation(async (draft) => {
+      const saved = { id: 'alarm-new', effectiveFromUtc: '2026-10-11T00:00:00Z', createdAt: '2026-10-11T00:00:00Z', updatedAt: '2026-10-11T00:00:00Z', ...draft };
+      alarms.push(saved);
+      return saved;
+    }),
+    updateAlarm: vi.fn().mockImplementation(async (id, patch) => {
+      const index = alarms.findIndex(item => item.id === id);
+      const saved = { ...alarms[index], ...patch };
+      alarms[index] = saved;
+      return saved;
+    }),
     deleteAlarm: vi.fn().mockResolvedValue(undefined)
   } as unknown as NowlyRepository;
 }
@@ -261,7 +272,7 @@ describe('TimeSettingsDialog', () => {
   it('only exposes the three approved settings tabs without a time comparison tool', async () => {
     renderDialog(repository());
     await screen.findByRole('button', { name: '添加时钟' });
-    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['世界时钟', '专注时段', '闹钟(0)']);
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['世界时钟', '专注时段', '闹钟']);
     expect(screen.queryByRole('tab', { name: '时差对照' })).not.toBeInTheDocument();
   });
 
@@ -269,23 +280,18 @@ describe('TimeSettingsDialog', () => {
     const user = userEvent.setup();
     const repo = repository({ alarms: [] });
     renderDialog(repo);
-    await user.click(await screen.findByRole('tab', { name: '闹钟(0)' }));
+    await user.click(await screen.findByRole('tab', { name: '闹钟' }));
     await user.click(screen.getByRole('button', { name: '添加闹钟' }));
     await user.clear(screen.getByLabelText('标题'));
     await user.type(screen.getByLabelText('标题'), '喝水');
-    await user.clear(screen.getByLabelText('分钟'));
-    await user.type(screen.getByLabelText('分钟'), '61');
-    await user.click(screen.getByRole('button', { name: '创建闹钟' }));
-    expect(screen.getByText('分钟必须是 0 到 59')).toBeInTheDocument();
-    await user.clear(screen.getByLabelText('分钟'));
-    await user.type(screen.getByLabelText('分钟'), '3');
-    await user.click(screen.getByRole('combobox', { name: '重复' }));
-    await user.click(screen.getByRole('option', { name: '工作日' }));
+    await user.click(screen.getByRole('button', { name: '时间' }));
+    fireEvent.change(screen.getByRole('spinbutton', { name: '分钟' }), { target: { value: '3' } });
+    await user.click(screen.getByRole('button', { name: '确定' }));
     await user.click(screen.getByRole('button', { name: '创建闹钟' }));
     await waitFor(() => expect(repo.createAlarm).toHaveBeenCalledWith(expect.objectContaining({ title: '喝水', hour: expect.any(Number), minute: 3, repeat: { kind: 'weekly', weekdays: [1, 2, 3, 4, 5] } })));
   });
 
-  it('notifies alarm counts after rendering without updating the dialog during a panel render', async () => {
+  it('keeps alarm tab count-free after creation without updating the dialog during a panel render', async () => {
     const user = userEvent.setup();
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
@@ -297,7 +303,7 @@ describe('TimeSettingsDialog', () => {
       await user.click(screen.getByRole('button', { name: '结束编辑' }));
       await user.click(screen.getByRole('button', { name: '添加闹钟' }));
       await user.click(screen.getByRole('button', { name: '创建闹钟' }));
-      await waitFor(() => expect(screen.getByRole('tab', { name: '闹钟(2)' })).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByRole('tab', { name: '闹钟' })).toBeInTheDocument());
       expect(consoleError.mock.calls.flat().join(' ')).not.toMatch(/Cannot update a component.*while rendering a different component/);
     } finally {
       consoleError.mockRestore();
@@ -315,8 +321,9 @@ describe('TimeSettingsDialog', () => {
     await user.click(screen.getByRole('button', { name: '编辑 瑜伽' }));
     expect(screen.getByDisplayValue('瑜伽')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '保存闹钟' })).not.toBeInTheDocument();
-    await user.clear(screen.getByLabelText('分钟'));
-    await user.type(screen.getByLabelText('分钟'), '46');
-    await waitFor(() => expect(repo.updateAlarm).toHaveBeenCalledWith('alarm-2', expect.objectContaining({ title: '瑜伽', hour: 8, minute: 46 })));
+    await user.click(screen.getByRole('button', { name: '时间' }));
+    fireEvent.change(screen.getByRole('spinbutton', { name: '分钟' }), { target: { value: '46' } });
+    await user.click(screen.getByRole('button', { name: '确定' }));
+    await waitFor(() => expect(repo.updateAlarm).toHaveBeenCalledWith('alarm-2', { hour: 8, minute: 46 }));
   });
 });

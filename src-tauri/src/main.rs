@@ -34,6 +34,8 @@ mod screenshot_shortcuts;
 mod screenshot_windows;
 mod settings;
 mod shell;
+mod sound_settings;
+mod sounds;
 mod status_island;
 mod subscription_sync;
 mod subscriptions;
@@ -197,7 +199,7 @@ fn send_native_notification<R: Runtime>(
 
 #[cfg(target_os = "windows")]
 fn send_windows_notification(title: &str, body: &str, reminder: bool) -> Result<(), String> {
-    use tauri_winrt_notification::{Duration, Scenario, Sound, Toast};
+    use tauri_winrt_notification::{Duration, Scenario, Toast};
     use windows::core::HSTRING;
     use windows::UI::Notifications::{NotificationSetting, ToastNotificationManager};
 
@@ -214,12 +216,11 @@ fn send_windows_notification(title: &str, body: &str, reminder: bool) -> Result<
         ));
     }
 
-    let mut toast = Toast::new(APP_USER_MODEL_ID).title(title).text1(body);
+    let mut toast = Toast::new(APP_USER_MODEL_ID).title(title).text1(body).sound(None);
     if reminder {
         toast = toast
             .scenario(Scenario::Reminder)
             .duration(Duration::Long)
-            .sound(Some(Sound::Reminder))
             .add_button("Close", "dismiss");
     }
     toast
@@ -320,7 +321,7 @@ fn main() {
             let quick_settings = settings::read_app_settings(&app.state::<AppDb>().0.lock().unwrap()).unwrap_or_else(|_| crate::models::AppSettings {
                 wallpaper_enabled: false, launch_at_login: false, target_monitor_id: None, density: "balanced".into(),
                 week_start: "monday".into(), date_format: "localized".into(), show_weekends: true, icon_style: "duotone".into(),
-                hide_topbar_in_wallpaper: true, notification_mode: crate::models::default_notification_mode(), quick_panel_enabled: true, quick_panel_shortcut: "Ctrl+Space".into(), screenshot_shortcut: crate::models::default_screenshot_shortcut(), screenshot_history_shortcut: crate::models::default_screenshot_history_shortcut(), bar_menu: crate::models::default_bar_menu(), recent_colors: vec![]
+                hide_topbar_in_wallpaper: true, notification_mode: crate::models::default_notification_mode(), sound_settings: Default::default(), quick_panel_enabled: true, quick_panel_shortcut: "Ctrl+Space".into(), screenshot_shortcut: crate::models::default_screenshot_shortcut(), screenshot_history_shortcut: crate::models::default_screenshot_history_shortcut(), bar_menu: crate::models::default_bar_menu(), recent_colors: vec![]
             });
             let quick_panel_controller = quick_panel::PanelController::default();
             quick_panel_controller.set_enabled(true);
@@ -357,6 +358,9 @@ fn main() {
             app.manage(Mutex::new(reminder_lifecycle));
             app.manage(Mutex::new(window_lifecycle::WindowLifecycle::default()));
             app.manage(Mutex::new(focus_timer::FocusTimerCoordinator::default()));
+            if let Err(error) = sounds::start(app.handle()) {
+                eprintln!("Failed to start reminder audio: {error}");
+            }
             let timer_handle = app.handle().clone();
             std::thread::spawn(move || {
                 let mut previous = None;
@@ -378,6 +382,7 @@ fn main() {
                         previous = current;
                     }
                     if let Some(snapshot) = completed {
+                        sounds::dispatch(&timer_handle, sound_settings::SoundScene::Focus, snapshot.id.clone());
                         if let Err(error) = send_native_notification(
                             &timer_handle,
                             &snapshot.notification_title,
@@ -412,12 +417,17 @@ fn main() {
                     }
                 };
                 for notification in notifications {
-                    if let Err(error) = send_native_notification(
+                    let result = send_native_notification(
                         &reminder_handle,
                         &notification.title,
                         &notification.body,
                         true,
-                    ) {
+                    );
+                    if result.is_ok() {
+                        sounds::dispatch(&reminder_handle, sound_settings::SoundScene::Calendar,
+                            format!("{}:{}:{}", notification.event_id, notification.occurrence_start_at, notification.offset_minutes));
+                    }
+                    if let Err(error) = result {
                         eprintln!("failed to send calendar reminder: {error}");
                         match reminder_handle.state::<AppDb>().0.lock() {
                             Ok(connection) => {
@@ -437,9 +447,8 @@ fn main() {
                 }
             });
 
-            // Time module alarms are independent from calendar reminders and
-            // surface through Nowly Bar only. They do not play sounds or depend
-            // on any React widget/settings window being visible.
+            // Time alarms surface through Nowly Bar; the native audio worker
+            // reads their persisted acknowledgement and snooze state.
             let alarm_handle = app.handle().clone();
             std::thread::spawn(move || loop {
                 std::thread::sleep(std::time::Duration::from_secs(1));

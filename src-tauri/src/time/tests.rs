@@ -1,5 +1,8 @@
 use super::schedule::next_occurrence;
-use super::scheduler::{acknowledge_notice, list_alarm_notices, poll, poll_in_zone, snooze_notice};
+use super::scheduler::{
+    acknowledge_notice, list_alarm_notices, list_expired_alarm_notices, list_ringing_alarm_notices,
+    poll, poll_in_zone, read_alarm_notice_lists, reconcile_superseded_alarms, snooze_notice,
+};
 use super::store::{
     create_alarm, delete_alarm, get_time_settings, list_alarms, save_time_settings, update_alarm,
 };
@@ -34,16 +37,17 @@ fn weekly_alarm(id: &str, weekdays: Vec<u8>, hour: u8, minute: u8) -> Alarm {
         enabled: true,
         created_at: "2026-10-11T00:00:00Z".into(),
         updated_at: "2026-10-11T00:00:00Z".into(),
+        effective_from_utc: "2026-10-11T00:00:00Z".into(),
         next_occurrence: None,
     }
 }
 
-fn draft_once(date: &str, hour: u8, minute: u8) -> AlarmDraft {
+fn draft_once(hour: u8, minute: u8) -> AlarmDraft {
     AlarmDraft {
         title: "Flight".into(),
         hour,
         minute,
-        repeat: AlarmRepeat::Once { date: date.into() },
+        repeat: AlarmRepeat::Once {},
         enabled: true,
     }
 }
@@ -60,6 +64,265 @@ fn draft_weekly(weekdays: Vec<u8>, hour: u8, minute: u8) -> AlarmDraft {
 
 fn next_due(alarm: &Alarm, after: DateTime<Utc>) -> DateTime<Utc> {
     next_occurrence(alarm, after, crate::timezone::device_tz()).unwrap()
+}
+
+#[test]
+fn date_free_once_contract_and_stable_candidate() {
+    assert!(
+        serde_json::from_value::<AlarmRepeat>(json!({"kind":"once", "date":"2099-01-01"})).is_err()
+    );
+    let alarm: Alarm = serde_json::from_value(json!({
+        "id":"once", "title":"Once", "hour":9, "minute":0,
+        "repeat":{"kind":"once"}, "enabled":true,
+        "createdAt":"2026-10-11T08:00:00Z", "updatedAt":"2026-10-11T08:00:00Z",
+        "effectiveFromUtc":"2026-10-11T08:00:00Z"
+    }))
+    .unwrap();
+    let due = instant("2026-10-11T09:00:00Z");
+    assert_eq!(
+        next_occurrence(&alarm, instant("2026-10-11T08:30:00Z"), Tz::UTC),
+        Some(due)
+    );
+    assert_eq!(next_occurrence(&alarm, due, Tz::UTC), None);
+    assert_eq!(
+        next_occurrence(&alarm, instant("2026-10-12T08:30:00Z"), Tz::UTC),
+        None
+    );
+    assert_eq!(
+        super::schedule::occurrence_in_window(
+            &alarm,
+            instant("2026-10-11T08:00:00Z"),
+            instant("2026-10-15T00:00:00Z"),
+            Tz::UTC,
+            10
+        ),
+        vec![due]
+    );
+    assert_eq!(
+        super::schedule::occurrence_summary_in_window(
+            &alarm,
+            instant("2026-10-11T08:00:00Z"),
+            instant("2026-10-15T00:00:00Z"),
+            Tz::UTC
+        ),
+        Some((1, due, due))
+    );
+}
+
+#[test]
+fn once_uses_next_valid_local_time_after_anchor_across_midnight_and_dst() {
+    for (anchor, hour, minute, zone, expected) in [
+        (
+            "2026-10-31T23:59:00Z",
+            0,
+            0,
+            Tz::UTC,
+            "2026-11-01T00:00:00Z",
+        ),
+        (
+            "2026-10-11T09:00:00Z",
+            9,
+            0,
+            Tz::UTC,
+            "2026-10-12T09:00:00Z",
+        ),
+        (
+            "2026-10-11T10:00:00Z",
+            9,
+            0,
+            Tz::UTC,
+            "2026-10-12T09:00:00Z",
+        ),
+        (
+            "2026-03-08T05:00:00Z",
+            2,
+            30,
+            Tz::America__New_York,
+            "2026-03-09T06:30:00Z",
+        ),
+        (
+            "2026-11-01T04:00:00Z",
+            1,
+            30,
+            Tz::America__New_York,
+            "2026-11-01T05:30:00Z",
+        ),
+        (
+            "2026-11-01T05:45:00Z",
+            1,
+            30,
+            Tz::America__New_York,
+            "2026-11-02T06:30:00Z",
+        ),
+    ] {
+        let alarm = Alarm {
+            repeat: AlarmRepeat::Once {},
+            effective_from_utc: anchor.into(),
+            ..weekly_alarm("once", vec![1], hour, minute)
+        };
+        let due = instant(expected);
+        assert_eq!(
+            next_occurrence(&alarm, instant(anchor), zone),
+            Some(due),
+            "{anchor}"
+        );
+        assert_eq!(
+            super::schedule::occurrence_summary_in_window(&alarm, instant(anchor), due, zone),
+            Some((1, due, due))
+        );
+        assert_eq!(
+            super::schedule::occurrence_summary_in_window(
+                &alarm,
+                due,
+                due + chrono::Duration::days(2),
+                zone
+            ),
+            None
+        );
+        assert_eq!(next_occurrence(&alarm, due, zone), None);
+    }
+}
+
+#[test]
+fn schedule_edits_and_reenable_reset_anchor_but_disabling_does_not() {
+    let mut connection = db();
+    let now = instant("2026-10-11T08:00:00Z");
+    let mut draft = draft_once(9, 0);
+    let mut alarm = create_alarm(&mut connection, draft.clone(), now).unwrap();
+    for offset in 1..=5 {
+        match offset {
+            1 => draft.minute = 17,
+            2 => {
+                draft.repeat = AlarmRepeat::Weekly {
+                    weekdays: vec![1, 2],
+                }
+            }
+            3 => draft.repeat = AlarmRepeat::Once {},
+            4 => draft.enabled = false,
+            5 => draft.enabled = true,
+            _ => unreachable!(),
+        }
+        let previous = alarm.effective_from_utc.clone();
+        let edited_at = now + chrono::Duration::hours(offset);
+        alarm = update_alarm(&mut connection, &alarm.id, draft.clone(), edited_at).unwrap();
+        assert_eq!(
+            alarm.effective_from_utc,
+            if offset == 4 {
+                previous
+            } else {
+                super::store::format_utc(edited_at)
+            }
+        );
+    }
+}
+
+#[test]
+fn title_patch_and_retry_preserve_fired_and_snoozed_once_notices() {
+    for snoozed in [false, true] {
+        let mut connection = db();
+        let now = instant("2026-10-11T00:00:00Z");
+        let alarm = create_alarm(&mut connection, draft_once(9, 0), now).unwrap();
+        let due = next_due(&alarm, now);
+        poll(&mut connection, due - chrono::Duration::seconds(1)).unwrap();
+        poll(&mut connection, due).unwrap();
+        let notice = list_alarm_notices(&connection, due).unwrap().remove(0);
+        if snoozed {
+            snooze_notice(&mut connection, &notice.id, due).unwrap();
+        }
+        let notice_state = |connection: &Connection| {
+            connection.query_row(
+            "SELECT id, acknowledged_at_utc, snoozed_until_utc FROM alarm_notices WHERE id=?1", [&notice.id],
+            |row| Ok((row.get::<_,String>(0)?, row.get::<_,Option<String>>(1)?, row.get::<_,Option<String>>(2)?))
+        ).unwrap()
+        };
+        let before = notice_state(&connection);
+        for seconds in [1, 2] {
+            let patch = super::types::AlarmPatch {
+                title: Some("Renamed".into()),
+                ..Default::default()
+            };
+            let saved = update_alarm(
+                &mut connection,
+                &alarm.id,
+                patch,
+                due + chrono::Duration::seconds(seconds),
+            )
+            .unwrap();
+            assert!(!saved.enabled);
+            assert_eq!(saved.effective_from_utc, alarm.effective_from_utc);
+            assert_eq!(notice_state(&connection), before);
+        }
+        update_alarm(
+            &mut connection,
+            &alarm.id,
+            super::types::AlarmPatch {
+                enabled: Some(false),
+                ..Default::default()
+            },
+            due + chrono::Duration::seconds(3),
+        )
+        .unwrap();
+        assert_eq!(
+            connection
+                .query_row(
+                    "SELECT count(*) FROM alarm_notices WHERE id=?1",
+                    [&notice.id],
+                    |row| row.get::<_, i64>(0)
+                )
+                .unwrap(),
+            0
+        );
+    }
+}
+
+#[test]
+fn atomic_title_patch_preserves_scheduler_disabled_once() {
+    let mut connection = db();
+    let now = instant("2026-10-11T08:00:00Z");
+    let created = create_alarm(&mut connection, draft_once(9, 0), now).unwrap();
+    connection
+        .execute("UPDATE alarms SET enabled=0 WHERE id=?1", [&created.id])
+        .unwrap();
+    let patch: super::types::AlarmPatch =
+        serde_json::from_value(json!({"title":"Renamed"})).unwrap();
+    let saved = update_alarm(
+        &mut connection,
+        &created.id,
+        patch,
+        now + chrono::Duration::days(1),
+    )
+    .unwrap();
+    assert_eq!(saved.title, "Renamed");
+    assert!(!saved.enabled);
+    assert_eq!(saved.effective_from_utc, created.effective_from_utc);
+    assert_eq!(
+        (saved.hour, saved.minute, saved.repeat),
+        (created.hour, created.minute, created.repeat)
+    );
+}
+
+#[test]
+fn title_only_edits_preserve_arming_anchor() {
+    let mut connection = db();
+    let now = instant("2026-10-11T08:00:00Z");
+    let alarm = create_alarm(&mut connection, draft_weekly(vec![1], 9, 0), now).unwrap();
+    let mut draft = draft_weekly(vec![1], 9, 0);
+    draft.title = "Edited".into();
+    update_alarm(
+        &mut connection,
+        &alarm.id,
+        draft,
+        now + chrono::Duration::days(1),
+    )
+    .unwrap();
+    let anchor: String = connection
+        .query_row(
+            "SELECT effective_from_utc FROM alarms WHERE id=?1",
+            [&alarm.id],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(anchor, "2026-10-11T08:00:00Z");
 }
 
 #[test]
@@ -203,7 +466,7 @@ fn alarm_crud_persists_timestamps_sorts_and_revokes_deleted_notices() {
     let now = instant("2026-10-11T08:00:00Z");
 
     let later = create_alarm(&mut connection, draft_weekly(vec![1, 3, 5], 9, 0), now).unwrap();
-    let earlier = create_alarm(&mut connection, draft_once("2026-10-12", 8, 30), now).unwrap();
+    let earlier = create_alarm(&mut connection, draft_once(8, 30), now).unwrap();
 
     let alarms = list_alarms(&connection, now).unwrap();
     assert_eq!(
@@ -236,12 +499,11 @@ fn alarm_crud_persists_timestamps_sorts_and_revokes_deleted_notices() {
 }
 
 #[test]
-fn alarm_validation_rejects_past_once_and_empty_weekdays() {
+fn alarm_validation_accepts_date_free_once_and_rejects_empty_weekdays() {
     let mut connection = db();
     let now = instant("2026-10-11T08:00:00Z");
 
-    let past = create_alarm(&mut connection, draft_once("2026-10-10", 23, 59), now).unwrap_err();
-    assert_eq!(past.field.as_deref(), Some("repeat"));
+    create_alarm(&mut connection, draft_once(23, 59), now).unwrap();
 
     let empty = create_alarm(&mut connection, draft_weekly(Vec::new(), 7, 0), now).unwrap_err();
     assert_eq!(empty.field.as_deref(), Some("repeat.weekdays"));
@@ -250,9 +512,8 @@ fn alarm_validation_rejects_past_once_and_empty_weekdays() {
 #[test]
 fn next_occurrence_uses_once_and_iso_weekdays_in_the_device_zone() {
     let once = Alarm {
-        repeat: AlarmRepeat::Once {
-            date: "2026-10-12".into(),
-        },
+        repeat: AlarmRepeat::Once {},
+        effective_from_utc: "2026-10-11T23:00:00Z".into(),
         hour: 8,
         minute: 30,
         ..weekly_alarm("once", vec![1], 0, 0)
@@ -355,8 +616,7 @@ fn scheduler_first_start_sets_checkpoint_without_backfilling_old_alarms() {
 fn scheduler_dispatches_due_alarm_once_and_snooze_is_persistent_and_idempotent() {
     let mut connection = db();
     let created_at = instant("2026-10-10T00:00:00Z");
-    let created =
-        create_alarm(&mut connection, draft_once("2026-10-11", 8, 1), created_at).unwrap();
+    let created = create_alarm(&mut connection, draft_once(8, 1), created_at).unwrap();
     let due = next_due(&created, created_at);
     let checkpoint = due - chrono::Duration::seconds(1);
     poll(&mut connection, checkpoint).unwrap();
@@ -417,8 +677,7 @@ fn scheduler_dispatches_due_alarm_once_and_snooze_is_persistent_and_idempotent()
 fn snooze_is_idempotent_while_active_but_can_be_requested_again_after_expiry() {
     let mut connection = db();
     let created_at = instant("2026-10-10T00:00:00Z");
-    let created =
-        create_alarm(&mut connection, draft_once("2026-10-11", 8, 1), created_at).unwrap();
+    let created = create_alarm(&mut connection, draft_once(8, 1), created_at).unwrap();
     let due = next_due(&created, created_at);
     poll(&mut connection, due - chrono::Duration::seconds(1)).unwrap();
     poll(&mut connection, due).unwrap();
@@ -522,4 +781,208 @@ fn scheduler_counts_long_offline_recovery_without_capping_instances() {
     assert_eq!(notices.len(), 1);
     assert_eq!(notices[0].kind, AlarmNoticeKind::MissedSummary);
     assert_eq!(notices[0].count, 601);
+}
+
+fn insert_notice(connection: &Connection, id: &str, kind: &str, due: &str, created: &str) {
+    connection
+        .execute(
+            "INSERT INTO alarm_notices
+                (id,kind,instance_key,title,due_at_utc,range_start_utc,range_end_utc,count,created_at_utc)
+             VALUES (?1,?2,?1,?1,?3,?3,?3,1,?4)",
+            rusqlite::params![id, kind, due, created],
+        )
+        .unwrap();
+}
+
+#[test]
+fn stacked_pending_alarms_keep_the_latest_active_and_expire_earlier_ones() {
+    let mut connection = db();
+    insert_notice(
+        &connection,
+        "alarm:early",
+        "alarm",
+        "2026-10-14T10:04:50Z",
+        "2026-10-14T10:04:50Z",
+    );
+    insert_notice(
+        &connection,
+        "alarm:mid",
+        "alarm",
+        "2026-10-14T10:05:00Z",
+        "2026-10-14T10:05:00Z",
+    );
+    insert_notice(
+        &connection,
+        "alarm:late",
+        "alarm",
+        "2026-10-14T10:05:20Z",
+        "2026-10-14T10:05:20Z",
+    );
+    insert_notice(
+        &connection,
+        "missed:1",
+        "missedSummary",
+        "2026-10-14T10:05:20Z",
+        "2026-10-14T10:05:20Z",
+    );
+    let now = instant("2026-10-14T10:05:40Z");
+
+    reconcile_superseded_alarms(&mut connection, now).unwrap();
+
+    let active = list_alarm_notices(&connection, now).unwrap();
+    assert_eq!(
+        active
+            .iter()
+            .map(|notice| notice.id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["alarm:late", "missed:1"]
+    );
+    let expired = list_expired_alarm_notices(&connection, now).unwrap();
+    assert_eq!(
+        expired
+            .iter()
+            .map(|notice| notice.id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["alarm:mid", "alarm:early"]
+    );
+    assert_eq!(
+        list_ringing_alarm_notices(&connection, now)
+            .unwrap()
+            .iter()
+            .map(|notice| notice.id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["alarm:late"]
+    );
+}
+
+#[test]
+fn reading_alarm_notices_closes_a_stack_without_a_separate_reconcile() {
+    let mut connection = db();
+    insert_notice(
+        &connection,
+        "alarm:early",
+        "alarm",
+        "2026-10-14T10:00:00Z",
+        "2026-10-14T10:00:00Z",
+    );
+    insert_notice(
+        &connection,
+        "alarm:late",
+        "alarm",
+        "2026-10-14T10:05:00Z",
+        "2026-10-14T10:05:00Z",
+    );
+    let now = instant("2026-10-14T10:05:10Z");
+
+    let (active, expired) = read_alarm_notice_lists(&mut connection, now).unwrap();
+
+    assert_eq!(
+        active
+            .iter()
+            .map(|notice| notice.id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["alarm:late"]
+    );
+    assert_eq!(
+        expired
+            .iter()
+            .map(|notice| notice.id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["alarm:early"]
+    );
+}
+
+#[test]
+fn reconcile_leaves_a_lone_alarm_pending_after_its_ring_window() {
+    let mut connection = db();
+    insert_notice(
+        &connection,
+        "alarm:only",
+        "alarm",
+        "2026-10-14T10:00:00Z",
+        "2026-10-14T10:00:00Z",
+    );
+    let now = instant("2026-10-14T10:02:00Z");
+
+    reconcile_superseded_alarms(&mut connection, now).unwrap();
+
+    assert_eq!(
+        list_alarm_notices(&connection, now).unwrap()[0].id,
+        "alarm:only"
+    );
+    assert!(list_expired_alarm_notices(&connection, now)
+        .unwrap()
+        .is_empty());
+}
+
+#[test]
+fn snoozed_alarm_stays_pending_until_it_resumes_beside_a_newer_alarm() {
+    let mut connection = db();
+    insert_notice(
+        &connection,
+        "alarm:early",
+        "alarm",
+        "2026-10-14T10:00:00Z",
+        "2026-10-14T10:00:00Z",
+    );
+    insert_notice(
+        &connection,
+        "alarm:late",
+        "alarm",
+        "2026-10-14T10:05:00Z",
+        "2026-10-14T10:05:00Z",
+    );
+    let snoozed_at = instant("2026-10-14T10:00:30Z");
+    snooze_notice(&mut connection, "alarm:early", snoozed_at).unwrap();
+    let while_snoozed = instant("2026-10-14T10:05:10Z");
+
+    reconcile_superseded_alarms(&mut connection, while_snoozed).unwrap();
+
+    assert!(list_expired_alarm_notices(&connection, while_snoozed)
+        .unwrap()
+        .is_empty());
+    let resumed = instant("2026-10-14T10:05:30Z");
+    reconcile_superseded_alarms(&mut connection, resumed).unwrap();
+    assert_eq!(
+        list_expired_alarm_notices(&connection, resumed).unwrap()[0].id,
+        "alarm:early"
+    );
+    assert_eq!(
+        list_alarm_notices(&connection, resumed).unwrap()[0].id,
+        "alarm:late"
+    );
+}
+
+#[test]
+fn acknowledging_the_latest_alarm_closes_expired_rows_but_snooze_does_not() {
+    let mut connection = db();
+    insert_notice(
+        &connection,
+        "alarm:early",
+        "alarm",
+        "2026-10-14T10:00:00Z",
+        "2026-10-14T10:00:00Z",
+    );
+    insert_notice(
+        &connection,
+        "alarm:late",
+        "alarm",
+        "2026-10-14T10:05:00Z",
+        "2026-10-14T10:05:00Z",
+    );
+    let now = instant("2026-10-14T10:05:10Z");
+    reconcile_superseded_alarms(&mut connection, now).unwrap();
+
+    snooze_notice(&mut connection, "alarm:late", now).unwrap();
+    assert_eq!(
+        list_expired_alarm_notices(&connection, now).unwrap()[0].id,
+        "alarm:early"
+    );
+
+    let resumed = now + chrono::Duration::minutes(5);
+    acknowledge_notice(&mut connection, "alarm:late", resumed).unwrap();
+    assert!(list_alarm_notices(&connection, resumed).unwrap().is_empty());
+    assert!(list_expired_alarm_notices(&connection, resumed)
+        .unwrap()
+        .is_empty());
 }

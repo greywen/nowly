@@ -46,9 +46,9 @@ pub struct TimeSettings {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
+#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum AlarmRepeat {
-    Once { date: String },
+    Once {},
     Weekly { weekdays: Vec<u8> },
 }
 
@@ -62,6 +62,28 @@ pub struct AlarmDraft {
     pub enabled: bool,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AlarmPatch {
+    pub title: Option<String>,
+    pub hour: Option<u8>,
+    pub minute: Option<u8>,
+    pub repeat: Option<AlarmRepeat>,
+    pub enabled: Option<bool>,
+}
+
+impl From<AlarmDraft> for AlarmPatch {
+    fn from(draft: AlarmDraft) -> Self {
+        Self {
+            title: Some(draft.title),
+            hour: Some(draft.hour),
+            minute: Some(draft.minute),
+            repeat: Some(draft.repeat),
+            enabled: Some(draft.enabled),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Alarm {
@@ -73,6 +95,7 @@ pub struct Alarm {
     pub enabled: bool,
     pub created_at: String,
     pub updated_at: String,
+    pub effective_from_utc: String,
     #[serde(default)]
     pub next_occurrence: Option<String>,
 }

@@ -43,7 +43,7 @@ describe('status island menu snapshot', () => {
     vi.mocked(invoke).mockImplementation(async command => command === 'get_focus_timer_snapshot' ? null : { ...snapshot, alarmNotices: [notice] });
     const { result } = renderHook(useStatusIslandSnapshot);
     await waitFor(() => expect(result.current.status).toBe('ready'));
-    expect(result.current.model.panelContext).toEqual({ kind: 'alarm', notice });
+    expect(result.current.model.panelContext).toEqual({ kind: 'alarm', notice, expiredNotices: [] });
     vi.mocked(invoke).mockImplementation(async command => command === 'get_focus_timer_snapshot' ? null : snapshot);
     await act(async () => invalidated?.());
     await waitFor(() => expect(result.current.model.attentionQueue).toEqual([]));

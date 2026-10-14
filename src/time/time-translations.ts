@@ -52,7 +52,9 @@ type TimeTranslationKey =
   | 'time.alarms.weekdays'
   | 'time.alarms.custom'
   | 'time.alarms.repeat'
-  | 'time.alarms.date'
+  | 'time.alarms.time'
+  | 'time.alarms.timeError'
+  | 'time.alarms.onceHint'
   | 'time.alarms.enabled'
   | 'time.alarms.enabledState'
   | 'time.alarms.disabledState'
@@ -127,8 +129,10 @@ export const timeTranslations: Record<Language, Record<TimeTranslationKey, strin
     'time.alarms.daily': '每天',
     'time.alarms.weekdays': '工作日',
     'time.alarms.custom': '自选星期',
-    'time.alarms.repeat': '重复',
-    'time.alarms.date': '日期',
+    'time.alarms.repeat': '重复闹钟',
+    'time.alarms.time': '时间',
+    'time.alarms.timeError': '请选择时间',
+    'time.alarms.onceHint': '下一个指定本地时刻响一次',
     'time.alarms.enabled': '启用',
     'time.alarms.enabledState': '已启用',
     'time.alarms.disabledState': '已停用',
@@ -202,8 +206,10 @@ export const timeTranslations: Record<Language, Record<TimeTranslationKey, strin
     'time.alarms.daily': 'Daily',
     'time.alarms.weekdays': 'Weekdays',
     'time.alarms.custom': 'Custom days',
-    'time.alarms.repeat': 'Repeat',
-    'time.alarms.date': 'Date',
+    'time.alarms.repeat': 'Repeat alarm',
+    'time.alarms.time': 'Time',
+    'time.alarms.timeError': 'Choose a time',
+    'time.alarms.onceHint': 'Ring once at the next specified local time',
     'time.alarms.enabled': 'Enabled',
     'time.alarms.enabledState': 'Enabled',
     'time.alarms.disabledState': 'Disabled',

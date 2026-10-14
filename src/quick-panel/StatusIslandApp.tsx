@@ -108,8 +108,8 @@ export function StatusIslandApp() {
   // Native records acknowledgement against whatever the capsule is showing. In
   // summary and idle mode it is showing no single reminder, so there is nothing
   // to acknowledge.
-  const primaryIdentity = open && source === 'island' && pinnedIdentity !== null
-    ? pinnedIdentity
+  const primaryIdentity = open && source === 'island' && pinnedReminder
+    ? pinnedReminder.identity
     : surfaceState.mode === 'detail' ? surfaceState.reminder.identity : null;
   const [nativeHidePending, setNativeHidePending] = useState(false);
   const lastStatusActivationSource = useRef<'pointer' | 'keyboard' | null>(null);

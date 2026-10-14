@@ -8,6 +8,7 @@ export const timeBarTranslations = {
     'timeBar.dueAt': '闹钟 · {time}',
     'timeBar.acknowledge': '确认',
     'timeBar.snooze': '稍后 5 分钟',
+    'timeBar.expiredAlarms': '已关闭的过期闹钟',
     'timeBar.actionFailed': '闹钟操作失败，请重试'
   },
   en: {
@@ -17,6 +18,7 @@ export const timeBarTranslations = {
     'timeBar.dueAt': 'Alarm · {time}',
     'timeBar.acknowledge': 'Acknowledge',
     'timeBar.snooze': 'Snooze 5 minutes',
+    'timeBar.expiredAlarms': 'Closed expired alarms',
     'timeBar.actionFailed': 'Alarm action failed. Please retry.'
   }
 };

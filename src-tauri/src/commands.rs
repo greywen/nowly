@@ -183,6 +183,7 @@ mod tests {
             icon_style: "duotone".into(),
             hide_topbar_in_wallpaper: true,
             notification_mode: "persistent".into(),
+            sound_settings: Default::default(),
             quick_panel_enabled: false,
             quick_panel_shortcut: "Ctrl+Space".into(),
             screenshot_shortcut: crate::models::default_screenshot_shortcut(),

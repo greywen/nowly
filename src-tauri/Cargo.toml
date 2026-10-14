@@ -57,6 +57,7 @@ image = { version = "=0.25.10", default-features = false, features = ["png"] }
 # `convertFileSrc` percent-encodes the whole path. Decoding it the same way
 # Tauri's own protocols do keeps the separator from arriving as `%2F`.
 percent-encoding = "=2.3.2"
+rodio = { version = "0.21", default-features = false, features = ["playback", "wav"] }
 
 [dev-dependencies]
 # mock runtime，用于在单元测试里真实走一遍 #[tauri::command] 的 IPC 参数解析。

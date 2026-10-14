@@ -65,6 +65,17 @@ test('uses offline keyboard-accessible date and time controls with trapped focus
  await page.keyboard.press('ArrowRight'); await page.keyboard.press('Enter');
  await page.getByRole('button',{name:'开始时间'}).click();
  const hour=page.getByRole('spinbutton',{name:'小时'});await hour.press('ArrowUp');await hour.press('Enter');
+ const startTime=page.getByRole('button',{name:'开始时间'});
+ await startTime.click();
+ await page.getByRole('spinbutton',{name:'分钟',exact:true}).fill('17');
+ await page.getByRole('button',{name:'确定',exact:true}).click();
+ await expect(startTime).toContainText(':17');
+ const confirmed=await startTime.innerText();
+ await startTime.click();
+ await page.getByRole('spinbutton',{name:'分钟',exact:true}).fill('29');
+ await page.keyboard.press('Escape');
+ await expect(startTime).toHaveText(confirmed);
+ await expect(startTime).toBeFocused();
  await expect(page.locator('input[type=date],input[type=time]')).toHaveCount(0);
  await page.getByLabel('日程标题').fill('键盘日程');
  await page.getByRole('button',{name:'取消'}).click();

@@ -11,9 +11,8 @@ pub fn next_occurrence(
         return None;
     }
     match &alarm.repeat {
-        AlarmRepeat::Once { date } => {
-            let date = NaiveDate::parse_from_str(date, "%Y-%m-%d").ok()?;
-            let due = occurrence_on_date(alarm, date, device_zone)?;
+        AlarmRepeat::Once {} => {
+            let due = once_occurrence(alarm, device_zone)?;
             (due > after_utc).then_some(due)
         }
         AlarmRepeat::Weekly { weekdays } => {
@@ -35,6 +34,21 @@ pub fn next_occurrence(
             }
             None
         }
+    }
+}
+
+fn once_occurrence(alarm: &Alarm, device_zone: Tz) -> Option<DateTime<Utc>> {
+    let anchor = DateTime::parse_from_rfc3339(&alarm.effective_from_utc)
+        .ok()?
+        .with_timezone(&Utc);
+    let mut date = anchor.with_timezone(&device_zone).date_naive();
+    loop {
+        if let Some(due) = occurrence_on_date(alarm, date, device_zone) {
+            if due > anchor {
+                return Some(due);
+            }
+        }
+        date = date.checked_add_days(Days::new(1))?;
     }
 }
 
@@ -85,12 +99,10 @@ pub(crate) fn occurrence_in_window(
     }
     let mut result = Vec::new();
     match &alarm.repeat {
-        AlarmRepeat::Once { date } => {
-            if let Ok(date) = NaiveDate::parse_from_str(date, "%Y-%m-%d") {
-                if let Some(due) = occurrence_on_date(alarm, date, device_zone) {
-                    if due > from_exclusive && due <= to_inclusive {
-                        result.push(due);
-                    }
+        AlarmRepeat::Once {} => {
+            if let Some(due) = once_occurrence(alarm, device_zone) {
+                if due > from_exclusive && due <= to_inclusive {
+                    result.push(due);
                 }
             }
         }
@@ -141,9 +153,8 @@ pub(crate) fn occurrence_summary_in_window(
     let mut first = None;
     let mut last = None;
     match &alarm.repeat {
-        AlarmRepeat::Once { date } => {
-            let date = NaiveDate::parse_from_str(date, "%Y-%m-%d").ok()?;
-            let due = summary_instant_on_date(alarm, date, device_zone)?;
+        AlarmRepeat::Once {} => {
+            let due = once_occurrence(alarm, device_zone)?;
             if due > from_exclusive && due <= to_inclusive {
                 count = 1;
                 first = Some(due);

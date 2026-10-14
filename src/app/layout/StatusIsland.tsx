@@ -792,12 +792,25 @@ function panelSummary(context: StatusIslandPanelContext, t: Translate): string {
 function panelBody(context: StatusIslandPanelContext, actions: PanelActions, t: Translate) {
   if (context.kind === 'alarm' || context.kind === 'missedSummary') {
     const notice = context.notice;
+    const expired = context.kind === 'alarm' ? context.expiredNotices : [];
     return <>
-      <div className="status-island__row">
-        <Clock3 aria-hidden="true" />
-        <span><small>{panelTitle(context, t)}</small><strong>{notice.title}</strong></span>
-        {context.kind === 'alarm' ? <time dateTime={notice.dueAt}>{alarmLocalTime(notice.dueAt)}</time> : null}
-      </div>
+      {expired.length > 0 ? (
+        <ul className="status-island__expired" aria-label={timeBarText('timeBar.expiredAlarms')}>
+          {expired.map(item => (
+            <li className="status-island__row" key={item.id}>
+              <Clock3 aria-hidden="true" />
+              <span><small>{timeBarText('timeBar.alarm')}</small><strong>{item.title}</strong></span>
+              <time dateTime={item.dueAt}>{alarmLocalTime(item.dueAt)}</time>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="status-island__row">
+          <Clock3 aria-hidden="true" />
+          <span><small>{panelTitle(context, t)}</small><strong>{notice.title}</strong></span>
+          {context.kind === 'alarm' ? <time dateTime={notice.dueAt}>{alarmLocalTime(notice.dueAt)}</time> : null}
+        </div>
+      )}
       {context.kind === 'missedSummary' ? <>
         <p className="status-island__empty">{timeBarText('timeBar.missedCount', { count: notice.count })}</p>
         <p className="status-island__empty"><time dateTime={notice.rangeStart}>{alarmLocalTime(notice.rangeStart, true)}</time> – <time dateTime={notice.rangeEnd}>{alarmLocalTime(notice.rangeEnd, true)}</time></p>

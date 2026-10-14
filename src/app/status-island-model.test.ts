@@ -83,13 +83,32 @@ describe('alarm notices', () => {
     const model = deriveStatusIslandModel({ ...input(), alarmNotices: [notice] });
     expect(model.surface.mode).toBe('detail');
     expect(model.attentionQueue[0].identity).toBe('alarm:notice-1');
-    expect(model.panelContext).toEqual({ kind: 'alarm', notice });
+    expect(model.panelContext).toEqual({ kind: 'alarm', notice, expiredNotices: [] });
+  });
+  it('shows the latest stacked alarm and lists earlier ones as expired', () => {
+    const early = { ...notice, id: 'early', title: 'Early', dueAt: '2026-10-14T10:00:00Z' };
+    const late = { ...notice, id: 'late', title: 'Late', dueAt: '2026-10-14T10:05:00Z' };
+    const model = deriveStatusIslandModel({
+      ...input(),
+      alarmNotices: [early, late],
+      expiredAlarmNotices: [{ ...early, id: 'closed', title: 'Closed', dueAt: '2026-10-14T09:00:00Z' }]
+    });
+    expect(model.surface).toMatchObject({ mode: 'detail', reminder: { identity: 'alarm:late' } });
+    expect(model.attentionQueue.map(item => item.identity)).toEqual(['alarm:late']);
+    expect(model.panelContext).toEqual({
+      kind: 'alarm',
+      notice: late,
+      expiredNotices: [
+        early,
+        { ...early, id: 'closed', title: 'Closed', dueAt: '2026-10-14T09:00:00Z' }
+      ]
+    });
   });
   it('keeps missed summaries distinct and resolves a pinned alarm behind focus', () => {
     const summary = { ...notice, id: 'summary-1', kind: 'missedSummary' as const, count: 8, alarmId: null };
     const model = deriveStatusIslandModel({ ...input({ focusStatus: 'running' }), alarmNotices: [notice, summary] });
     expect(model.attentionQueue[0].subject.kind).toBe('focus');
-    expect(reminderPanelContext(model.reminders.find(item => item.identity === 'alarm:notice-1'), null)).toEqual({ kind: 'alarm', notice });
+    expect(reminderPanelContext(model.reminders.find(item => item.identity === 'alarm:notice-1'), null)).toEqual({ kind: 'alarm', notice, expiredNotices: [] });
     expect(model.reminders.find(item => item.identity === 'missedSummary:summary-1')?.subject).toEqual({ kind: 'missedSummary', notice: summary });
   });
   it('keeps pending notices actionable after generic panel-open acknowledgement', () => {

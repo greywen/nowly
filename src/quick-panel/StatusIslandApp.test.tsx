@@ -274,6 +274,20 @@ describe('screen status island windows', () => {
     expect(invocations('close_status_island_details')).toHaveLength(1);
   });
 
+  it('follows a later alarm when it supersedes the pinned one', async () => {
+    const notice = { id: 'n1', kind: 'alarm' as const, title: 'Tea', dueAt: '2026-10-14T10:00:00Z', alarmId: 'a1', count: 1, rangeStart: '', rangeEnd: '' };
+    let notices = [notice];
+    invokeMock.mockImplementation((command: string) =>
+      Promise.resolve(command === 'get_status_island_snapshot' ? snapshotWith({ alarmNotices: notices }) : null));
+    render(<StatusIslandApp />);
+    await emitPanelEvent('status-island-details-open', { generation: 1, source: 'island', identity: 'alarm:n1' });
+    notices = [{ ...notice, id: 'n2', title: 'Later', dueAt: '2026-10-14T10:05:00Z' }, notice];
+    const invalidated = listenMock.mock.calls.find(call => call[0] === 'status-island-invalidated')?.[1];
+    await act(async () => invalidated({}));
+    expect(invocations('set_status_island_primary').slice(-1)[0]).toEqual(['set_status_island_primary', { identity: 'alarm:n2' }]);
+    fireEvent.click(screen.getByRole('button', { name: '稍后 5 分钟' }));
+    expect(invocations('snooze_alarm_notice')).toEqual([['snooze_alarm_notice', { id: 'n2' }]]);
+  });
   it.each(['menu', 'nowly', 'history'] as const)('does not let an arriving alarm take over %s', async source => {
     respondWith(snapshot);
     if (source === 'history') invokeMock.mockImplementation((command: string) => Promise.resolve(command === 'get_status_island_snapshot' ? snapshot : command === 'list_screenshot_history' ? { items: [], nextCursor: null } : null));

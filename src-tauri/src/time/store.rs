@@ -1,10 +1,10 @@
 use super::schedule::next_occurrence;
 use super::types::{
-    Alarm, AlarmDraft, AlarmRepeat, ClockMode, FocusPreferences, TimeAppearance, TimeSettings,
-    WorldClock,
+    Alarm, AlarmDraft, AlarmPatch, AlarmRepeat, ClockMode, FocusPreferences, TimeAppearance,
+    TimeSettings, WorldClock,
 };
 use crate::error::CommandError;
-use chrono::{DateTime, NaiveDate, SecondsFormat, Utc};
+use chrono::{DateTime, SecondsFormat, Utc};
 use rusqlite::{params, Connection, OptionalExtension};
 use std::collections::HashSet;
 
@@ -75,7 +75,7 @@ pub fn list_alarms(
 ) -> Result<Vec<Alarm>, CommandError> {
     let mut statement = connection
         .prepare(
-            "SELECT id,title,hour,minute,repeat,enabled,created_at,updated_at
+            "SELECT id,title,hour,minute,repeat,enabled,created_at,updated_at,effective_from_utc
              FROM alarms
              ORDER BY hour ASC, minute ASC, created_at ASC, id ASC",
         )
@@ -93,7 +93,7 @@ pub fn create_alarm(
     draft: AlarmDraft,
     now: DateTime<Utc>,
 ) -> Result<Alarm, CommandError> {
-    let draft = validate_alarm_draft(draft, now)?;
+    let draft = validate_alarm_draft(draft)?;
     let id = uuid::Uuid::new_v4().hyphenated().to_string();
     let timestamp = format_utc(now);
     let repeat = serde_json::to_string(&draft.repeat).map_err(CommandError::system)?;
@@ -117,22 +117,38 @@ pub fn create_alarm(
     get_alarm(connection, &id, now)
 }
 
-pub fn update_alarm(
+pub fn update_alarm<P: Into<AlarmPatch>>(
     connection: &mut Connection,
     id: &str,
-    draft: AlarmDraft,
+    patch: P,
     now: DateTime<Utc>,
 ) -> Result<Alarm, CommandError> {
-    ensure_alarm_exists(connection, id)?;
-    let draft = validate_alarm_draft(draft, now)?;
-    let timestamp = format_utc(now);
-    let repeat = serde_json::to_string(&draft.repeat).map_err(CommandError::system)?;
+    let patch = patch.into();
     let transaction = connection.transaction().map_err(CommandError::database)?;
+    let previous = get_alarm(&transaction, id, now)?;
+    let draft = validate_alarm_draft(AlarmDraft {
+        title: patch.title.unwrap_or_else(|| previous.title.clone()),
+        hour: patch.hour.unwrap_or(previous.hour),
+        minute: patch.minute.unwrap_or(previous.minute),
+        repeat: patch.repeat.unwrap_or_else(|| previous.repeat.clone()),
+        enabled: patch.enabled.unwrap_or(previous.enabled),
+    })?;
+    let timestamp = format_utc(now);
+    let effective_from = if previous.hour != draft.hour
+        || previous.minute != draft.minute
+        || previous.repeat != draft.repeat
+        || (!previous.enabled && draft.enabled)
+    {
+        timestamp.clone()
+    } else {
+        previous.effective_from_utc
+    };
+    let repeat = serde_json::to_string(&draft.repeat).map_err(CommandError::system)?;
     transaction
         .execute(
             "UPDATE alarms
              SET title=?2,hour=?3,minute=?4,repeat=?5,enabled=?6,
-                 effective_from_utc=?7,updated_at=?7
+                 effective_from_utc=?8,updated_at=?7
              WHERE id=?1",
             params![
                 id,
@@ -141,11 +157,12 @@ pub fn update_alarm(
                 draft.minute,
                 repeat,
                 if draft.enabled { 1 } else { 0 },
-                timestamp
+                timestamp,
+                effective_from
             ],
         )
         .map_err(CommandError::database)?;
-    if !draft.enabled {
+    if patch.enabled == Some(false) {
         transaction
             .execute(
                 "DELETE FROM alarm_notices WHERE alarm_id=?1 AND acknowledged_at_utc IS NULL",
@@ -279,10 +296,7 @@ fn validate_settings(settings: &TimeSettings) -> Result<(), CommandError> {
     Ok(())
 }
 
-fn validate_alarm_draft(
-    mut draft: AlarmDraft,
-    now: DateTime<Utc>,
-) -> Result<AlarmDraft, CommandError> {
+fn validate_alarm_draft(mut draft: AlarmDraft) -> Result<AlarmDraft, CommandError> {
     draft.title = draft.title.trim().to_owned();
     if draft.title.is_empty() {
         return Err(CommandError::validation(
@@ -303,21 +317,7 @@ fn validate_alarm_draft(
         ));
     }
     match &mut draft.repeat {
-        AlarmRepeat::Once { date } => {
-            let day = NaiveDate::parse_from_str(date, "%Y-%m-%d").map_err(|_| {
-                CommandError::validation("repeat", "Once alarms need a valid date.")
-            })?;
-            let wall = day
-                .and_hms_opt(draft.hour.into(), draft.minute.into(), 0)
-                .ok_or_else(|| CommandError::validation("repeat", "Alarm time is invalid."))?;
-            let due = crate::timezone::wall_to_utc(wall, crate::timezone::device_tz());
-            if due <= now {
-                return Err(CommandError::validation(
-                    "repeat",
-                    "Once alarms must be in the future.",
-                ));
-            }
-        }
+        AlarmRepeat::Once {} => {}
         AlarmRepeat::Weekly { weekdays } => {
             weekdays.sort_unstable();
             weekdays.dedup();
@@ -352,6 +352,7 @@ fn read_alarm(row: &rusqlite::Row<'_>) -> rusqlite::Result<Alarm> {
         enabled: row.get::<_, i64>(5)? == 1,
         created_at: row.get(6)?,
         updated_at: row.get(7)?,
+        effective_from_utc: row.get(8)?,
         next_occurrence: None,
     })
 }
@@ -359,7 +360,7 @@ fn read_alarm(row: &rusqlite::Row<'_>) -> rusqlite::Result<Alarm> {
 fn get_alarm(connection: &Connection, id: &str, now: DateTime<Utc>) -> Result<Alarm, CommandError> {
     let alarm = connection
         .query_row(
-            "SELECT id,title,hour,minute,repeat,enabled,created_at,updated_at
+            "SELECT id,title,hour,minute,repeat,enabled,created_at,updated_at,effective_from_utc
              FROM alarms WHERE id=?1",
             [id],
             read_alarm,
@@ -368,21 +369,6 @@ fn get_alarm(connection: &Connection, id: &str, now: DateTime<Utc>) -> Result<Al
         .map_err(CommandError::database)?
         .ok_or_else(|| CommandError::not_found("Alarm not found."))?;
     Ok(with_next_occurrences(vec![alarm], now).remove(0))
-}
-
-fn ensure_alarm_exists(connection: &Connection, id: &str) -> Result<(), CommandError> {
-    let exists: bool = connection
-        .query_row(
-            "SELECT EXISTS(SELECT 1 FROM alarms WHERE id=?1)",
-            [id],
-            |row| row.get(0),
-        )
-        .map_err(CommandError::database)?;
-    if exists {
-        Ok(())
-    } else {
-        Err(CommandError::not_found("Alarm not found."))
-    }
 }
 
 fn with_next_occurrences(mut alarms: Vec<Alarm>, now: DateTime<Utc>) -> Vec<Alarm> {

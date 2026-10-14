@@ -22,13 +22,14 @@
 // above means it needs no Tauri runtime, not that it avoids imports.)
 import { isAllowedAttachmentName } from '../lib/attachment';
 import { normalizeBarMenu } from '../app/bar-menu';
-import { defaultTimeSettings, type Alarm, type AlarmDraft, type AlarmNotice, type TimeSettings } from '../time/time-model';
+import { alarmToDraft, defaultTimeSettings, type Alarm, type AlarmDraft, type AlarmNotice, type TimeSettings } from '../time/time-model';
 
 type Dict = Record<string, unknown>;
 
 const STORAGE_KEY = 'nowly:browser-backend';
 
 type Store = {
+  alarmFormatVersion: number;
   timeSettings: TimeSettings;
   alarms: Alarm[];
   // Explicit E2E fixtures only: the Rust backend owns real alarm scheduling.
@@ -72,6 +73,7 @@ const defaultSettings: Dict = {
 
 function emptyStore(): Store {
   return {
+    alarmFormatVersion: 1,
     timeSettings: defaultTimeSettings(),
     alarms: [],
     alarmNotices: [],
@@ -97,13 +99,11 @@ function loadStore(): Store {
     const base = emptyStore();
     const settings = { ...base.settings, ...(parsed.settings ?? {}), barMenu: normalizeBarMenu(parsed.settings?.barMenu) };
     Reflect.deleteProperty(settings, 'barButtons');
-    if (parsed.timeSettings && !parsed.timeSettings.appearance) {
-      console.info('Resetting legacy development time and focus data.');
-      parsed.timeSettings = base.timeSettings;
+    if (parsed.alarmFormatVersion !== 1) {
       parsed.alarms = [];
       parsed.alarmNotices = [];
-      parsed.focusSessions = [];
-      parsed.moduleLayout = parsed.moduleLayout?.filter(item => item.id !== 'time' && item.id !== 'focusTimer');
+      parsed.alarmFormatVersion = 1;
+      Reflect.deleteProperty(parsed, 'alarmSchedulerState');
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...parsed, settings }));
     }
     return {
@@ -209,7 +209,7 @@ function validateTimeSettings(settings: TimeSettings) {
   }
 }
 
-function validateAlarmDraft(draft: AlarmDraft, now: Date) {
+function validateAlarmDraft(draft: AlarmDraft) {
   if (!draft || typeof draft.title !== 'string' || !draft.title.trim()) timeValidation('title', 'Alarm title is required.');
   if (!Number.isInteger(draft.hour) || draft.hour < 0 || draft.hour > 23) timeValidation('hour', 'Hour must be between 0 and 23.');
   if (!Number.isInteger(draft.minute) || draft.minute < 0 || draft.minute > 59) timeValidation('minute', 'Minute must be between 0 and 59.');
@@ -220,14 +220,7 @@ function validateAlarmDraft(draft: AlarmDraft, now: Date) {
       timeValidation('weekdays', 'Select unique ISO weekdays between 1 and 7.');
     }
   } else if (draft.repeat?.kind === 'once') {
-    const date = draft.repeat.date;
-    if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) timeValidation('date', 'Use a valid YYYY-MM-DD date.');
-    const [year, month, day] = date.split('-').map(Number);
-    const due = new Date(0);
-    due.setFullYear(year, month - 1, day);
-    due.setHours(draft.hour, draft.minute, 0, 0);
-    if (due.getFullYear() !== year || due.getMonth() !== month - 1 || due.getDate() !== day) timeValidation('date', 'Invalid calendar date.');
-    if (due.getTime() <= now.getTime()) timeValidation('date', 'Once alarms must be in the future.');
+    if (Object.keys(draft.repeat).some(key => key !== 'kind')) timeValidation('repeat', 'Once alarms have no date or other fields.');
   } else timeValidation('repeat', 'Invalid alarm repeat rule.');
 }
 
@@ -379,9 +372,9 @@ export function installBrowserTauriBackend() {
     list_alarms: () => [...store.alarms].sort((a, b) => a.hour - b.hour || a.minute - b.minute || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)),
     create_alarm: (a) => {
       const draft = a.draft as AlarmDraft;
-      validateAlarmDraft(draft, new Date());
+      validateAlarmDraft(draft);
       const stamp = nowIso();
-      const alarm: Alarm = { ...draft, id: id('alarm'), createdAt: stamp, updatedAt: stamp };
+      const alarm: Alarm = { ...draft, id: id('alarm'), createdAt: stamp, updatedAt: stamp, effectiveFromUtc: stamp };
       store.alarms.push(alarm);
       persist();
       emit('status-island-invalidated', null);
@@ -390,10 +383,19 @@ export function installBrowserTauriBackend() {
     update_alarm: (a) => {
       const index = store.alarms.findIndex(alarm => alarm.id === a.id);
       if (index === -1) throw { code: 'not_found', message: 'Alarm not found.' };
-      const draft = a.draft as AlarmDraft;
-      validateAlarmDraft(draft, new Date());
-      const alarm: Alarm = { ...draft, id: store.alarms[index].id, createdAt: store.alarms[index].createdAt, updatedAt: nowIso() };
+      const previous = store.alarms[index];
+      const draft = { ...alarmToDraft(previous), ...a.draft as Partial<AlarmDraft> };
+      validateAlarmDraft(draft);
+      const stamp = nowIso();
+      const repeatChanged = previous.repeat.kind !== draft.repeat.kind
+        || (previous.repeat.kind === 'weekly' && draft.repeat.kind === 'weekly'
+          && [...previous.repeat.weekdays].sort().join(',') !== [...draft.repeat.weekdays].sort().join(','));
+      const resetAnchor = previous.hour !== draft.hour || previous.minute !== draft.minute
+        || repeatChanged || (!previous.enabled && draft.enabled);
+      const alarm: Alarm = { ...draft, id: previous.id, createdAt: previous.createdAt, updatedAt: stamp,
+        effectiveFromUtc: resetAnchor ? stamp : previous.effectiveFromUtc };
       store.alarms[index] = alarm;
+      if ((a.draft as Partial<AlarmDraft>).enabled === false) store.alarmNotices = store.alarmNotices.filter(notice => notice.alarmId !== alarm.id);
       persist();
       emit('status-island-invalidated', null);
       return alarm;
@@ -402,6 +404,7 @@ export function installBrowserTauriBackend() {
       const index = store.alarms.findIndex(alarm => alarm.id === a.id);
       if (index === -1) throw { code: 'not_found', message: 'Alarm not found.' };
       store.alarms.splice(index, 1);
+      store.alarmNotices = store.alarmNotices.filter(notice => notice.alarmId !== a.id);
       persist();
       emit('status-island-invalidated', null);
     },
@@ -998,6 +1001,7 @@ export function installBrowserTauriBackend() {
       focus: sampleFocus(),
       reminders: [],
       alarmNotices: store.alarmNotices,
+      expiredAlarmNotices: [],
       notificationMode: store.settings.notificationMode ?? 'persistent',
       barMenu: normalizeBarMenu(store.settings.barMenu)
     }),

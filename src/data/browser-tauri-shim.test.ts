@@ -29,7 +29,75 @@ const clock = { id: 'local', timeZone: 'local', label: '本地' };
 const alarmDraft = { title: 'Break', hour: 9, minute: 7, repeat: { kind: 'weekly', weekdays: [1, 5] }, enabled: true };
 
 describe('browser time persistence', () => {
-  it('resets legacy development time data without removing unrelated content', async () => {
+  it('clears only old alarm data once and persists the alarm format marker', async () => {
+    const business = { timeSettings: defaultTimeSettings(), notes: [{ id: 'keep' }], focusSessions: [{ id: 'keep-focus' }], moduleLayout: [{ id: 'time' }], settings: { custom: 'keep' }, events: [{ id: 'keep-event' }] };
+    localStorage.setItem(storageKey, JSON.stringify({ ...business, alarms: [{ ...alarmDraft, id: 'old' }], alarmNotices: [{ id: 'old-notice' }], alarmSchedulerState: { checkpoint: 'old' } }));
+    installBrowserTauriBackend();
+    expect(await invoke()('list_alarms')).toEqual([]);
+    const persisted = JSON.parse(localStorage.getItem(storageKey)!);
+    expect(persisted).toMatchObject({ ...business, alarmFormatVersion: 1, alarms: [], alarmNotices: [] });
+    expect(persisted.alarmSchedulerState).toBeUndefined();
+    const alarm = await invoke()('create_alarm', { draft: alarmDraft });
+    Reflect.deleteProperty(window, '__TAURI_INTERNALS__');
+    installBrowserTauriBackend();
+    expect(await invoke()('list_alarms')).toEqual([alarm]);
+  });
+
+  it('revokes only matching notices when disabling or deleting an alarm', async () => {
+    const notices = [{ id: 'keep', alarmId: 'other' }, { id: 'remove', alarmId: 'a1' }];
+    localStorage.setItem(storageKey, JSON.stringify({ alarmFormatVersion: 1, alarms: [{ ...alarmDraft, id: 'a1', effectiveFromUtc: '2026-10-11T08:00:00Z', createdAt: 't', updatedAt: 't' }], alarmNotices: notices }));
+    installBrowserTauriBackend();
+    await invoke()('update_alarm', { id: 'a1', draft: { ...alarmDraft, enabled: false } });
+    expect(await invoke()('get_status_island_snapshot')).toHaveProperty('alarmNotices', [notices[0]]);
+    const alarm = await invoke()('create_alarm', { draft: alarmDraft }) as Record<string, unknown>;
+    Reflect.deleteProperty(window, '__TAURI_INTERNALS__');
+    const persisted = JSON.parse(localStorage.getItem(storageKey)!);
+    persisted.alarmNotices.push({ id: 'delete', alarmId: alarm.id });
+    localStorage.setItem(storageKey, JSON.stringify(persisted));
+    installBrowserTauriBackend();
+    await invoke()('delete_alarm', { id: alarm.id });
+    expect(await invoke()('get_status_island_snapshot')).toHaveProperty('alarmNotices', [notices[0]]);
+  });
+
+  it.each([false, true])('preserves a fired once notice and anchor on title edits and retries (snoozed=%s)', async snoozed => {
+    const alarm = { ...alarmDraft, id: 'fired', repeat: { kind: 'once' }, enabled: false, effectiveFromUtc: '2026-10-11T08:00:00Z', createdAt: 't', updatedAt: 't' };
+    const notice = { id: 'ringing', kind: 'alarm', alarmId: alarm.id, title: 'Break', dueAt: '2026-10-11T09:07:00Z', count: 1, rangeStart: '2026-10-11T09:07:00Z', rangeEnd: '2026-10-11T09:07:00Z', snoozedUntilUtc: snoozed ? '2026-10-11T09:12:00Z' : null };
+    localStorage.setItem(storageKey, JSON.stringify({ alarmFormatVersion: 1, alarms: [alarm], alarmNotices: [notice] }));
+    installBrowserTauriBackend();
+    for (let retry = 0; retry < 2; retry++) {
+      const saved = await invoke()('update_alarm', { id: alarm.id, draft: { title: 'Renamed' } });
+      expect(saved).toMatchObject({ enabled: false, effectiveFromUtc: alarm.effectiveFromUtc });
+      expect(await invoke()('get_status_island_snapshot')).toHaveProperty('alarmNotices', [notice]);
+      expect(JSON.parse(localStorage.getItem(storageKey)!).alarmNotices).toEqual([notice]);
+    }
+    await invoke()('update_alarm', { id: alarm.id, draft: { enabled: false } });
+    expect(await invoke()('get_status_island_snapshot')).toHaveProperty('alarmNotices', []);
+  });
+
+  it('atomically patches a title without reenabling a scheduler-disabled once alarm', async () => {
+    installBrowserTauriBackend();
+    const created = await invoke()('create_alarm', { draft: { ...alarmDraft, repeat: { kind: 'once' } } }) as Record<string, unknown>;
+    const disabled = await invoke()('update_alarm', { id: created.id, draft: { ...alarmDraft, repeat: { kind: 'once' }, enabled: false } });
+    const saved = await invoke()('update_alarm', { id: created.id, draft: { title: 'Renamed' } });
+    expect(saved).toEqual({ ...disabled as object, title: 'Renamed', updatedAt: expect.any(String) });
+  });
+
+  it('accepts date-free once alarms and preserves anchors on title edits', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-10-11T08:00:00Z'));
+      installBrowserTauriBackend();
+      const draft = { ...alarmDraft, repeat: { kind: 'once' } };
+      const alarm = await invoke()('create_alarm', { draft }) as Record<string, unknown>;
+      expect(alarm.effectiveFromUtc).toBe('2026-10-11T08:00:00.000Z');
+      vi.setSystemTime(new Date('2026-10-12T08:00:00Z'));
+      const edited = await invoke()('update_alarm', { id: alarm.id, draft: { ...draft, title: 'New title' } }) as Record<string, unknown>;
+      expect(edited.effectiveFromUtc).toBe(alarm.effectiveFromUtc);
+      const scheduled = await invoke()('update_alarm', { id: alarm.id, draft: { ...draft, minute: 8 } }) as Record<string, unknown>;
+      expect(scheduled.effectiveFromUtc).toBe('2026-10-12T08:00:00.000Z');
+    } finally { vi.useRealTimers(); }
+  });
+  it('preserves legacy time and focus data while clearing only alarms', async () => {
     const note = { id: 'note', title: 'Keep this', body: 'content' };
     localStorage.setItem(storageKey, JSON.stringify({
       timeSettings: { clocks: [clock] }, alarms: [{ ...alarmDraft, id: 'old' }],
@@ -37,11 +105,11 @@ describe('browser time persistence', () => {
       notes: [note], moduleLayout: [{ id: 'time' }, { id: 'focusTimer' }, { id: 'notes' }]
     }));
     installBrowserTauriBackend();
-    expect(await invoke()('get_time_settings')).toEqual(defaultTimeSettings());
+    expect(await invoke()('get_time_settings')).toEqual({ clocks: [clock] });
     expect(await invoke()('list_alarms')).toEqual([]);
-    expect(await invoke()('list_focus_sessions')).toEqual([]);
+    expect(JSON.parse(localStorage.getItem(storageKey)!).focusSessions).toEqual([{ id: 'old-focus' }]);
     expect(await invoke()('list_notes')).toEqual([note]);
-    expect(await invoke()('list_module_layout')).toEqual([{ id: 'notes' }]);
+    expect(await invoke()('list_module_layout')).toEqual([{ id: 'time' }, { id: 'focusTimer' }, { id: 'notes' }]);
   });
   it('defaults to one minimal local digital clock and no alarms or notices', async () => {
     installBrowserTauriBackend();
@@ -55,7 +123,7 @@ describe('browser time persistence', () => {
     const settings = { ...defaultTimeSettings(), appearance: { ...defaultTimeSettings().appearance, mode: 'mixed', showDate: true }, clocks: [{ ...clock, id: 'tokyo', timeZone: 'Asia/Tokyo' }] };
     expect(await invoke()('save_time_settings', { settings })).toEqual(settings);
     const alarm = await invoke()('create_alarm', { draft: alarmDraft }) as Record<string, unknown>;
-    expect(alarm).toEqual({ ...alarmDraft, id: expect.any(String), createdAt: expect.any(String), updatedAt: expect.any(String) });
+    expect(alarm).toEqual({ ...alarmDraft, id: expect.any(String), createdAt: expect.any(String), updatedAt: expect.any(String), effectiveFromUtc: expect.any(String) });
     const updated = await invoke()('update_alarm', { id: alarm.id, draft: { ...alarmDraft, title: 'Edited', enabled: false } });
     Reflect.deleteProperty(window, '__TAURI_INTERNALS__');
     installBrowserTauriBackend();
@@ -97,13 +165,13 @@ describe('browser time persistence', () => {
     expect(await invoke()('list_alarms')).toEqual([]);
   });
 
-  it('validates once alarms against the local minute, and supports future dates', async () => {
+  it('accepts once alarms at or before the current local minute', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 9, 11, 9, 7, 30));
     try {
       installBrowserTauriBackend();
-      await expect(invoke()('create_alarm', { draft: { ...alarmDraft, repeat: { kind: 'once', date: '2026-10-11' } } })).rejects.toMatchObject({ code: 'validation_error' });
-      expect(await invoke()('create_alarm', { draft: { ...alarmDraft, minute: 8, repeat: { kind: 'once', date: '2026-10-11' } } })).toMatchObject({ minute: 8 });
+      expect(await invoke()('create_alarm', { draft: { ...alarmDraft, repeat: { kind: 'once' } } })).toMatchObject({ repeat: { kind: 'once' } });
+      expect(await invoke()('create_alarm', { draft: { ...alarmDraft, minute: 8, repeat: { kind: 'once' } } })).toMatchObject({ minute: 8 });
     } finally { vi.useRealTimers(); }
   });
 
@@ -115,7 +183,7 @@ describe('browser time persistence', () => {
   it('uses only explicit persisted notice fixtures and consumes ack/snooze idempotently', async () => {
     const notice = { id: 'notice-1', kind: 'alarm', title: 'Break', alarmId: 'a1', dueAt: '2026-10-11T09:07:00Z', count: 1, rangeStart: '2026-10-11T09:07:00Z', rangeEnd: '2026-10-11T09:07:00Z' };
     const summary = { ...notice, id: 'summary', kind: 'missedSummary', alarmId: null, count: 4 };
-    localStorage.setItem(storageKey, JSON.stringify({ alarmNotices: [notice, summary] }));
+    localStorage.setItem(storageKey, JSON.stringify({ alarmFormatVersion: 1, alarmNotices: [notice, summary] }));
     installBrowserTauriBackend();
     expect(await invoke()('get_status_island_snapshot')).toHaveProperty('alarmNotices', [notice, summary]);
     await expect(invoke()('snooze_alarm_notice', { id: 'summary' })).rejects.toMatchObject({ code: 'validation_error' });
@@ -134,7 +202,7 @@ describe('browser time persistence', () => {
     vi.setSystemTime(new Date(2026, 9, 11, 9, 0));
     try {
       installBrowserTauriBackend();
-      await invoke()('create_alarm', { draft: { ...alarmDraft, repeat: { kind: 'once', date: '2026-10-11' } } });
+      await invoke()('create_alarm', { draft: { ...alarmDraft, repeat: { kind: 'once' } } });
       await vi.advanceTimersByTimeAsync(24 * 60 * 60 * 1000);
       expect(await invoke()('get_status_island_snapshot')).toHaveProperty('alarmNotices', []);
     } finally { vi.useRealTimers(); }

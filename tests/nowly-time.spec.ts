@@ -25,6 +25,7 @@ async function boot(page: Page, fixture: Fixture = {}, bar = false) {
     localStorage.setItem(key, JSON.stringify({
       settings: { wallpaperEnabled: false, density: fixture.density ?? 'balanced' },
       moduleLayout: [{ id: 'time', x: 0, y: 0, w: fixture.rect?.w ?? 4, h: fixture.rect?.h ?? 3 }],
+      alarmFormatVersion: 1,
       timeSettings: { ...fixture.timeSettings, clocks: fixture.clocks }, alarms: [], alarmNotices: fixture.alarmNotices ?? []
     }));
   }, { key: storageKey, fixture: { ...fixture, clocks: fixture.clocks ?? [clock('local', 'local')], timeSettings: { ...defaultTimeSettings(), appearance: { ...defaultTimeSettings().appearance, mode: fixture.mode ?? 'digital' } } } });
@@ -217,15 +218,58 @@ test('settings alarm tab creates alarms and enabled indicators update immediatel
   await expect(dialog.getByRole('tab', { name: /^闹钟/ })).toHaveAttribute('aria-selected', 'true');
   const editor = dialog.locator('.time-alarm-editor');
   await expect(editor).toBeVisible();
+  const layout = await editor.evaluate(element => {
+    const box = (selector: string) => {
+      const bounds = element.querySelector(selector)!.getBoundingClientRect();
+      return { x: bounds.x, y: bounds.y, right: bounds.right, bottom: bounds.bottom };
+    };
+    return {
+      main: box('.time-alarm-editor__main'), repeat: box('.time-alarm-editor__repeat'), actions: box('.time-alarm-editor__actions'),
+      enabled: box('.time-alarm-editor__main .form-check'), repeating: box('.time-alarm-editor__repeat .form-check'),
+      title: box('.time-alarm-editor__main .time-field'), weekdays: box('.time-weekday-fieldset'),
+      time: box('.time-alarm-editor__main > :last-child')
+    };
+  });
+  expect(Math.abs(layout.enabled.x - layout.repeating.x)).toBeLessThan(1);
+  expect(Math.abs(layout.title.x - layout.weekdays.x)).toBeLessThan(1);
+  expect(Math.abs(layout.time.right - layout.actions.right)).toBeLessThan(1);
+  expect(layout.main.bottom).toBeLessThan(layout.repeat.y);
+  expect(layout.repeat.bottom).toBeLessThan(layout.actions.y);
+  await expect(editor.locator('.time-weekday-chip__label')).toHaveText(['日', '一', '二', '三', '四', '五', '六']);
+  await expect(editor.locator('.time-alarm-editor__next')).toHaveCount(0);
   await editor.getByRole('textbox', { name: '标题', exact: true }).fill('晨间提醒');
-  await editor.getByRole('textbox', { name: '小时', exact: true }).fill('');
-  await editor.getByRole('button', { name: '创建闹钟', exact: true }).click();
-  await expect(editor).toContainText('小时必须是 0 到 23');
+  await expect(dialog.getByRole('tab', { name: '闹钟', exact: true })).toBeVisible();
+  await expect(editor.getByRole('button', { name: '日期', exact: true })).toHaveCount(0);
+  await editor.getByRole('button', { name: '时间', exact: true }).click();
+  await editor.getByRole('spinbutton', { name: '分钟', exact: true }).fill('17');
+  for (const unit of ['小时', '分钟']) {
+    const field = editor.getByRole('spinbutton', { name: unit, exact: true });
+    await field.focus();
+    await expect(field).toHaveCSS('border-top-color', 'rgba(0, 0, 0, 0)');
+    await expect(field).toHaveCSS('box-shadow', 'none');
+    const stepper = field.locator('..');
+    await expect(stepper).toHaveCSS('border-top-color', 'rgb(79, 201, 218)');
+    await editor.getByRole('button', { name: `增加${unit}`, exact: true }).focus();
+    await expect(stepper).toHaveCSS('border-top-color', 'rgb(79, 201, 218)');
+    const decrease = await editor.getByRole('button', { name: `减少${unit}`, exact: true }).boundingBox();
+    const input = await editor.getByRole('spinbutton', { name: unit, exact: true }).boundingBox();
+    const increase = await editor.getByRole('button', { name: `增加${unit}`, exact: true }).boundingBox();
+    expect(decrease!.width).toBe(40);
+    expect(increase!.width).toBe(40);
+    expect(input!.width).toBeGreaterThanOrEqual(48);
+    expect(decrease!.x + decrease!.width).toBeLessThanOrEqual(input!.x + 1);
+    expect(input!.x + input!.width).toBeLessThanOrEqual(increase!.x + 1);
+    expect(Math.abs(decrease!.y - increase!.y)).toBeLessThan(1);
+  }
   expect((await stored(page)).alarms).toEqual([]);
-  await editor.getByRole('textbox', { name: '小时', exact: true }).fill('9');
+  await editor.getByRole('button', { name: '确定', exact: true }).click();
   await editor.getByRole('button', { name: '创建闹钟', exact: true }).click();
   await expect(dialog.locator('.time-alarm-row')).toHaveCount(1);
   await expect(widget.locator('.time-widget__alarm')).toBeVisible();
+  await expect(dialog.locator('.time-alarm-editor')).toHaveCount(0);
+  await expect(dialog.getByRole('button', { name: '编辑 晨间提醒', exact: true })).toHaveAttribute('aria-expanded', 'false');
+  await expect(dialog.getByRole('button', { name: '添加闹钟', exact: true })).toBeFocused();
+  expect((await stored(page)).alarms[0].minute).toBe(17);
   await dialog.locator('.time-alarm-row').getByRole('checkbox').uncheck();
   await expect(widget.locator('.time-widget__alarm')).toHaveCount(0);
   await dialog.getByRole('button', { name: '关闭', exact: true }).click();
@@ -325,30 +369,34 @@ test('local alarms support all repeat rules, editing, disable, delete and reload
     await dialog.getByRole('button', { name: '添加闹钟', exact: true }).click();
     const editor = dialog.locator('.time-alarm-editor');
     await editor.getByRole('textbox', { name: '标题', exact: true }).fill(`测试${repeat}`);
-    await editor.getByRole('textbox', { name: '小时', exact: true }).fill('10');
-    await editor.getByRole('textbox', { name: '分钟', exact: true }).fill('15');
-    await select(editor, '重复', repeat);
-    if (repeat === '一次') {
-      await editor.getByRole('button', { name: '日期', exact: true }).click();
-      await editor.locator('[data-date="2099-01-15"]').click();
+    await editor.getByRole('button', { name: '时间', exact: true }).click();
+    await editor.getByRole('spinbutton', { name: '小时', exact: true }).fill('10');
+    await editor.getByRole('spinbutton', { name: '分钟', exact: true }).fill('17');
+    await editor.getByRole('button', { name: '确定', exact: true }).click();
+    if (repeat === '一次') await editor.getByRole('checkbox', { name: '重复闹钟', exact: true }).uncheck();
+    if (repeat === '每天') {
+      for (const day of ['周六', '周日']) await editor.getByRole('checkbox', { name: day, exact: true }).check();
     }
     if (repeat === '自选星期') {
       for (const day of ['周二', '周三', '周四', '周五']) await editor.getByRole('checkbox', { name: day, exact: true }).uncheck();
       await editor.getByRole('checkbox', { name: '周六', exact: true }).check();
     }
     await editor.getByRole('button', { name: '创建闹钟', exact: true }).click();
-    await expect(editor.getByRole('button', { name: '结束编辑', exact: true })).toBeVisible();
-    await editor.getByRole('button', { name: '结束编辑', exact: true }).click();
     await expect(editor).toHaveCount(0);
+    await expect(dialog.getByRole('button', { name: `编辑 测试${repeat}`, exact: true })).toHaveAttribute('aria-expanded', 'false');
+    await expect(dialog.getByRole('button', { name: '添加闹钟', exact: true })).toBeFocused();
   }
   await expect(dialog.locator('.time-alarm-row')).toHaveCount(4);
   const repeats = (await stored(page)).alarms.map(alarm => alarm.repeat);
-  expect(repeats).toEqual([{ kind: 'once', date: '2099-01-15' }, { kind: 'weekly', weekdays: [1, 2, 3, 4, 5, 6, 7] }, { kind: 'weekly', weekdays: [1, 2, 3, 4, 5] }, { kind: 'weekly', weekdays: [1, 6] }]);
+  expect(repeats).toEqual([{ kind: 'once' }, { kind: 'weekly', weekdays: [1, 2, 3, 4, 5, 6, 7] }, { kind: 'weekly', weekdays: [1, 2, 3, 4, 5] }, { kind: 'weekly', weekdays: [1, 6] }]);
+  await expect(dialog.getByRole('tab', { name: '闹钟', exact: true })).toBeVisible();
   const daily = dialog.locator('.time-alarm-row').filter({ hasText: '测试每天' });
   await daily.getByRole('checkbox').uncheck();
   await expect.poll(async () => (await stored(page)).alarms.find(item => item.title === '测试每天')?.enabled).toBe(false);
   await daily.getByRole('button', { name: '编辑 测试每天', exact: true }).click();
-  await dialog.locator('.time-alarm-editor').getByRole('textbox', { name: '标题', exact: true }).fill('修改每天');
+  await expect(daily.locator('.time-alarm-editor')).toHaveCount(1);
+  await expect(dialog.locator('.time-alarm-editor')).toHaveCount(1);
+  await daily.locator('.time-alarm-editor').getByRole('textbox', { name: '标题', exact: true }).fill('修改每天');
   await expect.poll(async () => (await stored(page)).alarms.some(item => item.title === '修改每天')).toBe(true);
   await dialog.getByRole('button', { name: '结束编辑', exact: true }).click();
   const deleteButton = dialog.getByRole('button', { name: '删除 测试工作日', exact: true });
@@ -367,7 +415,7 @@ test('local alarms support all repeat rules, editing, disable, delete and reload
   expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key)!).events, storageKey)).toEqual([]);
 });
 
-test('alarm validation retains drafts and rejects past dates and empty custom weekdays', async ({ page }) => {
+test('alarm validation retains drafts, cancels unconfirmed time and rejects empty weekdays', async ({ page }) => {
   await page.clock.setFixedTime(new Date('2026-01-14T08:00:00Z'));
   await boot(page);
   const dialog = await openTimeSettings(page);
@@ -375,22 +423,26 @@ test('alarm validation retains drafts and rejects past dates and empty custom we
   await dialog.getByRole('button', { name: '添加闹钟', exact: true }).click();
   const editor = dialog.locator('.time-alarm-editor');
   await editor.getByRole('textbox', { name: '标题', exact: true }).fill('保留草稿');
-  await select(editor, '重复', '一次');
-  await editor.getByRole('button', { name: '日期', exact: true }).click();
+  const time = editor.getByRole('button', { name: '时间', exact: true });
+  await time.click();
+  await editor.getByRole('spinbutton', { name: '分钟', exact: true }).fill('27');
   await page.keyboard.press('Escape');
   await expect(dialog).toBeVisible();
-  await expect(editor.getByRole('button', { name: '日期', exact: true })).toBeFocused();
+  await expect(time).toBeFocused();
+  await expect(time).toContainText('09:00');
   await expect(editor.getByRole('textbox', { name: '标题', exact: true })).toHaveValue('保留草稿');
-  await editor.getByRole('button', { name: '日期', exact: true }).click();
-  await editor.locator('[data-date="2026-01-13"]').click();
-  await editor.getByRole('button', { name: '创建闹钟', exact: true }).click();
-  await expect(editor).toContainText('一次性闹钟不能早于当前时间');
-  await select(editor, '重复', '自选星期');
   for (const day of ['周一', '周二', '周三', '周四', '周五']) await editor.getByRole('checkbox', { name: day, exact: true }).uncheck();
   await editor.getByRole('button', { name: '创建闹钟', exact: true }).click();
   await expect(editor).toContainText('自选星期不能为空');
   await expect(editor.getByRole('textbox', { name: '标题', exact: true })).toHaveValue('保留草稿');
   expect((await stored(page)).alarms).toEqual([]);
+  await page.setViewportSize({ width: 420, height: 800 });
+  expect(await editor.evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
+  await time.click();
+  const panel = await editor.getByRole('dialog').boundingBox();
+  const bounds = await dialog.boundingBox();
+  expect(panel!.x).toBeGreaterThanOrEqual(bounds!.x);
+  expect(panel!.x + panel!.width).toBeLessThanOrEqual(bounds!.x + bounds!.width + 1);
 });
 
 test('Bar confirms one seeded alarm and snoozes another without scheduling in the browser', async ({ page }) => {

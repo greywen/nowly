@@ -60,11 +60,19 @@ pub fn read_app_settings(connection: &Connection) -> Result<AppSettings, rusqlit
         screenshot_shortcut: read_value_or(connection, "screenshot_shortcut", crate::models::default_screenshot_shortcut())?,
         screenshot_history_shortcut: read_value_or(connection, "screenshot_history_shortcut", crate::models::default_screenshot_history_shortcut())?,
         bar_menu: crate::models::normalize_bar_menu(read_value_or(connection, "bar_menu", crate::models::default_bar_menu())?),
+        sound_settings: read_sound_settings(connection)?,
         recent_colors: read_value_or(connection, "recent_colors", Vec::new())?,
     })
 }
 
+pub fn read_sound_settings(connection: &Connection) -> Result<crate::sound_settings::SoundSettings, rusqlite::Error> {
+    let settings: crate::sound_settings::SoundSettings = read_value_or(connection, "sound_settings", Default::default())?;
+    settings.validate()?;
+    Ok(settings)
+}
+
 pub(crate) fn validate(settings: &AppSettings) -> Result<(), rusqlite::Error> {
+    settings.sound_settings.validate()?;
     let screenshot = crate::screenshot_shortcuts::normalize(&settings.screenshot_shortcut)
         .map_err(|_| rusqlite::Error::InvalidParameterName("screenshotShortcut".into()))?;
     let history = crate::screenshot_shortcuts::normalize(&settings.screenshot_history_shortcut)
@@ -161,6 +169,7 @@ pub fn write_app_settings(
         ("screenshot_shortcut", serde_json::to_string(&settings.screenshot_shortcut)),
         ("screenshot_history_shortcut", serde_json::to_string(&settings.screenshot_history_shortcut)),
         ("bar_menu", serde_json::to_string(&settings.bar_menu)),
+        ("sound_settings", serde_json::to_string(&settings.sound_settings)),
         (
             "recent_colors",
             serde_json::to_string(&settings.recent_colors),
@@ -194,6 +203,30 @@ mod tests {
     use super::read_app_settings;
     use crate::db::migrate;
     use rusqlite::Connection;
+
+    #[test]
+    fn sound_settings_default_round_trip_and_reject_invalid_values() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        migrate(&mut connection).unwrap();
+        let before = read_app_settings(&connection).unwrap();
+        let mut document = serde_json::to_value(&before).unwrap();
+        assert_eq!(document["soundSettings"]["volume"], 35);
+        assert_eq!(document["soundSettings"]["alarm"], "bell-rise");
+        document["soundSettings"] = serde_json::json!({
+            "enabled": false, "volume": 20, "calendar": "none", "alarm": "beep-soft",
+            "missedSummary": "low-knock", "focus": "done-blip"
+        });
+        let configured = serde_json::from_value(document.clone()).unwrap();
+        let saved = super::write_app_settings(&mut connection, &configured).unwrap();
+        assert_eq!(serde_json::to_value(&saved).unwrap()["soundSettings"], document["soundSettings"]);
+        for (field, value) in [("volume", serde_json::json!(101)), ("calendar", serde_json::json!("bad-sound")), ("alarm", serde_json::json!("resolve"))] {
+            let mut invalid = document.clone();
+            invalid["soundSettings"][field] = value;
+            let invalid = serde_json::from_value(invalid).unwrap();
+            assert!(super::write_app_settings(&mut connection, &invalid).is_err());
+            assert_eq!(read_app_settings(&connection).unwrap(), saved);
+        }
+    }
 
     #[test]
     fn fresh_database_returns_approved_defaults() {
@@ -339,6 +372,7 @@ mod tests {
             icon_style: "outline".into(),
             hide_topbar_in_wallpaper: false,
             notification_mode: "notification".into(),
+            sound_settings: Default::default(),
             // Non-default values, like every field above: the assertion below is a
             // round trip, so a field left at its default would pass even if it were
             // never written.

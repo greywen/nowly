@@ -10,6 +10,7 @@
 
 ## 当前功能计划
 
+- 提醒音效总计划：`docs/superpowers/specs/2026-10-14-reminder-sounds/00-master-plan.md`
 - 桌面截图规格：`docs/superpowers/specs/2026-09-25-nowly-screenshot-design.md`
 - 桌面截图验证清单：`docs/superpowers/specs/2026-09-25-nowly-screenshot-validation.md`
 - 桌面截图总计划：`docs/superpowers/specs/2026-09-25-nowly-screenshot/00-master-plan.md`
@@ -21,5 +22,7 @@
 - Rust 测试：`cargo test --manifest-path src-tauri/Cargo.toml`
 - Rust 单文件格式化：`rustfmt --edition 2021 <file>`
 - 端到端测试：`npm run e2e -- <spec-file>`
+- 重新生成音效：`node scripts/generate-sounds.mjs`
+- 音频质量与资产一致性：`node --test scripts/generate-sounds.test.mjs`
 
 Rust 改动只格式化本次触及的叶子文件，避免 `cargo fmt` 改写无关模块。

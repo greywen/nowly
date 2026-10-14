@@ -75,7 +75,7 @@ describe('alarm notice panels', () => {
   const notice = { id: 'n1', kind: 'alarm' as const, title: 'Tea', dueAt: '2026-10-11T00:00:00Z', alarmId: 'a1', count: 1, rangeStart: '2026-10-10T00:00:00Z', rangeEnd: '2026-10-11T00:00:00Z' };
   it('exposes ordinary notice acknowledgement and snooze as keyboard buttons', () => {
     const actions = panelActions({ onAcknowledgeAlarmNotice: vi.fn(), onSnoozeAlarmNotice: vi.fn() });
-    render(<StatusIslandPanel context={{ kind: 'alarm', notice }} actions={actions} />);
+    render(<StatusIslandPanel context={{ kind: 'alarm', notice, expiredNotices: [] }} actions={actions} />);
     const acknowledge = screen.getByRole('button', { name: '确认' });
     acknowledge.focus();
     expect(acknowledge).toHaveFocus();
@@ -84,6 +84,22 @@ describe('alarm notice panels', () => {
     expect(actions.onAcknowledgeAlarmNotice).toHaveBeenCalledWith('n1');
     expect(actions.onSnoozeAlarmNotice).toHaveBeenCalledWith('n1');
     expect(actions.onOpenEvent).not.toHaveBeenCalled();
+  });
+  it('lists closed expired alarms and keeps acknowledge and snooze on the latest', () => {
+    const early = { ...notice, id: 'early', title: 'Early tea', dueAt: '2026-10-14T10:00:00Z' };
+    const older = { ...notice, id: 'older', title: 'Older tea', dueAt: '2026-10-14T09:00:00Z' };
+    const actions = panelActions({ onAcknowledgeAlarmNotice: vi.fn(), onSnoozeAlarmNotice: vi.fn() });
+    render(<StatusIslandPanel context={{ kind: 'alarm', notice, expiredNotices: [early, older] }} actions={actions} />);
+    expect(screen.getByRole('list', { name: '已关闭的过期闹钟' })).toBeInTheDocument();
+    expect(screen.getAllByRole('listitem').map(item => item.textContent)).toEqual([
+      expect.stringContaining('Early tea'),
+      expect.stringContaining('Older tea')
+    ]);
+    expect(screen.queryByRole('button', { name: /Early tea|Older tea/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '确认' }));
+    fireEvent.click(screen.getByRole('button', { name: '稍后 5 分钟' }));
+    expect(actions.onAcknowledgeAlarmNotice).toHaveBeenCalledWith('n1');
+    expect(actions.onSnoozeAlarmNotice).toHaveBeenCalledWith('n1');
   });
   it('renders summary count and local date range without a snooze action', () => {
     render(<StatusIslandPanel compact context={{ kind: 'missedSummary', notice: { ...notice, kind: 'missedSummary', count: 8 } }} actions={panelActions({ onAcknowledgeAlarmNotice: vi.fn() })} />);

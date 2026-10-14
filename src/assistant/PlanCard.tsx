@@ -56,7 +56,7 @@ function DateField({ label, value, onChange, time = false }: { label: string; va
     <DatePicker id={`${id}-date`} label={time ? t('assistant.dateLabel', { label }) : label} value={value.slice(0, 10)}
       open={open === 'date'} onOpenChange={v => setOpen(v ? 'date' : null)}
       onChange={v => onChange(time && v ? `${v}T${value.slice(11, 16) || '09:00'}` : v)} />
-    {time && <TimePicker id={`${id}-time`} label={t('assistant.timeLabel', { label })} value={value.slice(11, 16)} commitOnChange
+    {time && <TimePicker id={`${id}-time`} label={t('assistant.timeLabel', { label })} value={value.slice(11, 16)}
       open={open === 'time'} onOpenChange={v => setOpen(v ? 'time' : null)}
       onChange={v => onChange(v && value.slice(0, 10) ? `${value.slice(0, 10)}T${v}` : '')} />}
   </div>;

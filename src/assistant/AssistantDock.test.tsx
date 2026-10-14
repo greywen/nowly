@@ -494,13 +494,15 @@ describe('AssistantDock execution boundary', () => {
     expect(await screen.findByRole('combobox', { name: '看板列 1' })).toHaveTextContent('待处理');
     expect(screen.getByRole('button', { name: '确认执行 1 项' })).toBeEnabled();
   });
-  it('invalidates confirmation as soon as a keyboard time adjustment is visible', async () => {
+  it('invalidates plan confirmation only after the time draft is confirmed', async () => {
     const client = clientFixture();
     render(<AssistantDock client={client} onRefresh={() => {}} />);
     await send();
     await click(screen.getByRole('button', { name: '开始 1时间' }));
     fireEvent.keyDown(screen.getByRole('spinbutton', { name: '小时' }), { key: 'ArrowUp' });
     expect(screen.getByRole('spinbutton', { name: '小时' })).toHaveAttribute('aria-valuenow', '9');
+    expect(screen.getByRole('button', { name: '确认执行 1 项' })).toBeEnabled();
+    await click(screen.getByRole('button', { name: '确定' }));
     expect(screen.getByRole('button', { name: '确认执行 1 项' })).toBeDisabled();
     expect(client.execute).not.toHaveBeenCalled();
   });

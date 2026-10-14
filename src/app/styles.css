@@ -381,6 +381,7 @@ button:disabled { cursor: default; opacity: .65; }
 .status-island__panel-title strong { color: var(--text-primary); font-size: 0.95rem; font-weight: 600; }
 .status-island__panel-title > span { overflow: hidden; color: var(--text-muted); font-size: 0.85rem; font-weight: 500; text-overflow: ellipsis; }
 .status-island__panel-body { min-height: 0; overflow-y: auto; display: grid; align-content: start; gap: 2px; }
+.status-island__expired { margin: 0; padding: 0; list-style: none; display: grid; gap: 2px; min-width: 0; }
 /* Opened from the summary: one section per marker, every item listed. The body
    already scrolls, so a long day grows downward instead of truncating. */
 .status-island__group { display: grid; align-content: start; gap: 2px; }
@@ -1186,12 +1187,12 @@ body:has(.screen-status-island-root),
 .time-picker__trigger[aria-expanded="true"] { border-color: var(--color-primary); }
 .time-picker__trigger:focus-visible { outline: 0; }
 .time-picker__popup {
-  position: absolute;
+  position: fixed;
   z-index: 70;
-  top: calc(100% + 8px);
+  overflow-y: auto;
   left: 0;
   box-sizing: border-box;
-  width: 280px;
+  width: 352px;
   max-width: calc(100vw - 32px);
   padding: 16px;
   color: var(--text-secondary);
@@ -1201,15 +1202,18 @@ body:has(.screen-status-island-root),
   box-shadow: var(--shadow-dropdown);
 }
 /* Inside the start/end row the time trigger sits at the right of each column,
-   so anchor its popup to the right edge to keep the full 280px within the
+   so anchor its popup to the right edge to keep the popup within the
    dialog instead of overflowing past it. */
-.event-form__range .time-picker__popup { left: auto; right: 0; }
+
 .time-picker__steppers { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; }
-.time-picker__stepper { display: grid; justify-items: center; gap: 8px; }
-.time-picker__unit { color: var(--text-muted); font-size: 0.85rem; font-weight: 600; }
+.time-picker__column { min-width: 0; display: grid; gap: var(--space-2); }
+.time-picker__column:nth-child(2) { grid-column: 3; }
+.time-picker__stepper { display: grid; grid-template-columns: 40px minmax(0, 1fr) 40px; align-items: center; height: 64px; border: 1px solid transparent; border-radius: var(--radius-default); background: var(--bg-subtle); }
+.time-picker__stepper:focus-within { border-color: var(--color-primary); }
+.time-picker__unit { color: var(--text-muted); font-size: 0.85rem; font-weight: 600; text-align: center; }
 .time-picker__stepper button {
-  width: 35px;
-  height: 35px;
+  width: 40px;
+  height: 40px;
   padding: 0;
   display: grid;
   place-items: center;
@@ -1218,14 +1222,23 @@ body:has(.screen-status-island-root),
   border-radius: var(--radius-default);
   background: transparent;
 }
-.time-picker__stepper button:hover { color: var(--color-primary-active); background: var(--bg-subtle); }
+.time-picker__stepper button { grid-column: 1; grid-row: 1; font-size: 1.25rem; }
+.time-picker__stepper button:last-child { grid-column: 3; }
+.time-picker__stepper button:hover { color: var(--color-primary-active); background: var(--bg-secondary); }
 .time-picker__stepper svg { width: 18px; height: 18px; }
 .time-picker__value {
   box-sizing: border-box;
-  min-width: 64px;
-  min-height: 56px;
-  display: grid;
-  place-items: center;
+  grid-column: 2;
+  grid-row: 1;
+  width: 100%;
+  min-width: 0;
+  height: 56px;
+  padding: 0;
+  text-align: center;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  border: 1px solid transparent;
+  outline: 0;
   color: var(--text-primary);
   border-radius: var(--radius-default);
   background: var(--bg-subtle);
@@ -1233,8 +1246,12 @@ body:has(.screen-status-island-root),
   font-weight: 700;
   line-height: 1.25;
 }
-.time-picker__value:focus-visible { outline: 0; }
-.time-picker__separator { margin-top: 28px; color: var(--text-primary); font-size: 1.75rem; font-weight: 700; }
+.time-picker__value:focus { outline: 0; border-color: transparent; box-shadow: none; }
+.time-picker__stepper button:focus-visible { outline: 0; box-shadow: none; }
+.time-picker__value:hover { background: var(--bg-secondary); }
+.time-picker__value[aria-invalid="true"] { border-color: var(--color-danger); }
+.time-picker__error { margin: var(--space-3) 0 0; color: var(--color-danger-active); font-size: 0.85rem; font-weight: 500; }
+.time-picker__separator { grid-column: 2; grid-row: 1; margin-top: 28px; color: var(--text-primary); font-size: 1.75rem; font-weight: 700; }
 .time-picker__quick-values { margin-top: 16px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .time-picker__quick-values button,
 .time-picker__footer button {
@@ -1251,6 +1268,11 @@ body:has(.screen-status-island-root),
 .time-picker__footer button:hover { color: var(--color-primary-active); background: var(--bg-secondary); }
 .time-picker__footer { margin-top: 12px; padding-top: 12px; display: flex; justify-content: space-between; border-top: 1px solid var(--border-default); }
 .time-picker__footer button { padding-inline: 12px; background: transparent; font-size: 0.95rem; }
+
+.time-picker__footer .time-picker__confirm { color: var(--text-inverse); background: var(--color-primary); }
+.time-picker__footer .time-picker__confirm:hover { color: var(--text-inverse); background: var(--color-primary-hover); }
+.time-picker__footer .time-picker__confirm:active { background: var(--color-primary-active); }
+.time-picker__quick-values button[aria-pressed="true"] { color: var(--color-primary-active); background: var(--color-primary-light); }
 
 .date-detail-dialog { width: min(600px, calc(100vw - 32px)); }
 .date-detail-dialog__summary { margin: 0 0 16px; color: var(--text-muted); font-size: 0.85rem; font-weight: 600; }
@@ -1403,7 +1425,8 @@ body:has(.screen-status-island-root),
 .feedback-channel:hover .feedback-channel__value { color: var(--color-primary); }
 
 .settings-dialog { width: min(760px, calc(100vw - 32px)); }
-.settings-form { display: grid; gap: 24px; }
+.settings-form { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: 24px; }
+.settings-form > .good-tabs { min-width: 0; overflow-x: auto; }
 .settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .settings-hint { margin: 12px 0 0; color: var(--text-muted); font-size: 0.8rem; line-height: 1.5; }
 .settings-checks { padding: 20px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; border-radius: var(--radius-default); background: var(--bg-subtle); }

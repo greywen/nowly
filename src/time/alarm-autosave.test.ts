@@ -1,12 +1,46 @@
 import { describe, expect, it, vi } from 'vitest';
 import { alarmAutosave } from './alarm-autosave';
 import type { Alarm, AlarmDraft, TimeRepository } from './time-model';
-const alarm: Alarm = { id: 'a', title: 'Water', hour: 9, minute: 0, enabled: true, repeat: { kind: 'weekly', weekdays: [1] }, createdAt: '', updatedAt: '' };
+const alarm: Alarm = { id: 'a', title: 'Water', hour: 9, minute: 0, enabled: true, repeat: { kind: 'weekly', weekdays: [1] }, createdAt: '', updatedAt: '', effectiveFromUtc: '2026-10-11T08:00:00Z' };
 function repo() { return { updateAlarm: vi.fn(async (id: string, draft: AlarmDraft) => ({ ...alarm, ...draft, id })), deleteAlarm: vi.fn().mockResolvedValue(undefined) } as unknown as TimeRepository; }
 function deferred<T>() { let resolve!: (v: T) => void; const promise = new Promise<T>(r => { resolve = r; }); return { promise, resolve }; }
 const tick = async () => { await new Promise(r => setTimeout(r, 0)); };
 
 describe('repository alarm queues', () => {
+  it('sends title intent only after scheduler disables a once alarm', async () => {
+    const r = repo(), s = alarmAutosave(r);
+    const once: Alarm = { ...alarm, repeat: { kind: 'once' } };
+    s.seed(once);
+    s.update(once, { title: 'After firing' });
+    await tick();
+    expect(r.updateAlarm).toHaveBeenCalledWith('a', { title: 'After firing' });
+  });
+
+  it('reconciles external state while preserving failed title intent and retry', async () => {
+    const r = repo(), s = alarmAutosave(r);
+    vi.mocked(r.updateAlarm).mockRejectedValueOnce(new Error('offline'));
+    s.update(alarm, { title: 'My draft' });
+    await tick();
+    s.reconcile([{ ...alarm, enabled: false }]);
+    expect(s.get('a')?.draft).toMatchObject({ title: 'My draft', enabled: false });
+    expect(s.get('a')?.error).toBe('offline');
+    s.retry('a');
+    await tick();
+    expect(r.updateAlarm).toHaveBeenLastCalledWith('a', { title: 'My draft' });
+  });
+
+  it('preserves newer queued user intents while reconciling an in-flight write', async () => {
+    const r = repo(), s = alarmAutosave(r), first = deferred<Alarm>();
+    vi.mocked(r.updateAlarm).mockImplementationOnce(() => first.promise);
+    s.update(alarm, { title: 'First' });
+    await tick();
+    s.update(alarm, { title: 'Latest', enabled: true });
+    s.reconcile([{ ...alarm, enabled: false }]);
+    expect(s.get('a')?.draft).toMatchObject({ title: 'Latest', enabled: true });
+    first.resolve({ ...alarm, title: 'First', enabled: false });
+    await tick();
+    expect(r.updateAlarm).toHaveBeenLastCalledWith('a', { title: 'Latest', enabled: true });
+  });
   it('isolates repositories and IDs', async () => {
     const r1 = repo(), r2 = repo(); const s1 = alarmAutosave(r1), s2 = alarmAutosave(r2);
     s1.update(alarm, { title: 'First' }); s1.update({ ...alarm, id: 'b' }, { title: 'Second' }); s2.update(alarm, { minute: 5 });

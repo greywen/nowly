@@ -1,4 +1,4 @@
-use super::types::{Alarm, AlarmDraft, TimeSettings};
+use super::types::{Alarm, AlarmDraft, AlarmPatch, TimeSettings};
 use crate::db::AppDb;
 use crate::error::CommandError;
 use tauri::State;
@@ -34,7 +34,7 @@ pub fn create_alarm(db: State<'_, AppDb>, draft: AlarmDraft) -> Result<Alarm, Co
 pub fn update_alarm(
     db: State<'_, AppDb>,
     id: String,
-    draft: AlarmDraft,
+    draft: AlarmPatch,
 ) -> Result<Alarm, CommandError> {
     let mut connection = db.0.lock().map_err(CommandError::database)?;
     super::store::update_alarm(&mut connection, &id, draft, chrono::Utc::now())

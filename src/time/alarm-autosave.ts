@@ -18,7 +18,7 @@ export function alarmAutosave(repository: TimeRepository) {
 }
 
 function createStore(repository: TimeRepository) {
-  const entries = new Map<string, { state: AlarmSaveState; pending: boolean; running: Promise<void> | null; removing: boolean }>();
+  const entries = new Map<string, { state: AlarmSaveState; intents: Map<keyof AlarmDraft, number>; pending: boolean; running: Promise<void> | null; removing: boolean }>();
   const listeners = new Set<() => void>();
   let version = 0;
   function emit() { version++; listeners.forEach(listener => listener()); }
@@ -26,7 +26,7 @@ function createStore(repository: TimeRepository) {
   function seed(alarm: Alarm) {
     let entry = entries.get(alarm.id);
     if (!entry) {
-      entry = { state: { draft: alarmToDraft(alarm), persisted: alarm, status: 'idle', error: null, revision: 0 }, pending: false, running: null, removing: false };
+      entry = { state: { draft: alarmToDraft(alarm), persisted: alarm, status: 'idle', error: null, revision: 0 }, intents: new Map(), pending: false, running: null, removing: false };
       entries.set(alarm.id, entry);
     }
     return entry;
@@ -38,13 +38,19 @@ function createStore(repository: TimeRepository) {
       while (entry.pending && !entry.removing) {
         entry.pending = false;
         const { draft, revision } = entry.state;
+        const sentIntents = new Map(entry.intents);
+        const patch = Object.fromEntries([...sentIntents.keys()].map(key => [key, draft[key]])) as Partial<AlarmDraft>;
         try {
-          const saved = await repository.updateAlarm(id, draft);
+          const saved = await repository.updateAlarm(id, patch);
           if (entry.removing) {
             entry.state = { ...entry.state, persisted: saved };
             continue;
           }
-          entry.state = { ...entry.state, persisted: saved, status: revision === entry.state.revision ? 'saved' : 'saving', error: null };
+          sentIntents.forEach((sentRevision, key) => {
+            if (entry.intents.get(key) === sentRevision) entry.intents.delete(key);
+          });
+          const remaining = Object.fromEntries([...entry.intents.keys()].map(key => [key, entry.state.draft[key]]));
+          entry.state = { ...entry.state, persisted: saved, draft: { ...alarmToDraft(saved), ...remaining }, status: revision === entry.state.revision ? 'saved' : 'saving', error: null };
           emit();
           notify();
         } catch (error) {
@@ -60,10 +66,21 @@ function createStore(repository: TimeRepository) {
   function update(alarm: Alarm, patch: Partial<AlarmDraft>) {
     const entry = seed(alarm);
     if (entry.removing || entry.state.status === 'deleted') return;
-    entry.state = { ...entry.state, draft: { ...entry.state.draft, ...patch }, revision: entry.state.revision + 1, status: 'saving', error: null };
+    const revision = entry.state.revision + 1;
+    (Object.keys(patch) as (keyof AlarmDraft)[]).forEach(key => entry.intents.set(key, revision));
+    entry.state = { ...entry.state, draft: { ...entry.state.draft, ...patch }, revision, status: 'saving', error: null };
     entry.pending = true;
     emit();
     pump(alarm.id);
+  }
+  function reconcile(alarms: Alarm[]) {
+    alarms.forEach(alarm => {
+      const entry = seed(alarm);
+      if (entry.removing || entry.state.status === 'deleted') return;
+      const intents = Object.fromEntries([...entry.intents.keys()].map(key => [key, entry.state.draft[key]]));
+      entry.state = { ...entry.state, persisted: alarm, draft: { ...alarmToDraft(alarm), ...intents } };
+    });
+    emit();
   }
   function retry(id: string) {
     const entry = entries.get(id);
@@ -100,7 +117,7 @@ function createStore(repository: TimeRepository) {
     states: () => [...entries.values()].map(entry => entry.state),
     subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
     version: () => version,
-    update, retry, remove,
+    update, reconcile, retry, remove,
     created: (alarm: Alarm) => { seed(alarm); emit(); notify(); }
   };
 }

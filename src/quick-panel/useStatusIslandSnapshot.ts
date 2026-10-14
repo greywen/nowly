@@ -17,6 +17,7 @@ import {
 
 export type NativeStatusIslandSnapshot = {
   alarmNotices?: AlarmNotice[];
+  expiredAlarmNotices?: AlarmNotice[];
   sampledAt: string;
   localDate?: string;
   events: CalendarEvent[];
@@ -123,7 +124,8 @@ export function useStatusIslandSnapshot(): {
       tasks: resource.data.tasks,
       focus: nativeFocus ?? resource.data.focus,
       reminderStates: resource.data.reminders ?? [],
-      alarmNotices: resource.data.alarmNotices ?? []
+      alarmNotices: resource.data.alarmNotices ?? [],
+      expiredAlarmNotices: resource.data.expiredAlarmNotices ?? []
     });
   }, [now, nativeFocus, resource.data, resource.status]);
 

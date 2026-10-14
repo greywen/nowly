@@ -39,7 +39,58 @@ const MIGRATIONS: &[(i64, Migration)] = &[
     (30, migration_30_bar_menu),
     (31, migration_31_time_module),
     (32, migration_32_unified_time),
+    (33, migration_33_alarm_notice_expiry),
+    (34, migration_34_date_free_alarms),
 ];
+
+fn migration_34_date_free_alarms(transaction: &Transaction<'_>) -> Result<()> {
+    transaction.execute_batch(
+        "DELETE FROM alarm_notices;
+         DELETE FROM alarm_scheduler_state;
+         DELETE FROM alarms;",
+    )
+}
+
+#[cfg(test)]
+#[test]
+fn migration_34_resets_only_alarms_once() {
+    let mut connection = Connection::open_in_memory().unwrap();
+    connection.execute_batch("CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);").unwrap();
+    for (version, migration) in MIGRATIONS.iter().filter(|(version, _)| *version <= 33) {
+        let transaction = connection.transaction().unwrap();
+        migration(&transaction).unwrap();
+        transaction.execute("INSERT INTO schema_migrations VALUES (?1,'t')", [version]).unwrap();
+        transaction.commit().unwrap();
+    }
+    connection.execute_batch("INSERT INTO alarms VALUES ('old','Old',9,0,'{\"kind\":\"once\",\"date\":\"2099-01-01\"}',1,'t','t','t');
+        INSERT INTO alarm_notices(id,kind,title,due_at_utc,range_start_utc,range_end_utc,count,created_at_utc) VALUES ('old','missedSummary','Old','t','t','t',1,'t');
+        INSERT INTO alarm_scheduler_state VALUES (1,'t','t');
+        INSERT INTO time_settings VALUES (1,'keep','t');
+        CREATE TABLE preserved_business_data(value TEXT);
+        INSERT INTO preserved_business_data VALUES ('keep');").unwrap();
+    let tables: Vec<String> = {
+        let mut statement = connection.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT IN ('alarms','alarm_notices','alarm_scheduler_state','schema_migrations') ORDER BY name").unwrap();
+        statement.query_map([], |row| row.get(0)).unwrap().collect::<Result<Vec<_>>>().unwrap()
+    };
+    let snapshot = |connection: &Connection| tables.iter().map(|table| {
+        let mut statement = connection.prepare(&format!("SELECT * FROM \"{table}\" ORDER BY rowid")).unwrap();
+        let columns = statement.column_count();
+        statement.query_map([], |row| (0..columns).map(|index| row.get::<_,rusqlite::types::Value>(index)).collect::<Result<Vec<_>>>()).unwrap().collect::<Result<Vec<_>>>().unwrap()
+    }).collect::<Vec<_>>();
+    let before = snapshot(&connection);
+    migrate(&mut connection).unwrap();
+    for table in ["alarms", "alarm_notices", "alarm_scheduler_state"] {
+        assert_eq!(connection.query_row(&format!("SELECT count(*) FROM {table}"), [], |row| row.get::<_,i64>(0)).unwrap(), 0, "{table}");
+    }
+    assert_eq!(snapshot(&connection), before);
+    connection.execute_batch("INSERT INTO alarms VALUES ('new','New',9,0,'{\"kind\":\"once\"}',1,'t','t','t');").unwrap();
+    migrate(&mut connection).unwrap();
+    assert_eq!(connection.query_row("SELECT count(*) FROM alarms", [], |row| row.get::<_,i64>(0)).unwrap(), 1);
+}
+
+fn migration_33_alarm_notice_expiry(transaction: &Transaction<'_>) -> Result<()> {
+    transaction.execute_batch("ALTER TABLE alarm_notices ADD COLUMN expired_at_utc TEXT;")
+}
 
 fn migration_32_unified_time(transaction: &Transaction<'_>) -> Result<()> {
     // Development and release share a database location. Schema upgrades must
@@ -1544,7 +1595,7 @@ mod tests {
         migrate_through(&mut connection, 31).unwrap();
         seed_time_reset_data(&connection);
         let before = time_reset_snapshot(&connection);
-        migrate(&mut connection).unwrap();
+        migrate_through(&mut connection, 32).unwrap();
         assert_eq!(time_reset_snapshot(&connection), before);
         assert_eq!(connection.query_row(
             "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='time_schema_resets'",
@@ -1556,10 +1607,12 @@ mod tests {
         connection.execute_batch(
             "INSERT INTO time_settings VALUES(1,'{\"clocks\":[]}','now');
              INSERT INTO alarms VALUES('old-alarm','Wake',8,0,'{}',1,'now','now','now');
-             INSERT INTO alarm_notices VALUES('n1','alarm','old-alarm','instance','Wake',
-                'now','now','now',1,'now',NULL,NULL);
-             INSERT INTO alarm_notices VALUES('n2','missedSummary',NULL,NULL,'Missed',
-                'now','now','now',1,'now',NULL,NULL);
+             INSERT INTO alarm_notices
+                (id,kind,alarm_id,instance_key,title,due_at_utc,range_start_utc,range_end_utc,count,created_at_utc,acknowledged_at_utc,snoozed_until_utc)
+                VALUES('n1','alarm','old-alarm','instance','Wake','now','now','now',1,'now',NULL,NULL);
+             INSERT INTO alarm_notices
+                (id,kind,alarm_id,instance_key,title,due_at_utc,range_start_utc,range_end_utc,count,created_at_utc,acknowledged_at_utc,snoozed_until_utc)
+                VALUES('n2','missedSummary',NULL,NULL,'Missed','now','now','now',1,'now',NULL,NULL);
              INSERT INTO alarm_scheduler_state VALUES(1,'now','now');
              INSERT INTO focus_sessions VALUES('old-session',1500,1500,'completed','now','now','now');
              INSERT INTO module_state VALUES('focusTimer','{\"snapshot\":\"old\"}','now');

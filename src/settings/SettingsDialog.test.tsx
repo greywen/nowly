@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AppSettings } from '../data/nowly-repository';
 import { SettingsDialog } from './SettingsDialog';
 import { invoke } from '@tauri-apps/api/core';
@@ -12,6 +12,57 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn().mockRejectedValue(new E
 const settings:AppSettings={wallpaperEnabled:false,launchAtLogin:false,targetMonitorId:null,density:'balanced',weekStart:'monday',dateFormat:'localized',showWeekends:true,iconStyle:'duotone',hideTopbarInWallpaper:true};
 
 describe('SettingsDialog',()=>{
+  afterEach(() => vi.restoreAllMocks());
+
+  it('previews the selected asset at draft volume and stops on switch, mute and tab exit', async () => {
+    const user = userEvent.setup();
+    const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
+    const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
+    const save = vi.fn();
+    render(<SettingsDialog settings={settings} onClose={vi.fn()} onSave={save}/>);
+    await user.click(screen.getByRole('tab', { name: 'Nowly Bar' }));
+    await user.click(screen.getByRole('button', { name: '试听 · 日历提醒音效' }));
+    const calendar = play.mock.contexts[0] as HTMLAudioElement;
+    expect(calendar.getAttribute('src')).toBe('/sounds/chime-glass.wav');
+    expect(calendar.volume).toBe(0.35);
+    await user.click(screen.getByRole('button', { name: '试听 · 闹钟提醒音效' }));
+    expect(pause.mock.contexts).toContain(calendar);
+    expect(play).toHaveBeenCalledTimes(2);
+    await user.click(screen.getByRole('checkbox', { name: '启用提醒音效' }));
+    expect(pause.mock.contexts).toContain(play.mock.contexts[1]);
+    expect(screen.getByRole('button', { name: '试听 · 闹钟提醒音效' })).toBeDisabled();
+    await user.click(screen.getByRole('checkbox', { name: '启用提醒音效' }));
+    await user.click(screen.getByRole('button', { name: '试听 · 专注完成音效' }));
+    await user.click(screen.getByRole('tab', { name: '界面' }));
+    expect(pause.mock.contexts).toContain(play.mock.contexts[2]);
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it('reports preview failures instead of silently claiming playback succeeded', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockRejectedValue(new Error('audio output failed'));
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
+    render(<SettingsDialog settings={settings} onClose={vi.fn()} onSave={vi.fn()}/>);
+    await user.click(screen.getByRole('tab', { name: 'Nowly Bar' }));
+    await user.click(screen.getByRole('button', { name: '试听 · 日历提醒音效' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('音效播放失败');
+  });
+
+  it('edits sound defaults and saves a silent calendar choice with the configured volume', async () => {
+    const user = userEvent.setup();
+    const save = vi.fn(async value => value);
+    render(<SettingsDialog settings={settings} onClose={vi.fn()} onSave={save}/>);
+    await user.click(screen.getByRole('tab', { name: 'Nowly Bar' }));
+    expect(screen.getByRole('checkbox', { name: '启用提醒音效' })).toBeChecked();
+    expect(screen.getByRole('slider', { name: '提醒音量' })).toHaveValue('35');
+    await user.click(screen.getByRole('combobox', { name: '日历提醒音效' }));
+    await user.click(screen.getByRole('option', { name: '无' }));
+    fireEvent.change(screen.getByRole('slider', { name: '提醒音量' }), { target: { value: '20' } });
+    await user.click(screen.getByRole('button', { name: '保存设置' }));
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ soundSettings: {
+      enabled: true, volume: 20, calendar: 'none', alarm: 'bell-rise', missedSummary: 'tap', focus: 'resolve'
+    } }));
+  });
   it('keeps module time settings out of the interface tab', () => {
     render(<SettingsDialog settings={settings} onClose={vi.fn()} onSave={vi.fn()}/>);
     expect(screen.getByRole('tab', { name: '界面' })).toHaveAttribute('aria-selected', 'true');
