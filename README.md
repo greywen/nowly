@@ -73,6 +73,9 @@ focusing. All data stays on your machine in a local SQLite database.
 - **Kanban board** — customizable lanes, cards, and fields for lightweight
   project tracking.
 - **Notes** — quick capture with a dedicated manager for organizing entries.
+- **Stickers** — an optional image and plain-text canvas with original, rounded,
+  circular and photo-frame styles, text formatting, transforms, opacity, layers,
+  locking, duplication and deletion.
 - **Wallpaper mode** — embed Nowly behind your desktop icons with taskbar-aware
   positioning, or run it as a regular window.
 - **Flexible layout** — arrange every module on a 12x8 grid; toggle modules on
@@ -103,6 +106,30 @@ focusing. All data stays on your machine in a local SQLite database.
   preference is enabled; otherwise it hides to the tray.
 - **Exit Nowly** in the tray menu is the only action that terminates the
   process.
+
+### Sticker canvas
+
+Add **Stickers** under **Edit layout → Add module**. If the grid is full, remove
+or shrink another module first. The module displays your work; **Edit stickers**
+opens the editing dialog. Select files or drop them on the editing canvas:
+PNG, JPEG and static WebP only, up to 10 MiB each, at most 4096 pixels per
+dimension and 16 million pixels in total. Transparency is preserved. Circular
+style crops the display; other styles show the full image without changing its file.
+
+A canvas holds up to 50 objects. Text supports up to 2000 Unicode characters,
+integer font sizes from 12 to 160px, hex colors, bold, italic, underline,
+alignment and newlines. The transparent 800×600 logical canvas fits the module
+uniformly; resizing the window does not rearrange the artwork.
+Use the layer list to select covered, transparent or locked objects. Unlock
+before editing. Position, size and rotation fields offer keyboard alternatives
+to dragging. Invalid geometry and overflowing text must be corrected before saving.
+
+Changes take effect on **Save**; closing a changed draft asks before discarding.
+Failed saves retain the draft for retry. Removing the module only hides it;
+adding it again restores the canvas. Images and layout stay local, independently
+of the existing 1 MiB note/task attachment limit. The browser development mode
+uses IndexedDB and also survives reloads. This version does not include online
+assets, animated stickers, custom fonts, background removal or file export.
 
 ### Nowly Bar visibility
 

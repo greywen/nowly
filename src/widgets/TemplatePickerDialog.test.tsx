@@ -29,9 +29,11 @@ describe('TemplatePickerDialog', () => {
     expect(screen.getByText('看板')).toBeInTheDocument();
   });
 
-  it('lists the optional extension modules alongside the built-ins', () => {
-    renderPicker();
-    expect(screen.getByText('专注计时')).toBeInTheDocument();
+  it('adds the optional stickers module alongside the built-ins', () => {
+    const onAdd = vi.fn();
+    renderPicker({ onAdd });
+    fireEvent.click(screen.getByRole('button', { name: '添加贴纸' }));
+    expect(onAdd).toHaveBeenCalledWith('stickers');
   });
 
   it('marks a module already on the canvas as added', () => {

@@ -45,6 +45,7 @@
     "react-dom": "latest"
   },
   "devDependencies": {
+    "fake-indexeddb": "^6.2.4",
     "@iconify-json/solar": "^1.2.10",
     "@playwright/test": "latest",
     "@tauri-apps/cli": "latest",

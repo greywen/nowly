@@ -1,11 +1,13 @@
 import type { Language } from './store';
 import { assistantTranslations } from './assistant-translations';
+import { stickerTranslations } from '../stickers/sticker-translations';
 
 // Flat key -> string dictionaries per language. Keys use dot-namespaces by
 // feature for readability. Interpolation uses `{name}` placeholders resolved by
 // the `t()` helper.
 export const translations: Record<Language, Record<string, string>> = {
   zh: {
+    ...stickerTranslations.zh,
     ...assistantTranslations.zh,
     // Common
     'common.cancel': '取消',
@@ -960,6 +962,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'widget.focusTimer.desc': '番茄钟式专注计时，帮助保持节奏。'
   },
   en: {
+    ...stickerTranslations.en,
     ...assistantTranslations.en,
     // Common
     'common.cancel': 'Cancel',

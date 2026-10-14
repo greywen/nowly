@@ -88,8 +88,18 @@ export const timeDefinition: WidgetDefinition = {
 };
 
 export function buildDefinitions(): WidgetDefinition[] {
-  return [...builtinDefinitions, kanbanDefinition, timeDefinition, ...extensionDefinitions];
+  return [...builtinDefinitions, kanbanDefinition, timeDefinition, stickersDefinition, ...extensionDefinitions];
 }
+
+export const stickersDefinition: WidgetDefinition = {
+  id: 'stickers',
+  get name() { return t('widget.stickers.name'); },
+  get description() { return t('widget.stickers.desc'); },
+  category: 'builtin',
+  minW: 2,
+  minH: 2,
+  default: { x: 0, y: 0, w: 4, h: 3 }
+};
 
 // The default layout the app ships with (built-in modules tiling the grid).
 export const defaultLayout: LayoutState = builtinDefinitions.map((definition) => ({

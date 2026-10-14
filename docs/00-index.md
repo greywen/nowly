@@ -7,6 +7,8 @@
 - Nowly Bar：`src/quick-panel/StatusIslandApp.tsx`
 - Tauri 入口：`src-tauri/src/main.rs`
 - 统一设计规范：`design.md`
+- 贴纸模块：`src/stickers/`；使用说明见 [中文 README](../README.zh.md#贴纸画布) / [English README](../README.md#sticker-canvas)
+- 贴纸浏览器存储：`src/data/browser-sticker-store.ts`（IndexedDB，与笔记附件隔离）
 
 ## 当前功能计划
 
