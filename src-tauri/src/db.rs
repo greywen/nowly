@@ -6,6 +6,27 @@ pub struct AppDb(pub Mutex<Connection>);
 
 type Migration = fn(&Transaction<'_>) -> Result<()>;
 
+#[cfg(test)]
+#[test]
+fn stickers_migration_preserves_data_and_is_idempotent() {
+    let mut connection = Connection::open_in_memory().unwrap();
+    connection.execute_batch("CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);").unwrap();
+    for (version, migration) in MIGRATIONS.iter().filter(|(version, _)| *version <= 34) {
+        let transaction = connection.transaction().unwrap();
+        migration(&transaction).unwrap();
+        transaction.execute("INSERT INTO schema_migrations VALUES (?1,'t')", [version]).unwrap();
+        transaction.commit().unwrap();
+    }
+    connection.execute_batch("INSERT INTO attachments VALUES ('existing','existing.png','attachments/existing',1048576,'image/png','t');").unwrap();
+    connection.execute_batch("CREATE TABLE sticker_preserved(value TEXT); INSERT INTO sticker_preserved VALUES ('keep');").unwrap();
+    migrate(&mut connection).unwrap();
+    migrate(&mut connection).unwrap();
+    assert_eq!(connection.query_row("SELECT count(*) FROM sqlite_master WHERE name IN ('sticker_boards','sticker_assets','sticker_asset_refs')", [], |row| row.get::<_, i64>(0)).unwrap(), 3);
+    assert_eq!(connection.query_row("SELECT value FROM sticker_preserved", [], |row| row.get::<_, String>(0)).unwrap(), "keep");
+    assert_eq!(connection.query_row("SELECT byte_size FROM attachments WHERE id='existing'", [], |row| row.get::<_, i64>(0)).unwrap(), 1048576);
+    assert_eq!(crate::attachments::MAX_ATTACHMENT_BYTES, 1048576);
+}
+
 const MIGRATIONS: &[(i64, Migration)] = &[
     (1, migration_1_core_tables),
     (2, migration_2_current_columns),
@@ -41,6 +62,7 @@ const MIGRATIONS: &[(i64, Migration)] = &[
     (32, migration_32_unified_time),
     (33, migration_33_alarm_notice_expiry),
     (34, migration_34_date_free_alarms),
+    (35, crate::stickers::migrate),
 ];
 
 fn migration_34_date_free_alarms(transaction: &Transaction<'_>) -> Result<()> {

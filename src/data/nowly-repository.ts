@@ -41,6 +41,7 @@ import type { HexColor } from '../lib/color';
 import type { IconStyle } from '../components/icon-style';
 import type { BarMenuItem } from '../app/bar-menu';
 import type { SoundSettings } from '../settings/sound-settings';
+import type { StickerAsset, StickerBoard } from '../stickers/sticker-model';
 import type { WorldClock, TimeSettings, Alarm, AlarmDraft } from '../time/time-model';
 export type { WorldClock, TimeSettings, Alarm, AlarmDraft };
 
@@ -118,6 +119,11 @@ export type RepositoryError = {
 };
 
 export type NowlyRepository = {
+  getStickerBoard?(): Promise<StickerBoard>;
+  saveStickerBoard?(board: StickerBoard): Promise<StickerBoard>;
+  uploadStickerImage?(fileName: string, bytes: Uint8Array): Promise<StickerAsset>;
+  readStickerImage?(id: string): Promise<Uint8Array>;
+  discardStickerImages?(ids: string[]): Promise<void>;
   getTimeSettings(): Promise<TimeSettings>;
   saveTimeSettings(settings: TimeSettings): Promise<TimeSettings>;
   listAlarms(): Promise<Alarm[]>;

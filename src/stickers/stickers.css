@@ -1,0 +1,52 @@
+.sticker-widget { min-width: 0; min-height: 0; }
+.sticker-widget__body { min-height: 0; flex: 1; padding: var(--space-3) var(--space-6) var(--space-6); display: grid; }
+.sticker-widget__empty { align-self: center; text-align: center; display: grid; gap: var(--space-3); }
+.sticker-widget__empty p { margin: 0; }
+.sticker-canvas { width: 100%; height: 100%; min-width: 0; min-height: 0; display: grid; place-items: center; overflow: hidden; }
+.sticker-canvas--editing { touch-action: none; background: var(--bg-subtle); border: 1px dashed var(--border-emphasis); border-radius: var(--radius-default); }
+.sticker-canvas__viewport { position: relative; }
+.sticker-canvas__stage { position: absolute; left: 0; top: 0; transform-origin: top left; }
+.sticker-object { position: absolute; transform-origin: center; }
+.sticker-canvas--editing .sticker-object { cursor: grab; outline: 1px solid transparent; }
+.sticker-canvas--editing .sticker-object:focus-visible { outline-color: var(--color-primary); }
+.sticker-object--selected { outline: 1px solid var(--color-primary) !important; }
+.sticker-object__text { width: 100%; height: 100%; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; font-family: var(--font-sans); overflow: hidden; }
+.sticker-object__image { width: 100%; height: 100%; overflow: hidden; }
+.sticker-object__image img { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+.sticker-object__image--rounded { border-radius: var(--radius-default); }
+.sticker-object__image--circle { border-radius: 50%; clip-path: circle(closest-side); }
+.sticker-object__image--circle img { object-fit: cover; }
+.sticker-object__image--photo { background: var(--bg-surface); border: 1px solid var(--border-default); padding: var(--space-3) var(--space-3) var(--space-6); border-radius: var(--radius-default); }
+.sticker-object__missing { display: grid; place-items: center; height: 100%; font-size: 1rem; color: var(--color-danger-active); background: var(--color-danger-light); }
+.sticker-object__handle { position: absolute; width: 24px; height: 24px; cursor: pointer; }
+.sticker-object__handle::after { content: ''; position: absolute; width: 8px; height: 8px; background: var(--color-primary); inset: 8px; }
+.sticker-object__handle--resize { bottom: -12px; right: -12px; cursor: nwse-resize; }
+.sticker-object__handle--rotate { top: -12px; left: calc(50% - 12px); }
+.good-dialog.sticker-editor-dialog { width: min(1040px, calc(100vw - 32px)); }
+.sticker-editor { container: sticker-editor / inline-size; display: grid; gap: var(--space-5); }
+.sticker-editor__fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.sticker-editor__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.sticker-editor__layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: var(--space-6); align-items: start; }
+.sticker-editor__canvas { min-width: 0; aspect-ratio: 4 / 3; position: sticky; top: 0; }
+.sticker-editor__sidebar { min-width: 0; display: grid; gap: var(--space-5); }
+.sticker-editor__hint { font-size: .85rem; color: var(--text-secondary); }
+.good-dialog__footer > .sticker-editor__hint { margin-right: auto; }
+.sticker-properties { display: grid; gap: var(--space-5); min-width: 0; }
+.sticker-properties h3, .sticker-layers h3 { font-size: 1.15rem; font-weight: 600; line-height: 1.2; margin: 0; color: var(--text-primary); }
+.sticker-properties__geometry { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-5); }
+.sticker-field { display: grid; gap: var(--space-2); min-width: 0; font-size: .95rem; }
+.sticker-field .good-input { width: 100%; min-width: 0; }
+.sticker-field textarea { min-height: 96px; resize: none; }
+.sticker-properties__format { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.sticker-properties__format .btn[aria-pressed="true"] { background: var(--color-primary-light); color: var(--color-primary-active); border-color: var(--color-primary); }
+.sticker-layers { display: grid; gap: var(--space-2); }
+.sticker-layers__item { width: 100%; min-height: 40px; text-align: left; padding: var(--space-2) var(--space-3); border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-surface); color: var(--text-secondary); overflow-wrap: anywhere; }
+.sticker-layers__item:hover { color: var(--color-primary-active); background: var(--bg-subtle); }
+.sticker-layers__item[aria-pressed="true"] { background: var(--color-primary-light); border-color: var(--color-primary); color: var(--color-primary-active); }
+.sticker-layers__item:focus-visible { box-shadow: var(--shadow-focus); outline: 0; }
+.sticker-error { margin: 0; padding: var(--space-3) var(--space-4); border-radius: var(--radius-default); color: var(--color-danger-active); background: var(--color-danger-light); white-space: pre-wrap; font-size: .85rem; }
+.sticker-editor__confirm { padding: var(--space-4); border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-surface); }
+@container sticker-editor (max-width: 760px) {
+  .sticker-editor__layout { grid-template-columns: minmax(0, 1fr); }
+  .sticker-editor__canvas { position: static; }
+}

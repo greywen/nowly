@@ -21,6 +21,8 @@
 // file the desktop build would refuse is refused here too. ("Self-contained"
 // above means it needs no Tauri runtime, not that it avoids imports.)
 import { isAllowedAttachmentName } from '../lib/attachment';
+import { getBrowserStickerBoard, saveBrowserStickerBoard, uploadBrowserStickerImage, readBrowserStickerImage, discardBrowserStickerImages } from './browser-sticker-store';
+import type { StickerBoard } from '../stickers/sticker-model';
 import { normalizeBarMenu } from '../app/bar-menu';
 import { alarmToDraft, defaultTimeSettings, type Alarm, type AlarmDraft, type AlarmNotice, type TimeSettings } from '../time/time-model';
 
@@ -361,6 +363,11 @@ export function installBrowserTauriBackend() {
   persist();
 
   const handlers: Record<string, (args: Dict) => unknown> = {
+    get_sticker_board: () => getBrowserStickerBoard(),
+    save_sticker_board: a => saveBrowserStickerBoard(a.board as StickerBoard),
+    upload_sticker_image: a => uploadBrowserStickerImage(String(a.fileName), new Uint8Array(a.bytes as number[])),
+    read_sticker_image: a => readBrowserStickerImage(String(a.id)).then(bytes => Array.from(bytes)),
+    discard_sticker_images: a => discardBrowserStickerImages(a.ids as string[]),
     get_time_settings: () => store.timeSettings,
     save_time_settings: (a) => {
       const settings = a.settings as TimeSettings;

@@ -29,6 +29,8 @@ import { useNowlyRepository } from '../data/RepositoryContext';
 import { useCurrentTime } from './useCurrentTime';
 import { t, useTranslation, getLanguage } from '../i18n';
 import { TimeModule } from '../time/TimeModule';
+import { StickersWidget } from '../stickers/StickersWidget';
+import { stickerError } from '../stickers/useStickers';
 import { TimeSettingsDialog } from '../time/TimeSettingsDialog';
 import { useFocusTimer } from '../focus/FocusTimerContext';
 import { FocusStatisticsDialog } from '../focus/FocusStatisticsDialog';
@@ -88,6 +90,8 @@ function AppContent() {
     onSubscriptionsChanged();
   }, [subscriptions, repository, onSubscriptionsChanged]);
   const [focusStatisticsOpen, setFocusStatisticsOpen] = useState(false);
+  const [stickerDialog, setStickerDialog] = useState<{ trigger: HTMLElement | null } | null>(null);
+  const [stickerDialogError, setStickerDialogError] = useState<string | null>(null);
   const [timeDialog, setTimeDialog] = useState<{ createAlarm: boolean; trigger: HTMLElement | null } | null>(null);
   const [windowMode, setWindowMode] = useState<WindowMode>('foreground');
   const [isSwitchingWindowMode, setIsSwitchingWindowMode] = useState(false);
@@ -138,6 +142,8 @@ function AppContent() {
   ).length;
   const summary = t('app.summary', { events: todayEventCount, tasks: importantTaskCount, notes: notes.length });
   const modules: Partial<Record<WidgetId, ReactNode>> = {};
+  modules.stickers = <StickersWidget editing={stickerDialog !== null} trigger={stickerDialog?.trigger}
+    error={stickerDialogError} onEdit={openStickerDialog} onClose={() => setStickerDialog(null)} />;
   {
     modules.calendar = (
       <CalendarWidget
@@ -293,6 +299,15 @@ function AppContent() {
     });
   }
 
+  function openStickerDialog() {
+    const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setStickerDialogError(null);
+    void runWindowModeSwitch(async () => {
+      if (windowMode === 'wallpaper') await switchToForeground();
+      setStickerDialog({ trigger });
+    }).catch(error => setStickerDialogError(stickerError(error)));
+  }
+
   const onboardingSteps: GuideStep[] = [
     { title: t('onboarding.welcome.title'), body: t('onboarding.welcome.body') },
     { target: 'workspace', title: t('onboarding.workspace.title'), body: t('onboarding.workspace.body') },
@@ -310,6 +325,7 @@ function AppContent() {
         dateText={new Intl.DateTimeFormat(localeTag(), { dateStyle: 'full' }).format(now)}
         summary={summary}
         modules={modules}
+        configurations={{ stickers: openStickerDialog }}
         definitions={definitions}
         isModeSwitching={isSwitchingWindowMode}
         onSetWallpaper={() => void runWindowModeSwitch(switchToWallpaper)}

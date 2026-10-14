@@ -37,6 +37,7 @@ mod shell;
 mod sound_settings;
 mod sounds;
 mod status_island;
+mod stickers;
 mod subscription_sync;
 mod subscriptions;
 mod task_workspace;
@@ -301,8 +302,14 @@ fn main() {
             // has a stable, discoverable place to read drafts from.
             std::fs::create_dir_all(app_dir.join("dev-modules"))
                 .expect("failed to create dev-modules dir");
-            let connection =
+            let mut connection =
                 open_database(app_dir.join("nowly.sqlite")).expect("failed to open database");
+            if let Err(error) = stickers::collect_startup_garbage(
+                &mut connection,
+                &stickers::stickers_dir(&app_dir),
+            ) {
+                eprintln!("sticker startup garbage collection failed: {}", error.message);
+            }
             // Reclaim attachment files that no rich text content references any
             // more. Startup is the one safe moment: no editor can be open, so an
             // uploaded-but-unsaved attachment cannot be collected out from under
@@ -762,6 +769,11 @@ fn main() {
             attachments::list_attachments,
             attachments::open_attachment,
             attachments::collect_attachment_garbage,
+            stickers::get_sticker_board,
+            stickers::save_sticker_board,
+            stickers::upload_sticker_image,
+            stickers::read_sticker_image,
+            stickers::discard_sticker_images,
             commands::get_app_settings,
             commands::update_app_settings,
             feedback::open_external,
