@@ -74,6 +74,15 @@
   --space-10: 40px;
   --space-12: 48px;
 
+  /* 仅启动欢迎贴纸作品 */
+  --welcome-ink: #343b58;
+  --welcome-text: #6e789d;
+  --welcome-blue: #6f91c8;
+  --welcome-violet: #9381bd;
+  --welcome-wash: linear-gradient(135deg, #fbfcff 0%, #f4f8ff 42%, #f5f1fd 100%);
+  --welcome-light: radial-gradient(ellipse at 48% 44%, rgba(255,255,255,.96) 0%, rgba(255,255,255,.65) 24%, transparent 54%), radial-gradient(ellipse at 8% 74%, rgba(193,216,254,.34) 0%, transparent 49%), radial-gradient(ellipse at 91% 15%, rgba(215,203,247,.35) 0%, transparent 45%);
+  --welcome-logo-shadow: 0 16px 32px rgba(128,143,194,.13);
+
   /* 字体 */
   --font-sans: Inter, "Microsoft YaHei", "PingFang SC", Helvetica, Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;

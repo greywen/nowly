@@ -117,9 +117,10 @@ describe('App startup and window behavior', () => {
 
   it('renders persisted empty startup data instead of samples', async () => {
     renderApp();
-    expect(screen.getByText('正在读取本地日程')).toBeInTheDocument();
-    expect(screen.getByText('正在读取本地任务')).toBeInTheDocument();
-    expect(screen.getByText('正在读取本地便签')).toBeInTheDocument();
+    expect(screen.getByTestId('welcome-sticker')).toBeInTheDocument();
+    expect(screen.queryByText('正在读取本地日程')).not.toBeInTheDocument();
+    expect(screen.queryByText('正在读取本地任务')).not.toBeInTheDocument();
+    expect(screen.queryByText('正在读取本地便签')).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByText('本月暂无日程')).toBeInTheDocument());
     expect(screen.getAllByText('暂无任务')).toHaveLength(4);
     expect(screen.getByText('还没有便签')).toBeInTheDocument();

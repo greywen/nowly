@@ -8,6 +8,9 @@ import { stickerTranslations } from '../stickers/sticker-translations';
 export const translations: Record<Language, Record<string, string>> = {
   zh: {
     ...stickerTranslations.zh,
+    'welcome.title': '欢迎使用 Nowly',
+    'welcome.loading': '正在加载你的工作区…',
+    'welcome.empty': '点击编辑布局，添加你的第一个模块',
     ...assistantTranslations.zh,
     // Common
     'common.cancel': '取消',
@@ -963,6 +966,9 @@ export const translations: Record<Language, Record<string, string>> = {
   },
   en: {
     ...stickerTranslations.en,
+    'welcome.title': 'Welcome to Nowly',
+    'welcome.loading': 'Loading your workspace…',
+    'welcome.empty': 'Click Edit layout to add your first module',
     ...assistantTranslations.en,
     // Common
     'common.cancel': 'Cancel',

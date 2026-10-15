@@ -1,0 +1,10 @@
+.welcome-sticker { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.welcome-sticker__body { position: relative; min-width: 0; min-height: 0; flex: 1; overflow: hidden; isolation: isolate; background: var(--welcome-light), var(--welcome-wash); }
+.welcome-sticker__artwork { position: absolute; inset: 0; pointer-events: none; }
+.welcome-sticker__body [data-object-id="welcome-logo"],
+.welcome-sticker__body [data-object-id="welcome-title"],
+.welcome-sticker__body [data-object-id="welcome-subtitle"] { z-index: 2; }
+.welcome-sticker__body [data-object-id="welcome-logo"] img { filter: drop-shadow(var(--welcome-logo-shadow)); }
+.welcome-sticker__body [data-text-id="welcome-title"] { font-weight: 600 !important; }
+.welcome-sticker__status { position: absolute; z-index: 3; left: 50%; bottom: var(--space-8); transform: translateX(-50%); display: flex; align-items: center; gap: var(--space-2); margin: 0; color: var(--text-secondary); font-size: .95rem; font-weight: 500; white-space: nowrap; }
+.welcome-sticker__status span { width: 4px; height: 4px; border-radius: 50%; background: var(--color-primary-active); }

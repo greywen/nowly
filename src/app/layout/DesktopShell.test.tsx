@@ -36,11 +36,11 @@ describe('DesktopShell', () => {
     ['foreground', false, false],
     ['wallpaper', true, true],
     ['wallpaper', false, false]
-  ] as const)('sets navigation visibility for %s with hiding %s', (mode, hideTopbarInWallpaper, hidden) => {
+  ] as const)('sets navigation visibility for %s with hiding %s', async (mode, hideTopbarInWallpaper, hidden) => {
     render(<DesktopShell mode={mode} hideTopbarInWallpaper={hideTopbarInWallpaper} time="09:41" dateText="today" summary="" modules={modules()} />);
     expect(screen.getByTestId('desktop-root').classList.contains('app-shell--no-topbar')).toBe(hidden);
     expect(screen.queryByRole('banner') !== null).toBe(!hidden);
-    expect(screen.getByText('calendar region')).toBeInTheDocument();
+    expect(await screen.findByText('calendar region')).toBeInTheDocument();
   });
 
   it('restores navigation when the wallpaper hiding setting changes', () => {
@@ -62,7 +62,7 @@ describe('DesktopShell', () => {
     expect(configure).toHaveBeenCalledOnce();
   });
 
-  it('renders a fixed viewport shell with calendar, matrix, and notes regions', () => {
+  it('renders a fixed viewport shell with calendar, matrix, and notes regions', async () => {
     render(
       <DesktopShell
         time="09:41"
@@ -73,7 +73,7 @@ describe('DesktopShell', () => {
     );
 
     expect(screen.getByText('2026年7月23日 星期四')).toBeInTheDocument();
-    expect(screen.getByText('calendar region')).toBeInTheDocument();
+    expect(await screen.findByText('calendar region')).toBeInTheDocument();
     expect(screen.getByText('matrix region')).toBeInTheDocument();
     expect(screen.getByText('notes region')).toBeInTheDocument();
     expect(screen.getByTestId('desktop-root')).toHaveClass('app-shell');
@@ -129,7 +129,7 @@ describe('DesktopShell', () => {
     expect(screen.queryByRole('button', { name: '编辑布局' })).not.toBeInTheDocument();
   });
 
-  it('returns wallpaper mode to foreground on a double click anywhere', () => {
+  it('returns wallpaper mode to foreground on a double click anywhere', async () => {
     const onWallpaperDoubleClick = vi.fn();
     render(
       <DesktopShell
@@ -142,11 +142,11 @@ describe('DesktopShell', () => {
       />
     );
 
-    fireEvent.doubleClick(screen.getByText('calendar region'));
+    fireEvent.doubleClick(await screen.findByText('calendar region'));
     expect(onWallpaperDoubleClick).toHaveBeenCalledOnce();
   });
 
-  it('shows tips only for topbar navigation buttons', () => {
+  it('shows tips only for topbar navigation buttons', async () => {
     render(
       <DesktopShell
         mode="foreground"
@@ -163,7 +163,7 @@ describe('DesktopShell', () => {
     fireEvent.blur(settings);
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
 
-    fireEvent.focus(screen.getByRole('button', { name: '模块内按钮' }));
+    fireEvent.focus(await screen.findByRole('button', { name: '模块内按钮' }));
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
   });
 
@@ -288,7 +288,7 @@ describe('DesktopShell', () => {
     expect(screen.getByTestId('desktop-root').className).not.toMatch(/(?:^|\s)(?:p-|sm:p-|xl:p-)/);
   });
 
-  it('toggles edit mode to reveal drag and resize handles without a reset control', () => {
+  it('toggles edit mode to reveal drag and resize handles without a reset control', async () => {
     render(
       <DesktopShell
         time="09:41"
@@ -298,6 +298,7 @@ describe('DesktopShell', () => {
       />
     );
 
+    await screen.findByText('calendar region');
     expect(screen.queryAllByTestId('module-frame-handle')).toHaveLength(0);
     expect(screen.queryAllByTestId('module-frame-resize')).toHaveLength(0);
     expect(screen.queryByRole('button', { name: '重置布局' })).not.toBeInTheDocument();
@@ -310,7 +311,7 @@ describe('DesktopShell', () => {
     expect(screen.queryByRole('button', { name: '重置布局' })).not.toBeInTheDocument();
   });
 
-  it('leaves edit mode and hides the editing affordances again', () => {
+  it('leaves edit mode and hides the editing affordances again', async () => {
     render(
       <DesktopShell
         time="09:41"
@@ -320,6 +321,7 @@ describe('DesktopShell', () => {
       />
     );
 
+    await screen.findByText('calendar region');
     fireEvent.click(screen.getByRole('button', { name: '编辑布局' }));
     expect(screen.getAllByTestId('module-frame-resize')).toHaveLength(3);
 
@@ -328,7 +330,7 @@ describe('DesktopShell', () => {
     expect(screen.queryByRole('button', { name: '重置布局' })).not.toBeInTheDocument();
   });
 
-  it('renders only the modules provided in the modules map', () => {
+  it('renders only the modules provided in the modules map', async () => {
     render(
       <DesktopShell
         time="09:41"
@@ -338,7 +340,7 @@ describe('DesktopShell', () => {
       />
     );
 
-    expect(screen.getByText('calendar region')).toBeInTheDocument();
+    expect(await screen.findByText('calendar region')).toBeInTheDocument();
     expect(screen.queryByText('matrix region')).not.toBeInTheDocument();
     expect(screen.queryByText('notes region')).not.toBeInTheDocument();
   });

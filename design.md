@@ -775,6 +775,13 @@ app-shell（100vw × 100vh，grid-template-rows: 70px minmax(0, 1fr)）
 - 图层入口（含展开列表）与普通保存状态提示仅在鼠标位于整个贴纸模块内时即时显示，移出即隐藏；键盘焦点保留不使其常驻。显隐不改变画布布局、编辑草稿或自动保存，错误提示与重试入口不受悬停限制。
 - 壁纸和布局编辑模式只读，不显示编辑控件。点击外部或 Esc 关闭轻量工具条，不丢弃待保存草稿。
 
+### 14.2.1 启动欢迎贴纸（welcome-only 视觉例外）
+
+- 模块布局初次读取期间或没有任何已添加模块时，用只读欢迎作品铺满工作区；存在模块时立即恢复实际布局，读取失败沿用默认布局回退。保留原有顶栏，不保存欢迎作品、不修改用户贴纸或默认布局。删除最后一个模块后恢复欢迎画面，空布局重启后也保持欢迎画面。
+- 复用贴纸画布呈现固定错落、多语言、大小与透明度不同的欢迎文字。背景文字透明度 12%–14%，环绕文字 28%–48%，字号 16–76 逻辑像素、旋转 -8° 至 8°。中央 Logo 为 144 逻辑像素，中文欢迎语 48 逻辑像素 / 600，英文 24 逻辑像素 / 400；按内容区等比适配，核心文案不被遮挡。
+- 仅欢迎内容区允许以下限定 Token：淡蓝紫线性背景、静态径向亮度层、Logo 的柔和 drop-shadow。模块外壳、顶栏、按钮与其他模块继续遵守既有配色、无阴影和无渐变规范；不增加玻璃或文字模糊。
+- 所有文字静态显示，不持续漂浮、不轮播、不补间。加载提示为普通可访问文本；低透明度背景作品从无障碍树隐藏。加载期间禁止编辑布局及添加模块；加载完成但无模块时显示「点击编辑布局，添加你的第一个模块」引导，不显示加载文案，顶栏编辑与添加模块操作正常可用。
+
 ## 15. Token 清单
 
 以下是唯一允许的 Token 集合，实现时全部定义在 `:root`：
@@ -853,6 +860,15 @@ app-shell（100vw × 100vh，grid-template-rows: 70px minmax(0, 1fr)）
   --space-9: 36px;
   --space-10: 40px;
   --space-12: 48px;
+
+  /* 仅启动欢迎贴纸作品，禁止用于其他界面 */
+  --welcome-ink: #343b58;
+  --welcome-text: #6e789d;
+  --welcome-blue: #6f91c8;
+  --welcome-violet: #9381bd;
+  --welcome-wash: linear-gradient(135deg, #fbfcff 0%, #f4f8ff 42%, #f5f1fd 100%);
+  --welcome-light: radial-gradient(ellipse at 48% 44%, rgba(255,255,255,.96) 0%, rgba(255,255,255,.65) 24%, transparent 54%), radial-gradient(ellipse at 8% 74%, rgba(193,216,254,.34) 0%, transparent 49%), radial-gradient(ellipse at 91% 15%, rgba(215,203,247,.35) 0%, transparent 45%);
+  --welcome-logo-shadow: 0 16px 32px rgba(128,143,194,.13);
 
   /* 字体 */
   --font-sans: Inter, "Microsoft YaHei", "PingFang SC", Helvetica, Arial, sans-serif;

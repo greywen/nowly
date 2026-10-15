@@ -15,6 +15,7 @@ import { Tip } from '../../components/Tip';
 import { BlurControl } from '../BlurControl';
 import { DEFAULT_BLUR, useBlur } from '../useBlur';
 import { t } from '../../i18n';
+import { WelcomeSticker } from '../../stickers/WelcomeSticker';
 
 type DesktopShellProps = {
   mode?: 'foreground' | 'wallpaper';
@@ -64,7 +65,7 @@ export function DesktopShell({
   // The no-topbar shell state also hides module headers via workspace CSS.
   // A double-click anywhere in wallpaper mode still returns to the foreground.
   const showTopbar = foreground || !hideTopbarInWallpaper;
-  const { layout, move, resize, addWidget, removeWidget, presentIds } =
+  const { layout, loaded, move, resize, addWidget, removeWidget, presentIds } =
     useModuleLayout(definitions);
   const { blur, setBlur } = useBlur();
   const [isEditing, setIsEditing] = useState(false);
@@ -121,7 +122,7 @@ export function DesktopShell({
           ) : null}
           {foreground && isEditing ? (
             <Tip content={t('shell.addModule')}>
-              <button type="button" className="btn" aria-label={t('shell.addModule')} onClick={() => setPickerOpen(true)}>
+              <button type="button" className="btn" aria-label={t('shell.addModule')} disabled={!loaded} onClick={() => setPickerOpen(true)}>
                 <Plus aria-hidden="true" />
                 {t('shell.addModule')}
               </button>
@@ -129,7 +130,7 @@ export function DesktopShell({
           ) : null}
           {foreground ? (
             <Tip content={isEditing ? t('shell.finishEditing') : t('shell.editLayout')}>
-              <button type="button" data-guide="edit-layout" className={`btn btn-icon${isEditing ? ' is-active' : ''}`} aria-label={isEditing ? t('shell.finishEditing') : t('shell.editLayout')} aria-pressed={isEditing} onClick={() => setIsEditing((current) => !current)}>
+              <button type="button" data-guide="edit-layout" className={`btn btn-icon${isEditing ? ' is-active' : ''}`} disabled={!loaded} aria-label={isEditing ? t('shell.finishEditing') : t('shell.editLayout')} aria-pressed={isEditing} onClick={() => setIsEditing((current) => !current)}>
                 {isEditing ? <Check aria-hidden="true" /> : <LayoutGrid aria-hidden="true" />}
               </button>
             </Tip>
@@ -151,8 +152,8 @@ export function DesktopShell({
         </div>
       </header>
       ) : null}
-      <main className="workspace" data-guide="workspace" style={workspaceStyle}>
-        <ModuleGrid
+      <main className="workspace" data-guide="workspace" aria-busy={!loaded} style={workspaceStyle}>
+        {!loaded || items.length === 0 ? <WelcomeSticker loading={!loaded} /> : <ModuleGrid
           items={items}
           editing={foreground && isEditing}
           definitions={definitions}
@@ -160,7 +161,7 @@ export function DesktopShell({
           onResize={resize}
           onRemove={removeWidget}
           configurations={configurations}
-        />
+        />}
       </main>
       {overlay}
 
