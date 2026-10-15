@@ -2,6 +2,13 @@ import { isHexColor } from '../lib/color';
 
 export const STICKER_WIDTH = 800;
 export const STICKER_HEIGHT = 600;
+/** How far (in logical units) objects may extend past each stage edge to use a module that is not 4:3. */
+export const STICKER_OVERSCAN = 4000;
+export type StickerBounds = { left: number; top: number; right: number; bottom: number };
+export const STICKER_STAGE_BOUNDS: StickerBounds = { left: 0, top: 0, right: STICKER_WIDTH, bottom: STICKER_HEIGHT };
+export const STICKER_STORAGE_BOUNDS: StickerBounds = {
+  left: -STICKER_OVERSCAN, top: -STICKER_OVERSCAN, right: STICKER_WIDTH + STICKER_OVERSCAN, bottom: STICKER_HEIGHT + STICKER_OVERSCAN
+};
 export const MAX_STICKER_BYTES = 10 * 1024 * 1024;
 export const MAX_STICKERS = 50;
 export type StickerGeometry = {
@@ -36,16 +43,33 @@ export function newTextSticker(id: string, text: string): TextSticker {
   };
 }
 
-export function geometryFits(value: StickerGeometry): boolean {
+export function geometryFits(value: StickerGeometry, bounds: StickerBounds = STICKER_STAGE_BOUNDS): boolean {
   if (![value.x, value.y, value.width, value.height, value.rotation, value.opacity].every(Number.isFinite)) return false;
   if (value.width <= 0 || value.height <= 0 || Math.abs(value.rotation) > 180 || value.opacity < 0 || value.opacity > 100) return false;
-  const radians = value.rotation * Math.PI / 180;
-  const w = Math.abs(value.width * Math.cos(radians)) + Math.abs(value.height * Math.sin(radians));
-  const h = Math.abs(value.width * Math.sin(radians)) + Math.abs(value.height * Math.cos(radians));
+  const { halfWidth, halfHeight } = rotatedHalfSize(value);
   const cx = value.x + value.width / 2;
   const cy = value.y + value.height / 2;
-  return cx - w / 2 >= -1e-7 && cy - h / 2 >= -1e-7 &&
-    cx + w / 2 <= STICKER_WIDTH + 1e-7 && cy + h / 2 <= STICKER_HEIGHT + 1e-7;
+  return cx - halfWidth >= bounds.left - 1e-7 && cy - halfHeight >= bounds.top - 1e-7 &&
+    cx + halfWidth <= bounds.right + 1e-7 && cy + halfHeight <= bounds.bottom + 1e-7;
+}
+
+/** Logical area that is actually visible when the 800×600 stage is scaled to fit and centered in a host. */
+export function visibleStickerBounds(hostWidth: number, hostHeight: number): StickerBounds {
+  const scale = Math.min(hostWidth / STICKER_WIDTH, hostHeight / STICKER_HEIGHT);
+  if (!(scale > 0) || !Number.isFinite(scale)) return STICKER_STAGE_BOUNDS;
+  const extraX = Math.min(STICKER_OVERSCAN, Math.max(0, (hostWidth / scale - STICKER_WIDTH) / 2));
+  const extraY = Math.min(STICKER_OVERSCAN, Math.max(0, (hostHeight / scale - STICKER_HEIGHT) / 2));
+  return { left: 0 - extraX, top: 0 - extraY, right: STICKER_WIDTH + extraX, bottom: STICKER_HEIGHT + extraY };
+}
+
+/** Moves an object by its rotated box so it lies inside bounds; returns the same object when it already fits. */
+export function fitStickerIntoBounds<T extends StickerGeometry>(value: T, bounds: StickerBounds): T {
+  if (geometryFits(value, bounds)) return value;
+  const { halfWidth, halfHeight } = rotatedHalfSize(value);
+  const clamp = (n: number, min: number, max: number) => Math.min(Math.max(n, min), Math.max(min, max));
+  const cx = clamp(value.x + value.width / 2, bounds.left + halfWidth, bounds.right - halfWidth);
+  const cy = clamp(value.y + value.height / 2, bounds.top + halfHeight, bounds.bottom - halfHeight);
+  return { ...value, x: cx - value.width / 2, y: cy - value.height / 2 };
 }
 
 export function validateStickerBoard(raw: unknown): StickerProblem | null {
@@ -61,7 +85,7 @@ export function validateStickerBoard(raw: unknown): StickerProblem | null {
     ids.add(o.id);
     const fields = ['x', 'y', 'width', 'height', 'rotation', 'opacity'] as const;
     if (!fields.every(key => typeof o[key] === 'number')) return 'geometry';
-    if (!geometryFits(o as StickerGeometry)) return 'geometry';
+    if (!geometryFits(o as StickerGeometry, STICKER_STORAGE_BOUNDS)) return 'geometry';
     if (o.kind === 'text') {
       if (typeof o.text !== 'string' || [...o.text].length > 2000 || !Number.isInteger(o.fontSize) ||
         Number(o.fontSize) < 12 || Number(o.fontSize) > 160 || !isHexColor(o.color) ||
@@ -75,7 +99,15 @@ export function validateStickerBoard(raw: unknown): StickerProblem | null {
   return null;
 }
 
-export function copySticker(object: StickerObject, id: string): StickerObject {
+export function copySticker(object: StickerObject, id: string, bounds: StickerBounds = STICKER_STAGE_BOUNDS): StickerObject {
   const shifted = { ...object, id, x: object.x + 16, y: object.y + 16 };
-  return geometryFits(shifted) ? shifted : { ...object, id };
+  return geometryFits(shifted, bounds) ? shifted : { ...object, id };
+}
+
+function rotatedHalfSize(value: StickerGeometry) {
+  const radians = value.rotation * Math.PI / 180;
+  return {
+    halfWidth: (Math.abs(value.width * Math.cos(radians)) + Math.abs(value.height * Math.sin(radians))) / 2,
+    halfHeight: (Math.abs(value.width * Math.sin(radians)) + Math.abs(value.height * Math.cos(radians))) / 2
+  };
 }

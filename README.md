@@ -110,8 +110,13 @@ focusing. All data stays on your machine in a local SQLite database.
 ### Sticker canvas
 
 Add **Stickers** under **Edit layout → Add module**. If the grid is full, remove
-or shrink another module first. The module displays your work; **Edit stickers**
-opens the editing dialog. Select files or drop them on the editing canvas:
+or shrink another module first. Click a blank canvas area to add text or upload an
+image at that position, without a dialog. Single-click text to edit inline; its box
+adapts to content, font size and styling. The floating toolbar stays on one row and
+scrolls horizontally in narrow modules. Style, size, opacity and layers use dropdowns;
+click the color swatch to pick a color and the lock icon to lock or unlock. There is
+no More panel or numerical geometry form.
+Images support file selection, replacement, dropping and pasting:
 PNG, JPEG and static WebP only, up to 10 MiB each, at most 4096 pixels per
 dimension and 16 million pixels in total. Transparency is preserved. Circular
 style crops the display; other styles show the full image without changing its file.
@@ -121,11 +126,17 @@ integer font sizes from 12 to 160px, hex colors, bold, italic, underline,
 alignment and newlines. The transparent 800×600 logical canvas fits the module
 uniformly; resizing the window does not rearrange the artwork.
 Use the layer list to select covered, transparent or locked objects. Unlock
-before editing. Position, size and rotation fields offer keyboard alternatives
-to dragging. Invalid geometry and overflowing text must be corrected before saving.
+before editing. Drag a text box edge to move it, its top handle to rotate, and its
+corner handle to change font size; image resizing preserves aspect ratio. With an
+object focused, arrow keys move, Shift accelerates, Alt + Left/Right rotates, and
+Alt + Up/Down resizes. The Default layer option restores the session's initial
+relative order; reloading uses the saved order as its baseline. Invalid geometry
+and overflowing text must be corrected before saving.
 
-Changes take effect on **Save**; closing a changed draft asks before discarding.
-Failed saves retain the draft for retry. Removing the module only hides it;
+Changes autosave after about 500 ms of inactivity, or immediately after a gesture.
+Failed saves retain the draft for explicit retry; conflicts never overwrite stored
+work. Unreferenced images are cleaned after a successful save, with a separate
+cleanup retry. Wallpaper and layout editing modes are read-only. Removing the module only hides it;
 adding it again restores the canvas. Images and layout stay local, independently
 of the existing 1 MiB note/task attachment limit. The browser development mode
 uses IndexedDB and also survives reloads. This version does not include online
@@ -148,7 +159,6 @@ Screenshot history expands directly from the top-edge Nowly Bar into an animated
 An archive failure preserves the editor and does not copy. If archiving succeeds but the clipboard fails, retrying the same final image reuses its history entry. Copying from history never creates another entry. Raw desktop frames are retained only for the active capture session.
 
 Browser development mode can validate the UI but cannot manage real screenshot files or global shortcuts. Full functionality requires the Windows desktop app.
-
 ## Tech Stack
 
 - **Frontend** — React + TypeScript, built with Vite and styled with

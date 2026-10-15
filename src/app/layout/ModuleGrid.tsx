@@ -1,3 +1,4 @@
+import { LayoutEditingContext } from '../../widgets/LayoutEditingContext';
 import { useRef, useState, type PointerEvent, type ReactNode } from 'react';
 import {
   GRID_COLS,
@@ -133,7 +134,7 @@ export function ModuleGrid({
   }
 
   return (
-    <div
+    <LayoutEditingContext.Provider value={editing}><div
       className="module-grid"
       data-testid="module-grid"
       ref={gridRef}
@@ -165,6 +166,6 @@ export function ModuleGrid({
           </ModuleFrame>
         );
       })}
-    </div>
+    </div></LayoutEditingContext.Provider>
   );
 }

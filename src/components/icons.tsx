@@ -46,6 +46,7 @@ export const AlertTriangle=createIcon('AlertTriangle'), ArrowRightUp=createIcon(
   CircleAlert=createIcon('CircleAlert'), Clock3=createIcon('Clock3'), Crop=createIcon('Crop'), Cursor=createIcon('Cursor'), Download=createIcon('Download'),
   Droplets=createIcon('Droplets'), FileText=createIcon('FileText'), FolderOpen=createIcon('FolderOpen'), Copy=createIcon('Copy'), GalleryCircle=createIcon('GalleryCircle'), GripVertical=createIcon('GripVertical'), History=createIcon('History'),
   Layers=createIcon('Layers'), LayoutGrid=createIcon('LayoutGrid'), List=createIcon('List'),
+  Lock=createIcon('Lock'), Unlock=createIcon('Unlock'),
   Mail=createIcon('Mail'), MessageCircle=createIcon('MessageCircle'), Mic=createIcon('Mic'), Minus=createIcon('Minus'),
   MonitorDown=createIcon('MonitorDown'), Paperclip=createIcon('Paperclip'), Pause=createIcon('Pause'), Pencil=createIcon('Pencil'), Pin=createIcon('Pin'),
   Play=createIcon('Play'), Plug=createIcon('Plug'), Plus=createIcon('Plus'), RadialBlur=createIcon('RadialBlur'), RefreshCw=createIcon('RefreshCw'),

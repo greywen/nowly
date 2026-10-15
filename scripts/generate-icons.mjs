@@ -57,6 +57,8 @@ const ICON_SOURCES = {
   Layers: 'layers-minimalistic',
   LayoutGrid: 'widget-5',
   List: 'list',
+  Lock: 'lock-keyhole',
+  Unlock: 'lock-keyhole-unlocked',
   Mail: 'letter',
   MessageCircle: 'chat-round-dots',
   Mic: 'microphone',

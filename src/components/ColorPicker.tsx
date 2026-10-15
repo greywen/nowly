@@ -18,6 +18,8 @@ type ColorPickerProps = {
   presets: readonly ColorPreset[];
   recentColors: readonly HexColor[];
   disabled?: boolean;
+  compact?: boolean;
+  stickerPopup?: boolean;
   onChange(color: HexColor): void;
   onRememberColor?(color: HexColor): void;
 };
@@ -113,7 +115,7 @@ function pickerPosition(anchor: DOMRect): PickerPosition {
   return { left, top };
 }
 
-export function ColorPicker({ legend, name, value, presets, recentColors, disabled = false, onChange, onRememberColor }: ColorPickerProps) {
+export function ColorPicker({ legend, name, value, presets, recentColors, disabled = false, compact = false, stickerPopup = false, onChange, onRememberColor }: ColorPickerProps) {
   const customRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -148,7 +150,7 @@ export function ColorPicker({ legend, name, value, presets, recentColors, disabl
 
   // While the popover is open the trigger mirrors the live draft; when closed it
   // shows the committed custom color, otherwise a neutral "add" affordance.
-  const triggerColor = open ? draftHex : (isCustom ? normalizedValue ?? FALLBACK_COLOR : null);
+  const triggerColor = open ? draftHex : (compact || isCustom ? normalizedValue ?? FALLBACK_COLOR : null);
 
   useLayoutEffect(() => {
     if (!open || !triggerRef.current) return;
@@ -166,7 +168,7 @@ export function ColorPicker({ legend, name, value, presets, recentColors, disabl
 
   useEffect(() => {
     if (!open) return;
-    const closeOutside = (event: globalThis.PointerEvent) => {
+    const closeOutside = (event: Event) => {
       const target = event.target as Node;
       if (!customRef.current?.contains(target) && !popoverRef.current?.contains(target)) finishCustomSelection();
     };
@@ -176,10 +178,12 @@ export function ColorPicker({ legend, name, value, presets, recentColors, disabl
         triggerRef.current?.focus();
       }
     };
-    document.addEventListener('pointerdown', closeOutside);
+    document.addEventListener('pointerdown', closeOutside, true);
+    document.addEventListener('focusin', closeOutside, true);
     document.addEventListener('keydown', closeOnEscape);
     return () => {
-      document.removeEventListener('pointerdown', closeOutside);
+      document.removeEventListener('pointerdown', closeOutside, true);
+      document.removeEventListener('focusin', closeOutside, true);
       document.removeEventListener('keydown', closeOnEscape);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -271,6 +275,7 @@ export function ColorPicker({ legend, name, value, presets, recentColors, disabl
     <div
       ref={popoverRef}
       className="color-picker__popover"
+      data-sticker-popup={stickerPopup ? '' : undefined}
       role="dialog"
       aria-label={t('colorPicker.custom')}
       style={{ position: 'fixed', left: position.left, top: position.top } as CSSProperties}
@@ -362,6 +367,18 @@ export function ColorPicker({ legend, name, value, presets, recentColors, disabl
     </div>,
     document.body
   ) : null;
+
+  if (compact) return (
+    <div ref={customRef} className="color-picker color-picker--compact">
+      <button ref={triggerRef} type="button" className="color-picker__trigger"
+        aria-label={legend} title={legend} aria-haspopup="dialog" aria-expanded={open} disabled={disabled}
+        style={{ background: triggerColor ?? FALLBACK_COLOR, borderColor: triggerColor ?? FALLBACK_COLOR }}
+        onClick={() => { if (open) finishCustomSelection(); else openPicker(); }}>
+        <span aria-hidden="true" />
+      </button>
+      {popover}
+    </div>
+  );
 
   return (
     <fieldset className="color-picker">

@@ -11,6 +11,8 @@
 .sticker-canvas--editing .sticker-object:focus-visible { outline-color: var(--color-primary); }
 .sticker-object--selected { outline: 1px solid var(--color-primary) !important; }
 .sticker-object__text { width: 100%; height: 100%; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; font-family: var(--font-sans); overflow: hidden; }
+.sticker-object__measure::before { content: attr(data-content); }
+.sticker-object__measure { position: absolute; visibility: hidden; pointer-events: none; width: max-content; max-width: 798px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; font-family: var(--font-sans); }
 .sticker-object__image { width: 100%; height: 100%; overflow: hidden; }
 .sticker-object__image img { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
 .sticker-object__image--rounded { border-radius: var(--radius-default); }
@@ -21,32 +23,48 @@
 .sticker-object__handle { position: absolute; width: 24px; height: 24px; cursor: pointer; }
 .sticker-object__handle::after { content: ''; position: absolute; width: 8px; height: 8px; background: var(--color-primary); inset: 8px; }
 .sticker-object__handle--resize { bottom: -12px; right: -12px; cursor: nwse-resize; }
-.sticker-object__handle--rotate { top: -12px; left: calc(50% - 12px); }
-.good-dialog.sticker-editor-dialog { width: min(1040px, calc(100vw - 32px)); }
-.sticker-editor { container: sticker-editor / inline-size; display: grid; gap: var(--space-5); }
-.sticker-editor__fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
-.sticker-editor__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-.sticker-editor__layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: var(--space-6); align-items: start; }
-.sticker-editor__canvas { min-width: 0; aspect-ratio: 4 / 3; position: sticky; top: 0; }
-.sticker-editor__sidebar { min-width: 0; display: grid; gap: var(--space-5); }
-.sticker-editor__hint { font-size: .85rem; color: var(--text-secondary); }
-.good-dialog__footer > .sticker-editor__hint { margin-right: auto; }
-.sticker-properties { display: grid; gap: var(--space-5); min-width: 0; }
-.sticker-properties h3, .sticker-layers h3 { font-size: 1.15rem; font-weight: 600; line-height: 1.2; margin: 0; color: var(--text-primary); }
-.sticker-properties__geometry { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-5); }
+.sticker-object__handle--rotate { top: -28px; left: calc(50% - 12px); cursor: crosshair; }
+.sticker-object__handle--rotate::before { content: ''; position: absolute; left: 12px; top: 12px; width: 1px; height: 16px; background: var(--color-primary); }
+.sticker-object__edge { position: absolute; cursor: grab; touch-action: none; }
+.sticker-object__edge--top, .sticker-object__edge--bottom { left: 0; width: 100%; height: 8px; }
+.sticker-object__edge--top { top: -4px; }
+.sticker-object__edge--bottom { bottom: -4px; }
+.sticker-object__edge--left, .sticker-object__edge--right { top: 0; height: 100%; width: 8px; }
+.sticker-object__edge--left { left: -4px; }
+.sticker-object__edge--right { right: -4px; }
 .sticker-field { display: grid; gap: var(--space-2); min-width: 0; font-size: .95rem; }
 .sticker-field .good-input { width: 100%; min-width: 0; }
 .sticker-field textarea { min-height: 96px; resize: none; }
-.sticker-properties__format { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-.sticker-properties__format .btn[aria-pressed="true"] { background: var(--color-primary-light); color: var(--color-primary-active); border-color: var(--color-primary); }
-.sticker-layers { display: grid; gap: var(--space-2); }
-.sticker-layers__item { width: 100%; min-height: 40px; text-align: left; padding: var(--space-2) var(--space-3); border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-surface); color: var(--text-secondary); overflow-wrap: anywhere; }
-.sticker-layers__item:hover { color: var(--color-primary-active); background: var(--bg-subtle); }
-.sticker-layers__item[aria-pressed="true"] { background: var(--color-primary-light); border-color: var(--color-primary); color: var(--color-primary-active); }
-.sticker-layers__item:focus-visible { box-shadow: var(--shadow-focus); outline: 0; }
 .sticker-error { margin: 0; padding: var(--space-3) var(--space-4); border-radius: var(--radius-default); color: var(--color-danger-active); background: var(--color-danger-light); white-space: pre-wrap; font-size: .85rem; }
-.sticker-editor__confirm { padding: var(--space-4); border: 1px solid var(--border-default); border-radius: var(--radius-default); background: var(--bg-surface); }
-@container sticker-editor (max-width: 760px) {
-  .sticker-editor__layout { grid-template-columns: minmax(0, 1fr); }
-  .sticker-editor__canvas { position: static; }
-}
+
+
+.sticker-widget__body { position: relative; padding: var(--space-2); }
+.sticker-widget__body .sticker-canvas { border: 0; background: transparent; }
+.sticker-widget__empty { color: var(--text-muted); }
+.sticker-floating-tools { box-sizing: border-box; position: absolute; z-index: 22; max-width: calc(100% - 16px); padding: var(--space-2); display: flex; flex-wrap: nowrap; gap: var(--space-2); align-items: center; background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-default); box-shadow: var(--shadow-sm); }
+.sticker-object-tools__row { display: flex; flex-wrap: nowrap; gap: var(--space-2); align-items: center; min-width: 0; max-width: 100%; overflow-x: auto; overflow-y: hidden; }
+.sticker-object-tools__row > * { flex: none; }
+.sticker-object-tools__row .select-field { width: max-content; min-width: 80px; }
+.sticker-object-tools__row .select-trigger { height: 40px; padding: 0 var(--space-3); gap: var(--space-2); }
+.sticker-object-tools__row .color-picker--compact { display: flex; align-items: center; margin: 0; padding: 0; border: 0; min-width: 40px; }
+.sticker-object-tools__row .color-picker--compact legend { display: none; }
+.sticker-object-tools__row .color-picker__choices { margin: 0; }
+.sticker-object-tools__row .color-picker__trigger { width: 40px; height: 40px; }
+.sticker-object-tools__row .icon-button { flex: none; }
+.sticker-object__input { display: block; box-sizing: border-box; width: 100%; height: 100%; min-height: 0; padding: 0; border: 0; outline: 0; resize: none; overflow: hidden; scrollbar-gutter: auto; background: transparent; color: inherit; font: inherit; line-height: inherit; text-align: inherit; }
+.sticker-object:focus-within { outline: 1px solid var(--color-primary); }
+.sticker-floating-tools { max-height: calc(100% - 16px); overflow: auto; }
+.sticker-floating-tools .sticker-field { flex: 1 1 80px; max-width: 128px; }
+.sticker-floating-tools .sticker-field input { height: 40px; }
+.sticker-floating-tools:has(.sticker-object-tools__row) { overflow: visible; }
+.sticker-object-tools__row .select-label { display: none; }
+.sticker-widget__body:focus-visible { outline: 0; box-shadow: var(--shadow-focus); }
+.sticker-widget__status { position: absolute; right: var(--space-3); bottom: var(--space-3); color: var(--text-muted); font-size: .85rem; }
+.sticker-widget__feedback { position: absolute; left: var(--space-3); right: var(--space-3); bottom: var(--space-3); display: flex; gap: var(--space-2); align-items: center; justify-content: space-between; }
+.sticker-widget__layers { position: absolute; left: var(--space-2); top: var(--space-2); z-index: 21; width: max-content; max-width: calc(100% - var(--space-2) * 2); }
+.sticker-widget__layers,
+.sticker-widget__status { visibility: hidden; }
+.sticker-widget:hover .sticker-widget__layers,
+.sticker-widget:hover .sticker-widget__status { visibility: visible; }
+.sticker-widget__layer-list { display: grid; gap: var(--space-2); margin-top: var(--space-2); max-height: 128px; max-width: 240px; overflow: auto; padding: var(--space-2); background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-default); box-shadow: var(--shadow-sm); }
+.sticker-widget__layer-list .btn { min-width: 0; min-height: 40px; height: auto; white-space: normal; overflow-wrap: anywhere; text-align: left; }

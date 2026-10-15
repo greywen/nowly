@@ -25,9 +25,10 @@ type SelectProps = {
   // Keep the label accessible to screen readers but hide it visually, for
   // compact inline selects that already have a nearby textual label.
   hideLabel?: boolean;
+  fitContent?: boolean;
 };
 
-export function Select({ id, name, label, options, value, onChange, placeholder, searchable = false, disabled = false, errorId, hideLabel = false }: SelectProps) {
+export function Select({ id, name, label, options, value, onChange, placeholder, searchable = false, disabled = false, errorId, hideLabel = false, fitContent = false }: SelectProps) {
   const resolvedPlaceholder = placeholder ?? t('select.placeholder');
   const listboxId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -67,7 +68,9 @@ export function Select({ id, name, label, options, value, onChange, placeholder,
       setPopupMaxHeight(Math.max(96, Math.min(320, above ? spaceAbove : spaceBelow)));
       // Anchor the popup with viewport coordinates so it can escape the
       // modal body's overflow clipping via position: fixed.
-      setPopupRect({ left: rect.left, top: rect.bottom, bottom: rect.top, width: rect.width });
+      const width = fitContent ? Math.max(rect.width, popupRef.current?.offsetWidth ?? 0) : rect.width;
+      const left = fitContent ? Math.max(16, Math.min(rect.left, window.innerWidth - width - 16)) : rect.left;
+      setPopupRect({ left, top: rect.bottom, bottom: rect.top, width: rect.width });
     }
     measurePlacement();
     window.addEventListener('resize', measurePlacement);
@@ -76,14 +79,16 @@ export function Select({ id, name, label, options, value, onChange, placeholder,
     setActiveIndex(selectedIndex >= 0 ? selectedIndex : 0);
     if (searchable) requestAnimationFrame(() => searchRef.current?.focus());
 
-    function dismiss(event: PointerEvent) {
+    function dismiss(event: Event) {
       const target = event.target as Node;
       if (rootRef.current?.contains(target) || popupRef.current?.contains(target)) return;
       close(false);
     }
-    document.addEventListener('pointerdown', dismiss);
+    document.addEventListener('pointerdown', dismiss, true);
+    document.addEventListener('focusin', dismiss, true);
     return () => {
-      document.removeEventListener('pointerdown', dismiss);
+      document.removeEventListener('pointerdown', dismiss, true);
+      document.removeEventListener('focusin', dismiss, true);
       window.removeEventListener('resize', measurePlacement);
       window.removeEventListener('scroll', measurePlacement, true);
     };
@@ -168,10 +173,11 @@ export function Select({ id, name, label, options, value, onChange, placeholder,
           className={`select-popup${placeAbove ? ' select-popup--above' : ''}`}
           style={{
             maxHeight: `${popupMaxHeight}px`,
+            ...(fitContent ? { width: 'max-content', maxWidth: 'calc(100vw - 32px)' } : {}),
             ...(popupRect
               ? {
                   left: `${popupRect.left}px`,
-                  width: `${popupRect.width}px`,
+                  ...(fitContent ? { minWidth: `${popupRect.width}px` } : { width: `${popupRect.width}px` }),
                   ...(placeAbove
                     ? { bottom: `${window.innerHeight - popupRect.bottom + 8}px` }
                     : { top: `${popupRect.top + 8}px` })

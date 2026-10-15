@@ -14,6 +14,8 @@ pub const MAX_IMAGE_BYTES: usize = 10 * 1024 * 1024;
 const MAX_DIMENSION: u32 = 4096;
 const MAX_PIXELS: u64 = 16_000_000;
 const MAX_REVISION: i64 = 9_007_199_254_740_991;
+/// Must match `STICKER_OVERSCAN` in `src/stickers/sticker-model.ts`.
+const STICKER_OVERSCAN: f64 = 4000.;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -177,14 +179,15 @@ fn validate_board(board: &StickerBoard) -> Result<(), CommandError> {
         let half_height = (g.width * angle.sin().abs() + g.height * angle.cos().abs()) / 2.;
         let (cx, cy) = (g.x + g.width / 2., g.y + g.height / 2.);
         // Match frontend floating-point tolerance at exact quarter-turn boundaries.
-        if cx - half_width < -1e-7
-            || cy - half_height < -1e-7
-            || cx + half_width > 800. + 1e-7
-            || cy + half_height > 600. + 1e-7
+        // Objects may extend past the 800x600 stage into the visible module, up to STICKER_OVERSCAN per side.
+        if cx - half_width < -STICKER_OVERSCAN - 1e-7
+            || cy - half_height < -STICKER_OVERSCAN - 1e-7
+            || cx + half_width > 800. + STICKER_OVERSCAN + 1e-7
+            || cy + half_height > 600. + STICKER_OVERSCAN + 1e-7
         {
             return Err(CommandError::validation(
                 "geometry",
-                "The rotated sticker must fit inside the 800 by 600 canvas.",
+                "The rotated sticker is too far outside the sticker canvas.",
             ));
         }
         match &object.content {
@@ -722,10 +725,16 @@ mod tests {
     #[test]
     fn stickers_validate_geometry_and_limits() {
         assert!(validate_board(&board()).is_ok());
-        for value in [f64::NAN, f64::INFINITY, -1., 801.] {
+        for value in [f64::NAN, f64::INFINITY, -STICKER_OVERSCAN - 1., 800. + STICKER_OVERSCAN - 99.] {
             let mut b = board();
             b.objects[0].geometry.x = value;
             assert!(validate_board(&b).is_err(), "x={value}");
+        }
+        // A wide module shows space beside the 4:3 stage, so slightly negative or >800 positions are valid.
+        for value in [-1., 801.] {
+            let mut b = board();
+            b.objects[0].geometry.x = value;
+            assert!(validate_board(&b).is_ok(), "x={value}");
         }
         for value in [-181., 181., f64::NAN] {
             let mut b = board();
@@ -733,7 +742,7 @@ mod tests {
             assert!(validate_board(&b).is_err());
         }
         let mut b = board();
-        b.objects[0].geometry.x = 0.;
+        b.objects[0].geometry.x = -STICKER_OVERSCAN;
         b.objects[0].geometry.rotation = 45.;
         assert!(validate_board(&b).is_err());
         b = board();
