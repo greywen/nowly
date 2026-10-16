@@ -87,9 +87,9 @@ jobs:
         env:
           RELEASE_VERSION: ${{ steps.version.outputs.version }}
         run: |
-          # Keep pre-1.0 app releases in a positive Store major version.
+          # Offset the major version so pre-1.0 releases stay positive and ordered.
           $parts = $env:RELEASE_VERSION.Split('.')
-          $storeMajor = [Math]::Max(1, [int]$parts[0])
+          $storeMajor = [int]$parts[0] + 1
           $storeVersion = "$storeMajor.$($parts[1]).$($parts[2]).0"
           ./scripts/package-msix.ps1 `
             -IdentityName 'grey.wen.Nowly' `

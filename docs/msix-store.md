@@ -23,7 +23,7 @@ The Release workflow runs on pushes to main and can also be started manually fro
 
 No additional GitHub Secrets are required for MSIX. Package identity, publisher and Store Product ID are public values in the workflow. GitHub provides GITHUB_TOKEN automatically. The existing optional LLM_API_KEY is used only for release notes. Do not upload the local test certificate or private key.
 
-The workflow maps release X.Y.Z to MSIX max(1, X).Y.Z.0 to support the current pre-1.0 application versions. For example, 0.1.11 becomes 1.1.11.0. Moving from application 0.x to 1.x keeps the same Store major; keep subsequent mapped versions increasing. The manual 1.0.5.0 validation package is below this release series.
+The workflow maps release X.Y.Z to MSIX (X+1).Y.Z.0 to support the current pre-1.0 application versions while preserving version order across major releases. For example, 0.1.11 becomes 1.1.11.0 and 1.0.0 becomes 2.0.0.0. The manual 1.0.5.0 validation package is below this release series.
 
 ## WebView2
 
