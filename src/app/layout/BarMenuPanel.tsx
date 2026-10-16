@@ -21,7 +21,7 @@ const icons = { screenshot: Crop, screenshotHistory: History, assistant: Sparkle
 
 export function BarMenuPanel({ active, items }: { active: boolean; items: readonly BarMenuItem[] }) {
   const { t } = useTranslation();
-  const visible = items.filter(item => item.visible);
+  const visible = items.filter(item => item.visible && item.id !== 'assistant');
   const visibleIds = visible.map(item => item.id).join(',');
   const wasActive = useRef(false);
   const focusPending = useRef(false);

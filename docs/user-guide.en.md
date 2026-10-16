@@ -8,6 +8,8 @@ Use Nowly as a personal Windows workspace: add your schedule, sort tasks in the 
 
 The ordinary window, wallpaper, tray, quick panel and fullscreen focus serve different purposes. AI and connected calendars are optional; local task, note and focus work does not require connecting them. Nowly is not a shared team workspace.
 
+> AI chat, the AI assistant option in Nowly Bar settings, and the Model Settings tab are temporarily hidden. Existing AI data and configuration are retained; other features are unaffected.
+
 ## Features
 
 - **Monthly calendar** — events with times, colors, and per-day detail views, so

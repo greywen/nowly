@@ -14,6 +14,16 @@ const settings:AppSettings={wallpaperEnabled:false,launchAtLogin:false,targetMon
 describe('SettingsDialog',()=>{
   afterEach(() => vi.restoreAllMocks());
 
+  it('hides AI configuration and its Bar option without removing saved preferences', async () => {
+    const save = vi.fn(async value => value);
+    render(<SettingsDialog settings={{ ...settings, barMenu: [...DEFAULT_BAR_MENU] }} onClose={vi.fn()} onSave={save}/>);
+    expect(screen.queryByRole('tab', { name: t('settings.model') })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: 'Nowly Bar' }));
+    expect(screen.queryByRole('checkbox', { name: t('barMenu.assistant') })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '保存设置' }));
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ barMenu: DEFAULT_BAR_MENU }));
+  });
+
   it('groups wallpaper appearance and saves the independent background option', async () => {
     const user = userEvent.setup();
     const save = vi.fn(async value => value);
@@ -147,9 +157,9 @@ describe('SettingsDialog',()=>{
     const user=userEvent.setup(); const save=vi.fn().mockImplementation(async value=>value);
     render(<SettingsDialog settings={settings} onClose={vi.fn()} onSave={save}/>);
     await user.click(screen.getByRole('tab',{name:'Nowly Bar'}));
-    for (const item of DEFAULT_BAR_MENU) await user.click(screen.getByRole('checkbox',{name:t(`barMenu.${item.id}`)}));
+    for (const item of DEFAULT_BAR_MENU.filter(item=>item.id!=='assistant')) await user.click(screen.getByRole('checkbox',{name:t(`barMenu.${item.id}`)}));
     await user.click(screen.getByRole('button',{name:'保存设置'}));
-    expect(save).toHaveBeenCalledWith(expect.objectContaining({barMenu:DEFAULT_BAR_MENU.map(item=>({...item,visible:false}))}));
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({barMenu:DEFAULT_BAR_MENU.map(item=>({...item,visible:item.id==='assistant'}))}));
   });
   it('cancels menu edits without saving or mutating the provided settings',async()=>{
     const user=userEvent.setup(); const save=vi.fn(); const close=vi.fn();

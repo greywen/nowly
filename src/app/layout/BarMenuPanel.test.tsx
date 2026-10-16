@@ -19,19 +19,27 @@ describe('Bar function menu', () => {
       Promise.resolve(command === 'screenshot_shortcut_status' ? shortcuts : null));
   });
 
+  it('hides the AI entry even when an existing preference enables it', async () => {
+    render(<BarMenuPanel active items={[{ id: 'assistant', visible: true }]} />);
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith('screenshot_shortcut_status'));
+    expect(screen.queryByRole('menuitem')).not.toBeInTheDocument();
+    expect(screen.getByText('暂无显示的功能，请在设置 → Nowly Bar 中启用。')).toBeVisible();
+    expect(invokeMock).not.toHaveBeenCalledWith('toggle_nowly_panel');
+  });
+
   it('renders only visible entries in configured order and focuses the first one', async () => {
     render(<BarMenuPanel active items={[
       { id: 'assistant', visible: true },
-      { id: 'screenshot', visible: false },
-      { id: 'screenshotHistory', visible: true }
+      { id: 'screenshotHistory', visible: true },
+      { id: 'screenshot', visible: true }
     ]} />);
     await waitFor(() => expect(screen.getAllByRole('menuitem')).toHaveLength(2));
     const items = screen.getAllByRole('menuitem');
-    expect(items[0]).toHaveTextContent('AI 助手');
-    expect(items[1]).toHaveTextContent('截图历史');
+    expect(items[0]).toHaveTextContent('截图历史');
+    expect(items[1]).toHaveTextContent('截图');
     expect(items[0]).toHaveFocus();
-    expect(items[1]).toHaveTextContent('Ctrl+Alt+H');
-    expect(items[1]).toHaveTextContent('快捷键不可用');
+    expect(items[0]).toHaveTextContent('Ctrl+Alt+H');
+    expect(items[0]).toHaveTextContent('快捷键不可用');
     fireEvent.keyDown(items[0], { key: 'ArrowDown' });
     expect(items[1]).toHaveFocus();
     fireEvent.keyDown(items[1], { key: 'Home' });
@@ -47,12 +55,12 @@ describe('Bar function menu', () => {
   it('preserves keyboard selection across snapshots and repairs focus when an entry is hidden', async () => {
     const { rerender } = render(<BarMenuPanel active items={DEFAULT_BAR_MENU} />);
     await waitFor(() => expect(screen.getAllByRole('menuitem')[0]).toHaveFocus());
-    const assistant = screen.getByRole('menuitem', { name: 'AI 助手' });
-    assistant.focus();
+    const history = screen.getByRole('menuitem', { name: /截图历史/ });
+    history.focus();
     rerender(<BarMenuPanel active items={DEFAULT_BAR_MENU.map(item => ({ ...item }))} />);
-    expect(assistant).toHaveFocus();
+    expect(history).toHaveFocus();
     rerender(<BarMenuPanel active items={DEFAULT_BAR_MENU.map(item => ({
-      ...item, visible: item.id !== 'assistant'
+      ...item, visible: item.id !== 'screenshotHistory'
     }))} />);
     expect(screen.getAllByRole('menuitem')[0]).toHaveFocus();
   });

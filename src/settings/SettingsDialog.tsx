@@ -1,7 +1,6 @@
 import { X } from '../components/icons';
 import type { IconStyle } from '../components/icon-style';
 import { useEffect, useState } from 'react';
-import { AssistantSettingsPanel } from '../assistant/AssistantSettingsPanel';
 import { BarMenuSettings } from './BarMenuSettings';
 import { SoundSettingsPanel } from './SoundSettingsPanel';
 import { defaultSoundSettings } from './sound-settings';
@@ -18,7 +17,7 @@ import type { AppSettings, MonitorInfo } from '../data/nowly-repository';
 import { t, useTranslation, type Language } from '../i18n';
 
 type Props={settings:AppSettings;monitors?:MonitorInfo[];onClose():void;onSave(settings:AppSettings):Promise<AppSettings>};
-type SettingsTab='interface'|'desktop'|'notifications'|'model'|'shortcuts';
+type SettingsTab='interface'|'desktop'|'notifications'|'shortcuts';
 function errorMessage(error:unknown){return typeof error==='object'&&error!==null&&'message'in error&&typeof error.message==='string'?error.message:t('settings.saveError')}
 
 export function SettingsDialog({settings,monitors=[],onClose,onSave}:Props){
@@ -46,7 +45,7 @@ export function SettingsDialog({settings,monitors=[],onClose,onSave}:Props){
   if(screenshotShortcut===screenshotHistoryShortcut){setError(t('settings.shortcutDuplicate'));return;}
   setSaving(true);setError(null);try{await onSave({...draft,screenshotShortcut,screenshotHistoryShortcut,quickPanelEnabled:true});onClose();}catch(reason){setError(typeof reason==='object'&&reason!==null&&'field'in reason&&['screenshotShortcut','screenshotHistoryShortcut'].includes(String(reason.field))?t('settings.shortcutConflict'):errorMessage(reason));}finally{setSaving(false)}
  }
- const tabs:TabItem<SettingsTab>[]=[{id:'interface',label:t('settings.interface')},{id:'desktop',label:t('settings.desktopStartup')},{id:'notifications',label:t('settings.notifications')},{id:'shortcuts',label:t('settings.shortcuts')},{id:'model',label:t('settings.model')}];
+ const tabs:TabItem<SettingsTab>[]=[{id:'interface',label:t('settings.interface')},{id:'desktop',label:t('settings.desktopStartup')},{id:'notifications',label:t('settings.notifications')},{id:'shortcuts',label:t('settings.shortcuts')}];
  return <Dialog title={t('settings.title')} ariaLabelledBy="settings-title" onRequestClose={onClose} className="settings-dialog" headerActions={<button className="good-icon-button" aria-label={t('settings.close')} onClick={onClose}><X aria-hidden="true"/></button>} footer={<><button className="good-button" onClick={onClose}>{t('common.cancel')}</button><button className="good-button good-button--primary" disabled={saving} onClick={()=>void save()}>{saving?t('common.saving'):t('settings.saveSettings')}</button></>}>
   <div className="settings-form">
    <Tabs idPrefix="settings" label={t('settings.title')} items={tabs} value={tab} onChange={setTab}/>
@@ -86,9 +85,6 @@ export function SettingsDialog({settings,monitors=[],onClose,onSave}:Props){
      <p className="shortcut-settings__status">{t('settings.shortcutPending')}</p>
      {statusError?<p className="shortcut-settings__status shortcut-settings__status--error" role="status">{t('settings.shortcutStatusError')}</p>:shortcutStatus?(['screenshot','history'] as const).map(action=>{const status=shortcutStatus[action];return <p key={action} className={`shortcut-settings__status${status.registered?'':' shortcut-settings__status--error'}`} role="status">{t(action==='screenshot'?'settings.screenshotShortcut':'settings.screenshotHistoryShortcut')}: {status.shortcut} — {t(status.registered?'settings.shortcutRegistered':'settings.shortcutUnavailable')}</p>;}):<p role="status" className="shortcut-settings__status">{t('settings.shortcutStatusLoading')}</p>}
     </div>
-   </TabPanel>
-   <TabPanel idPrefix="settings" tabId="model" active={tab==='model'}>
-    <AssistantSettingsPanel/>
    </TabPanel>
    {error?<div className="dialog-error" role="alert">{error}</div>:null}
   </div>
