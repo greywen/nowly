@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="{{lang}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="{{description}}">
+  <meta name="theme-color" content="#4fc9da">
+  <title>{{title}}</title>
+  <link rel="canonical" href="{{canonical}}">
+  <link rel="alternate" hreflang="zh-CN" href="{{chineseUrl}}">
+  <link rel="alternate" hreflang="en" href="{{englishUrl}}">
+  <link rel="alternate" hreflang="x-default" href="{{chineseUrl}}">
+  <link rel="icon" href="{{assets}}/logo.png" type="image/png">
+  <link rel="stylesheet" href="{{assets}}/site.css">
+</head>
+<body>
+  <a class="site__skip" href="#main">{{skipLabel}}</a>
+  <header class="site__header">
+    <div class="site__header-inner">
+      <a class="site__brand" href="index.html"><img src="{{assets}}/logo.png" width="40" height="40" alt=""><span>{{productName}}<small>{{tagline}}</small></span></a>
+      <nav class="site__nav" aria-label="{{navLabel}}">{{navigation}}<a href="{{languageUrl}}" lang="{{otherLang}}">{{languageLabel}}</a></nav>
+    </div>
+  </header>
+  <main id="main" class="site__main">{{body}}</main>
+  <footer class="site__footer">
+    <div class="site__footer-inner"><div><strong>{{productName}} · 此刻</strong><p>{{footer}}</p><p>{{versionLabel}} {{version}}</p></div><nav aria-label="{{legalLabel}}">{{legalLinks}}<a href="mailto:{{supportEmail}}">{{supportEmail}}</a></nav></div>
+    <div class="site__credit">{{developerName}} · Solar icons by 480 Design · <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a></div>
+  </footer>
+</body>
+</html>

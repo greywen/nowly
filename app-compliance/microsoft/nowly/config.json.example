@@ -1,0 +1,35 @@
+{
+  "productName": "Nowly",
+  "productDescription": "Nowly 是一款 Windows 桌面效率应用，将日历、任务、看板、便签和专注计时集中在一个本地优先的工作台中。",
+  "companyName": "REPLACE_BEFORE_DEPLOY_COMPANY_NAME",
+  "companyAddress": "REPLACE_BEFORE_DEPLOY_COMPANY_ADDRESS",
+  "officialDomain": "https://REPLACE_BEFORE_DEPLOY_DOMAIN",
+  "supportEmail": "REPLACE_BEFORE_DEPLOY_SUPPORT_EMAIL",
+  "privacyEmail": "REPLACE_BEFORE_DEPLOY_PRIVACY_EMAIL",
+  "dataDeletionEmail": "REPLACE_BEFORE_DEPLOY_DATA_DELETION_EMAIL",
+  "effectiveDate": "REPLACE_BEFORE_DEPLOY_EFFECTIVE_DATE",
+  "lastUpdated": "REPLACE_BEFORE_DEPLOY_LAST_UPDATED",
+  "provider": "microsoft",
+  "providerLabel": "Microsoft Calendar",
+  "locale": "zh-CN",
+  "oauthScopes": [
+    "openid",
+    "email",
+    "offline_access",
+    "https://graph.microsoft.com/Calendars.ReadWrite"
+  ],
+  "features": {
+    "calendarRead": true,
+    "calendarWrite": true,
+    "localTokenStorage": true,
+    "windowsDpapi": true,
+    "serverCalendarStorage": false,
+    "analytics": false,
+    "crashReporting": false
+  },
+  "review": {
+    "testAccount": "REPLACE_BEFORE_DEPLOY_TEST_ACCOUNT",
+    "videoUrl": "REPLACE_BEFORE_DEPLOY_VIDEO_URL"
+  }
+}
+

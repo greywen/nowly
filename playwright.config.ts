@@ -8,6 +8,7 @@ const reuseExistingServer = runtimeEnv.PW_REUSE_SERVER === 'true';
 
 export default defineConfig({
   testDir: './tests',
+  testIgnore: 'website.spec.ts',
   webServer: {
     command: `npm run dev -- --host 127.0.0.1 --port ${testPort}`,
     url: `http://127.0.0.1:${testPort}`,

@@ -73,4 +73,31 @@ docs/superpowers/plans/*
 dev-modules/*
 !dev-modules/example.js
 !dev-modules/README.md
-app-compliance/
+# Public documentation and website sources
+!docs/product-definition.md
+!docs/user-guide.zh.md
+!docs/user-guide.en.md
+!docs/privacy-and-data.zh.md
+!docs/privacy-and-data.en.md
+!docs/website.md
+/website/dist/
+/website/test-results/
+/website/playwright-report/
+
+# Track reusable compliance sources, never private review configuration or output
+/app-compliance/*
+!/app-compliance/README.md
+!/app-compliance/scripts/
+!/app-compliance/templates/
+!/app-compliance/deploy/
+!/app-compliance/google/
+/app-compliance/google/*
+!/app-compliance/google/nowly/
+/app-compliance/google/nowly/*
+!/app-compliance/google/nowly/config.json.example
+!/app-compliance/microsoft/
+/app-compliance/microsoft/*
+!/app-compliance/microsoft/nowly/
+/app-compliance/microsoft/nowly/*
+!/app-compliance/microsoft/nowly/README.md
+!/app-compliance/microsoft/nowly/config.json.example

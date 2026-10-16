@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{{productName}} 支持</title><link rel="stylesheet" href="../site.css"></head>
+  <body>
+    <header class="site-header"><div class="header-inner"><a class="brand" href="index.html">{{productName}}<small>支持中心</small></a><nav class="site-nav" aria-label="主导航"><a href="index.html">产品</a><a href="privacy.html">隐私政策</a><a href="terms.html">服务条款</a><a href="data-deletion.html">数据删除</a><a href="support.html">支持</a><a href="../support.html" lang="en">English</a></nav></div></header>
+    <main><div class="page-shell"><article class="document">
+      <h1>{{productName}} 支持</h1><p class="meta">最后更新：{{lastUpdated}}</p>
+      <section><h2>连接 {{providerLabel}}</h2><p>在 Nowly 的日历设置中点击连接账户，在浏览器中完成登录和授权，然后返回应用选择需要显示的日历。终端用户不需要填写 Client ID。</p></section>
+      <section><h2>权限说明</h2><p>连接时显示的权限由当前应用版本决定。完整说明请查看<a href="privacy.html">隐私政策</a>。日历权限只用于显示已授权日历，以及执行用户在 Nowly 中明确发起的事件操作。</p></section>
+      <section><h2>授权失败或超时</h2><ol><li>确认系统浏览器已完成登录并点击允许。</li><li>不要关闭 Nowly 的授权流程，直到浏览器显示授权完成。</li><li>检查系统时间、网络、代理和 Google 服务状态。</li><li>返回 Nowly 后等待日历列表加载；仍失败时重新连接账户。</li></ol><p>联系支持时请提供 Nowly 版本、Windows 版本、发生时间和不含个人日历内容的错误描述。不要发送密码、OAuth 凭证、令牌或完整日志。</p></section>
+      <section><h2>断开账户</h2><p>在日历设置中找到已连接账户并选择断开。详细说明请查看<a href="data-deletion.html">数据删除页面</a>。</p></section>
+      <section><h2>联系我们</h2><p>一般支持：<a href="mailto:{{supportEmail}}">{{supportEmail}}</a></p><p>隐私问题：<a href="mailto:{{privacyEmail}}">{{privacyEmail}}</a></p><p>数据删除：<a href="mailto:{{dataDeletionEmail}}">{{dataDeletionEmail}}</a></p></section>
+    </article></div></main>
+    <footer class="site-footer"><div class="page-shell"><div class="footer-links"><a href="index.html">产品</a><a href="privacy.html">隐私政策</a><a href="terms.html">服务条款</a><a href="data-deletion.html">数据删除</a></div><div>{{companyName}} · {{officialDomain}}</div></div></footer>
+  </body>
+</html>

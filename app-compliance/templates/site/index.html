@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="{{productDescriptionEn}}">
+    <title>{{productName}} · {{providerLabel}}</title>
+    <link rel="stylesheet" href="site.css">
+  </head>
+  <body>
+    <header class="site-header"><div class="header-inner">
+      <a class="brand" href="index.html">{{productName}}<small>{{providerLabel}} integration</small></a>
+      <nav class="site-nav" aria-label="Main navigation">
+        <a href="index.html">Product</a><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a><a href="data-deletion.html">Data deletion</a><a href="support.html">Support</a><a href="zh-CN/index.html" lang="zh-CN">简体中文</a>
+      </nav>
+    </div></header>
+    <main><div class="page-shell">
+      <section class="hero">
+        <div class="eyebrow">WINDOWS DESKTOP PRODUCT</div>
+        <h1>{{productName}} and {{providerLabel}}</h1>
+        <p class="lead">{{productDescriptionEn}}</p>
+        <p>Users can voluntarily connect their own {{providerLabel}} account, choose which calendars to display, and manage calendar events from within {{productName}}.</p>
+        <p class="meta">Last updated: {{lastUpdated}}</p>
+      </section>
+      <div class="notice">This public website provides product, privacy, and support information only. It does not receive OAuth callbacks, credentials, tokens, or users’ calendar data.</div>
+      <section class="card-grid" aria-label="Product capabilities">
+        <article class="card"><h2>One calendar view</h2><p>View authorized calendars and events in a desktop workspace without constantly switching applications.</p></article>
+        <article class="card"><h2>User-initiated actions</h2><p>{{writeCapabilityEn}}</p></article>
+        <article class="card"><h2>Local protection</h2><p>{{tokenStorageDescriptionEn}}</p></article>
+      </section>
+      <section class="document document--spaced">
+        <h2>How the connection works</h2>
+        <ol class="step-list">
+          <li><div><h3>Connect from Nowly</h3><p>The user starts the connection from calendar settings. End users are never asked to provide a Client ID.</p></div></li>
+          <li><div><h3>Authorize with {{providerLabel}}</h3><p>The system browser opens the provider’s consent screen, where the user can review and approve the requested permissions.</p></div></li>
+          <li><div><h3>Return and select calendars</h3><p>After authorization, the user returns to Nowly and chooses which calendars to display.</p></div></li>
+          <li><div><h3>View or manage events</h3><p>{{calendarBehaviorEn}}</p></div></li>
+          <li><div><h3>Disconnect at any time</h3><p>The user can disconnect the account in Nowly settings and remove locally stored connection data.</p></div></li>
+        </ol>
+      </section>
+    </div></main>
+    <footer class="site-footer"><div class="page-shell">
+      <div class="footer-links"><a href="privacy.html">Privacy Policy</a><a href="terms.html">Terms of Service</a><a href="data-deletion.html">Data Deletion</a><a href="support.html">Support</a><a href="mailto:{{supportEmail}}">Contact support</a></div>
+      <div>{{companyNameEn}} · {{officialDomain}} · {{lastUpdated}}</div>
+    </div></footer>
+  </body>
+</html>

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{productName}} Privacy Policy</title>
+    <link rel="stylesheet" href="site.css">
+  </head>
+  <body>
+    <header class="site-header"><div class="header-inner">
+      <a class="brand" href="index.html">{{productName}}<small>Privacy Policy</small></a>
+      <nav class="site-nav" aria-label="Main navigation"><a href="index.html">Product</a><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a><a href="data-deletion.html">Data deletion</a><a href="support.html">Support</a><a href="zh-CN/privacy.html" lang="zh-CN">简体中文</a></nav>
+    </div></header>
+    <main><div class="page-shell"><article class="document">
+      <h1>{{productName}} Privacy Policy</h1>
+      <p class="meta">Effective: {{effectiveDate}} · Last updated: {{lastUpdated}}</p>
+      <section><h2>1. Scope</h2><p>This policy explains how {{companyNameEn}} handles information that you authorize when using {{productName}} and its {{providerLabel}} integration. {{productName}} is a Windows desktop application. This public website does not receive OAuth callbacks, credentials, tokens, or calendar data.</p></section>
+      <section><h2>2. Google data accessed and purposes</h2><p>When you voluntarily connect {{providerLabel}}, the application accesses account and calendar information only within the permissions approved on the consent screen:</p>{{scopeTableEn}}<p>{{calendarBehaviorEn}}</p></section>
+      <section><h2>3. Protection of sensitive Google user data</h2><p>{{productName}} uses the OAuth 2.0 Authorization Code flow with PKCE and a random state value. The authorization response is returned only to a temporary loopback listener on the user’s device.</p><p>Authorization, token exchange, and Google Calendar API requests are transmitted over HTTPS (TLS) and are restricted to Google’s authorization, token, identity, and Calendar API endpoints.</p><p>{{tokenStorageDescriptionEn}} Access and refresh tokens are encrypted before they are written to the local database, are tied to the current Windows user account, and are decrypted only by the application backend when an authorized Google API request is required. OAuth tokens are not intentionally logged, are not exposed to the application interface, and are not sent to a developer-operated server.</p><p>{{calendarStorageDescriptionEn}} The local calendar cache is available only through the user’s Windows account and Nowly application functions. Users should protect their Windows account, keep the operating system and Nowly updated, and disconnect the account if a device is lost or shared.</p></section>
+      <section><h2>4. Sharing, advertising, analytics, and Limited Use</h2><p>{{thirdPartyDataStatementEn}}</p><p>Google user data is not used to train, develop, or improve generalized artificial intelligence or machine learning models.</p><p>{{analyticsStatementEn}}</p><p>Nowly’s use and transfer of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements.</p></section>
+      <section><h2>Optional networking and local-first storage</h2><p>Nowly is your personal workspace for Windows. Local-first does not mean every feature is offline. In addition to authorized calendar synchronization, the optional AI assistant sends your input, conversation history and permission-filtered context to the model service you configure. When external-calendar reading is enabled, context may include cached Google, Microsoft or ICS events. AI access to external events is read-only and cannot modify remote calendars. Do not send sensitive information without authorization, and check your provider's retention policy.</p><p>Google user data must not be used to train, develop or improve general-purpose models; users should select provider configurations consistent with Limited Use requirements. Nowly performs update checks against GitHub release information. The website has no analytics scripts, but its hosting service may generate ordinary access logs. Local storage includes databases, attachment files and screenshot PNG files. Native desktop integrations and optional external services are not executed by this public website.</p></section>
+      <section><h2>5. Retention, disconnection, and deletion</h2><p>You can disconnect a connected account in {{productName}}. Disconnecting removes the locally stored OAuth tokens, account connection, subscription settings, and associated local event cache. You may also send a deletion request to <a href="mailto:{{dataDeletionEmail}}">{{dataDeletionEmail}}</a>.</p><p>Disconnecting Nowly does not automatically delete original data in your {{providerLabel}} account. You remain in control of that data through Google.</p></section>
+      <section><h2>6. Your choices and contact</h2><p>For privacy, access, or deletion questions, contact <a href="mailto:{{privacyEmail}}">{{privacyEmail}}</a>. Developer location: {{companyAddressEn}}.</p></section>
+      <section><h2>7. Policy changes</h2><p>We may update this policy when the product, law, or platform requirements change. The revised policy will be published here with an updated date.</p></section>
+    </article></div></main>
+    <footer class="site-footer"><div class="page-shell"><div class="footer-links"><a href="index.html">Product</a><a href="terms.html">Terms of Service</a><a href="data-deletion.html">Data Deletion</a><a href="support.html">Support</a></div><div>{{companyNameEn}} · <a href="mailto:{{supportEmail}}">{{supportEmail}}</a></div></div></footer>
+  </body>
+</html>

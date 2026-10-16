@@ -3,11 +3,11 @@
   "version": "0.1.5",
   "private": true,
   "type": "module",
-  "description": "Nowly (此刻) — a local-first focus dashboard that lives on your Windows desktop wallpaper and answers one question: what should I be doing right now?",
+  "description": "Nowly (此刻) — your local-first personal workspace for Windows, bringing schedules, tasks, notes, time and desktop tools together.",
   "keywords": [
-    "focus",
+    "personal-workspace",
     "productivity",
-    "dashboard",
+    "focus",
     "desktop-widgets",
     "desktop-wallpaper",
     "local-first",
@@ -33,7 +33,12 @@
     "tauri": "tauri",
     "icons": "node scripts/generate-icons.mjs",
     "version:check": "node scripts/check-version-sync.mjs",
-    "test:tooling": "node scripts/check-version-sync.mjs"
+    "test:tooling": "node scripts/check-version-sync.mjs",
+    "site:build": "node website/scripts/build.mjs",
+    "site:preview": "vite website/dist --host 127.0.0.1 --port 4174 --strictPort",
+    "site:test": "node --test website/scripts/build.test.mjs website/scripts/showcase-fixtures.test.mjs",
+    "site:e2e": "playwright test --config website/playwright.config.ts",
+    "site:capture": "node website/scripts/capture-workspace.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "latest",

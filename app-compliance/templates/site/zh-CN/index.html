@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="{{productDescription}}">
+    <title>{{productName}} · {{providerLabel}}</title>
+    <link rel="stylesheet" href="../site.css">
+  </head>
+  <body>
+    <header class="site-header"><div class="header-inner">
+      <a class="brand" href="index.html">{{productName}}<small>{{providerLabel}} 连接说明</small></a>
+      <nav class="site-nav" aria-label="主导航"><a href="index.html">产品</a><a href="privacy.html">隐私政策</a><a href="terms.html">服务条款</a><a href="data-deletion.html">数据删除</a><a href="support.html">支持</a><a href="../index.html" lang="en">English</a></nav>
+    </div></header>
+    <main><div class="page-shell">
+      <section class="hero"><div class="eyebrow">WINDOWS DESKTOP PRODUCT</div><h1>{{productName}} 与 {{providerLabel}}</h1><p class="lead">{{productDescription}}</p><p>用户可以在 {{productName}} 中主动连接自己的 {{providerLabel}}，选择需要显示的日历，并在应用内管理日历事件。</p><p class="meta">最后更新：{{lastUpdated}}</p></section>
+      <div class="notice">{{productName}} 的公开网站只提供产品、隐私和支持信息。它不接收 OAuth 回调、凭证、令牌或用户日历数据。</div>
+      <section class="card-grid" aria-label="产品功能"><article class="card"><h2>集中查看</h2><p>在桌面工作台中查看已授权日历和事件，减少在多个应用之间切换。</p></article><article class="card"><h2>用户发起的操作</h2><p>{{writeCapability}}</p></article><article class="card"><h2>本机保护</h2><p>{{tokenStorageDescription}}</p></article></section>
+      <section class="document document--spaced"><h2>连接流程</h2><ol class="step-list"><li><div><h3>在 Nowly 中点击连接</h3><p>用户从日历设置开始连接流程，应用不会要求用户填写 Client ID。</p></div></li><li><div><h3>在 {{providerLabel}} 页面授权</h3><p>浏览器显示平台授权页面，用户可以查看并同意请求的权限。</p></div></li><li><div><h3>返回 Nowly 选择日历</h3><p>授权完成后回到应用，用户选择希望显示的日历。</p></div></li><li><div><h3>查看或管理事件</h3><p>{{calendarBehavior}}</p></div></li><li><div><h3>随时断开</h3><p>用户可以在 Nowly 设置中断开账户并清理本机连接数据。</p></div></li></ol></section>
+    </div></main>
+    <footer class="site-footer"><div class="page-shell"><div class="footer-links"><a href="privacy.html">隐私政策</a><a href="terms.html">服务条款</a><a href="data-deletion.html">数据删除</a><a href="support.html">支持</a><a href="mailto:{{supportEmail}}">联系支持</a></div><div>{{companyName}} · {{officialDomain}} · {{lastUpdated}}</div></div></footer>
+  </body>
+</html>

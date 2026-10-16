@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{{productName}} 隐私政策</title><link rel="stylesheet" href="../site.css"></head>
+  <body>
+    <header class="site-header"><div class="header-inner"><a class="brand" href="index.html">{{productName}}<small>隐私政策</small></a><nav class="site-nav" aria-label="主导航"><a href="index.html">产品</a><a href="privacy.html">隐私政策</a><a href="terms.html">服务条款</a><a href="data-deletion.html">数据删除</a><a href="support.html">支持</a><a href="../privacy.html" lang="en">English</a></nav></div></header>
+    <main><div class="page-shell"><article class="document">
+      <h1>{{productName}} 隐私政策</h1><p class="meta">生效日期：{{effectiveDate}} · 最后更新：{{lastUpdated}}</p>
+      <section><h2>1. 适用范围</h2><p>本政策说明 {{companyName}} 如何处理你在使用 {{productName}} 及其 {{providerLabel}} 连接功能时主动授权给应用的信息。{{productName}} 是 Windows 桌面应用，公开网站不接收 OAuth 回调、凭证、令牌或用户日历数据。</p></section>
+      <section><h2>2. 访问的信息和用途</h2><p>当你主动连接 {{providerLabel}} 时，应用会按照你在授权页面同意的权限访问账户和日历信息：</p>{{scopeTable}}<p>{{calendarBehavior}}</p></section>
+      <section><h2>3. Google 用户敏感数据保护机制</h2><p>{{productName}} 使用 OAuth 2.0 Authorization Code + PKCE 授权流程，并使用随机 state 参数防止请求被替换。授权结果只返回用户设备上的临时 loopback 回调监听器。</p><p>授权、令牌交换和 Google Calendar API 请求均通过 HTTPS（TLS）传输，并且目标仅限 Google 的授权、令牌、身份和 Calendar API 端点。</p><p>{{tokenStorageDescription}}访问令牌和刷新令牌在写入本地数据库前即完成加密，密文与当前 Windows 用户账户绑定，只会在应用后端发起已授权 Google API 请求时解密。OAuth 令牌不会被有意写入日志、不会暴露给应用界面，也不会发送到开发者运营的服务器。</p><p>{{calendarStorageDescription}}本地日历缓存只能通过用户自己的 Windows 账户和 Nowly 应用功能访问。用户应保护 Windows 账户、及时更新操作系统和 Nowly，并在设备丢失或与他人共用时断开账户。</p></section>
+      <section><h2>4. 数据共享、广告、分析与有限使用</h2><p>{{thirdPartyDataStatement}}</p><p>Google 用户数据不会用于训练、开发或改进通用人工智能或机器学习模型。</p><p>{{analyticsStatement}}</p><p>Nowly 对从 Google API 获取的信息的使用和传输遵守 <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>，包括 Limited Use（有限使用）要求。</p></section>
+      <section><h2>可选联网能力与本地优先</h2><p>Nowly 是你的 Windows 个人工作桌面，本地优先不等于全部功能离线。除授权日历同步外，可选 AI 助手会把输入、对话历史和用户允许的上下文发送到用户配置的模型服务；启用外部日历读取权限时，上下文可能包含本机缓存的 Google、Microsoft 或 ICS 事件。AI 对外部事件只读，不能通过 AI 修改远端日历。不要将未获授权的敏感资料交给模型服务，并核对该服务的数据保留政策。</p><p>Google 用户数据不得用于训练、开发或改进通用模型；使用者应选择与有限使用要求一致的服务配置。Nowly 的更新检查会请求 GitHub 发行信息。网站无分析脚本，但托管服务可能生成普通访问日志。本地数据包含数据库、附件文件与截图 PNG；桌面原生集成和可选外部服务不由本公开网站执行。</p></section>
+      <section><h2>5. 保留、断开连接与删除</h2><p>你可以在 {{productName}} 中断开已连接账户。断开操作会移除本机保存的 OAuth 令牌、连接账户、订阅配置和相关本地事件缓存。你也可以通过 <a href="mailto:{{dataDeletionEmail}}">{{dataDeletionEmail}}</a> 提交数据删除请求。</p><p>这不会自动删除 {{providerLabel}} 账户中的原始数据；你仍通过 Google 管理这些数据。</p></section>
+      <section><h2>6. 你的选择和联系我们</h2><p>如需咨询隐私、访问或删除问题，请联系 <a href="mailto:{{privacyEmail}}">{{privacyEmail}}</a>。开发者所在地：{{companyAddress}}。</p></section>
+      <section><h2>7. 政策更新</h2><p>我们可能因产品、法律或平台要求更新本政策。更新后的版本会在本页面发布，并更新“最后更新”日期。</p></section>
+    </article></div></main>
+    <footer class="site-footer"><div class="page-shell"><div class="footer-links"><a href="index.html">产品</a><a href="terms.html">服务条款</a><a href="data-deletion.html">数据删除</a><a href="support.html">支持</a></div><div>{{companyName}} · <a href="mailto:{{supportEmail}}">{{supportEmail}}</a></div></div></footer>
+  </body>
+</html>

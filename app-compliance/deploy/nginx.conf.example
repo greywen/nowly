@@ -1,0 +1,26 @@
+# 将下面的 root 替换为实际部署目录，并放入对应的 server 块。
+# 证书路径和域名由部署者配置，本示例不包含生产密钥或主机名。
+
+server {
+    listen 80;
+    server_name REPLACE_BEFORE_DEPLOY_DOMAIN;
+
+    root REPLACE_BEFORE_DEPLOY_DOCUMENT_ROOT;
+    index index.html;
+
+    autoindex off;
+    charset utf-8;
+
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header Content-Security-Policy "default-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; script-src 'none'; frame-ancestors 'self'; base-uri 'self'" always;
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+
+    # 正式环境建议另外配置 HTTPS，并将 HTTP 重定向到 HTTPS。
+    # return 301 https://$host$request_uri;
+}
+
