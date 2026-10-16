@@ -357,6 +357,8 @@ pub struct AppSettings {
     pub icon_style: String,
     #[serde(default = "default_hide_topbar_in_wallpaper")]
     pub hide_topbar_in_wallpaper: bool,
+    #[serde(default)]
+    pub hide_module_background_in_wallpaper: bool,
     #[serde(default = "default_notification_mode")]
     pub notification_mode: String,
     #[serde(default)]

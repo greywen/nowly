@@ -183,6 +183,7 @@ mod tests {
             show_weekends: true,
             icon_style: "duotone".into(),
             hide_topbar_in_wallpaper: true,
+            hide_module_background_in_wallpaper: false,
             notification_mode: "persistent".into(),
             sound_settings: Default::default(),
             quick_panel_enabled: false,

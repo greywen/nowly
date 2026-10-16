@@ -160,7 +160,7 @@ Allowed query results, entered messages, recent conversation and optional previo
 
 ## Desktop modes and data care
 
-The quick panel is a top-edge native surface, separate from embedding the workspace as wallpaper. Fullscreen focus is a dedicated focus view, not wallpaper mode; keep the shared timer running when switching views. The **hide navigation/module headers in wallpaper mode** setting hides both the top bar and complete module headers only in wallpaper mode; it does not change layout data, module content or the independent Nowly Bar.
+The quick panel is a top-edge native surface, separate from embedding the workspace as wallpaper. Fullscreen focus is a dedicated focus view, not wallpaper mode; keep the shared timer running when switching views. Under **Settings → Interface → Wallpaper appearance**, **Hide navigation and module headers** is enabled by default, while **Hide module backgrounds and borders** is disabled by default. These independent options apply only in wallpaper mode. The second option makes only module shells transparent, preserving internal cards, task rows and inputs. Returning to the foreground restores normal appearance; layout data, module content and the independent Nowly Bar are unchanged.
 
 Wallpaper/tray operation is not a backup. SQLite is only one part of desktop data: preserve attachment/sticker files, screenshots and relevant WebView storage too. Follow [backup and control guidance](privacy-and-data.en.md#backups-and-control) before changing machines or manually resetting development data.
 

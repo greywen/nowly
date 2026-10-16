@@ -17,7 +17,7 @@ const defaultSettings: AppSettings = {
   dateFormat: 'localized',
   showWeekends: true,
   iconStyle: 'duotone',
-  hideTopbarInWallpaper: true,
+  hideTopbarInWallpaper: true, hideModuleBackgroundInWallpaper: false,
   recentColors: []
 };
 

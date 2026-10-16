@@ -59,6 +59,7 @@ export type AppSettings = {
   // wallpaper reads as a clean dashboard; the topbar returns the moment the app
   // is brought back to the foreground.
   hideTopbarInWallpaper: boolean;
+  hideModuleBackgroundInWallpaper?: boolean;
   notificationMode?: 'persistent' | 'notification';
   soundSettings?: SoundSettings;
   quickPanelEnabled?: boolean;

@@ -14,6 +14,58 @@ const layouts = [
   ]
 ];
 
+for (const hideHeaders of [false, true]) {
+  for (const hideBackground of [false, true]) {
+    test(`wallpaper appearance independently combines headers=${hideHeaders}, backgrounds=${hideBackground}`, async ({ page }) => {
+      await page.addInitScript(() => {
+        localStorage.setItem('nowly:onboarding-seen', 'true');
+        if (!localStorage.getItem('nowly:browser-backend')) {
+          localStorage.setItem('nowly:browser-backend', JSON.stringify({ moduleLayout: [
+            { id: 'calendar', x: 0, y: 0, w: 7, h: 8 },
+            { id: 'matrix', x: 7, y: 0, w: 5, h: 8 }
+          ] }));
+        }
+      });
+      await page.goto('/');
+      const root = page.getByTestId('desktop-root');
+      const shell = page.locator('.module-frame.card').first();
+      await expect(shell).toBeVisible();
+      const original = await shell.evaluate(element => {
+        const style = getComputedStyle(element);
+        return { background: style.backgroundColor, border: style.borderTopColor };
+      });
+      const inner = page.locator('.quadrant').first();
+      await expect(inner).toBeVisible();
+      const innerBackground = await inner.evaluate(element => getComputedStyle(element).backgroundColor);
+      await page.getByRole('button', { name: '打开设置', exact: true }).click();
+      await expect(page.getByRole('group', { name: '壁纸模式外观' })).toBeVisible();
+      const headers = page.getByRole('checkbox', { name: '隐藏导航栏及模块顶部栏', exact: true });
+      const background = page.getByRole('checkbox', { name: '隐藏模块背景颜色和边框', exact: true });
+      await expect(headers).toBeChecked();
+      await expect(background).not.toBeChecked();
+      await headers.setChecked(hideHeaders);
+      await background.setChecked(hideBackground);
+      await page.getByRole('button', { name: '保存设置', exact: true }).click();
+      await page.getByRole('button', { name: '设为壁纸', exact: true }).click();
+      await expect(page.locator('.topbar')).toBeVisible({ visible: !hideHeaders });
+      await expect(shell).toHaveCSS('background-color', hideBackground ? 'rgba(0, 0, 0, 0)' : original.background);
+      await expect(shell).toHaveCSS('border-top-color', hideBackground ? 'rgba(0, 0, 0, 0)' : original.border);
+      await expect(shell).toHaveCSS('border-top-width', '1px');
+      await expect(inner).toHaveCSS('background-color', innerBackground);
+      await root.dblclick({ position: { x: 4, y: 4 } });
+      await expect(shell).toHaveCSS('background-color', original.background);
+      await expect(shell).toHaveCSS('border-top-color', original.border);
+      await page.reload();
+      await page.getByRole('button', { name: '打开设置', exact: true }).click();
+      await expect(headers).toBeChecked({ checked: hideHeaders });
+      await expect(background).toBeChecked({ checked: hideBackground });
+      await page.getByRole('button', { name: '取消', exact: true }).click();
+      await page.getByRole('button', { name: '设为壁纸', exact: true }).click();
+      await expect(shell).toHaveCSS('background-color', hideBackground ? 'rgba(0, 0, 0, 0)' : original.background);
+    });
+  }
+}
+
 for (const layout of layouts) {
   test(`wallpaper navigation follows the setting for ${layout.map(item => item.id).join(', ')}`, async ({ page }) => {
     await page.addInitScript((moduleLayout) => {
@@ -50,7 +102,7 @@ for (const layout of layouts) {
     for (const header of await headers.all()) await expect(header).toBeVisible();
 
     await page.getByRole('button', { name: '打开设置', exact: true }).click();
-    const hideNavigation = page.getByRole('checkbox', { name: /设为壁纸后隐藏导航栏/ });
+    const hideNavigation = page.getByRole('checkbox', { name: '隐藏导航栏及模块顶部栏' });
     await expect(hideNavigation).toBeChecked();
     await hideNavigation.uncheck();
     await page.getByRole('button', { name: '保存设置', exact: true }).click();

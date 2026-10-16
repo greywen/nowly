@@ -64,7 +64,7 @@ const defaultSettings: Dict = {
   dateFormat: 'localized',
   showWeekends: true,
   iconStyle: 'duotone',
-  hideTopbarInWallpaper: true,
+  hideTopbarInWallpaper: true, hideModuleBackgroundInWallpaper: false,
   quickPanelEnabled: true,
   quickPanelShortcut: 'Ctrl+Space',
   screenshotShortcut: 'Ctrl+Alt+A',

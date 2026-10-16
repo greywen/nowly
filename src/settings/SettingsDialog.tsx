@@ -56,9 +56,14 @@ export function SettingsDialog({settings,monitors=[],onClose,onSave}:Props){
      <Select id="settings-density" label={t('settings.density')} value={draft.density} options={[{value:'compact',label:t('settings.densityCompact')},{value:'balanced',label:t('settings.densityBalanced')},{value:'comfortable',label:t('settings.densityComfortable')}]} onChange={value=>setDraft({...draft,density:value as AppSettings['density']})}/>
      <Select id="settings-icon-style" label={t('settings.iconStyle')} value={draft.iconStyle} options={[{value:'duotone',label:t('settings.iconStyleDuotone')},{value:'solid',label:t('settings.iconStyleSolid')},{value:'outline',label:t('settings.iconStyleOutline')}]} onChange={value=>setDraft({...draft,iconStyle:value as IconStyle})}/>
     </div>
-    <div className="settings-checks">
-     <Check label={t('settings.hideTopbarInWallpaper')} checked={draft.hideTopbarInWallpaper} onChange={toggle('hideTopbarInWallpaper')}/>
-    </div>
+    <fieldset className="settings-wallpaper">
+     <legend>{t('settings.wallpaperAppearance')}</legend>
+     <p>{t('settings.wallpaperAppearanceHint')}</p>
+     <div className="settings-checks">
+      <Check label={t('settings.hideTopbarInWallpaper')} checked={draft.hideTopbarInWallpaper} onChange={toggle('hideTopbarInWallpaper')}/>
+      <Check label={t('settings.hideModuleBackgroundInWallpaper')} checked={draft.hideModuleBackgroundInWallpaper ?? false} onChange={toggle('hideModuleBackgroundInWallpaper')}/>
+     </div>
+    </fieldset>
    </TabPanel>
    <TabPanel idPrefix="settings" tabId="notifications" active={tab==='notifications'}>
     <div className="settings-grid">
