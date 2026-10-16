@@ -490,6 +490,10 @@ body:has(.screen-status-island-root),
 .card-header { min-height: 56px; padding: 8px 20px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px dashed var(--border-default); }
 .card-header:has(> .heading-group:empty), .card-header.card-header--actions-only { justify-content: flex-end; }
 .app-shell--no-topbar .workspace .module-frame__body > * > .card-header { display: none; }
+.app-shell--transparent-modules .workspace .module-frame.card { background: transparent; border-color: transparent; }
+.settings-wallpaper { min-width: 0; margin: 0; padding: 0; border: 0; }
+.settings-wallpaper legend { padding: 0; margin-bottom: var(--space-2); font-size: 0.95rem; font-weight: 500; color: var(--text-secondary); }
+.settings-wallpaper > p { margin: 0 0 var(--space-3); color: var(--text-secondary); font-size: 0.85rem; }
 .heading-group h1, .heading-group h2 { margin: 0; color: var(--text-primary); font-size: 1.25rem; font-weight: 600; line-height: 1.2; }
 .calendar-card-content .heading-group { min-width: 0; }
 .calendar-card-content .heading-group h1 { font-size: clamp(14px, 1.4vw, 20px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

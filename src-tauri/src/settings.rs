@@ -46,6 +46,7 @@ pub fn read_app_settings(connection: &Connection) -> Result<AppSettings, rusqlit
             crate::models::default_icon_style(),
         )?,
         hide_topbar_in_wallpaper: read_value_or(connection, "hide_topbar_in_wallpaper", true)?,
+        hide_module_background_in_wallpaper: read_value_or(connection, "hide_module_background_in_wallpaper", false)?,
         notification_mode: read_value_or(
             connection,
             "notification_mode",
@@ -155,6 +156,10 @@ pub fn write_app_settings(
             serde_json::to_string(&settings.hide_topbar_in_wallpaper),
         ),
         (
+            "hide_module_background_in_wallpaper",
+            serde_json::to_string(&settings.hide_module_background_in_wallpaper),
+        ),
+        (
             "notification_mode",
             serde_json::to_string(&settings.notification_mode),
         ),
@@ -246,6 +251,7 @@ mod tests {
         assert!(settings.show_weekends);
         assert_eq!(settings.icon_style, "duotone");
         assert!(settings.hide_topbar_in_wallpaper);
+        assert!(!settings.hide_module_background_in_wallpaper);
         assert_eq!(settings.notification_mode, "persistent");
         assert_eq!(settings.bar_menu, crate::models::default_bar_menu());
     }
@@ -371,6 +377,7 @@ mod tests {
             show_weekends: false,
             icon_style: "outline".into(),
             hide_topbar_in_wallpaper: false,
+            hide_module_background_in_wallpaper: true,
             notification_mode: "notification".into(),
             sound_settings: Default::default(),
             // Non-default values, like every field above: the assertion below is a

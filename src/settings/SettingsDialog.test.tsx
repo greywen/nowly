@@ -14,6 +14,19 @@ const settings:AppSettings={wallpaperEnabled:false,launchAtLogin:false,targetMon
 describe('SettingsDialog',()=>{
   afterEach(() => vi.restoreAllMocks());
 
+  it('groups wallpaper appearance and saves the independent background option', async () => {
+    const user = userEvent.setup();
+    const save = vi.fn(async value => value);
+    render(<SettingsDialog settings={settings} onClose={vi.fn()} onSave={save}/>);
+    expect(screen.getByRole('group', { name: '壁纸模式外观' })).toBeVisible();
+    expect(screen.getByRole('checkbox', { name: '隐藏导航栏及模块顶部栏' })).toBeChecked();
+    const background = screen.getByRole('checkbox', { name: '隐藏模块背景颜色和边框' });
+    expect(background).not.toBeChecked();
+    await user.click(background);
+    await user.click(screen.getByRole('button', { name: '保存设置' }));
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ hideTopbarInWallpaper: true, hideModuleBackgroundInWallpaper: true }));
+  });
+
   it('previews the selected asset at draft volume and stops on switch, mute and tab exit', async () => {
     const user = userEvent.setup();
     const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();

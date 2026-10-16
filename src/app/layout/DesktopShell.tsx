@@ -32,6 +32,7 @@ type DesktopShellProps = {
   // Hide the topbar and module headers as wallpaper. Defaults on; all headers
   // return in the foreground.
   hideTopbarInWallpaper?: boolean;
+  hideModuleBackgroundInWallpaper?: boolean;
   overlay?: ReactNode;
   // The launch-time update check result. When it reports a newer release the
   // logo button shows a red dot, and the About dialog surfaces the changelog.
@@ -58,6 +59,7 @@ export function DesktopShell({
   onOpenSettings,
   configurations,
   hideTopbarInWallpaper = true,
+  hideModuleBackgroundInWallpaper = false,
   overlay,
   update
 }: DesktopShellProps) {
@@ -99,7 +101,7 @@ export function DesktopShell({
     <div
       data-testid="desktop-root"
       onDoubleClickCapture={foreground ? undefined : onWallpaperDoubleClick}
-      className={`app-shell${showTopbar ? '' : ' app-shell--no-topbar'}`}
+      className={`app-shell${showTopbar ? '' : ' app-shell--no-topbar'}${!foreground && hideModuleBackgroundInWallpaper ? ' app-shell--transparent-modules' : ''}`}
     >
       <WallpaperLayer />
       {showTopbar ? (

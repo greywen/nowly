@@ -43,6 +43,15 @@ describe('DesktopShell', () => {
     expect(await screen.findByText('calendar region')).toBeInTheDocument();
   });
 
+  it.each(['foreground', 'wallpaper'] as const)('only makes module shells transparent in wallpaper mode: %s', (mode) => {
+    const props = { time: '09:41', dateText: 'today', summary: '', modules: modules() };
+    const { rerender } = render(<DesktopShell {...props} mode={mode} hideTopbarInWallpaper={false} hideModuleBackgroundInWallpaper />);
+    expect(screen.getByTestId('desktop-root').classList.contains('app-shell--transparent-modules')).toBe(mode === 'wallpaper');
+    expect(screen.getByRole('banner')).toBeInTheDocument();
+    rerender(<DesktopShell {...props} mode={mode} hideModuleBackgroundInWallpaper={false} />);
+    expect(screen.getByTestId('desktop-root')).not.toHaveClass('app-shell--transparent-modules');
+  });
+
   it('restores navigation when the wallpaper hiding setting changes', () => {
     const props = { time: '09:41', dateText: 'today', summary: '', modules: modules() };
     const { rerender } = render(<DesktopShell {...props} mode="wallpaper" hideTopbarInWallpaper />);
