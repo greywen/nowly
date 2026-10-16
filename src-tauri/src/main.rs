@@ -4,6 +4,8 @@
 mod assistant;
 mod attachments;
 mod autostart;
+mod package;
+mod package_policy;
 mod calendar_api;
 mod categories;
 mod color;
@@ -127,6 +129,11 @@ const APP_USER_MODEL_ID: &str = "com.nowly.app";
 /// autostart, etc.).
 #[cfg(target_os = "windows")]
 fn set_app_user_model_id() {
+    match package::aumid() {
+        Ok(Some(_)) => return,
+        Ok(None) => {},
+        Err(error) => { eprintln!("{error}"); return; }
+    }
     use windows::core::{w, PCWSTR};
     use windows::Win32::Foundation::ERROR_SUCCESS;
     use windows::Win32::System::Registry::{
@@ -204,8 +211,9 @@ fn send_windows_notification(title: &str, body: &str, reminder: bool) -> Result<
     use windows::core::HSTRING;
     use windows::UI::Notifications::{NotificationSetting, ToastNotificationManager};
 
+    let aumid = package::aumid()?.unwrap_or_else(|| APP_USER_MODEL_ID.to_owned());
     let notifier =
-        ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from(APP_USER_MODEL_ID))
+        ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from(&aumid))
             .map_err(|error| format!("cannot create Windows toast notifier: {error}"))?;
     let setting = notifier
         .Setting()
@@ -217,7 +225,7 @@ fn send_windows_notification(title: &str, body: &str, reminder: bool) -> Result<
         ));
     }
 
-    let mut toast = Toast::new(APP_USER_MODEL_ID).title(title).text1(body).sound(None);
+    let mut toast = Toast::new(&aumid).title(title).text1(body).sound(None);
     if reminder {
         toast = toast
             .scenario(Scenario::Reminder)
@@ -279,8 +287,8 @@ fn main() {
                 );
             },
         )
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            show_main_window(app)
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            if !package_policy::background_launch(args.iter().map(String::as_str)) { show_main_window(app) }
         }))
         .plugin(screenshot_shortcuts::plugin())
         .plugin(tauri_plugin_notification::init())
@@ -574,7 +582,7 @@ fn main() {
                 })
                 .build(app)?;
 
-            if std::env::args().any(|arg| arg == "--background") {
+            if package_policy::background_launch(std::env::args().collect::<Vec<_>>().iter().map(String::as_str)) {
                 if let Some(window) = app.get_webview_window("main") {
                     let wallpaper_enabled = app
                         .state::<AppDb>()

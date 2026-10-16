@@ -45,6 +45,8 @@ windows = { version = "0.61", features = [
   "Win32_System_Registry",
   "Win32_Security",
   "Win32_Security_Cryptography",
+  "ApplicationModel",
+  "Win32_Storage_Packaging_Appx",
   "UI_Notifications"
 ] }
 tauri-plugin-autostart = "2.5.1"

@@ -4,7 +4,6 @@ use crate::models::AppSettings;
 use crate::settings::{read_app_settings, write_app_settings};
 use rusqlite::Connection;
 use tauri::{Manager, State};
-use tauri_plugin_autostart::ManagerExt;
 
 #[derive(Debug, PartialEq, Eq)]
 enum StatusIslandVisibilityChange {
@@ -43,8 +42,10 @@ fn with_connection<T>(
 }
 
 #[tauri::command]
-pub fn get_app_settings(db: State<'_, AppDb>) -> Result<AppSettings, CommandError> {
-    with_connection(db, read_app_settings).map(normalize_status_island_settings)
+pub fn get_app_settings(app: tauri::AppHandle, db: State<'_, AppDb>) -> Result<AppSettings, CommandError> {
+    let mut settings = with_connection(db, read_app_settings).map(normalize_status_island_settings)?;
+    settings.launch_at_login = crate::autostart::enabled(&app).map_err(CommandError::system)?;
+    Ok(settings)
 }
 
 #[tauri::command]
@@ -72,7 +73,7 @@ fn update_settings_blocking(app: tauri::AppHandle, settings: AppSettings) -> Res
     let previous_settings = normalize_status_island_settings(
         read_app_settings(&connection).map_err(CommandError::database)?,
     );
-    let previous_launch_at_login = previous_settings.launch_at_login;
+    let previous_launch_at_login = crate::autostart::enabled(&app).map_err(CommandError::system)?;
     // The AI quick panel and its global shortcut are removed for now, so
     // `quickPanelShortcut` is still persisted but never registered.
     // `quickPanelEnabled` keeps gating the screen-level top surfaces.
@@ -92,7 +93,7 @@ fn update_settings_blocking(app: tauri::AppHandle, settings: AppSettings) -> Res
     }
     if settings.launch_at_login != previous_launch_at_login {
         let autostart_result = if settings.launch_at_login {
-            app.autolaunch().enable()
+            crate::autostart::enable(&app)
         } else {
             crate::autostart::disable(&app)
         };
@@ -117,7 +118,7 @@ fn update_settings_blocking(app: tauri::AppHandle, settings: AppSettings) -> Res
             );
             if settings.launch_at_login != previous_launch_at_login {
                 let rollback = if previous_launch_at_login {
-                    app.autolaunch().enable()
+                    crate::autostart::enable(&app)
                 } else {
                     crate::autostart::disable(&app)
                 };

@@ -1,10 +1,26 @@
+pub fn enable<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<(), tauri_plugin_autostart::Error> {
+    #[cfg(windows)]
+    if crate::package::aumid().map_err(tauri_plugin_autostart::Error::Anyhow)?.is_some() {
+        return crate::package::startup_state(Some(true)).map(|_| ()).map_err(tauri_plugin_autostart::Error::Anyhow);
+    }
+    app.autolaunch().enable()
+}
+
+pub fn enabled<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<bool, String> {
+    #[cfg(windows)]
+    if crate::package::aumid()?.is_some() { return crate::package::startup_state(None); }
+    app.autolaunch().is_enabled().map_err(|e| e.to_string())
+}
+
 use tauri::Runtime;
-#[cfg(not(windows))]
 use tauri_plugin_autostart::ManagerExt;
 
 pub fn disable<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), tauri_plugin_autostart::Error> {
     #[cfg(windows)]
     {
+        if crate::package::aumid().map_err(tauri_plugin_autostart::Error::Anyhow)?.is_some() {
+            return crate::package::startup_state(Some(false)).map(|_| ()).map_err(tauri_plugin_autostart::Error::Anyhow);
+        }
         disable_value(&app.package_info().name)
             .map_err(|error| tauri_plugin_autostart::Error::Anyhow(error.to_string()))
     }

@@ -101,3 +101,7 @@ dev-modules/*
 /app-compliance/microsoft/nowly/*
 !/app-compliance/microsoft/nowly/README.md
 !/app-compliance/microsoft/nowly/config.json.example
+
+# Local MSIX build output
+/artifacts/
+!docs/msix-store.md

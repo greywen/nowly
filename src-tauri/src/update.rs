@@ -100,6 +100,14 @@ fn run_check(current_version: String) -> Result<UpdateInfo, CommandError> {
 
 #[tauri::command]
 pub fn check_for_update() -> Result<UpdateInfo, CommandError> {
+    if crate::package::aumid().map_err(CommandError::system)?.is_some() {
+        let product_id = crate::package::store_product_id().map_err(CommandError::system)?;
+        return Ok(UpdateInfo {
+            current_version: env!("CARGO_PKG_VERSION").to_owned(), latest_version: None,
+            update_available: false, release_notes: None, published_at: None,
+            release_url: crate::package_policy::store_url(Some(&product_id)).unwrap(),
+        });
+    }
     run_check(env!("CARGO_PKG_VERSION").to_owned())
 }
 
