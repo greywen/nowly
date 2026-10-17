@@ -23,6 +23,13 @@ describe('routeForLabel', () => {
     expect(routeForLabel('screenshot-overlay-42-12')).toBe('screenshot-overlay');
   });
 
+  it('routes unique pin windows and scoped scroll surfaces', () => {
+    expect(routeForLabel('screenshot-pin-1')).toBe('screenshot-pin');
+    expect(routeForLabel('screenshot-pin-x')).toBe('main');
+    expect(routeForLabel('screenshot-scroll-control-42')).toBe('screenshot-scroll-control');
+    expect(routeForLabel('screenshot-scroll-preview-42')).toBe('screenshot-scroll-preview');
+  });
+
   it('falls back to the main app for anything unrecognised', () => {
     // main.tsx runs this at module top level: an unknown label must still render
     // a working window rather than a blank page.

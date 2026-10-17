@@ -14,6 +14,8 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { ScreenshotOverlayApp, ScreenshotSessionApp } from './ScreenshotApp';
 import { SurfaceIconProvider } from '../screenshot-history/SurfaceIconProvider';
 import { routeForLabel } from './window-route';
+import { PinnedImageApp } from './PinnedImageApp';
+import { ScrollCaptureAuxApp } from './ScrollCaptureAuxApp';
 import '../app/styles.css';
 
 // Only native capture windows load this document, but the label is still read
@@ -33,15 +35,16 @@ function surface() {
   // overlays carry the frozen frame. Anything else reaching this document is a
   // routing mistake, and the placeholder is the safe thing to show: it never
   // displays desktop pixels.
-  return routeForLabel(currentWindowLabel()) === 'screenshot-overlay'
-    ? <ScreenshotOverlayApp />
-    : <ScreenshotSessionApp />;
+  const route = routeForLabel(currentWindowLabel());
+  if (route === 'screenshot-pin') return <PinnedImageApp />;
+  if (route === 'screenshot-scroll-control' || route === 'screenshot-scroll-preview') return <ScrollCaptureAuxApp />;
+  return route === 'screenshot-overlay' ? <ScreenshotOverlayApp /> : <ScreenshotSessionApp />;
 }
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
-    <SurfaceIconProvider>
-      {surface()}
-    </SurfaceIconProvider>
+    {routeForLabel(currentWindowLabel()) === 'screenshot-pin'
+      ? surface()
+      : <SurfaceIconProvider>{surface()}</SurfaceIconProvider>}
   </React.StrictMode>
 );

@@ -34,6 +34,7 @@ mod rrule_engine;
 mod screen_capture;
 mod screenshot_shortcuts;
 mod screenshot_windows;
+mod screenshot_pins;
 mod settings;
 mod shell;
 mod sound_settings;
@@ -262,10 +263,12 @@ fn main() {
         .manage(assistant::commands::Requests::default())
         .manage(screen_capture::ActiveCapture::default())
         .manage(screen_capture::FrameStore::default())
+        .manage(screen_capture::scroll::ScrollCapture::default())
         .manage(screen_capture::FreezeLayer::default())
         .manage(screen_capture::OverlayStaging::default())
         .manage(screen_capture::PreviewStore::default())
         .manage(screenshot_windows::ScreenshotWindows::default())
+        .manage(screenshot_pins::ScreenshotPins::default())
         .register_asynchronous_uri_scheme_protocol(
             screen_capture::FRAME_URI_SCHEME,
             |context, request, responder| {
@@ -644,6 +647,12 @@ fn main() {
                 }
                 return;
             }
+            if window.label().starts_with("screenshot-pin-")
+                || window.label().starts_with("screenshot-scroll-control-")
+                || window.label().starts_with("screenshot-scroll-preview-")
+            {
+                return;
+            }
             if window.label() == screenshot_windows::HISTORY_LABEL {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
@@ -732,7 +741,8 @@ fn main() {
                 _ => {}
             }
         })
-        .invoke_handler(tauri::generate_handler![
+        .invoke_handler({
+            let handler: Box<dyn Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync> = Box::new(tauri::generate_handler![
             assistant::commands::assistant_get_config,
             assistant::commands::assistant_save_config,
             assistant::commands::assistant_interpret,
@@ -845,8 +855,13 @@ fn main() {
             screen_capture::capture_window_ready,
             screen_capture::capture_window_failed,
             screen_capture::stage_capture_overlay,
+            screen_capture::pin_capture,
+            screenshot_pins::capture_pin_image,
+            screenshot_pins::zoom_capture_pin,
             screen_capture::copy_capture_to_clipboard,
             screen_capture::save_capture_to_file,
+            screen_capture::scroll::scroll_capture,
+            screen_capture::scroll::scroll_capture_image,
             screen_capture::render_mosaic_preview,
             screen_capture::copy_capture_color,
             status_island::get_status_island_snapshot,
@@ -873,7 +888,15 @@ fn main() {
             time::commands::create_alarm,
             time::commands::update_alarm,
             time::commands::delete_alarm
-        ])
+            ]);
+            move |invoke| {
+                if !screenshot_pins::allows_command(invoke.message.webview().label(), invoke.message.command()) {
+                    invoke.resolver.reject("This screenshot surface cannot invoke that command.");
+                    return true;
+                }
+                handler(invoke)
+            }
+        })
         .run(tauri::generate_context!())
         .expect("failed to run Nowly");
 }

@@ -10,7 +10,7 @@
 
 use image::RgbaImage;
 
-use super::composite::{composite_selection, SelectionRect};
+use super::composite::SelectionRect;
 use super::encode::encode_export;
 use super::mosaic::MosaicRegion;
 use super::output::{ClipboardSink, ExportError, ExportKind, ExportToken, ExportTransaction};
@@ -126,11 +126,9 @@ pub(crate) fn render_request(
     // The base image comes from this session's frozen frames only: `with_frames`
     // refuses a superseded session, so a late export cannot read new desktop pixels.
     let base_bytes = frames
-        .with_frames(request.token.session_id, |frames| {
-            composite_selection(frames, request.selection)
-        })
+        .selection_pixels(request.token.session_id, request.selection)
         .ok_or(ExportError::Superseded)?
-        .map_err(|error| ExportError::WriteFailed(format!("compositing failed: {error:?}")))?;
+        .map_err(ExportError::WriteFailed)?;
 
     let base = RgbaImage::from_raw(width, height, base_bytes).ok_or_else(|| {
         ExportError::WriteFailed("the composited buffer does not match the selection".into())
@@ -263,6 +261,117 @@ mod tests {
         // The pixel at selection-local (0,0) is desktop (2,3).
         assert_eq!(image.get_pixel(0, 0).0, [2, 3, 0, 255]);
         assert_eq!(image.get_pixel(3, 1).0, [5, 4, 0, 255]);
+    }
+
+    #[test]
+    fn renders_adopted_long_image_in_image_coordinates_and_restores_desktop() {
+        let frames = store(4, 4);
+        frames
+            .adopt_long_image(1, 7, 2, 8, [41, 42, 43, 255].repeat(16))
+            .unwrap();
+        let request = ExportRequest {
+            token: token(1),
+            selection: selection(0, 0, 2, 8),
+            overlay: None,
+            mosaics: vec![],
+        };
+        let image = render_request(&frames, &request).unwrap();
+        assert_eq!(image.dimensions(), (2, 8));
+        assert!(image.pixels().all(|pixel| pixel.0 == [41, 42, 43, 255]));
+        assert!(frames.discard_long_image(1));
+        assert!(render_request(&frames, &request).is_err());
+    }
+
+    #[test]
+    fn long_image_crop_preserves_image_local_row_and_column_order() {
+        let frames = store(4, 4);
+        let mut rgba = Vec::new();
+        for y in 0..8u8 {
+            for x in 0..3u8 {
+                rgba.extend_from_slice(&[x, y, 9, 255]);
+            }
+        }
+        frames.adopt_long_image(1, 1, 3, 8, rgba).unwrap();
+        let image = render_request(
+            &frames,
+            &ExportRequest {
+                token: token(1),
+                selection: selection(1, 5, 2, 3),
+                overlay: None,
+                mosaics: vec![],
+            },
+        )
+        .unwrap();
+        assert_eq!(image.dimensions(), (2, 3));
+        assert_eq!(image.get_pixel(0, 0).0, [1, 5, 9, 255]);
+        assert_eq!(image.get_pixel(1, 2).0, [2, 7, 9, 255]);
+    }
+
+    #[test]
+    fn long_image_cannot_be_adopted_after_session_retirement() {
+        let frames = store(4, 4);
+        frames.activate(1);
+        frames.retire(1);
+        assert!(frames.adopt_long_image(1, 1, 2, 8, vec![0; 64]).is_err());
+    }
+
+    #[test]
+    fn long_image_output_uses_the_same_annotation_and_mosaic_compositor() {
+        let frames = store(4, 4);
+        frames
+            .adopt_long_image(1, 1, 2, 8, [20, 30, 40, 255].repeat(16))
+            .unwrap();
+        let mut overlay = vec![0; 64];
+        overlay[0..4].copy_from_slice(&[100, 50, 60, 255]);
+        let image = render_request(
+            &frames,
+            &ExportRequest {
+                token: token(1),
+                selection: selection(0, 0, 2, 8),
+                overlay: Some(overlay),
+                mosaics: vec![MosaicRegion {
+                    x: 0,
+                    y: 0,
+                    width: 2,
+                    height: 1,
+                    block_size: 2,
+                }],
+            },
+        )
+        .unwrap();
+        assert_eq!(image.get_pixel(0, 0).0, [60, 40, 50, 255]);
+        assert_eq!(image.get_pixel(1, 0).0, [60, 40, 50, 255]);
+        assert_eq!(image.get_pixel(1, 7).0, [20, 30, 40, 255]);
+    }
+
+    #[test]
+    fn adopted_long_image_rejects_stale_revision_and_invalid_dimensions() {
+        let frames = store(4, 4);
+        assert!(frames.adopt_long_image(99, 1, 2, 8, vec![0; 64]).is_err());
+        assert!(frames.adopt_long_image(1, 1, 2, 8, vec![0; 4]).is_err());
+        assert!(frames.adopt_long_image(1, 1, 1, 65_536, vec![]).is_err());
+        frames.adopt_long_image(1, 3, 2, 8, vec![0; 64]).unwrap();
+        assert!(frames.adopt_long_image(1, 2, 2, 8, vec![1; 64]).is_err());
+        assert_eq!(frames.long_image_dimensions(1), Some((3, 2, 8)));
+        assert!(frames.long_image_bitmap(1, 2).is_none());
+        assert!(frames.long_image_bitmap(99, 3).is_none());
+        assert!(frames.long_image_bitmap(1, 3).is_some());
+        for crop in [
+            selection(-1, 0, 1, 1),
+            selection(0, 7, 2, 2),
+            selection(0, 0, 0, 1),
+        ] {
+            let request = ExportRequest {
+                token: token(1),
+                selection: crop,
+                overlay: None,
+                mosaics: vec![],
+            };
+            assert!(render_request(&frames, &request).is_err());
+        }
+        frames.clear_if_session(1);
+        assert!(frames.long_image_dimensions(1).is_none());
+        assert!(frames.long_image_bitmap(1, 3).is_none());
     }
 
     #[test]

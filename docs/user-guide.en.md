@@ -143,7 +143,21 @@ Screenshot history expands directly from the top-edge Nowly Bar into an animated
 
 An archive failure preserves the editor and does not copy. If archiving succeeds but the clipboard fails, retrying the same final image reuses its history entry. Copying from history never creates another entry. Raw desktop frames are retained only for the active capture session.
 
-Browser development mode can validate the UI but cannot manage real screenshot files or global shortcuts. Full functionality requires the Windows desktop app.
+#### Pin an image
+
+Choose **Pin** in the screenshot toolbar to open the final cropped and annotated image in an independent always-on-top desktop window. Move or close it while using other apps. The complete image fits the window proportionally, without manual zoom controls. Both ordinary screenshots and confirmed long images can be pinned. Up to **five** pins can remain open; a sixth request keeps your editor intact and asks you to close one first. Pinning does not copy to the clipboard or replace saving a permanent image.
+
+Existing pins hide temporarily during another capture and return without taking focus when it ends or is cancelled. Closing a pin frees its slot. Pins are not restored after quitting the app.
+
+#### Manual scrolling capture
+
+1. Select a vertical content region within one monitor, avoiding unrelated windows, fixed sidebars and video. Choose **Scrolling capture** before adding annotations.
+2. Choose **Start capture** and wait for the first frame. Scroll down manually in the source window, retaining overlap and pausing briefly after each step. Nowly captures and stitches frames without sending wheel input. The controls show confirmed height and a preview, with pause, resume, stop and cancel actions.
+3. Choose **Finish and review** or press **Esc** to review the image and seams. Choose **Use long image** to annotate, copy, save or pin it. If capture stopped abnormally, explicitly choose **Use captured portion**. Cancelling the long capture restores the original ordinary screenshot.
+
+During scrolling capture, the Nowly main window may hide temporarily to avoid obscuring the target. It returns to its previous visibility without changing the always-on-top preference when capture ends or is cancelled. Switching apps, moving/resizing or obscuring the target, capture failures and uncertain joins stop capture while retaining the confirmed portion. Unchanged content or reaching the end keeps capture waiting; select Finish when done. The target keeps its current scroll position after cancellation. Horizontal, cross-monitor and automatic scrolling modes are not included, and Nowly does not elevate privileges to control protected apps. Output is limited to **64 million pixels**, with neither edge exceeding **65,535 pixels**; reaching a limit preserves the captured portion for review.
+
+Browser development mode can validate the UI but cannot manage real screenshot files, desktop scrolling capture or global shortcuts. Full functionality requires the Windows desktop app.
 ## Connected calendars
 
 Open the Calendar module settings and subscription manager. Local events need no connected account. For a feed, choose ICS, enter a name and HTTPS/webcal URL, then set category and refresh interval. For Google or Microsoft, connect an account in the provider's browser flow, select calendars and subscribe. Up to 50 sources are supported; intervals are 1–30 minutes (default 15). Use refresh to retry; a failed refresh retains the last successful events, so check sync status before relying on them.

@@ -45,6 +45,10 @@ import { useCaptureKeyboard } from './useCaptureKeyboard';
 import { useExport } from './useExport';
 import { MosaicLayer } from './MosaicLayer';
 import { useSelection } from './useSelection';
+import { useScrollCapture } from './useScrollCapture';
+import { ScrollCapturePanel } from './ScrollCapturePanel';
+import type { ScrollState } from './scroll-model';
+import { currentImageBox } from './long-image-geometry';
 
 
 // The two capture surfaces, mirroring the windows in
@@ -103,7 +107,10 @@ export function ScreenshotSessionApp() {
 /// The toolbar and magnifier follow in the rest of 02-editor.
 export function ScreenshotOverlayApp() {
   const { t } = useTranslation();
-  const frame = useCaptureFrame();
+  const originalFrame = useCaptureFrame();
+  const [longImage,setLongImage] = useState<{src:string;width:number;height:number}|null>(null);
+  const [zoom,setZoom] = useState(1);
+  const frame = longImage ? {...originalFrame,status:'ready' as const,frame:{...longImage,originX:0,originY:0,windowCandidates:[]}} : originalFrame;
   const framePlan = frame.status === 'ready' ? frame.frame : null;
   const displayOrigin: DisplayOrigin = framePlan
     ? { x: framePlan.originX, y: framePlan.originY }
@@ -122,6 +129,16 @@ export function ScreenshotOverlayApp() {
     onPointerUp,
     setSelection
   } = selection;
+  const adoptLong = useCallback(async (result:ScrollState) => {
+    const bytes=await invoke<ArrayBuffer>('scroll_capture_image',{revision:result.revision});
+    const src=URL.createObjectURL(new Blob([new Uint8Array(bytes)]));
+    setLongImage({src,width:result.width,height:result.height});setZoom(Math.min(1,(innerWidth-32)/result.width));
+    setDoc(emptyDocument());
+    selection.adoptImage({width:result.width,height:result.height});
+  },[selection.adoptImage]);
+  const scroll=useScrollCapture();
+  useEffect(()=>{let active=true;let stop:(()=>void)|undefined;void listen<ScrollState>('screenshot-scroll-adopted',e=>{if(active)void adoptLong(e.payload);}).then(s=>{if(active)stop=s;else s();});return()=>{active=false;stop?.();};},[adoptLong]);
+  useEffect(()=>()=>{if(longImage)URL.revokeObjectURL(longImage.src);},[longImage]);
   const [tool, setTool] = useState<ToolId>(DEFAULT_TOOL);
   // §4.1 line 160: the magnifier's hint reports the copy's outcome, and the next pointer
   // move restores the plain hint.
@@ -167,7 +184,7 @@ export function ScreenshotOverlayApp() {
 
   // The rectangle on screen: the live drag while dragging, the committed one after.
   const rect = state.draft ?? state.selection;
-  const { box } = state;
+  const box = longImage ? {frameWidth:longImage.width,frameHeight:longImage.height,renderedWidth:longImage.width*zoom,renderedHeight:longImage.height*zoom,offsetX:frameRef.current?.getBoundingClientRect().left??0,offsetY:frameRef.current?.getBoundingClientRect().top??0} : state.box;
   // The pointer in CSS pixels, derived from the sampled pixel so the card follows
   // the same resolution the sample came from.
   const pointerCss =
@@ -202,10 +219,10 @@ export function ScreenshotOverlayApp() {
   // the annotations, so a single pointer stream never drives both.
   const editing = state.phase === 'editing' && state.selection !== null;
   // The selection is locked once the first annotation is drawn (WeChat behavior).
-  const selectionLocked = doc.objects.length > 0;
+  const selectionLocked = longImage!==null || doc.objects.length > 0;
   const exporter = useExport(doc, state.selection, () => annotationRef.current, displayOrigin);
   const exporting =
-    exporter.state.status === 'copying' || exporter.state.status === 'saving';
+    exporter.state.status === 'copying' || exporter.state.status === 'saving' || exporter.state.status === 'pinning' || scroll.state!==null;
   // Committed objects stay editable: the select tool picks one up, moves it, and
   // the keyboard deletes or nudges it. §8.1 freezes the document during an export,
   // so the hook is disabled rather than left able to start a move it cannot commit.
@@ -269,7 +286,7 @@ export function ScreenshotOverlayApp() {
   })();
   const pixelOf = useCallback(
     (event: React.PointerEvent) =>
-      box ? pointerToFramePixel({ x: event.clientX, y: event.clientY }, box) : null,
+      box ? pointerToFramePixel({ x: event.clientX, y: event.clientY }, longImage ? currentImageBox(box,frameRef.current):box) : null,
     [box]
   );
   const handleDown = useCallback(
@@ -439,9 +456,14 @@ export function ScreenshotOverlayApp() {
         'savePng',
         'copyHex'
       ].includes(action.type);
-      if (exporting && mutatesEditor) return;
+      if (exporting && mutatesEditor && !['leaveScrollPrepare','discardLongImage','stopScrollAndReview'].includes(action.type)) return;
 
       switch (action.type) {
+        case 'leaveScrollPrepare':
+        case 'discardLongImage':
+          void scroll.command('discard');return;
+        case 'stopScrollAndReview':
+          void scroll.command('stop');return;
         case 'cancelSession':
           void invoke('cancel_screen_capture').catch((error: unknown) => {
             // The window is about to be destroyed on success, so only a rejection
@@ -538,7 +560,7 @@ export function ScreenshotOverlayApp() {
 
   useCaptureKeyboard(
     {
-      phase: editing ? 'editing' : 'aiming',
+      phase: scroll.state ? ({prepare:'scrollPrepare',capturing:'scrolling',paused:'scrollPaused',review:'scrollReview',cancelled:'editing'} as const)[scroll.state.phase] : editing ? 'editing' : 'aiming',
       saveDialogOpen: false,
       // The hook merges the event's own isComposing, which is the only reliable
       // source for an unfinished composition.
@@ -618,7 +640,7 @@ export function ScreenshotOverlayApp() {
       ) {
         return;
       }
-      const pixel = pointerToFramePixel({ x: event.clientX, y: event.clientY }, box);
+      const pixel = pointerToFramePixel({ x: event.clientX, y: event.clientY }, longImage?currentImageBox(box,frameRef.current):box);
       if (!pixel) return;
       // §6 of the amendment: a double-click on a text object re-edits that object,
       // and only an empty-area double-click finishes the capture. Checked in that
@@ -657,8 +679,8 @@ export function ScreenshotOverlayApp() {
 
   return (
     <main
-      className={`screenshot-overlay${rect ? ' screenshot-overlay--editing' : ''}`}
-      style={{ cursor }}
+      className={`screenshot-overlay${rect ? ' screenshot-overlay--editing' : ''}${longImage?' screenshot-overlay--long':''}`}
+      style={{ cursor, ...(longImage?{width:longImage.width*zoom,height:longImage.height*zoom}: {}) }}
       aria-label={t('screenshot.overlayLabel')}
       onPointerDown={handleDown}
       onPointerMove={handleMove}
@@ -676,6 +698,7 @@ export function ScreenshotOverlayApp() {
         <img
           ref={frameRef}
           className="screenshot-overlay__frame"
+          style={longImage?{visibility:'visible'}:undefined}
           src={frame.frame.src}
           crossOrigin="anonymous"
           width={frame.frame.width}
@@ -851,6 +874,8 @@ export function ScreenshotOverlayApp() {
               else if (action === 'redo') setDoc(redo(doc));
               else if (action === 'done') void exporter.copy();
               else if (action === 'save') void exporter.save();
+              else if (action === 'pin') void exporter.pin();
+              else if (action === 'scroll' && state.selection) { setTool('select'); void scroll.command('prepare',{region:{...state.selection,...toVirtualDesktop(state.selection,displayOrigin)}}); }
               else if (action === 'cancel') {
                 void invoke('cancel_screen_capture').catch((error: unknown) => {
                   console.error('failed to cancel the capture session', error);
@@ -860,11 +885,11 @@ export function ScreenshotOverlayApp() {
             state={{
               selectionCrossesDisplays: false,
               annotationCount: doc.objects.length,
-              baseImageIsLong: false,
-              captureTargetUnavailable: false,
+              baseImageIsLong: longImage!==null,
+              captureTargetUnavailable: frame.status!=='ready',
               canUndo: canUndo(doc),
               canRedo: canRedo(doc),
-              exporting: exporter.state.status === 'copying' || exporter.state.status === 'saving'
+              exporting
             }}
           />
           {/* §5.2's fixed value sets, as discrete choices. Selected object first: the rows
@@ -905,6 +930,9 @@ export function ScreenshotOverlayApp() {
           ) : null}
         </div>
       ) : null}
+      {scroll.state?<div className="scroll-capture-anchor"><ScrollCapturePanel state={scroll.state} command={(a,extra)=>void scroll.command(a,extra)} preview={scroll.preview} error={scroll.error}/></div>:null}
+      {scroll.error&&!scroll.state?<p className="screenshot-export-status" role="alert">{scroll.error}</p>:null}
+      {longImage?<div className="long-image-zoom" onPointerDown={e=>e.stopPropagation()}><label>{t('screenshot.auto.zoom')} <select aria-label={t('screenshot.auto.zoom')} value={zoom} onChange={e=>setZoom(Number(e.target.value))}>{![.25,.5,1,2].includes(zoom)?<option value={zoom}>{t('screenshot.auto.fit')}</option>:null}{[.25,.5,1,2].map(z=><option key={z} value={z}>{z*100}%</option>)}</select></label></div>:null}
     </main>
   );
 }

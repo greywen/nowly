@@ -1,0 +1,2 @@
+import {it,expect} from 'vitest';import {currentImageBox} from './long-image-geometry';
+it('reads current image rectangle for every pointer rather than stale scroll layout',()=>{let top=0;const image={getBoundingClientRect:()=>({left:12,top,width:500,height:2500})} as HTMLImageElement;const base={frameWidth:1000,frameHeight:5000,renderedWidth:500,renderedHeight:2500,offsetX:0,offsetY:0};expect(currentImageBox(base,image).offsetY).toBe(0);top=-300;expect(currentImageBox(base,image).offsetY).toBe(-300);expect(currentImageBox(base,image).offsetX).toBe(12);});

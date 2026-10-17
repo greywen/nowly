@@ -35,6 +35,7 @@ struct SessionFrames {
     session_id: u64,
     frames: Vec<CapturedDisplay>,
     candidates: Vec<WindowBounds>,
+    long_image: Option<super::image_source::LongImage>,
 }
 
 #[derive(Debug, Default)]
@@ -71,17 +72,95 @@ impl FrameStore {
             session_id,
             frames,
             candidates,
+            long_image: None,
         });
         true
     }
 
     #[cfg(test)]
     pub(crate) fn store(&self, session_id: u64, frames: Vec<CapturedDisplay>) {
+        self.activate(session_id);
         *self.0.lock().unwrap() = Some(SessionFrames {
             session_id,
             frames,
             candidates: Vec::new(),
+            long_image: None,
         });
+    }
+
+    pub(crate) fn adopt_long_image(
+        &self,
+        session_id: u64,
+        revision: u64,
+        width: u32,
+        height: u32,
+        rgba: Vec<u8>,
+    ) -> Result<(), String> {
+        let image = super::image_source::LongImage::new(revision, width, height, rgba)?;
+        let mut held = self.0.lock().unwrap();
+        if self.1.load(std::sync::atomic::Ordering::SeqCst) != session_id {
+            return Err("The capture session is no longer current.".into());
+        }
+        let session = held
+            .as_mut()
+            .filter(|session| session.session_id == session_id)
+            .ok_or("The capture session is no longer current.")?;
+        if session
+            .long_image
+            .as_ref()
+            .is_some_and(|previous| previous.revision >= revision)
+        {
+            return Err("The long image revision is stale.".into());
+        }
+        session.long_image = Some(image);
+        Ok(())
+    }
+
+    pub(crate) fn discard_long_image(&self, session_id: u64) -> bool {
+        let mut held = self.0.lock().unwrap();
+        held.as_mut()
+            .filter(|session| session.session_id == session_id)
+            .and_then(|session| session.long_image.take())
+            .is_some()
+    }
+
+    pub(crate) fn long_image_dimensions(&self, session_id: u64) -> Option<(u64, u32, u32)> {
+        let held = self.0.lock().unwrap();
+        let image = held
+            .as_ref()
+            .filter(|session| session.session_id == session_id)?
+            .long_image
+            .as_ref()?;
+        Some((image.revision, image.width, image.height))
+    }
+
+    pub(crate) fn long_image_bitmap(&self, session_id: u64, revision: u64) -> Option<Vec<u8>> {
+        let held = self.0.lock().unwrap();
+        let image = held
+            .as_ref()
+            .filter(|session| session.session_id == session_id)?
+            .long_image
+            .as_ref()?;
+        if image.revision != revision {
+            return None;
+        }
+        encode_bitmap_pixels(image.width, image.height, &image.rgba)
+    }
+
+    pub(crate) fn selection_pixels(
+        &self,
+        session_id: u64,
+        selection: super::composite::SelectionRect,
+    ) -> Option<Result<Vec<u8>, String>> {
+        let held = self.0.lock().unwrap();
+        let session = held
+            .as_ref()
+            .filter(|session| session.session_id == session_id)?;
+        Some(match &session.long_image {
+            Some(image) => image.crop(selection),
+            None => super::composite::composite_selection(&session.frames, selection)
+                .map_err(|error| format!("compositing failed: {error:?}")),
+        })
     }
 
     /// Runs `body` against this session's raw frames, for compositing an export.
@@ -180,11 +259,14 @@ const V4_HEADER_LEN: usize = 108;
 /// A top-down 32-bit `BITMAPV4HEADER` bitmap whose bitfield masks describe the
 /// stored RGBA byte order, so the pixels are copied without any per-pixel work.
 fn encode_bitmap(frame: &CapturedDisplay) -> Option<Vec<u8>> {
-    let width = i32::try_from(frame.display.width).ok()?;
-    let height = i32::try_from(frame.display.height).ok()?;
-    let image_len = u32::try_from(frame.rgba.len()).ok()?;
-    if u64::from(image_len) != u64::from(frame.display.width) * u64::from(frame.display.height) * 4
-    {
+    encode_bitmap_pixels(frame.display.width, frame.display.height, &frame.rgba)
+}
+
+pub(crate) fn encode_bitmap_pixels(width: u32, height: u32, rgba: &[u8]) -> Option<Vec<u8>> {
+    let width = i32::try_from(width).ok()?;
+    let height = i32::try_from(height).ok()?;
+    let image_len = u32::try_from(rgba.len()).ok()?;
+    if u64::from(image_len) != width as u64 * height as u64 * 4 {
         return None;
     }
     let offset = (FILE_HEADER_LEN + V4_HEADER_LEN) as u32;
@@ -219,7 +301,7 @@ fn encode_bitmap(frame: &CapturedDisplay) -> Option<Vec<u8>> {
     bytes.extend_from_slice(&[0; 48]);
     debug_assert_eq!(bytes.len(), offset as usize);
 
-    bytes.extend_from_slice(&frame.rgba);
+    bytes.extend_from_slice(rgba);
     Some(bytes)
 }
 

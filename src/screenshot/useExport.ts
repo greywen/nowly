@@ -9,12 +9,12 @@ const PRIMARY_ORIGIN: DisplayOrigin = { x: 0, y: 0 };
 
 // Running an export from the overlay.
 //
-// §8.1 of docs/superpowers/specs/2026-09-25-nowly-screenshot-design.md: the version
+// 搂8.1 of docs/superpowers/specs/2026-09-25-nowly-screenshot-design.md: the version
 // is frozen for the duration, the finishing controls are disabled, a static status
 // is shown, and a failure keeps the session with every annotation intact.
 //
 // The two invokes are deliberate. The annotation pixels go over a raw binary body
-// because §9 line 393 forbids pushing them through a large Base64/JSON invoke; the
+// because 搂9 line 393 forbids pushing them through a large Base64/JSON invoke; the
 // geometry goes as JSON. Staging first also means the version recorded with the
 // pixels and the version asserted at export time come from different moments, which
 // is what makes the staleness check real.
@@ -23,18 +23,22 @@ export type ExportState =
   | { status: 'idle' }
   | { status: 'copying' }
   | { status: 'saving' }
-  /// The message sits next to the control that failed, per §8.1. Never a toast.
+  | { status: 'pinning' }
+  /// The message sits next to the control that failed, per 搂8.1. Never a toast.
   /// `message` is already user-facing text; `fallbackKey` is set instead when the
   /// failure was local and has no localised message of its own.
   | { status: 'failed'; message: string | null; fallbackKey: string | null };
 
 /// Rust rejections arrive as a serialised `CommandError`, whose message is already
-/// localised and phrased per §8.3. Anything else is a local failure whose message is
+/// localised and phrased per 搂8.3. Anything else is a local failure whose message is
 /// developer-facing English, so it must not be shown to the user.
 function describeFailure(
   error: unknown,
   fallbackKey: string
 ): { message: string | null; fallbackKey: string | null } {
+  if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'pin_limit') {
+    return { message: null, fallbackKey: 'screenshot.export.pinLimit' };
+  }
   if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'archived_copy_failed') {
     return { message: null, fallbackKey: 'screenshot.export.savedCopyFailed' };
   }
@@ -54,6 +58,7 @@ export type ExportControls = {
   state: ExportState;
   copy: () => Promise<void>;
   save: () => Promise<void>;
+  pin: () => Promise<void>;
   dismissError: () => void;
 };
 
@@ -95,10 +100,10 @@ export function useExport(
   const busyRef = useRef(false);
 
   /// Both exports build the same thing; only the last step differs. Sharing it keeps
-  /// the file and the clipboard from drifting apart, which §8.1 requires.
+  /// the file and the clipboard from drifting apart, which 搂8.1 requires.
   const run = useCallback(
     async (
-      kind: 'copying' | 'saving',
+      kind: 'copying' | 'saving' | 'pinning',
       finish: (geometry: Record<string, unknown>) => Promise<unknown>
     ) => {
       if (!selection || busyRef.current) return;
@@ -136,14 +141,14 @@ export function useExport(
           version,
           hasOverlay: needsOverlay
         });
-        // Both operations archive the final image; success closes the native session.
+        // Success closes the native session; pin does not archive or copy.
         setState({ status: 'idle' });
       } catch (error) {
         setState({
           status: 'failed',
           ...describeFailure(
             error,
-            kind === 'copying' ? 'screenshot.export.copyFailed' : 'screenshot.export.saveFailed'
+            kind === 'pinning' ? 'screenshot.export.pinFailed' : kind === 'copying' ? 'screenshot.export.copyFailed' : 'screenshot.export.saveFailed'
           )
         });
       } finally {
@@ -164,7 +169,12 @@ export function useExport(
     [run]
   );
 
+  const pin = useCallback(
+    () => run('pinning', (geometry) => invoke('pin_capture', { geometry })),
+    [run]
+  );
+
   const dismissError = useCallback(() => setState({ status: 'idle' }), []);
 
-  return { state, copy, save, dismissError };
+  return { state, copy, save, pin, dismissError };
 }

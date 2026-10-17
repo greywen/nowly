@@ -1,0 +1,4 @@
+import { useEffect } from 'react';
+import { ScrollCapturePanel } from './ScrollCapturePanel';
+import { useScrollCapture } from './useScrollCapture';
+export function ScrollCaptureAuxApp(){const scroll=useScrollCapture();useEffect(()=>{void scroll.command('describe');},[scroll.command]);useEffect(()=>{const key=(e:KeyboardEvent)=>{if(e.key==='Escape'){e.preventDefault();void scroll.command(scroll.state?.phase==='review'||scroll.state?.phase==='prepare'?'discard':'stop');}};addEventListener('keydown',key);return()=>removeEventListener('keydown',key);},[scroll.command,scroll.state?.phase]);return scroll.state?<ScrollCapturePanel state={scroll.state} command={(a,extra)=>void scroll.command(a,extra)} preview={scroll.preview} error={scroll.error}/>:<p role="status">{scroll.error??'正在连接滚动截图…'}</p>;}

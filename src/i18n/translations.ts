@@ -1,6 +1,7 @@
 import type { Language } from './store';
 import { assistantTranslations } from './assistant-translations';
 import { stickerTranslations } from '../stickers/sticker-translations';
+import { scrollTranslations } from '../screenshot/scroll-translations';
 
 // Flat key -> string dictionaries per language. Keys use dot-namespaces by
 // feature for readability. Interpolation uses `{name}` placeholders resolved by
@@ -8,6 +9,7 @@ import { stickerTranslations } from '../stickers/sticker-translations';
 export const translations: Record<Language, Record<string, string>> = {
   zh: {
     ...stickerTranslations.zh,
+    ...scrollTranslations.zh,
     'welcome.title': '欢迎使用 Nowly',
     'welcome.loading': '正在加载你的工作区…',
     'welcome.empty': '点击编辑布局，添加你的第一个模块',
@@ -143,6 +145,15 @@ export const translations: Record<Language, Record<string, string>> = {
     'screenshot.action.undo': '撤销',
     'screenshot.action.redo': '重做',
     'screenshot.action.scroll': '滚动截图',
+    'screenshot.export.pinLimit': '最多钉住 5 张，请先关闭一张。',
+    'screenshot.action.pin': '钉住',
+    'screenshot.export.pinFailed': '钉图失败，请重试。最多可钉住 5 张图片。',
+    'screenshot.pin.close': '关闭钉图',
+    'screenshot.pin.zoomIn': '放大',
+    'screenshot.pin.zoomOut': '缩小',
+    'screenshot.pin.image': '钉住的截图',
+    'screenshot.pin.loading': '正在读取钉图…',
+    'screenshot.pin.failed': '无法读取钉图。请关闭后重试。',
     'screenshot.action.save': '另存为 PNG',
     'screenshot.action.cancel': '取消截图',
     'screenshot.action.done': '复制图片并完成',
@@ -969,6 +980,7 @@ export const translations: Record<Language, Record<string, string>> = {
   },
   en: {
     ...stickerTranslations.en,
+    ...scrollTranslations.en,
     'welcome.title': 'Welcome to Nowly',
     'welcome.loading': 'Loading your workspace…',
     'welcome.empty': 'Click Edit layout to add your first module',
@@ -1099,6 +1111,15 @@ export const translations: Record<Language, Record<string, string>> = {
     'screenshot.action.undo': 'Undo',
     'screenshot.action.redo': 'Redo',
     'screenshot.action.scroll': 'Scrolling screenshot',
+    'screenshot.export.pinLimit': 'Up to five images can be pinned. Close one first.',
+    'screenshot.action.pin': 'Pin image',
+    'screenshot.export.pinFailed': 'Pinning failed. Retry, or close one of the five pinned images first.',
+    'screenshot.pin.close': 'Close pinned image',
+    'screenshot.pin.zoomIn': 'Zoom in',
+    'screenshot.pin.zoomOut': 'Zoom out',
+    'screenshot.pin.image': 'Pinned screenshot',
+    'screenshot.pin.loading': 'Loading pinned image…',
+    'screenshot.pin.failed': 'Unable to read the pinned image. Close it and retry.',
     'screenshot.action.save': 'Save as PNG',
     'screenshot.action.cancel': 'Cancel screenshot',
     'screenshot.action.done': 'Copy image and finish',

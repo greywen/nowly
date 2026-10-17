@@ -47,7 +47,7 @@ describe('toolbar contents', () => {
     expect(TOOLBAR_GROUPS).toEqual([
       TOOL_ORDER,
       ['undo', 'redo', 'scroll'],
-      ['save', 'cancel', 'done']
+      ['pin', 'save', 'cancel', 'done']
     ]);
   });
 

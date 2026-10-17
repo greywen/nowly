@@ -7,6 +7,7 @@ import {
   Circle,
   Mosaic,
   Pencil,
+  Pin,
   ScrollVertical,
   Text,
   Stop,
@@ -28,8 +29,8 @@ import {
 
 // The editing toolbar.
 //
-// §5.1 of docs/superpowers/specs/2026-09-25-nowly-screenshot-design.md fixes the
-// order and grouping; design.md §14 fixes 40×40 buttons with 18px icons. §2.3
+// 搂5.1 of docs/superpowers/specs/2026-09-25-nowly-screenshot-design.md fixes the
+// order and grouping; design.md 搂14 fixes 40脳40 buttons with 18px icons. 搂2.3
 // forbids toast, banner and spinner here, so a blocked action explains itself
 // through its own tooltip and accessible description instead.
 
@@ -52,6 +53,7 @@ const ICONS: Record<ToolId | ActionId, React.ComponentType<{ size?: number }>> =
   undo: UndoLeft,
   redo: UndoRight,
   scroll: ScrollVertical,
+  pin: Pin,
   save: Download,
   cancel: X,
   done: Check
@@ -79,7 +81,7 @@ export function ScreenshotToolbar({
           {group.map((control) => {
             const label = t(CONTROL_LABEL_KEYS[control]);
             const disabled = isDisabled(control, state);
-            // The reason travels with the control itself: §2.3 rules out a toast
+            // The reason travels with the control itself: 搂2.3 rules out a toast
             // or banner for this.
             const reason =
               control === 'scroll' && blocked ? t(SCROLL_BLOCK_KEYS[blocked]) : null;
@@ -97,7 +99,7 @@ export function ScreenshotToolbar({
                 aria-describedby={reason ? `screenshot-reason-${control}` : undefined}
                 // Both, because a native tooltip does not reach a screen reader
                 // and an aria description does not show on hover.
-                title={reason ? `${label} — ${reason}` : label}
+                title={reason ? `${label} 鈥?${reason}` : label}
                 disabled={disabled}
                 onClick={() => (tool ? onSelectTool(control) : onAction(control as ActionId))}
               >

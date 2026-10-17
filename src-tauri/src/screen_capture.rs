@@ -8,6 +8,8 @@ mod dib;
 pub(crate) mod encode;
 mod export;
 mod frames;
+pub(crate) use frames::encode_bitmap_pixels;
+mod image_source;
 mod freeze;
 mod gdi;
 mod pool;
@@ -22,6 +24,11 @@ mod save;
 mod session;
 mod startup;
 mod stitcher;
+#[cfg(test)] mod scroll_tests;
+pub(crate) mod scroll;
+mod scroll_target;
+mod scroll_regions;
+mod scroll_worker;
 mod window;
 
 use crate::error::CommandError;
@@ -509,6 +516,7 @@ pub fn abandon_session(app: &tauri::AppHandle, label: &str) {
 }
 
 fn finish_capture<R: tauri::Runtime>(app: &tauri::AppHandle<R>, session_id: u64) {
+    scroll::cancel(app, session_id);
     let state = app.state::<ActiveCapture>();
     if state.end_session(session_id) {
         if let Some(history) = app.try_state::<history::HistoryState>() {
@@ -788,6 +796,35 @@ pub fn copy_capture_to_clipboard(
     let start = std::time::Instant::now();
     transaction.run_clipboard(&mut sink, &encoded, request.token, std::thread::sleep, || start.elapsed())
         .map_err(|_| archived_copy_error())?;
+    finish_capture(&app, token.session_id);
+    Ok(())
+}
+
+/// Pins the same composited pixels without archiving or touching the clipboard.
+#[tauri::command(async)]
+pub fn pin_capture(
+    app: tauri::AppHandle,
+    window: tauri::Window,
+    geometry: ExportGeometry,
+) -> Result<(), CommandError> {
+    if !window::is_screenshot_label(window.label()) {
+        return Err(CommandError::reported("This window cannot access the screenshot session."));
+    }
+    let state = app.state::<ActiveCapture>();
+    let _operation = state.export_operation.try_lock()
+        .map_err(|_| CommandError::reported("Finishing the screenshot. Please wait."))?;
+    let token = state.caller_token(window.label())?;
+    let request = build_export_request(&app, token.session_id, &geometry)?;
+    let image = export::render_request(&app.state::<FrameStore>(), &request)
+        .map_err(export_error_message)?;
+    if !state.is_current(token.session_id) {
+        return Err(CommandError::reported("The screenshot session has ended."));
+    }
+    let label = crate::screenshot_pins::create_pin(&app, image)?;
+    if !state.is_current(token.session_id) {
+        crate::screenshot_pins::close_pin(&app, &label);
+        return Err(CommandError::reported("The screenshot session has ended."));
+    }
     finish_capture(&app, token.session_id);
     Ok(())
 }

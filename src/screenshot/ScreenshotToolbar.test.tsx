@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { ScreenshotToolbar } from './ScreenshotToolbar';
@@ -6,6 +6,7 @@ import { IconStyleProvider } from '../components/icons';
 import { type IconStyle } from '../components/icon-style';
 import { iconBodies } from '../components/icon-data';
 import { type ToolbarState, type ToolId } from './toolbar-model';
+import { setLanguage } from '../i18n';
 
 function state(overrides: Partial<ToolbarState> = {}): ToolbarState {
   return {
@@ -92,6 +93,25 @@ describe('the toolbar', () => {
     expect(glyph()).toBe(duotone);
   });
 
+  it('offers pin as a final output action and disables it while exporting', async () => {
+    const { onAction } = renderToolbar();
+    await userEvent.click(screen.getByRole('button', { name: '钉住' }));
+    expect(onAction).toHaveBeenCalledWith('pin');
+  });
+
+  it('has an English accessible pin action', () => {
+    setLanguage('en');
+    try {
+      renderToolbar();
+      expect(screen.getByRole('button', { name: 'Pin image' })).toBeEnabled();
+    } finally { act(() => setLanguage('zh')); }
+  });
+
+  it('disables pin during output', () => {
+    renderToolbar({ exporting: true });
+    expect(screen.getByRole('button', { name: '钉住' })).toBeDisabled();
+  });
+
   it('is announced as one labelled toolbar', () => {
     renderToolbar();
 
@@ -114,6 +134,7 @@ describe('the toolbar', () => {
       '撤销',
       '重做',
       '滚动截图',
+      '钉住',
       '另存为 PNG',
       '取消截图',
       '复制图片并完成'

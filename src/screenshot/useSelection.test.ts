@@ -44,6 +44,16 @@ describe('the aiming drag', () => {
     { x: 60, y: 60, width: 600, height: 500 }
   ];
 
+  it('adopting a long image commits a full image selection even while aiming with a hover draft',()=>{
+    const {result}=renderHook(()=>useSelection(frameRef(),candidates));
+    act(()=>result.current.onPointerMove(pointer(100,100)));
+    act(()=>result.current.adoptImage({width:600,height:660}));
+    expect(result.current.state.phase).toBe('editing');
+    expect(result.current.state.selection).toEqual({x:0,y:0,width:600,height:660});
+    expect(result.current.state.draft).toBeNull();
+    expect(result.current.state.pointerPixel).toBeNull();
+  });
+
   it('highlights the topmost frozen window under the pointer', () => {
     const { result } = renderHook(() => useSelection(frameRef(), candidates));
 

@@ -113,6 +113,39 @@ describe('useExport', () => {
     expect(result.current.state.status).toBe('idle');
   });
 
+  it('pins the same annotated final selection and keeps quota failures retryable', async () => {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    const doc = addAnnotation(addAnnotation(emptyDocument(), mosaic), {
+      id: 'box', kind: 'rect', ...selection, color: '#211f1c', strokeWidth: 2
+    });
+    vi.mocked(rasterizeAnnotations).mockResolvedValue(new Uint8Array(32000));
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === 'pin_capture') throw { code: 'pin_limit', message: 'Close a pinned image first.' };
+    });
+    const { result } = renderHook(() => useExport(doc, selection, () => svg));
+    await act(async () => { await result.current.pin(); });
+    expect(invoke).toHaveBeenLastCalledWith('pin_capture', { geometry: {
+      ...selection, mosaics: [{ x: 5, y: 7, width: 30, height: 20, blockSize: 8 }], version: 2, hasOverlay: true
+    } });
+    expect(result.current.state).toEqual({ status: 'failed', message: null, fallbackKey: 'screenshot.export.pinLimit' });
+    expect(doc.objects).toHaveLength(2);
+    expect(invoke).not.toHaveBeenCalledWith('cancel_screen_capture');
+    vi.mocked(invoke).mockResolvedValue(undefined);
+    await act(async () => { await result.current.pin(); });
+    expect(result.current.state.status).toBe('idle');
+  });
+
+  it('shares the synchronous output latch with pin', async () => {
+    let finish!: () => void;
+    vi.mocked(invoke).mockReturnValue(new Promise<void>(resolve => { finish = resolve; }));
+    const { result } = renderHook(() => useExport(emptyDocument(), selection, () => null));
+    let pin!: Promise<void>;
+    act(() => { pin = result.current.pin(); void result.current.pin(); void result.current.copy(); });
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(result.current.state.status).toBe('pinning');
+    await act(async () => { finish(); await pin; });
+  });
+
   it('does not output without a committed selection', async () => {
     const { result } = renderHook(() => useExport(emptyDocument(), null, () => null));
     await act(async () => {

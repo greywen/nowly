@@ -5,7 +5,7 @@ use tauri::{AppHandle, Manager, Runtime};
 pub const HISTORY_LABEL: &str = "screenshot-history";
 
 #[derive(Default)]
-pub struct ScreenshotWindows(Mutex<Option<bool>>);
+pub struct ScreenshotWindows(Mutex<Option<Vec<String>>>);
 
 fn ensure_idle<R: Runtime>(app: &AppHandle<R>) -> Result<(), CommandError> {
     if app
@@ -46,12 +46,16 @@ pub fn suppress_for_capture<R: Runtime>(app: &AppHandle<R>) {
     if suppressed.is_some() {
         return;
     }
-    let history = app.get_webview_window(HISTORY_LABEL);
-    let visible = history.as_ref().is_some_and(|window| {
-        window.is_visible().unwrap_or(false) && !window.is_minimized().unwrap_or(false)
-    });
-    if let Some(history) = history {
-        let _ = history.hide();
+    let mut labels = app.state::<crate::screenshot_pins::ScreenshotPins>().labels();
+    labels.push(HISTORY_LABEL.into());
+    let mut visible = Vec::new();
+    for label in labels {
+        if let Some(window) = app.get_webview_window(&label) {
+            if window.is_visible().unwrap_or(false) && !window.is_minimized().unwrap_or(false) {
+                visible.push(label);
+                let _ = window.hide();
+            }
+        }
     }
     *suppressed = Some(visible);
 }
@@ -61,25 +65,27 @@ pub fn restore_after_capture<R: Runtime>(app: &AppHandle<R>) {
     let Ok(mut suppressed) = state.0.lock() else {
         return;
     };
-    if suppressed.take() == Some(true) {
-        if let Some(history) = app.get_webview_window(HISTORY_LABEL) {
-            #[cfg(windows)]
-            if let Ok(hwnd) = history.hwnd() {
-                unsafe {
-                    let _ = windows::Win32::UI::WindowsAndMessaging::ShowWindow(
-                        hwnd,
-                        windows::Win32::UI::WindowsAndMessaging::SW_SHOWNOACTIVATE,
-                    );
-                }
+    if let Some(labels) = suppressed.take() {
+        for label in labels {
+            if let Some(window) = app.get_webview_window(&label) {
+                crate::screenshot_pins::show_without_activation(&window);
             }
-            #[cfg(not(windows))]
-            let _ = history.show();
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn capture_suppression_snapshots_pins_and_restores_without_activation() {
+        let source = include_str!("screenshot_windows.rs");
+        let suppress = source.split("pub fn suppress_for_capture").nth(1).unwrap().split("pub fn restore_after_capture").next().unwrap();
+        assert!(suppress.contains("ScreenshotPins"));
+        let restore = source.split("pub fn restore_after_capture").nth(1).unwrap().split("#[cfg(test)]").next().unwrap();
+        assert!(restore.contains("show_without_activation"));
+        assert!(!restore.contains("set_focus"));
+    }
+
     #[test]
     fn history_does_not_schedule_positioning_back_onto_the_ui_thread() {
         let source = include_str!("screenshot_windows.rs");
