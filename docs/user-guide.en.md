@@ -69,8 +69,10 @@ The ordinary window, wallpaper, tray, quick panel and fullscreen focus serve dif
   formatting, density controls, and login-on-startup.
 - **Reminder sounds** — eight bundled sounds for calendar reminders, alarms,
   missed-alarm summaries, and focus completion. Choose each sound, preview it,
-  adjust volume, or mute all reminders under **Settings → Nowly Bar**. Selecting
-  **None** mutes only that scene. Changes apply after saving; desktop reminders
+  under **Settings → Sound**. Sounds are always enabled; use the system volume
+  or volume mixer to adjust loudness. There are no in-app mute or volume controls.
+  Previously muted scenes revert to their default sounds; other choices are preserved.
+  Changes apply after saving; desktop reminders
   sound in the background while Nowly is running, without duplicate system chimes.
 - **Localization** — English and Simplified Chinese, following your system
   language on startup. Language changes synchronize across screenshot and Bar

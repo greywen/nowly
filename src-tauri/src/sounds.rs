@@ -62,7 +62,7 @@ impl SoundCoordinator {
         }
         settings
             .selected(scene)
-            .map(|sound| (sound.to_owned(), settings.volume))
+            .map(|sound| (sound.to_owned(), 100))
     }
 }
 
@@ -216,7 +216,7 @@ fn run(app: AppHandle, receiver: Receiver<NotificationSound>, initial: Vec<Alarm
             if last_settings.as_ref() != Some(&settings) {
                 engine.stop_singles();
             }
-            engine.volume(settings.volume);
+            engine.volume(100);
         }
         last_settings = Some(settings.clone());
         let plan = coordinator.sample(&settings, &notices);
@@ -225,14 +225,14 @@ fn run(app: AppHandle, receiver: Receiver<NotificationSound>, initial: Vec<Alarm
                 engine.stop_alarm();
             }
             if let Err(error) = reconcile_alarm(&mut alarm_key, plan.alarm, |sound| {
-                play(&mut engine, sound, settings.volume, true)
+                play(&mut engine, sound, 100, true)
             }) {
                 eprintln!("Cannot start alarm audio: {error}");
             }
         }
         for scene in plan.singles {
             if let Some(sound) = settings.selected(scene) {
-                if let Err(error) = play(&mut engine, sound, settings.volume, false) {
+                if let Err(error) = play(&mut engine, sound, 100, false) {
                     eprintln!("Cannot play summary audio: {error}");
                 }
             }
@@ -339,7 +339,7 @@ mod tests {
     }
 
     #[test]
-    fn alarms_stop_when_removed_or_muted_and_resume_after_snooze() {
+    fn alarms_stop_when_removed_and_ignore_legacy_mute_settings() {
         let mut coordinator = SoundCoordinator::new(&[]);
         let mut settings = SoundSettings::default();
         let alarm = notice("alarm:one", AlarmNoticeKind::Alarm);
@@ -351,13 +351,13 @@ mod tests {
             plan.alarm
         );
         settings.enabled = false;
-        assert_eq!(coordinator.sample(&settings, &[alarm.clone()]).alarm, None);
+        assert_eq!(coordinator.sample(&settings, &[alarm.clone()]).alarm, plan.alarm);
         settings.enabled = true;
         settings.volume = 0;
-        assert_eq!(coordinator.sample(&settings, &[alarm.clone()]).alarm, None);
+        assert_eq!(coordinator.sample(&settings, &[alarm.clone()]).alarm, plan.alarm);
         settings.volume = 20;
         settings.alarm = "none".into();
-        assert_eq!(coordinator.sample(&settings, &[alarm]).alarm, None);
+        assert_eq!(coordinator.sample(&settings, &[alarm]).alarm, plan.alarm);
     }
 
     #[test]
@@ -383,20 +383,20 @@ mod tests {
         let muted = notice("summary:muted", AlarmNoticeKind::MissedSummary);
         let mut off = settings.clone();
         off.enabled = false;
-        assert!(coordinator
-            .sample(&off, &[muted.clone()])
-            .singles
-            .is_empty());
+        assert_eq!(
+            coordinator.sample(&off, &[muted.clone()]).singles,
+            vec![SoundScene::MissedSummary]
+        );
         assert!(coordinator.sample(&settings, &[muted]).singles.is_empty());
     }
 
     #[test]
-    fn single_notifications_are_deduplicated_even_when_muted() {
+    fn single_notifications_use_system_volume_and_ignore_legacy_mute() {
         let mut coordinator = SoundCoordinator::new(&[]);
         let mut settings = SoundSettings::default();
         assert_eq!(
             coordinator.single(&settings, SoundScene::Calendar, "event:1"),
-            Some(("chime-glass".into(), 35))
+            Some(("chime-glass".into(), 100))
         );
         assert_eq!(
             coordinator.single(&settings, SoundScene::Calendar, "event:1"),
@@ -405,7 +405,7 @@ mod tests {
         settings.enabled = false;
         assert_eq!(
             coordinator.single(&settings, SoundScene::Focus, "session:1"),
-            None
+            Some(("resolve".into(), 100))
         );
         settings.enabled = true;
         assert_eq!(
@@ -414,7 +414,7 @@ mod tests {
         );
         assert_eq!(
             coordinator.single(&settings, SoundScene::Focus, "session:2"),
-            Some(("resolve".into(), 35))
+            Some(("resolve".into(), 100))
         );
     }
 

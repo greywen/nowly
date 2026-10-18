@@ -37,54 +37,77 @@ describe('SettingsDialog',()=>{
     expect(save).toHaveBeenCalledWith(expect.objectContaining({ hideTopbarInWallpaper: true, hideModuleBackgroundInWallpaper: true }));
   });
 
-  it('previews the selected asset at draft volume and stops on switch, mute and tab exit', async () => {
+  it('only exposes sound choices and previews in the sound tab', async () => {
+    const user = userEvent.setup();
+    render(<SettingsDialog settings={settings} onClose={vi.fn()} onSave={vi.fn()}/>);
+    await user.click(screen.getByRole('tab', { name: 'Nowly Bar' }));
+    expect(screen.queryByRole('combobox', { name: t('sounds.calendar') })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: t('settings.sound') }));
+    expect(screen.getByRole('tabpanel', { name: t('settings.sound') })).toBeVisible();
+    expect(screen.queryByRole('checkbox', { name: t('sounds.enabled') })).not.toBeInTheDocument();
+    expect(screen.queryByRole('slider')).not.toBeInTheDocument();
+    for (const scene of ['calendar', 'alarm', 'missedSummary', 'focus']) {
+      expect(screen.getByRole('combobox', { name: t('sounds.' + scene) })).toBeVisible();
+    }
+    await user.click(screen.getByRole('combobox', { name: t('sounds.calendar') }));
+    expect(screen.queryByRole('option', { name: t('sounds.none') })).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: t('settings.notificationMode') })).not.toBeInTheDocument();
+  });
+
+  it('restores legacy muted settings and preserves sound choice edits across tabs', async () => {
+    const user = userEvent.setup();
+    const save = vi.fn(async value => value);
+    render(<SettingsDialog settings={{ ...settings, soundSettings: { enabled: false, volume: 0, calendar: 'none', alarm: 'beep-soft', missedSummary: 'low-knock', focus: 'done-blip' } }} onClose={vi.fn()} onSave={save}/>);
+    await user.click(screen.getByRole('tab', { name: t('settings.sound') }));
+    expect(screen.getByRole('combobox', { name: t('sounds.calendar') })).toHaveTextContent(t('sounds.chime-glass'));
+    await user.click(screen.getByRole('combobox', { name: t('sounds.calendar') }));
+    await user.click(screen.getByRole('option', { name: t('sounds.chime-wood') }));
+    await user.click(screen.getByRole('tab', { name: 'Nowly Bar' }));
+    await user.click(screen.getByRole('tab', { name: t('settings.sound') }));
+    expect(screen.getByRole('combobox', { name: t('sounds.calendar') })).toHaveTextContent(t('sounds.chime-wood'));
+    await user.click(screen.getByRole('button', { name: t('settings.saveSettings') }));
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ soundSettings: { enabled: true, volume: 100, calendar: 'chime-wood', alarm: 'beep-soft', missedSummary: 'low-knock', focus: 'done-blip' } }));
+  });
+
+  it('previews at system volume and stops on scene switch and tab exit', async () => {
     const user = userEvent.setup();
     const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
     const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
     const save = vi.fn();
     render(<SettingsDialog settings={settings} onClose={vi.fn()} onSave={save}/>);
-    await user.click(screen.getByRole('tab', { name: 'Nowly Bar' }));
-    await user.click(screen.getByRole('button', { name: '试听 · 日历提醒音效' }));
+    await user.click(screen.getByRole('tab', { name: t('settings.sound') }));
+    await user.click(screen.getByRole('button', { name: t('sounds.preview') + ' · ' + t('sounds.calendar') }));
     const calendar = play.mock.contexts[0] as HTMLAudioElement;
     expect(calendar.getAttribute('src')).toBe('/sounds/chime-glass.wav');
-    expect(calendar.volume).toBe(0.35);
-    await user.click(screen.getByRole('button', { name: '试听 · 闹钟提醒音效' }));
+    expect(calendar.volume).toBe(1);
+    await user.click(screen.getByRole('button', { name: t('sounds.preview') + ' · ' + t('sounds.alarm') }));
     expect(pause.mock.contexts).toContain(calendar);
-    expect(play).toHaveBeenCalledTimes(2);
-    await user.click(screen.getByRole('checkbox', { name: '启用提醒音效' }));
+    await user.click(screen.getByRole('tab', { name: 'Nowly Bar' }));
     expect(pause.mock.contexts).toContain(play.mock.contexts[1]);
-    expect(screen.getByRole('button', { name: '试听 · 闹钟提醒音效' })).toBeDisabled();
-    await user.click(screen.getByRole('checkbox', { name: '启用提醒音效' }));
-    await user.click(screen.getByRole('button', { name: '试听 · 专注完成音效' }));
-    await user.click(screen.getByRole('tab', { name: '界面' }));
-    expect(pause.mock.contexts).toContain(play.mock.contexts[2]);
     expect(save).not.toHaveBeenCalled();
   });
 
-  it('reports preview failures instead of silently claiming playback succeeded', async () => {
+  it('reports preview failures', async () => {
     const user = userEvent.setup();
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockRejectedValue(new Error('audio output failed'));
     vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
     render(<SettingsDialog settings={settings} onClose={vi.fn()} onSave={vi.fn()}/>);
-    await user.click(screen.getByRole('tab', { name: 'Nowly Bar' }));
-    await user.click(screen.getByRole('button', { name: '试听 · 日历提醒音效' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('音效播放失败');
+    await user.click(screen.getByRole('tab', { name: t('settings.sound') }));
+    await user.click(screen.getByRole('button', { name: t('sounds.preview') + ' · ' + t('sounds.calendar') }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(t('sounds.error'));
   });
 
-  it('edits sound defaults and saves a silent calendar choice with the configured volume', async () => {
+  it('does not save sound edits when cancelled', async () => {
     const user = userEvent.setup();
-    const save = vi.fn(async value => value);
-    render(<SettingsDialog settings={settings} onClose={vi.fn()} onSave={save}/>);
-    await user.click(screen.getByRole('tab', { name: 'Nowly Bar' }));
-    expect(screen.getByRole('checkbox', { name: '启用提醒音效' })).toBeChecked();
-    expect(screen.getByRole('slider', { name: '提醒音量' })).toHaveValue('35');
-    await user.click(screen.getByRole('combobox', { name: '日历提醒音效' }));
-    await user.click(screen.getByRole('option', { name: '无' }));
-    fireEvent.change(screen.getByRole('slider', { name: '提醒音量' }), { target: { value: '20' } });
-    await user.click(screen.getByRole('button', { name: '保存设置' }));
-    expect(save).toHaveBeenCalledWith(expect.objectContaining({ soundSettings: {
-      enabled: true, volume: 20, calendar: 'none', alarm: 'bell-rise', missedSummary: 'tap', focus: 'resolve'
-    } }));
+    const save = vi.fn();
+    const close = vi.fn();
+    render(<SettingsDialog settings={settings} onClose={close} onSave={save}/>);
+    await user.click(screen.getByRole('tab', { name: t('settings.sound') }));
+    await user.click(screen.getByRole('combobox', { name: t('sounds.calendar') }));
+    await user.click(screen.getByRole('option', { name: t('sounds.chime-wood') }));
+    await user.click(screen.getByRole('button', { name: t('common.cancel') }));
+    expect(close).toHaveBeenCalledOnce();
+    expect(save).not.toHaveBeenCalled();
   });
   it('keeps module time settings out of the interface tab', () => {
     render(<SettingsDialog settings={settings} onClose={vi.fn()} onSave={vi.fn()}/>);
