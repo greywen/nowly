@@ -31,6 +31,23 @@ test('starts focus and automatically presents the wallpaper fullscreen timer',as
   await expect(page.getByRole('region',{name:'全屏专注'})).toHaveCount(0);
 });
 
+for (const pauseFirst of [false, true]) {
+  test(`shows clocks after ${pauseFirst ? 'pausing and ' : ''}resetting focus and entering wallpaper`, async ({ page }) => {
+    await page.getByRole('button', { name: '开始专注', exact: true }).click();
+    if (pauseFirst) await page.getByRole('button', { name: '暂停', exact: true }).click();
+    await page.getByRole('button', { name: '重置计时', exact: true }).click();
+    await expect(page.getByRole('button', { name: '开始专注', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: '设为壁纸', exact: true }).click();
+    await expect(page.getByRole('region', { name: '全屏专注' })).toHaveCount(0);
+    await expect(page.getByTestId('time-widget')).toBeVisible();
+    await expect(page.getByRole('timer')).toHaveCount(0);
+    await expect(page.getByText('双击返回前台以操作专注计时')).toBeHidden();
+    await page.getByTestId('time-widget').dblclick();
+    await expect(page.getByRole('button', { name: '开始专注', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: '专注时段', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  });
+}
+
 test('keeps focus statistics access in a constrained unified module',async({page})=>{
   await page.locator('.focus-timer').evaluate(element=>{(element as HTMLElement).style.width='400px';(element as HTMLElement).style.height='350px'});
   await expect(page.locator('.focus-timer__trend-chart')).toBeHidden();

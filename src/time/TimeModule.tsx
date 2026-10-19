@@ -18,7 +18,7 @@ export function TimeModule({ mode, onOpenSettings, onOpenStatistics, onEnterWall
   const { state, load, save } = useTimeSettings();
   const timer = useFocusTimer();
   const ready = state.status === 'ready';
-  const showFocus = state.data.displayContent === 'focus';
+  const showFocus = state.data.displayContent === 'focus' && !(mode === 'wallpaper' && timer.state.status === 'idle');
   function selectDisplay(value: 'clocks' | 'focus') {
     if (!ready || state.data.displayContent === value) return;
     save({ ...state.data, displayContent: value });
