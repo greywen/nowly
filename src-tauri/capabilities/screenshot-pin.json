@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "screenshot-pin",
-  "description": "Ephemeral pinned screenshot: only own image IPC, native drag and close. No filesystem, database, clipboard or notification access.",
+  "description": "Ephemeral pinned screenshot: only own image IPC, native drag, resize and close. No filesystem, database, clipboard or notification access.",
   "windows": ["screenshot-pin-*"],
-  "permissions": ["core:window:allow-close", "core:window:allow-start-dragging"]
+  "permissions": ["core:window:allow-close", "core:window:allow-start-dragging", "core:window:allow-start-resize-dragging"]
 }

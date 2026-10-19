@@ -31,13 +31,16 @@ export type SelectionLayerProps = {
   box: FrameBox;
   /// Handles are shown only for a committed, still-adjustable rectangle.
   onResizeStart?: (handle: ResizeHandle, event: React.PointerEvent) => void;
+  /// Scrolling capture: the selection is a hole onto the live page, so the border
+  /// is drawn just outside it rather than on its edge pixels.
+  live?: boolean;
 };
 
-export function SelectionLayer({ rect, box, onResizeStart }: SelectionLayerProps) {
+export function SelectionLayer({ rect, box, onResizeStart, live = false }: SelectionLayerProps) {
   const css = framePixelToCss(rect, box);
 
   return (
-    <div className="screenshot-selection" aria-hidden="true">
+    <div className={`screenshot-selection${live ? ' screenshot-selection--live' : ''}`} aria-hidden="true">
       {/* Four dim panels rather than one box-shadow, so the selection itself
           carries no tint at all: any overlay over it would shift the colours the
           magnifier reads. */}

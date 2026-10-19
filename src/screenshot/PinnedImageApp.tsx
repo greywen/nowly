@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { X } from '../components/icons';
 import { useTranslation } from '../i18n';
 
+const resizeDirections = ['North', 'South', 'East', 'West', 'NorthEast', 'NorthWest', 'SouthEast', 'SouthWest'] as const;
+
 export function PinnedImageApp() {
   const { t } = useTranslation();
   const [url, setUrl] = useState<string | null>(null);
@@ -31,6 +33,15 @@ export function PinnedImageApp() {
           if (event.button === 0) { event.preventDefault(); void getCurrentWindow().startDragging(); }
         }} /> : !failed ? <p role="status">{t('screenshot.pin.loading')}</p> : null}
       </div>
+      {resizeDirections.map(direction => (
+        <div key={direction} className={`screenshot-pin__resize screenshot-pin__resize--${direction}`} aria-hidden="true"
+          onPointerDown={event => {
+            if (event.button !== 0) return;
+            event.preventDefault();
+            event.stopPropagation();
+            void getCurrentWindow().startResizeDragging(direction);
+          }} />
+      ))}
     </main>
   );
 }

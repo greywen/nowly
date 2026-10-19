@@ -29,6 +29,10 @@ windows = { version = "0.61", features = [
   "Win32_Foundation",
   "Win32_Graphics_Dwm",
   "Win32_Graphics_Gdi",
+  "Win32_Graphics_Direct3D",
+  "Win32_Graphics_Direct3D11",
+  "Win32_Graphics_Dxgi",
+  "Win32_Graphics_Dxgi_Common",
   "Win32_UI_Accessibility",
   "Win32_UI_Controls",
   "Win32_UI_HiDpi",
@@ -60,6 +64,10 @@ image = { version = "=0.25.10", default-features = false, features = ["png", "jp
 # Tauri's own protocols do keeps the separator from arriving as `%2F`.
 percent-encoding = "=2.3.2"
 rodio = { version = "0.21", default-features = false, features = ["playback", "wav"] }
+
+# Keep the pixel matching loops usable at display frame rates in the dev app.
+[profile.dev.package.nowly]
+opt-level = 2
 
 [dev-dependencies]
 # mock runtime，用于在单元测试里真实走一遍 #[tauri::command] 的 IPC 参数解析。

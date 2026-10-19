@@ -2076,6 +2076,7 @@ body:has(.screenshot-overlay),
 .screenshot-properties__swatch[aria-checked='true'] { background: var(--bg-secondary); border-color: var(--border-default); }
 
 .screenshot-pin {
+  position: relative;
   height: 100vh;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
@@ -2114,24 +2115,24 @@ body:has(.screenshot-overlay),
 .screenshot-pin__viewport { min-width: 0; min-height: 0; overflow: hidden; grid-row: 3; }
 .screenshot-pin__image { display: block; width: 100%; height: 100%; object-fit: contain; border-radius: 0; cursor: grab; }
 .screenshot-pin__image:active { cursor: grabbing; }
+.screenshot-pin__resize { position: absolute; z-index: 1; touch-action: none; }
+.screenshot-pin__resize--North, .screenshot-pin__resize--South { left: var(--space-2); right: var(--space-2); height: var(--space-1); cursor: ns-resize; }
+.screenshot-pin__resize--North { top: 0; }
+.screenshot-pin__resize--South { bottom: 0; }
+.screenshot-pin__resize--East, .screenshot-pin__resize--West { top: var(--space-2); bottom: var(--space-2); width: var(--space-1); cursor: ew-resize; }
+.screenshot-pin__resize--East { right: 0; }
+.screenshot-pin__resize--West { left: 0; }
+.screenshot-pin__resize--NorthEast, .screenshot-pin__resize--NorthWest,
+.screenshot-pin__resize--SouthEast, .screenshot-pin__resize--SouthWest { width: var(--space-2); height: var(--space-2); }
+.screenshot-pin__resize--NorthEast { top: 0; right: 0; cursor: nesw-resize; }
+.screenshot-pin__resize--NorthWest { top: 0; left: 0; cursor: nwse-resize; }
+.screenshot-pin__resize--SouthEast { bottom: 0; right: 0; cursor: nwse-resize; }
+.screenshot-pin__resize--SouthWest { bottom: 0; left: 0; cursor: nesw-resize; }
 .screenshot-pin__error { margin: 0; padding: var(--space-2); color: var(--color-danger-active); background: var(--color-danger-light); font-size: 0.85rem; }
 
-.scroll-capture { padding:var(--space-4); background:var(--bg-surface); border:1px solid var(--border-default); border-radius:var(--radius-default); color:var(--text-secondary); display:grid; gap:var(--space-3); max-height:100vh; overflow:auto; }
-.scroll-capture h2 {font-size:1.25rem;font-weight:600;line-height:1.2;color:var(--text-primary);margin:0;}
-.scroll-capture p {margin:0;}
-.scroll-capture__actions {display:flex;flex-wrap:wrap;gap:var(--space-2);}
-.scroll-capture button,.long-image-zoom select {min-height:40px;padding:var(--space-2) var(--space-4);border:1px solid var(--border-default);border-radius:var(--radius-default);background:var(--bg-subtle);color:var(--text-strong);font:inherit;}
-.scroll-capture button:hover {background:var(--bg-secondary);color:var(--color-primary-active);}
-.scroll-capture button:active {background:var(--color-primary-light);}
-.scroll-capture button:focus-visible {box-shadow:var(--shadow-focus);}
-.scroll-capture__preview {max-height:320px;overflow:auto;}
-.scroll-capture__preview img {display:block;max-width:100%;height:auto;border-radius:0;}
-.scroll-capture-anchor {position:fixed;right:var(--space-4);top:var(--space-4);width:432px;z-index:100;}
-.screenshot-overlay--long {min-height:0;background:var(--bg-subtle);overflow:visible;}
-body:has(.screenshot-overlay--long),#root:has(.screenshot-overlay--long) {overflow:auto;}
-.long-image-zoom {position:fixed;top:var(--space-4);right:var(--space-4);z-index:90;background:var(--bg-surface);padding:var(--space-2);border:1px solid var(--border-default);border-radius:var(--radius-default);}
-.screenshot-overlay--long .screenshot-toolbar-anchor {position:fixed;left:var(--space-4)!important;top:auto!important;bottom:var(--space-4);}
-
-.scroll-review {display:grid;gap:var(--space-2);}.scroll-review__viewport {overflow:auto;max-height:320px;padding-left:var(--space-12);}.scroll-review__image {position:relative;}.scroll-review__image img {display:block;border-radius:0;}.scroll-review__seam {position:absolute;right:100%;font-size:0.85rem;color:var(--text-secondary);white-space:nowrap;}
-
-.scroll-capture .scroll-capture__point-picker {width:100%;min-height:96px;background:var(--bg-subtle);border:1px dashed var(--border-default);}
+/* Scrolling capture runs inside the overlay: the selection is a live hole onto the page, so the border sits just outside it. */
+.screenshot-selection--live .screenshot-selection__frame { border: 0; outline: 1px solid var(--color-primary); }
+.screenshot-overlay--scrolling .screenshot-overlay__aim-dim { display: none; }
+.screenshot-scroll-hint { position: absolute; margin: 0; padding: 2px 6px; border: 1px solid var(--border-default); background: var(--bg-surface); color: var(--text-strong); font-size: 0.8rem; line-height: 1.5; white-space: nowrap; pointer-events: none; }
+.screenshot-scroll-preview { position: absolute; overflow-x: hidden; overflow-y: auto; background: var(--bg-surface); border: 1px solid var(--border-default); cursor: default; }
+.screenshot-scroll-preview img { display: block; width: 100%; height: auto; border-radius: 0; }

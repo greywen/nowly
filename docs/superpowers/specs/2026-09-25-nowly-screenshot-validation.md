@@ -66,6 +66,21 @@
 
 上述各域只完成部分门槛，因此标记为 `RUNNING`，不提升为完整 `PASS`。原生保存取消、真实中文 IME、跨应用粘贴、多屏混合 DPI、Alt+Tab 隐私生命周期、长截图和规定性能样本仍需单独验收。
 
+### 2.2 2026-10-19 连续滚动处理压力测试
+
+当前未提交实现新增 `full_size_continuous_scroll_pipeline_preserves_every_row`：以 16ms 间隔把 430×618 RGBA 视口送入实际 64MiB 队列与拼接器，从源图第 480 行向下滚至 1920 行，再向上滚至第 0 行；最终与独立保留的 430×2538 源图逐像素比较。
+
+- 未优化开发构建：第 74 帧入队失败，处理耗时中位数约 275ms，队列耗尽可复现。
+- 对 `nowly` 包启用开发构建 `opt-level = 2`，并对完全相同像素行使用等价的切片比较后：211 帧全部处理，队列未溢出，输出逐像素一致；中位数约 8.8ms、p95 约 19.1ms。此数值是当前机器的一次处理链路测量，不包含原生抓屏与预览编码。
+- 执行：`cargo test --manifest-path src-tauri/Cargo.toml --bin nowly full_size_continuous_scroll_pipeline_preserves_every_row -- --ignored --nocapture`。截图回归 276 项通过。
+- 真实桌面验收仍受阻：当前工具进程的 DXGI `DuplicateOutput` 和 GDI `BitBlt` 均返回 `0x80070005`。诊断确认工具与启动的 Nowly 位于会话 1（WTS 状态 Active、协议 2，即 RDP），而 `WTSGetActiveConsoleSessionId` 为 3；会话 1 的输入桌面 Default 可打开。工具不在物理控制台会话中，但仅凭此不足以断言访问拒绝的全部原因；没有尝试切换或接管其它会话。上述合成帧测试不能证明覆盖层、真实抓屏、预览或跨应用导出已通过，V07/V08 不提升为 PASS。
+
+### 2.3 2026-10-19 浏览器真实渲染帧拼接验证
+
+`rendered_browser_scroll_frames_preserve_every_pixel` 使用浏览器渲染的测试页截图，CSS 滚动位置依次为 `480, 720, 960, 1200, 1440, 960, 480, 240, 0`，视口高 1048 CSS px、DPR 1.75。每帧高 1834 物理像素；排除右侧浏览器滚动条区域后送入生产 `Capture`。预期高 4354 物理像素，全部输出像素与独立整页截图对应选区一致；回看两帧不增长，向上两帧分别前置 420 行。该项 PASS。
+
+整页截图会改变右侧对齐内容的位置，因此生成独立基准时，先读取原页面 `body.getBoundingClientRect().width`，再通过 Playwright 截图的临时 `style` 固定正文为此宽度，避免把基准图重排误当成拼接错误。截图文件保留在会话证据目录；显式设置 `NOWLY_SCROLL_BROWSER_FRAMES` 后运行该 ignored 测试。它覆盖真实网页像素的双向拼接，不覆盖 DXGI/GDI、原生覆盖层、实际预览 IPC 或跨应用导出；完整产品验收仍未通过。
+
 ## 3. 逐项验证
 
 ### V00：依赖与平台可行性

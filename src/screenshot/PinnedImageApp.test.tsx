@@ -3,10 +3,11 @@ import { invoke } from '@tauri-apps/api/core';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { PinnedImageApp } from './PinnedImageApp';
 
-const native = vi.hoisted(() => ({ close: vi.fn(), startDragging: vi.fn() }));
+const native = vi.hoisted(() => ({ close: vi.fn(), startDragging: vi.fn(), startResizeDragging: vi.fn() }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => native }));
 beforeEach(() => {
+  vi.clearAllMocks();
   vi.mocked(invoke).mockReset().mockResolvedValue(new Uint8Array([66, 77]));
   vi.stubGlobal('URL', { createObjectURL: vi.fn(() => 'blob:pin'), revokeObjectURL: vi.fn() });
 });
@@ -47,6 +48,18 @@ it('fits tall initial images to both viewport axes', async () => {
   expect(image).not.toHaveAttribute('style');
   expect(screen.queryByRole('button', { name: '放大' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: '缩小' })).not.toBeInTheDocument();
+});
+
+it.each(['North', 'South', 'East', 'West', 'NorthEast', 'NorthWest', 'SouthEast', 'SouthWest'])('resizes through the %s hit area instead of moving the image', async direction => {
+  const { container } = render(<PinnedImageApp />);
+  await screen.findByRole('img');
+  const handle = container.querySelector(`.screenshot-pin__resize--${direction}`)!;
+  fireEvent.pointerDown(handle, { button: 2 });
+  expect(native.startResizeDragging).not.toHaveBeenCalled();
+  fireEvent.pointerDown(handle, { button: 0 });
+  expect(native.startResizeDragging).toHaveBeenCalledExactlyOnceWith(direction);
+  expect(native.startDragging).not.toHaveBeenCalled();
+  expect(screen.getAllByRole('button')).toHaveLength(1);
 });
 
 it('drags the fitted image without providing manual zoom controls', async () => {

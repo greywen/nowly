@@ -29,6 +29,8 @@ pub(crate) mod scroll;
 mod scroll_target;
 mod scroll_regions;
 mod scroll_worker;
+mod scroll_queue;
+#[cfg(windows)] mod scroll_dxgi;
 mod window;
 
 use crate::error::CommandError;
@@ -609,12 +611,17 @@ pub fn cancel_screen_capture(
     // front end to only call it from the right place.
     let session_id = window::window_session_id(window.label())
         .ok_or_else(|| CommandError::system("This window cannot access the screenshot session."))?;
+    cancel_session(&app, session_id);
+    Ok(())
+}
+
+/// Ends the session as if the user cancelled it.
+pub(crate) fn cancel_session(app: &tauri::AppHandle, session_id: u64) {
     if app.state::<ActiveCapture>().is_current(session_id) {
         app.state::<crate::quick_panel::PanelController>()
             .capture_startup_succeeded();
     }
-    finish_capture(&app, session_id);
-    Ok(())
+    finish_capture(app, session_id);
 }
 
 #[tauri::command]

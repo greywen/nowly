@@ -37,6 +37,9 @@ export const TOOLBAR_GROUPS: readonly (readonly (ToolId | ActionId)[])[] = [
   ['pin', 'save', 'cancel', 'done']
 ];
 
+/// While scrolling capture runs, only finishing it is possible.
+export const SCROLL_TOOLBAR_GROUPS: readonly (readonly ActionId[])[] = [['save', 'cancel', 'done']];
+
 /// i18n keys for each control's accessible name and tooltip.
 ///
 /// 搂5.1: "done" says it copies as well, and "save" names the format, so no

@@ -8,13 +8,7 @@
 // spec cares about is that every key has exactly one owner: a local edit must
 // never also produce a clipboard or file side effect.
 
-export type CapturePhase =
-  | 'aiming'
-  | 'editing'
-  | 'scrollPrepare'
-  | 'scrolling'
-  | 'scrollPaused'
-  | 'scrollReview';
+export type CapturePhase = 'aiming' | 'editing' | 'scrolling';
 
 export type KeyContext = {
   phase: CapturePhase;
@@ -59,10 +53,7 @@ export type KeyAction =
   | { type: 'redo' }
   | { type: 'moveSelection'; dx: number; dy: number }
   | { type: 'resizeSelection'; dx: number; dy: number }
-  | { type: 'cancelSession' }
-  | { type: 'leaveScrollPrepare' }
-  | { type: 'stopScrollAndReview' }
-  | { type: 'discardLongImage' };
+  | { type: 'cancelSession' };
 
 export type KeyPress = {
   key: string;
@@ -134,31 +125,34 @@ export function dispatchKey(press: KeyPress, context: KeyContext): KeyAction {
     return context.focus === 'control' ? { type: 'deferToControl' } : { type: 'ignore' };
   }
 
-  // 7. The capture main state.
-  if (key === 'Escape') return escapeForPhase(context.phase);
+  // 7. The capture main state. Esc closes the whole capture, scrolling included.
+  if (key === 'Escape') return { type: 'cancelSession' };
 
   if (ctrl && (key === 'z' || key === 'Z')) {
+    if (context.phase === 'scrolling') return { type: 'ignore' };
     return shift ? { type: 'redo' } : { type: 'undo' };
   }
-  if (ctrl && (key === 'y' || key === 'Y')) return { type: 'redo' };
+  if (ctrl && (key === 'y' || key === 'Y')) {
+    return context.phase === 'scrolling' ? { type: 'ignore' } : { type: 'redo' };
+  }
 
+  // Scrolling finishes like a plain selection: copy, or save.
+  const finishing = context.phase === 'editing' || context.phase === 'scrolling';
   if (ctrl && (key === 'c' || key === 'C')) {
     if (context.focus === 'control') return { type: 'deferToControl' };
     if (context.phase === 'aiming') return { type: 'copyHex' };
-    if (context.phase === 'editing') return { type: 'copyImageAndFinish' };
-    // Scroll phases: nothing is exportable before the result is accepted.
-    return { type: 'ignore' };
+    return { type: 'copyImageAndFinish' };
   }
   if (ctrl && (key === 's' || key === 'S')) {
     if (context.focus === 'control') return { type: 'deferToControl' };
-    return context.phase === 'editing' ? { type: 'savePng' } : { type: 'ignore' };
+    return finishing ? { type: 'savePng' } : { type: 'ignore' };
   }
 
   if (key === 'Enter') {
     // A focused button keeps its own keyboard semantics, so Enter never both
     // presses a button and finishes the capture.
     if (context.focus === 'control') return { type: 'deferToControl' };
-    return context.phase === 'editing' ? { type: 'copyImageAndFinish' } : { type: 'ignore' };
+    return finishing ? { type: 'copyImageAndFinish' } : { type: 'ignore' };
   }
 
   const arrow = ARROWS[key];
@@ -172,19 +166,4 @@ export function dispatchKey(press: KeyPress, context: KeyContext): KeyAction {
   }
 
   return { type: 'ignore' };
-}
-
-/// Esc's last rung: one layer per press, never two.
-function escapeForPhase(phase: CapturePhase): KeyAction {
-  switch (phase) {
-    case 'scrollPrepare':
-      return { type: 'leaveScrollPrepare' };
-    case 'scrolling':
-    case 'scrollPaused':
-      return { type: 'stopScrollAndReview' };
-    case 'scrollReview':
-      return { type: 'discardLongImage' };
-    default:
-      return { type: 'cancelSession' };
-  }
 }

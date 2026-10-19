@@ -647,10 +647,7 @@ fn main() {
                 }
                 return;
             }
-            if window.label().starts_with("screenshot-pin-")
-                || window.label().starts_with("screenshot-scroll-control-")
-                || window.label().starts_with("screenshot-scroll-preview-")
-            {
+            if window.label().starts_with("screenshot-pin-") {
                 return;
             }
             if window.label() == screenshot_windows::HISTORY_LABEL {

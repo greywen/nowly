@@ -15,7 +15,6 @@ import { ScreenshotOverlayApp, ScreenshotSessionApp } from './ScreenshotApp';
 import { SurfaceIconProvider } from '../screenshot-history/SurfaceIconProvider';
 import { routeForLabel } from './window-route';
 import { PinnedImageApp } from './PinnedImageApp';
-import { ScrollCaptureAuxApp } from './ScrollCaptureAuxApp';
 import '../app/styles.css';
 
 // Only native capture windows load this document, but the label is still read
@@ -37,7 +36,6 @@ function surface() {
   // displays desktop pixels.
   const route = routeForLabel(currentWindowLabel());
   if (route === 'screenshot-pin') return <PinnedImageApp />;
-  if (route === 'screenshot-scroll-control' || route === 'screenshot-scroll-preview') return <ScrollCaptureAuxApp />;
   return route === 'screenshot-overlay' ? <ScreenshotOverlayApp /> : <ScreenshotSessionApp />;
 }
 

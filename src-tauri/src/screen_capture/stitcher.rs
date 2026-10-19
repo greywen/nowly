@@ -22,12 +22,8 @@
 /// different rows that happen to share a total are still told apart.
 const BUCKETS: usize = 8;
 
-/// The worst-matching bucket is dropped from every row's score.
-///
-/// This is what tolerates a scrollbar thumb, a narrow dynamic sidebar or a live clock:
-/// they occupy a small column range, so they land in one bucket, and dropping the
-/// worst bucket removes their influence without needing to detect them. Dropping only
-/// one keeps it from hiding a real mismatch.
+/// The rightmost bucket is excluded from matching to tolerate a scrollbar.
+/// Interior text remains evidence even when it occupies only one narrow column.
 const TRIMMED_BUCKETS: usize = 1;
 
 /// Channels per bucket.
@@ -101,6 +97,7 @@ pub(crate) enum RejectReason {
 /// The outcome of offering one frame.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum StitchOutcome {
+    Prepended { rows: u32, score: u32 },
     Accepted {
         /// Row in the new frame where the confirmed tail was found. With
         /// `appended_rows` this is the full alignment §6.4 asks to be reportable.
@@ -133,6 +130,10 @@ pub(crate) struct Stitcher {
     height: u32,
     /// Per-row signatures of the confirmed image, kept so a match does not rebuild them.
     signatures: Vec<u32>,
+    /// Spread of the band starting at each confirmed row, extended as rows are
+    /// appended so no frame has to rescan the whole image.
+    band_spreads: Vec<u32>,
+    max_spread: u32,
     max_height: u32,
     log: Vec<StitchOutcome>,
 }
@@ -171,15 +172,31 @@ impl Stitcher {
         let mut rgba = rgba;
         rgba.truncate((kept as usize) * (width as usize) * 4);
         let signatures = row_signatures(&rgba, width, kept, config);
-        Some(Self {
+        let mut stitcher = Self {
             config,
             width,
             confirmed: rgba,
             height: kept,
             signatures,
+            band_spreads: Vec::new(),
+            max_spread: 0,
             max_height,
             log: Vec::new(),
-        })
+        };
+        stitcher.extend_band_spreads();
+        Some(stitcher)
+    }
+
+    fn extend_band_spreads(&mut self) {
+        let band = self.config.band_rows;
+        if self.height < band {
+            return;
+        }
+        for start in self.band_spreads.len() as u32..=self.height - band {
+            let spread = band_spread_at(&self.signatures, start, band);
+            self.max_spread = self.max_spread.max(spread);
+            self.band_spreads.push(spread);
+        }
     }
 
     pub(crate) fn width(&self) -> u32 {
@@ -188,6 +205,21 @@ impl Stitcher {
 
     pub(crate) fn height(&self) -> u32 {
         self.height
+    }
+
+    pub(crate) fn preview(&self, max_width: u32) -> (u32, u32, Vec<u8>) {
+        let width = max_width.max(1).min(self.width);
+        let height = (self.height as u64 * width as u64 / self.width as u64).max(1) as u32;
+        let mut pixels = Vec::with_capacity(width as usize * height as usize * 4);
+        for y in 0..height {
+            let source_y = y as u64 * self.height as u64 / height as u64;
+            for x in 0..width {
+                let source_x = x as u64 * self.width as u64 / width as u64;
+                let index = (source_y * self.width as u64 + source_x) as usize * 4;
+                pixels.extend_from_slice(&self.confirmed[index..index + 4]);
+            }
+        }
+        (width, height, pixels)
     }
 
     /// The confirmed pixels. Never contains a pending or rejected frame.
@@ -210,21 +242,66 @@ impl Stitcher {
             ..
         } = outcome
         {
-            let start = ((offset + self.config.band_rows) as usize) * (width as usize) * 4;
+            let overlap = height - self.config.exclude_bottom_rows - offset - appended_rows;
+            let start = ((offset + overlap) as usize) * (width as usize) * 4;
             let end = start + (appended_rows as usize) * (width as usize) * 4;
             self.confirmed.extend_from_slice(&rgba[start..end]);
-            let appended_signatures = row_signatures_range(
-                rgba,
-                width,
-                offset + self.config.band_rows,
-                appended_rows,
-                self.config,
-            );
+            let appended_signatures =
+                row_signatures_range(rgba, width, offset + overlap, appended_rows, self.config);
             self.signatures.extend_from_slice(&appended_signatures);
             self.height += appended_rows;
+            self.extend_band_spreads();
         }
+        let outcome = if matches!(outcome, StitchOutcome::Rejected(RejectReason::NoOverlap { .. })) {
+            self.try_prepend(width, height, rgba).unwrap_or(outcome)
+        } else {
+            outcome
+        };
         self.log.push(outcome);
         outcome
+    }
+
+    fn try_prepend(&mut self, width: u32, height: u32, rgba: &[u8]) -> Option<StitchOutcome> {
+        if width != self.width || rgba.len() != width as usize * height as usize * 4
+            || self.config.exclude_top_rows != 0 || self.config.exclude_bottom_rows != 0 {
+            return None;
+        }
+        let minimum = self.config.min_overlap_rows.max(self.config.band_rows);
+        if height <= minimum { return None; }
+        let signatures = row_signatures(rgba, width, height, self.config);
+        let mut matches = Vec::new();
+        for rows in 1..=height - minimum {
+            let overlap = (height - rows).min(self.height);
+            let right = &signatures[rows as usize * BUCKETS * CHANNELS..];
+            let score = band_score_bounded(&self.signatures, right, overlap, self.config.accept_score);
+            if score <= self.config.accept_score
+                && (0..=overlap - self.config.band_rows).any(|start| {
+                    band_spread_at(&self.signatures, start, self.config.band_rows)
+                        >= self.config.min_band_spread
+                })
+                && overlap_pixels_agree(&self.confirmed, rgba, width, 0, rows, overlap) {
+                matches.push((rows, score));
+            }
+        }
+        let &(rows, score) = matches.iter().min_by_key(|candidate| candidate.1)?;
+        if matches.iter().any(|&(other, other_score)| {
+            other.abs_diff(rows) > RUNNER_UP_EXCLUSION
+                && other_score < score.saturating_add(self.config.ambiguity_margin)
+        }) { return None; }
+        if self.height.saturating_add(rows) > self.max_height {
+            return Some(StitchOutcome::Rejected(RejectReason::CapacityReached));
+        }
+        let mut pixels = rgba[..rows as usize * width as usize * 4].to_vec();
+        pixels.extend_from_slice(&self.confirmed);
+        self.confirmed = pixels;
+        let mut prefix = signatures[..rows as usize * BUCKETS * CHANNELS].to_vec();
+        prefix.extend_from_slice(&self.signatures);
+        self.signatures = prefix;
+        self.height += rows;
+        self.band_spreads.clear();
+        self.max_spread = 0;
+        self.extend_band_spreads();
+        Some(StitchOutcome::Prepended { rows, score })
     }
 
     /// Decides without mutating, so the append stays a separate step.
@@ -250,77 +327,180 @@ impl Stitcher {
         // A band of identical rows matches anywhere, so there is nothing to conclude
         // from a good score. Reported separately from ambiguity because the fix is
         // different: the user has to scroll to content that has structure.
-        let spread = band_spread(&self.signatures, self.height, band);
+        let spread = self.max_spread;
         if spread < self.config.min_band_spread {
             return StitchOutcome::Rejected(RejectReason::LowInformation { spread });
         }
 
         let frame_signatures = row_signatures(rgba, width, height, self.config);
-        let band_start = ((self.height - band) as usize) * BUCKETS * CHANNELS;
-        let band_signature = &self.signatures[band_start..];
+        let available = height - bottom;
+        let min_overlap = self.config.min_overlap_rows.max(band);
+        let mut candidates = Vec::new();
+        let informative = |candidate: &(u32, u32, u32, u32)| {
+            self.band_spreads[candidate.1 as usize..=(candidate.1 + candidate.2 - band) as usize]
+                .iter()
+                .any(|spread| *spread >= self.config.min_band_spread)
+        };
+        let reverse_candidate = |confirmed_start: u32, overlap: u32| {
+            let left = &self.signatures[(confirmed_start as usize) * BUCKETS * CHANNELS..];
+            let right = &frame_signatures[(top as usize) * BUCKETS * CHANNELS..];
+            (top, confirmed_start, overlap, band_score(left, right, overlap))
+        };
 
-        // Candidate offsets are absolute rows in the frame, within the searchable part.
-        let first = top;
-        let last = top + searchable - band;
-        let mut best = (first, u32::MAX);
-        let mut scores = Vec::with_capacity((last - first + 1) as usize);
-        for offset in first..=last {
-            let start = (offset as usize) * BUCKETS * CHANNELS;
-            let score = band_score(band_signature, &frame_signatures[start..], band);
-            scores.push((offset, score));
-            if score < best.1 {
-                best = (offset, score);
+        // Compare the whole usable overlap, with a band only as the minimum anchor.
+        // Forward candidates end at the confirmed tail; reverse candidates stay wholly
+        // inside confirmed history and therefore never mutate it.
+        for offset in top..=top + searchable - band {
+            let max_overlap = available - offset;
+            if max_overlap < min_overlap {
+                continue;
+            }
+            let before = offset.saturating_sub(top).min(self.height - band);
+            let forward_overlap = before + band;
+            if forward_overlap >= min_overlap {
+                let confirmed_start = self.height - band - before;
+                let frame_start = offset - before;
+                let left = &self.signatures[(confirmed_start as usize) * BUCKETS * CHANNELS..];
+                let right = &frame_signatures[(frame_start as usize) * BUCKETS * CHANNELS..];
+                candidates.push((
+                    frame_start,
+                    confirmed_start,
+                    forward_overlap,
+                    band_score_bounded(left, right, forward_overlap,
+                        self.config.accept_score.saturating_add(self.config.ambiguity_margin)),
+                ));
             }
         }
-
-        if best.1 > self.config.accept_score {
-            return StitchOutcome::Rejected(RejectReason::NoOverlap { best: best.1 });
+        let reverse_overlap = (available - top).min(self.height);
+        let reverse = reverse_overlap >= min_overlap;
+        if reverse {
+            // The one reverse alignment that ends at the tail competes with the tail.
+            candidates.push(reverse_candidate(self.height - reverse_overlap, reverse_overlap));
         }
-
-        // The runner-up has to be a different alignment, not a neighbouring row of the
-        // same one.
-        let runner_up = scores
+        candidates.retain(|candidate| informative(candidate));
+        let prefer_tail = candidates.iter().any(|candidate| {
+            candidate.1 + candidate.2 == self.height && candidate.3 <= self.config.accept_score
+        });
+        // History is only consulted when the tail cannot explain the frame: with an
+        // acceptable tail match, neither the pick nor the ambiguity check looks at
+        // history. Skipping it keeps each frame's cost independent of the length.
+        if reverse && !prefer_tail {
+            candidates.extend(
+                (0..self.height - reverse_overlap)
+                    .map(|confirmed_start| reverse_candidate(confirmed_start, reverse_overlap))
+                    .filter(|candidate| informative(candidate)),
+            );
+        }
+        let tail_candidates: Vec<_> = candidates
             .iter()
-            .filter(|(offset, _)| offset.abs_diff(best.0) > RUNNER_UP_EXCLUSION)
-            .map(|(_, score)| *score)
+            .filter(|candidate| candidate.1 + candidate.2 == self.height)
+            .collect();
+        let prefer_tail = tail_candidates
+            .iter()
+            .any(|candidate| candidate.3 <= self.config.accept_score);
+        let pool = if prefer_tail {
+            tail_candidates
+        } else {
+            candidates.iter().collect()
+        };
+        let Some(best) = pool
+            .into_iter()
+            .min_by_key(|candidate| (candidate.3, std::cmp::Reverse(candidate.2)))
+            .copied()
+        else {
+            return StitchOutcome::Rejected(RejectReason::NoOverlap { best: u32::MAX });
+        };
+        if best.3 > self.config.accept_score {
+            return StitchOutcome::Rejected(RejectReason::NoOverlap { best: best.3 });
+        }
+        let pixels_agree = |candidate: &(u32, u32, u32, u32)| {
+            overlap_pixels_agree(&self.confirmed, rgba, width,
+                candidate.1, candidate.0, candidate.2)
+        };
+        if !pixels_agree(&best) {
+            return StitchOutcome::Rejected(RejectReason::NoOverlap { best: best.3 });
+        }
+        let distinct = |candidate: &&(u32, u32, u32, u32)| {
+            (!prefer_tail || candidate.1 + candidate.2 == self.height)
+                && (candidate.1 as i64 - candidate.0 as i64)
+                    .abs_diff(best.1 as i64 - best.0 as i64)
+                    > RUNNER_UP_EXCLUSION as u64
+        };
+        let runner_up = candidates
+            .iter()
+            .filter(distinct)
+            .map(|candidate| candidate.3)
             .min();
         if let Some(runner_up) = runner_up {
-            if runner_up < best.1.saturating_add(self.config.ambiguity_margin) {
+            if runner_up < best.3.saturating_add(self.config.ambiguity_margin)
+                && candidates.iter().filter(distinct).any(|candidate| {
+                    candidate.3 < best.3.saturating_add(self.config.ambiguity_margin)
+                        && pixels_agree(candidate)
+                })
+            {
                 return StitchOutcome::Rejected(RejectReason::Ambiguous {
-                    best: best.1,
+                    best: best.3,
                     runner_up,
                 });
             }
         }
 
-        // Everything above the band's end in the frame is already in the confirmed
-        // image; only what is below it is new.
-        let consumed = best.0 + band;
-        let overlap = consumed;
-        if overlap < self.config.min_overlap_rows {
-            return StitchOutcome::Rejected(RejectReason::NoOverlap { best: best.1 });
+        // A short repeated tail must not outrank an exact full viewport revisit.
+        // Anchor scoring rejects most history positions before pixel verification.
+        if reverse && best.2 < reverse_overlap {
+            for start in 0..self.height - reverse_overlap {
+                let candidate = reverse_candidate(start, reverse_overlap);
+                if candidate.3 <= self.config.accept_score && informative(&candidate)
+                    && pixels_agree(&candidate) {
+                    return StitchOutcome::Rejected(RejectReason::NoNewContent);
+                }
+            }
         }
-        // The footer is excluded from the append as well as from the search, so it is
-        // kept once, from the first frame, instead of once per frame.
-        let available = height - bottom;
-        if available <= consumed {
-            // A perfect match with nothing below it: the view did not move. §6.3 allows
-            // this to pause the capture, but only with a message that does not claim
-            // the bottom was reached.
+        let ends_at_tail = best.1 + best.2 == self.height;
+        let appended_rows = available - (best.0 + best.2);
+        if !ends_at_tail || appended_rows == 0 {
             return StitchOutcome::Rejected(RejectReason::NoNewContent);
         }
-        let appended_rows = available - consumed;
         if self.height.saturating_add(appended_rows) > self.max_height {
             return StitchOutcome::Rejected(RejectReason::CapacityReached);
         }
-
         StitchOutcome::Accepted {
-            offset: best.0,
+            offset: best.0 + best.2 - band,
             appended_rows,
-            score: best.1,
+            score: best.3,
             runner_up,
         }
     }
+}
+
+/// Pixel verification prevents bucket averages from hiding moving or changed text.
+/// The rightmost bucket remains excluded for a scrollbar, as in signature scoring.
+fn overlap_pixels_agree(
+    confirmed: &[u8], frame: &[u8], width: u32,
+    confirmed_start: u32, frame_start: u32, rows: u32,
+) -> bool {
+    let columns = (width as usize * (BUCKETS - TRIMMED_BUCKETS)) / BUCKETS;
+    let stride = width as usize * 4;
+    let budget = (columns * rows as usize / 2000).min(64);
+    let mut changed = 0;
+    for row in 0..rows as usize {
+        let left = (confirmed_start as usize + row) * stride;
+        let right = (frame_start as usize + row) * stride;
+        if confirmed[left..left + columns * 4] == frame[right..right + columns * 4] {
+            continue;
+        }
+        for column in 0..columns {
+            let a = left + column * 4;
+            let b = right + column * 4;
+            if (0..3).any(|channel| confirmed[a + channel].abs_diff(frame[b + channel]) > 3) {
+                changed += 1;
+                if changed > budget {
+                    return false;
+                }
+            }
+        }
+    }
+    true
 }
 
 /// Mean of each channel over each column bucket, in fixed point, for every row.
@@ -361,6 +541,11 @@ fn row_signatures_range(
 
 /// Mean absolute difference over `rows` rows, dropping each row's worst bucket.
 fn band_score(left: &[u32], right: &[u32], rows: u32) -> u32 {
+    band_score_bounded(left, right, rows, u32::MAX)
+}
+
+fn band_score_bounded(left: &[u32], right: &[u32], rows: u32, cutoff: u32) -> u32 {
+    let maximum = cutoff as u64 * rows as u64 * (BUCKETS - TRIMMED_BUCKETS) as u64 * CHANNELS as u64;
     let mut total = 0u64;
     let mut counted = 0u64;
     for row in 0..rows as usize {
@@ -374,13 +559,14 @@ fn band_score(left: &[u32], right: &[u32], rows: u32) -> u32 {
             }
             per_bucket[bucket] = sum;
         }
-        per_bucket.sort_unstable();
-        // The worst buckets are dropped, which is what absorbs a scrollbar or a narrow
-        // dynamic region without having to find it first.
+        // Only the right edge may be discarded as scrollbar evidence. Discarding
+        // whichever bucket differs most also discards all text in a narrow left
+        // column, making distinct text rows look like identical blank backgrounds.
         for value in per_bucket.iter().take(BUCKETS - TRIMMED_BUCKETS) {
             total += value;
             counted += CHANNELS as u64;
         }
+        if total > maximum { return cutoff.saturating_add(1); }
     }
     if counted == 0 {
         return u32::MAX;
@@ -392,8 +578,8 @@ fn band_score(left: &[u32], right: &[u32], rows: u32) -> u32 {
 ///
 /// Measured against the band's own mean rather than between neighbours, so a slow
 /// gradient still counts as information while a flat block does not.
-fn band_spread(signatures: &[u32], height: u32, band: u32) -> u32 {
-    let start = ((height - band) as usize) * BUCKETS * CHANNELS;
+fn band_spread_at(signatures: &[u32], start_row: u32, band: u32) -> u32 {
+    let start = (start_row as usize) * BUCKETS * CHANNELS;
     let values = &signatures[start..];
     let per_row = BUCKETS * CHANNELS;
     let mut total = 0u64;
@@ -657,6 +843,91 @@ mod tests {
 
         assert_eq!(outcome, StitchOutcome::Rejected(RejectReason::NoNewContent));
         assert_eq!(stitcher.height(), 100);
+    }
+
+    #[test]
+    fn reverse_history_does_not_mutate_then_forward_scroll_appends() {
+        let page = page(400);
+        let mut stitcher = stitcher(&window(&page, 0, 100), 100);
+        assert!(matches!(
+            stitcher.offer(WIDTH, 100, &window(&page, 40, 100)),
+            StitchOutcome::Accepted {
+                appended_rows: 40,
+                ..
+            }
+        ));
+        let before = stitcher.confirmed().to_vec();
+        assert_eq!(
+            stitcher.offer(WIDTH, 100, &window(&page, 20, 100)),
+            StitchOutcome::Rejected(RejectReason::NoNewContent)
+        );
+        assert_eq!(stitcher.confirmed(), before.as_slice());
+        assert!(matches!(
+            stitcher.offer(WIDTH, 100, &window(&page, 80, 100)),
+            StitchOutcome::Accepted {
+                appended_rows: 40,
+                ..
+            }
+        ));
+        assert_eq!(stitcher.height(), 180);
+    }
+
+    #[test]
+    fn structured_history_allows_a_whitespace_tail_overlap() {
+        let mut page = page(220);
+        for row in 100..220 {
+            let start = row as usize * WIDTH as usize * 4;
+            page[start..start + WIDTH as usize * 4].fill(255);
+        }
+        let mut stitcher = stitcher(&window(&page, 0, 100), 100);
+        let outcome = stitcher.offer(WIDTH, 100, &window(&page, 40, 100));
+        assert!(matches!(outcome, StitchOutcome::Accepted { .. }));
+    }
+
+    fn text_blocks(rows: u32, repeated: bool) -> Vec<u8> {
+        let width = 600usize;
+        let mut pixels = vec![255; width * rows as usize * 4];
+        for row in 0..rows as usize {
+            let line = row / 60;
+            let phase = row % 60;
+            let background = if repeated { 245 } else { 230 + (line % 4) as u8 * 6 };
+            for column in 0..width {
+                let index = (row * width + column) * 4;
+                let glyph = phase >= 8 && phase < 20 && column < 68
+                    && column % 9 < 5
+                    && (column / 9 + phase + if repeated { 0 } else { line * 3 }) % 7 < 4;
+                let value = if glyph { 35 } else { background };
+                pixels[index..index + 4].copy_from_slice(&[value, value, value, 255]);
+            }
+        }
+        pixels
+    }
+
+    #[test]
+    fn colored_text_blocks_with_blank_tail_match_full_support() {
+        let page = text_blocks(900, false);
+        let frame = |start: usize| page[start * 600 * 4..(start + 400) * 600 * 4].to_vec();
+        let first = frame(0);
+        let mut stitcher = Stitcher::new(StitchConfig::default(), 600, 400,
+            first, 1200).unwrap();
+        let started = std::time::Instant::now();
+        let outcome = stitcher.offer(600, 400, &frame(180));
+        eprintln!("600x400 text-block match: {:?}", started.elapsed());
+        assert!(matches!(outcome, StitchOutcome::Accepted { appended_rows: 180, .. }),
+            "{outcome:?}");
+        assert_eq!(stitcher.confirmed(), &page[..580 * 600 * 4]);
+    }
+
+    #[test]
+    fn repeated_text_blocks_still_reject_ambiguous_displacements() {
+        let page = text_blocks(900, true);
+        let frame = |start: usize| page[start * 600 * 4..(start + 400) * 600 * 4].to_vec();
+        let mut stitcher = Stitcher::new(StitchConfig::default(), 600, 400,
+            frame(0), 1200).unwrap();
+        let before = stitcher.confirmed().to_vec();
+        assert!(matches!(stitcher.offer(600, 400, &frame(180)),
+            StitchOutcome::Rejected(RejectReason::Ambiguous { .. })));
+        assert_eq!(stitcher.confirmed(), before.as_slice());
     }
 
     #[test]
