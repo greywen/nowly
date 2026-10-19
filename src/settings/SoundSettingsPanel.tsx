@@ -41,8 +41,7 @@ export function SoundSettingsPanel({ value, onChange }: { value: SoundSettings; 
     catch { if (player.current === audio) { stop(); setError(true); } }
   }
 
-  return <section className="sound-settings" aria-labelledby="sound-settings-title">
-    <h3 id="sound-settings-title">{t('sounds.title')}</h3>
+  return <section className="sound-settings" aria-label={t('settings.sound')}>
     <div className="sound-settings__choices">
       {(Object.keys(soundChoices) as SoundScene[]).map(scene => <div className="sound-settings__choice" key={scene}>
         <Select id={`sound-${scene}`} label={t(`sounds.${scene}`)} value={value[scene]} options={soundChoices[scene].map(id => ({ value: id, label: t(`sounds.${id}`) }))} onChange={id => onChange({ ...value, [scene]: id as SoundId })}/>

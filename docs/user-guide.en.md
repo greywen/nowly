@@ -73,7 +73,9 @@ The ordinary window, wallpaper, tray, quick panel and fullscreen focus serve dif
   or volume mixer to adjust loudness. There are no in-app mute or volume controls.
   Previously muted scenes revert to their default sounds; other choices are preserved.
   Changes apply after saving; desktop reminders
-  sound in the background while Nowly is running, without duplicate system chimes.
+  sound in the background while Nowly is running. Calendar reminders, focus completion,
+  and alarms all appear in Nowly Bar. Nowly no longer sends Windows system
+  notifications, and sounds do not depend on Windows notification permissions.
 - **Localization** — English and Simplified Chinese, following your system
   language on startup. Language changes synchronize across screenshot and Bar
   windows. Missing translations fall back to English; native surfaces without
@@ -131,9 +133,15 @@ assets, animated stickers, custom fonts, background removal or file export.
 
 ### Nowly Bar visibility
 
+Calendar reminders, focus completion, and alarms appear in Nowly Bar, without
+entries in Windows Notification Center or system notifications on the lock screen.
+Keep Nowly running: reminders remain available when the main window is minimized
+or hidden to the tray, but stop after fully exiting. Save failures, form validation,
+and screenshot results remain next to the relevant action.
+
 Set Nowly Bar to **Notification only** in **Settings → Notifications** to keep a thin top-edge entry when no notification needs attention, rather than hiding the Bar completely. Hovering continuously unfolds the same shell down into the full Bar; leaving folds it back up. Hover only reveals the Bar; click its status area or Logo to open a panel.
 
-Pending notifications, open reminder/menu/AI/history panels, keyboard focus within the Bar, and actions in progress keep the surface available without acknowledging notifications or interrupting input. After a panel closes, the current state determines whether it folds back. Tab can enter the strip; reduced-motion preferences make the transition immediate. Persistent mode is unchanged. Disabling the Bar or suppressing it for capture also hides the strip, and transparent areas do not intercept desktop clicks.
+Pending notifications, open reminder/menu/AI/history panels, keyboard focus within the Bar, and actions in progress keep the surface available without acknowledging notifications or interrupting input. After a panel closes, the current state determines whether it folds back. Tab can enter the strip; reduced-motion preferences make the transition immediate. Persistent mode is unchanged. Suppressing the Bar for capture also hides the strip, and transparent areas do not intercept desktop clicks.
 
 ### Screenshots and history
 
@@ -141,7 +149,7 @@ Click the **Nowly Bar Logo** to open the function menu, then choose **Screenshot
 
 **Save** writes directly to the system **Pictures\Nowly\Screenshots** folder instead of opening a Save As dialog. **Copy image and finish** archives the same final PNG before writing the image clipboard. Only cropped, annotated and redacted output is retained; cancelling creates no history. Redirected system Pictures folders are respected.
 
-Screenshot history expands directly from the top-edge Nowly Bar into an animated panel, without a separate window. The collapsed Bar is **288 × 40px**, with only the status area and Logo entry; reminders, the function menu, AI, and history all expand to **432px** wide. Enable Nowly Bar to use the history shortcut. Press **Esc**, use the close button, or click outside to collapse it; Esc first cancels an open deletion confirmation. Click the Logo again to return to the function menu. The panel shows thumbnails with image-copy and confirmed-delete actions, plus **Open folder**. Images remain until deleted; confirmation removes the archived PNG and its thumbnail cache. SQLite stores metadata, not image bytes. Thumbnail caches can be regenerated.
+Screenshot history expands directly from the top-edge Nowly Bar into an animated panel, without a separate window. The collapsed Bar is **288 × 40px**, with only the status area and Logo entry; reminders, the function menu, AI, and history all expand to **432px** wide. Press **Esc**, use the close button, or click outside to collapse it; Esc first cancels an open deletion confirmation. Click the Logo again to return to the function menu. The panel shows thumbnails with image-copy and confirmed-delete actions, plus **Open folder**. Images remain until deleted; confirmation removes the archived PNG and its thumbnail cache. SQLite stores metadata, not image bytes. Thumbnail caches can be regenerated.
 
 An archive failure preserves the editor and does not copy. If archiving succeeds but the clipboard fails, retrying the same final image reuses its history entry. Copying from history never creates another entry. Raw desktop frames are retained only for the active capture session.
 

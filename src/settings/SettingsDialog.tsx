@@ -6,10 +6,7 @@ import { SoundSettingsPanel } from './SoundSettingsPanel';
 import { normalizeSoundSettings } from './sound-settings';
 import { normalizeBarMenu } from '../app/bar-menu';
 import { ShortcutRecorder, normalizeShortcut } from './ShortcutRecorder';
-import { invoke } from '@tauri-apps/api/core';
 import './shortcut-settings.css';
-type ShortcutStatus = {shortcut:string;registered:boolean;error:string|null};
-type ShortcutStatuses = {screenshot:ShortcutStatus;history:ShortcutStatus};
 import { Dialog } from '../components/Dialog';
 import { Select } from '../components/Select';
 import { TabPanel, Tabs, type TabItem } from '../components/Tabs';
@@ -26,9 +23,6 @@ export function SettingsDialog({settings,monitors=[],onClose,onSave}:Props){
  const {language,setLanguage}=useTranslation();
  const [draft,setDraft]=useState(()=>({...settings, soundSettings: normalizeSoundSettings(settings.soundSettings), barMenu: normalizeBarMenu(settings.barMenu), notificationMode: settings.notificationMode ?? 'persistent', quickPanelEnabled: true, quickPanelShortcut: settings.quickPanelShortcut ?? 'Ctrl+Space', screenshotShortcut: settings.screenshotShortcut ?? 'Ctrl+Alt+A', screenshotHistoryShortcut: settings.screenshotHistoryShortcut ?? 'Ctrl+Alt+H'})); const [saving,setSaving]=useState(false); const [error,setError]=useState<string|null>(null);
  const [tab,setTab]=useState<SettingsTab>('interface');
- const [shortcutStatus,setShortcutStatus]=useState<ShortcutStatuses|null>(null);
- const [statusError,setStatusError]=useState(false);
- useEffect(()=>{if(tab!=='shortcuts')return;let active=true;setStatusError(false);void invoke<ShortcutStatuses>('screenshot_shortcut_status').then(value=>{if(active)setShortcutStatus(value);}).catch(()=>{if(active)setStatusError(true);});return()=>{active=false;};},[tab]);
  // Resolve the monitor that should appear selected: the saved id when it still
  // matches a connected monitor, otherwise the primary (or first) one. Falling
  // back here rather than trusting the saved id blindly keeps the dropdown from
@@ -81,11 +75,8 @@ export function SettingsDialog({settings,monitors=[],onClose,onSave}:Props){
    </TabPanel>
    <TabPanel idPrefix="settings" tabId="shortcuts" active={tab==='shortcuts'}>
     <div className="shortcut-settings">
-     <p id="settings-shortcut-hint" className="shortcut-recorder__hint">{t('settings.shortcutRecordHint')}</p>
-     <ShortcutRecorder hintId="settings-shortcut-hint" id="settings-screenshot-shortcut" label={t('settings.screenshotShortcut')} value={draft.screenshotShortcut} otherValue={draft.screenshotHistoryShortcut} disabled={saving} onChange={screenshotShortcut=>setDraft(current=>({...current,screenshotShortcut}))}/>
-     <ShortcutRecorder hintId="settings-shortcut-hint" id="settings-history-shortcut" label={t('settings.screenshotHistoryShortcut')} value={draft.screenshotHistoryShortcut} otherValue={draft.screenshotShortcut} disabled={saving} onChange={screenshotHistoryShortcut=>setDraft(current=>({...current,screenshotHistoryShortcut}))}/>
-     <p className="shortcut-settings__status">{t('settings.shortcutPending')}</p>
-     {statusError?<p className="shortcut-settings__status shortcut-settings__status--error" role="status">{t('settings.shortcutStatusError')}</p>:shortcutStatus?(['screenshot','history'] as const).map(action=>{const status=shortcutStatus[action];return <p key={action} className={`shortcut-settings__status${status.registered?'':' shortcut-settings__status--error'}`} role="status">{t(action==='screenshot'?'settings.screenshotShortcut':'settings.screenshotHistoryShortcut')}: {status.shortcut} — {t(status.registered?'settings.shortcutRegistered':'settings.shortcutUnavailable')}</p>;}):<p role="status" className="shortcut-settings__status">{t('settings.shortcutStatusLoading')}</p>}
+     <ShortcutRecorder id="settings-screenshot-shortcut" label={t('settings.screenshotShortcut')} value={draft.screenshotShortcut} otherValue={draft.screenshotHistoryShortcut} disabled={saving} onChange={screenshotShortcut=>setDraft(current=>({...current,screenshotShortcut}))}/>
+     <ShortcutRecorder id="settings-history-shortcut" label={t('settings.screenshotHistoryShortcut')} value={draft.screenshotHistoryShortcut} otherValue={draft.screenshotShortcut} disabled={saving} onChange={screenshotHistoryShortcut=>setDraft(current=>({...current,screenshotHistoryShortcut}))}/>
     </div>
    </TabPanel>
    {error?<div className="dialog-error" role="alert">{error}</div>:null}

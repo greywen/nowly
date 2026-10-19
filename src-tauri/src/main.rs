@@ -110,24 +110,7 @@ fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
-/// The AppUserModelID (AUMID) used for Windows toast notifications. It must
-/// match the notification identifier the plugin uses, which is the app's
-/// bundle identifier from tauri.conf.json (`com.nowly.app`).
-#[cfg(target_os = "windows")]
-const APP_USER_MODEL_ID: &str = "com.nowly.app";
-
-/// Registers the app's AUMID with Windows so toast notifications are delivered
-/// and attributed to Nowly.
-///
-/// On Windows the notification plugin sets the toast's AppUserModelID to the
-/// bundle identifier in installed builds. Windows silently drops a toast whose
-/// AUMID is not registered, which is why the installed app shows no
-/// notification at all. Registering a DisplayName under
-/// HKCU\Software\Classes\AppUserModelId\{AUMID} makes the AUMID valid and gives
-/// the toast the correct "Nowly" attribution. Calling
-/// SetCurrentProcessExplicitAppUserModelID keeps the running process aligned
-/// with that identity regardless of how it was launched (installed shortcut,
-/// autostart, etc.).
+/// Keeps unpackaged taskbar grouping consistent with the app's bundle identity.
 #[cfg(target_os = "windows")]
 fn set_app_user_model_id() {
     match package::aumid() {
@@ -135,124 +118,12 @@ fn set_app_user_model_id() {
         Ok(None) => {},
         Err(error) => { eprintln!("{error}"); return; }
     }
-    use windows::core::{w, PCWSTR};
-    use windows::Win32::Foundation::ERROR_SUCCESS;
-    use windows::Win32::System::Registry::{
-        RegCloseKey, RegCreateKeyExW, RegSetValueExW, HKEY, HKEY_CURRENT_USER, KEY_WRITE,
-        REG_OPTION_NON_VOLATILE, REG_SZ,
-    };
+    use windows::core::w;
     use windows::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID;
-
-    let subkey: Vec<u16> = format!("Software\\Classes\\AppUserModelId\\{APP_USER_MODEL_ID}")
-        .encode_utf16()
-        .chain(std::iter::once(0))
-        .collect();
-
-    let mut key = HKEY::default();
-    let status = unsafe {
-        RegCreateKeyExW(
-            HKEY_CURRENT_USER,
-            PCWSTR(subkey.as_ptr()),
-            Some(0),
-            PCWSTR::null(),
-            REG_OPTION_NON_VOLATILE,
-            KEY_WRITE,
-            None,
-            &mut key,
-            None,
-        )
-    };
-    if status == ERROR_SUCCESS {
-        let display_name: Vec<u16> = "Nowly".encode_utf16().chain(std::iter::once(0)).collect();
-        let display_bytes = unsafe {
-            std::slice::from_raw_parts(
-                display_name.as_ptr() as *const u8,
-                display_name.len() * std::mem::size_of::<u16>(),
-            )
-        };
-        let status =
-            unsafe { RegSetValueExW(key, w!("DisplayName"), Some(0), REG_SZ, Some(display_bytes)) };
-        if status != ERROR_SUCCESS {
-            eprintln!("failed to set AppUserModelId DisplayName: {status:?}");
-        }
-        unsafe {
-            let _ = RegCloseKey(key);
-        }
-    } else {
-        eprintln!("failed to open AppUserModelId registry key: {status:?}");
-    }
 
     if let Err(error) = unsafe { SetCurrentProcessExplicitAppUserModelID(w!("com.nowly.app")) } {
         eprintln!("failed to set AppUserModelID: {error}");
     }
-}
-
-/// Sends the focus completion toast.
-///
-/// On Windows we build the toast directly with `tauri-winrt-notification` and
-/// pass our registered AUMID as the app_id. This bypasses the notification
-/// plugin, which refuses to set an app_id when the executable runs from a
-/// `target\debug` or `target\release` directory and therefore lets the toast
-/// fall back to the PowerShell AUMID ("Windows PowerShell"). Because the AUMID
-/// is registered in `set_app_user_model_id`, the toast is delivered and
-/// attributed to Nowly across dev, release, and installed builds.
-#[cfg(target_os = "windows")]
-fn send_native_notification<R: Runtime>(
-    _app: &AppHandle<R>,
-    title: &str,
-    body: &str,
-    reminder: bool,
-) -> Result<(), String> {
-    send_windows_notification(title, body, reminder)
-}
-
-#[cfg(target_os = "windows")]
-fn send_windows_notification(title: &str, body: &str, reminder: bool) -> Result<(), String> {
-    use tauri_winrt_notification::{Duration, Scenario, Toast};
-    use windows::core::HSTRING;
-    use windows::UI::Notifications::{NotificationSetting, ToastNotificationManager};
-
-    let aumid = package::aumid()?.unwrap_or_else(|| APP_USER_MODEL_ID.to_owned());
-    let notifier =
-        ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from(&aumid))
-            .map_err(|error| format!("cannot create Windows toast notifier: {error}"))?;
-    let setting = notifier
-        .Setting()
-        .map_err(|error| format!("cannot read Windows notification setting: {error}"))?;
-    if setting != NotificationSetting::Enabled {
-        return Err(format!(
-            "Windows notifications are disabled for Nowly (setting={})",
-            setting.0
-        ));
-    }
-
-    let mut toast = Toast::new(&aumid).title(title).text1(body).sound(None);
-    if reminder {
-        toast = toast
-            .scenario(Scenario::Reminder)
-            .duration(Duration::Long)
-            .add_button("Close", "dismiss");
-    }
-    toast
-        .show()
-        .map_err(|error| format!("Windows rejected the notification: {error}"))
-}
-
-#[cfg(not(target_os = "windows"))]
-fn send_native_notification<R: Runtime>(
-    app: &AppHandle<R>,
-    title: &str,
-    body: &str,
-    _reminder: bool,
-) -> Result<(), String> {
-    use tauri_plugin_notification::NotificationExt;
-
-    app.notification()
-        .builder()
-        .title(title)
-        .body(body)
-        .show()
-        .map_err(|error| format!("failed to send notification: {error}"))
 }
 
 fn main() {
@@ -294,7 +165,6 @@ fn main() {
             if !package_policy::background_launch(args.iter().map(String::as_str)) { show_main_window(app) }
         }))
         .plugin(screenshot_shortcuts::plugin())
-        .plugin(tauri_plugin_notification::init())
         .plugin(
             tauri_plugin_autostart::Builder::new()
                 .args(["--background"])
@@ -402,14 +272,6 @@ fn main() {
                     }
                     if let Some(snapshot) = completed {
                         sounds::dispatch(&timer_handle, sound_settings::SoundScene::Focus, snapshot.id.clone());
-                        if let Err(error) = send_native_notification(
-                            &timer_handle,
-                            &snapshot.notification_title,
-                            &snapshot.notification_body,
-                            false,
-                        ) {
-                            eprintln!("failed to send focus notification: {error}");
-                        }
                         if let Err(error) = timer_handle.emit("focus-session-completed", snapshot) {
                             eprintln!("failed to emit focus completion: {error}");
                         }
@@ -417,7 +279,7 @@ fn main() {
                 }
             });
 
-            // 日程提醒轮询：每 20 秒展开近期日程，把到点且未派发过的提醒发成系统通知。
+            // Bar 从日程快照展示提醒；每 20 秒只为首次到期的提醒派发音效。
             let reminder_handle = app.handle().clone();
             std::thread::spawn(move || loop {
                 std::thread::sleep(std::time::Duration::from_secs(20));
@@ -435,34 +297,14 @@ fn main() {
                         Vec::new()
                     }
                 };
+                if !notifications.is_empty() {
+                    if let Err(error) = status_island::invalidate(&reminder_handle) {
+                        eprintln!("failed to refresh Nowly Bar reminders: {error:?}");
+                    }
+                }
                 for notification in notifications {
-                    let result = send_native_notification(
-                        &reminder_handle,
-                        &notification.title,
-                        &notification.body,
-                        true,
-                    );
-                    if result.is_ok() {
-                        sounds::dispatch(&reminder_handle, sound_settings::SoundScene::Calendar,
-                            format!("{}:{}:{}", notification.event_id, notification.occurrence_start_at, notification.offset_minutes));
-                    }
-                    if let Err(error) = result {
-                        eprintln!("failed to send calendar reminder: {error}");
-                        match reminder_handle.state::<AppDb>().0.lock() {
-                            Ok(connection) => {
-                                if let Err(release_error) =
-                                    reminders::release_dispatch(&connection, &notification)
-                                {
-                                    eprintln!(
-                                        "failed to release calendar reminder for retry: {release_error:?}"
-                                    );
-                                }
-                            }
-                            Err(lock_error) => eprintln!(
-                                "failed to lock calendar database to release reminder: {lock_error}"
-                            ),
-                        }
-                    }
+                    sounds::dispatch(&reminder_handle, sound_settings::SoundScene::Calendar,
+                        format!("{}:{}:{}", notification.event_id, notification.occurrence_start_at, notification.offset_minutes));
                 }
             });
 
@@ -886,6 +728,25 @@ mod tests {
         should_activate_tray, should_prevent_close, sync_window_visibility, TrayClickKind,
     };
     use tauri::tray::{MouseButton, MouseButtonState};
+
+    #[test]
+    fn reminders_use_nowly_bar_without_system_notification_access() {
+        let source = include_str!("main.rs").split("#[cfg(test)]").next().unwrap();
+        assert!(!source.contains("send_native_notification"));
+        assert!(!source.contains("ToastNotificationManager"));
+        assert!(!source.contains("tauri_plugin_notification"));
+
+        let manifest = include_str!("../Cargo.toml");
+        assert!(!manifest.contains("tauri-plugin-notification"));
+        assert!(!manifest.contains("tauri-winrt-notification"));
+        assert!(!manifest.contains("UI_Notifications"));
+
+        let capability: serde_json::Value =
+            serde_json::from_str(include_str!("../capabilities/default.json")).unwrap();
+        assert!(capability["permissions"].as_array().unwrap().iter().all(|permission| {
+            !permission.as_str().is_some_and(|name| name.starts_with("notification:"))
+        }));
+    }
 
     #[test]
     fn nowly_bar_close_requests_are_prevented() {

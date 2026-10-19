@@ -44,6 +44,7 @@ describe('SettingsDialog',()=>{
     expect(screen.queryByRole('combobox', { name: t('sounds.calendar') })).not.toBeInTheDocument();
     await user.click(screen.getByRole('tab', { name: t('settings.sound') }));
     expect(screen.getByRole('tabpanel', { name: t('settings.sound') })).toBeVisible();
+    expect(screen.queryByRole('heading', { name: t('sounds.title') })).not.toBeInTheDocument();
     expect(screen.queryByRole('checkbox', { name: t('sounds.enabled') })).not.toBeInTheDocument();
     expect(screen.queryByRole('slider')).not.toBeInTheDocument();
     for (const scene of ['calendar', 'alarm', 'missedSummary', 'focus']) {
@@ -122,20 +123,21 @@ describe('SettingsDialog',()=>{
     fireEvent.click(screen.getByRole('tab', { name: '快捷键' }));
     const capture = screen.getByRole('textbox', { name: '截图快捷键' });
     expect(capture).toHaveValue('Ctrl+Alt+A');
-    expect(screen.getByRole('textbox', { name: '截图快捷键' })).toHaveAttribute('aria-describedby', 'settings-shortcut-hint');
-    expect(screen.getByRole('textbox', { name: '截图历史快捷键' })).toHaveAttribute('aria-describedby', 'settings-shortcut-hint');
-    expect(screen.getAllByText('点击输入框后按下组合键，保存后生效。')).toHaveLength(1);
+    expect(capture).not.toHaveAttribute('aria-describedby');
+    expect(screen.getByRole('textbox', { name: '截图历史快捷键' })).not.toHaveAttribute('aria-describedby');
+    expect(screen.queryByText(t('settings.shortcutRecordHint'))).not.toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: '截图历史快捷键' })).toHaveValue('Ctrl+Alt+H');
     fireEvent.keyDown(capture, { key: 'k', code: 'KeyK', ctrlKey: true, shiftKey: true });
     fireEvent.click(screen.getByRole('button', { name: '保存设置' }));
     expect(save).toHaveBeenCalledWith(expect.objectContaining({ screenshotShortcut:'Ctrl+Shift+K', screenshotHistoryShortcut:'Ctrl+Alt+H' }));
   });
-  it('displays native registration failures rather than claiming configured bindings work', async () => {
-    vi.mocked(invoke).mockResolvedValueOnce({screenshot:{shortcut:'Ctrl+Alt+A',registered:false,error:'conflict'},history:{shortcut:'Ctrl+Alt+H',registered:true,error:null}});
+  it('omits saved shortcut status information and native status queries', () => {
+    vi.mocked(invoke).mockClear();
     render(<SettingsDialog settings={settings} onClose={vi.fn()} onSave={vi.fn()}/>);
     fireEvent.click(screen.getByRole('tab', { name:'快捷键' }));
-    expect(await screen.findByText(/截图快捷键: Ctrl\+Alt\+A — 全局快捷键不可用/)).toBeInTheDocument();
-    expect(screen.getByText(/截图历史快捷键: Ctrl\+Alt\+H — 已注册全局快捷键/)).toBeInTheDocument();
+    expect(screen.queryByText(t('settings.shortcutPending'))).not.toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(invoke).not.toHaveBeenCalledWith('screenshot_shortcut_status');
   });
   it('does not expose a separate Nowly Bar enable switch or shortcut field', async () => {
     const save = vi.fn(async value => value);

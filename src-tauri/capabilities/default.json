@@ -5,7 +5,6 @@
   "windows": ["main", "quick-panel-handle"],
   "permissions": [
     "core:default",
-    "core:event:default",
-    "notification:default"
+    "core:event:default"
   ]
 }
