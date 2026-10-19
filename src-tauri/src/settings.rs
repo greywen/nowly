@@ -69,7 +69,7 @@ pub fn read_app_settings(connection: &Connection) -> Result<AppSettings, rusqlit
 pub fn read_sound_settings(connection: &Connection) -> Result<crate::sound_settings::SoundSettings, rusqlite::Error> {
     let settings: crate::sound_settings::SoundSettings = read_value_or(connection, "sound_settings", Default::default())?;
     settings.validate()?;
-    Ok(settings)
+    Ok(settings.normalize())
 }
 
 pub(crate) fn validate(settings: &AppSettings) -> Result<(), rusqlite::Error> {
@@ -174,7 +174,7 @@ pub fn write_app_settings(
         ("screenshot_shortcut", serde_json::to_string(&settings.screenshot_shortcut)),
         ("screenshot_history_shortcut", serde_json::to_string(&settings.screenshot_history_shortcut)),
         ("bar_menu", serde_json::to_string(&settings.bar_menu)),
-        ("sound_settings", serde_json::to_string(&settings.sound_settings)),
+        ("sound_settings", serde_json::to_string(&settings.sound_settings.clone().normalize())),
         (
             "recent_colors",
             serde_json::to_string(&settings.recent_colors),
@@ -215,7 +215,7 @@ mod tests {
         migrate(&mut connection).unwrap();
         let before = read_app_settings(&connection).unwrap();
         let mut document = serde_json::to_value(&before).unwrap();
-        assert_eq!(document["soundSettings"]["volume"], 35);
+        assert_eq!(document["soundSettings"]["volume"], 100);
         assert_eq!(document["soundSettings"]["alarm"], "bell-rise");
         document["soundSettings"] = serde_json::json!({
             "enabled": false, "volume": 20, "calendar": "none", "alarm": "beep-soft",
@@ -223,7 +223,10 @@ mod tests {
         });
         let configured = serde_json::from_value(document.clone()).unwrap();
         let saved = super::write_app_settings(&mut connection, &configured).unwrap();
-        assert_eq!(serde_json::to_value(&saved).unwrap()["soundSettings"], document["soundSettings"]);
+        assert_eq!(serde_json::to_value(&saved).unwrap()["soundSettings"], serde_json::json!({
+            "enabled": true, "volume": 100, "calendar": "chime-glass", "alarm": "beep-soft",
+            "missedSummary": "low-knock", "focus": "done-blip"
+        }));
         for (field, value) in [("volume", serde_json::json!(101)), ("calendar", serde_json::json!("bad-sound")), ("alarm", serde_json::json!("resolve"))] {
             let mut invalid = document.clone();
             invalid["soundSettings"][field] = value;

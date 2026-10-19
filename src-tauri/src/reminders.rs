@@ -30,7 +30,7 @@ pub struct DueReminder {
     pub all_day: bool,
 }
 
-/// 要发送给系统的一条通知。
+/// 首次到期的提醒，用于独立派发音效；Bar 展示由日程快照推导。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReminderNotification {
     pub event_id: String,
@@ -38,27 +38,6 @@ pub struct ReminderNotification {
     pub offset_minutes: i64,
     pub title: String,
     pub body: String,
-}
-
-/// A notification is reserved in `poll_due` before the OS call so concurrent
-/// polls cannot duplicate it. If submitting the toast fails, remove that
-/// reservation so the next poll can retry while the reminder is still valid.
-pub fn release_dispatch(
-    connection: &Connection,
-    notification: &ReminderNotification,
-) -> Result<(), CommandError> {
-    connection
-        .execute(
-            "DELETE FROM reminder_dispatches
-             WHERE event_id=?1 AND occurrence_start_at=?2 AND offset_minutes=?3",
-            params![
-                notification.event_id,
-                notification.occurrence_start_at,
-                notification.offset_minutes
-            ],
-        )
-        .map_err(CommandError::database)?;
-    Ok(())
 }
 
 /// 该实例在去重表里的身份键：`event_id` 与 `occurrence_start_at`。
@@ -468,26 +447,6 @@ mod tests {
         // 再次轮询同一时刻：已派发，不再返回。
         let second = poll_due(&connection, dt("2026-08-10T09:51")).unwrap();
         assert!(second.is_empty());
-    }
-
-    #[test]
-    fn failed_os_submission_can_release_and_retry_a_dispatch() {
-        let connection = database();
-        connection
-            .execute(
-                "INSERT INTO events(id,title,start_at,end_at,all_day,category,color,note,created_at,updated_at,reminders)
-                 VALUES ('e1','评审','2026-08-10T10:00','2026-08-10T11:00',0,'work','#4FC9DA','','t','t','[10]')",
-                [],
-            )
-            .unwrap();
-
-        let first = poll_due(&connection, dt("2026-08-10T09:50")).unwrap();
-        assert_eq!(first.len(), 1);
-        release_dispatch(&connection, &first[0]).unwrap();
-
-        let retry = poll_due(&connection, dt("2026-08-10T09:51")).unwrap();
-        assert_eq!(retry.len(), 1);
-        assert_eq!(retry[0].event_id, "e1");
     }
 
     #[test]
