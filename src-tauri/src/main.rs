@@ -526,12 +526,7 @@ fn main() {
             }
 
             let menu = MenuBuilder::new(app)
-                .text("open", "Open Nowly")
-                                .text("wallpaper", "Set as wallpaper / Exit wallpaper mode")
-                .separator()
-                                .text("settings", "Settings")
-                .separator()
-                                .text("quit", "Quit Nowly")
+                .text("quit", "Quit Nowly")
                 .build()?;
 
             let mut tray_builder = TrayIconBuilder::new()
@@ -559,30 +554,14 @@ fn main() {
                         show_main_window(tray.app_handle());
                     }
                 })
-                .on_menu_event(|app, event| match event.id().as_ref() {
-                    "open" => show_main_window(app),
-                    "settings" => {
-                        show_main_window(app);
-                        if let Err(error) = app.emit("open-settings", ()) {
-                            eprintln!("failed to request settings: {error}");
-                        }
-                    }
-                    "wallpaper" => {
-                        if let Some(window) = app.get_webview_window("main") {
-                            #[cfg(target_os = "windows")]
-                            if let Err(error) = wallpaper::enter_foreground_webview(&window) {
-                                eprintln!("failed to toggle wallpaper from tray: {error}");
-                            }
-                        }
-                    }
-                    "quit" => {
+                .on_menu_event(|app, event| {
+                    if event.id().as_ref() == "quit" {
                         if let Ok(mut timer) = app.state::<focus_timer::ManagedFocusTimer>().lock()
                         {
                             timer.cancel();
                         }
                         app.exit(0);
                     }
-                    _ => {}
                 })
                 .build(app)?;
 
