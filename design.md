@@ -550,6 +550,7 @@ app-shell（100vw × 100vh，grid-template-rows: 70px minmax(0, 1fr)）
 - 结构：`grid-template-rows: auto minmax(0, 1fr) auto`，只有 Body 滚动。
 - Header 标题 `1.25rem / 600 / 1.4`，`--text-primary`；Header 与 Footer 用 `1px solid --border-default` 分隔；Footer 操作右对齐，间距 `8px`。
 - 宽度档位（均带 `calc(100vw - 32px)` 上限）：确认框 `480px`，标准 `560px`，日期详情 `600px`，任务/事件编辑 `680px`。
+- 日历设置两个 Tab 共用宽度 `min(760px, calc(100vw - 32px))`，与全局设置、时间设置一致；最大宽度同时不超过遮罩的可用内容宽度，窄窗保留两侧留白。订阅列表在常规宽度下为来源徽标、同步状态及操作按钮保留完整横向空间，不缩小字号。
 - 便笺创建与编辑共用宽度 `min(760px, calc(100vw - 32px))`。取消独立标题输入与首行提示；首个非空逻辑行仅在模块卡片作为标题显示，长行只在显示处省略，不截断正文。
 - 便笺保留既有富文本工具栏及功能，仅正文高度使用 `min-height: clamp(96px, calc(100dvh - 400px), 320px)`、`max-height: min(480px, calc(100dvh - 320px))`，其他富文本编辑器不变。
 - 便笺页脚左侧使用三枚紧凑入口（颜色色点 / Solar smile-circle 图标选择 / 置顶），无常驻标签，按钮 `28 × 28px`、图标或色点 `16px`、圆角 `--radius-sm`。复用既有 ColorPicker compact、Select 与原生 Checkbox，保留可访问名称、键盘焦点与选中反馈；这是便笺页脚限定规则，不扩展到其他弹框。颜色与图标浮层互斥。图标入口居中预览当前选中的便笺内容图标（沿用便笺内容已有的 Emoji）；无图标时显示 Solar smile-circle 占位，清除选择后恢复占位。

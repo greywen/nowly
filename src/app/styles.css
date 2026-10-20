@@ -466,7 +466,8 @@ body:has(.screen-status-island-root),
 /* Calendar settings: an icon button in the calendar toolbar that opens a
    popover holding calendar-scoped preferences (week start, date format,
    weekend visibility) so they sit next to the view they affect. */
-.calendar-settings-dialog { width: min(640px, calc(100vw - 32px)); }
+.overlay:has(> .calendar-settings-dialog) { grid-template-columns: minmax(0, 1fr); }
+.good-dialog.calendar-settings-dialog { width: min(760px, calc(100vw - 32px)); min-width: 0; max-width: 100%; }
 .calendar-settings { display: grid; gap: 24px; }
 .calendar-settings__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .calendar-settings__checks { padding: 20px; border-radius: var(--radius-default); background: var(--bg-subtle); }
