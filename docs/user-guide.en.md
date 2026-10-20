@@ -19,6 +19,8 @@ The ordinary window, wallpaper, tray, quick panel and fullscreen focus serve dif
 - **Focus timer** — countdown sessions with a distraction-free fullscreen mode
   and session statistics. On desktop, one native timer supplies the same remaining
   time to the dashboard, fullscreen focus, and Nowly Bar; views resync on resume.
+  Nowly Bar keeps the completion reminder visible after the session record is saved,
+  until you close the reminder or start another focus session.
 - **World clocks and alarms** — an optional Time module arranges multiple time zones
   as pure digital clocks, pure analog faces, or mixed displays. City, date, and
   time-difference labels are hidden by default; layout adapts to the module size.
@@ -35,12 +37,14 @@ The ordinary window, wallpaper, tray, quick panel and fullscreen focus serve dif
   Focus settings only configure the default duration (1–720 minutes). **Focus statistics**
   is available in the module header only when focus is displayed. Switching the
   displayed content does not interrupt an active session.
-  The **Alarms** settings tab creates a new alarm requiring one explicit creation
+  The Time module header's add icon opens the **Alarms** settings tab with a new
+  alarm form. Alarms can also be added from that tab, requiring one explicit creation
   confirmation. Existing alarms expand for editing within their own list rows;
   valid edits save automatically, ending editing does not undo changes, and deletion
   still requires confirmation. The Alarms tab has no count suffix. Alarms do not
   accept dates: turn repeat off to ring once at the next selected local time, or
-  select weekdays for repeating alarms (default: 09:00, Monday–Friday).
+  select weekdays for repeating alarms (default: current local time when the form
+  opens, Monday–Friday).
   Alarm and calendar time pickers accept any minute from 00 to 59. Input, shortcuts,
   and Now remain drafts until Confirm or Enter; Escape or an outside click cancels
   unconfirmed edits. Invalid times or an empty repeat weekday selection are not saved.

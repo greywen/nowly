@@ -83,6 +83,26 @@ async function saveClocks(dialog: Locator) {
   await expect(dialog.getByRole('status')).toHaveText('已保存');
 }
 
+test('header add opens alarm creation at the current time and persists after confirmation', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-10-20T15:17:42Z'));
+  await boot(page);
+  const add = page.getByTestId('time-module').getByRole('button', { name: '添加闹钟', exact: true });
+  await expect(add).toBeVisible();
+  await add.click();
+  const dialog = page.getByRole('dialog', { name: '时间设置', exact: true });
+  await expect(dialog.getByRole('tab', { name: '闹钟', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(dialog.getByRole('button', { name: '时间', exact: true })).toHaveText('15:17');
+  expect((await stored(page)).alarms).toHaveLength(0);
+  await dialog.getByRole('button', { name: '创建闹钟', exact: true }).click();
+  await expect.poll(async () => (await stored(page)).alarms).toEqual([
+    expect.objectContaining({ hour: 15, minute: 17, repeat: { kind: 'weekly', weekdays: [1, 2, 3, 4, 5] } })
+  ]);
+  await dialog.getByRole('button', { name: '关闭', exact: true }).click();
+  await expect(add).toBeFocused();
+  await page.reload();
+  expect((await stored(page)).alarms).toHaveLength(1);
+});
+
 for (const mode of ['digital', 'analog', 'mixed'] as const) {
   test(`pure ${mode} hides optional information and keeps tabs in settings`, async ({ page }) => {
     await boot(page, { mode, clocks: [clock('东京', 'Asia/Tokyo')] });

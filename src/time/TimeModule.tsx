@@ -1,4 +1,4 @@
-import { BarChart3, Clock3, Settings, Timer } from '../components/icons';
+import { BarChart3, Clock3, Plus, Settings, Timer } from '../components/icons';
 import { useTranslation } from '../i18n';
 import { FocusTimerWidget } from '../focus/FocusTimerWidget';
 import { useFocusTimer } from '../focus/FocusTimerContext';
@@ -9,11 +9,12 @@ import { tt } from './time-translations';
 type Props = {
   mode: 'foreground' | 'wallpaper';
   onOpenSettings: () => void;
+  onCreateAlarm?: () => void;
   onOpenStatistics: () => void;
   onEnterWallpaper?: () => void;
 };
 
-export function TimeModule({ mode, onOpenSettings, onOpenStatistics, onEnterWallpaper }: Props) {
+export function TimeModule({ mode, onOpenSettings, onCreateAlarm, onOpenStatistics, onEnterWallpaper }: Props) {
   const { t } = useTranslation();
   const { state, load, save } = useTimeSettings();
   const timer = useFocusTimer();
@@ -35,6 +36,7 @@ export function TimeModule({ mode, onOpenSettings, onOpenStatistics, onEnterWall
         </div>
         {showFocus ? <button type="button" className="btn" onClick={onOpenStatistics}><BarChart3 aria-hidden="true" />{tt('time.focus.statistics')}</button> : null}
         <button type="button" className="btn btn-icon" aria-label={tt('time.title')} onClick={onOpenSettings}><Settings aria-hidden="true" /></button>
+        <button type="button" className="btn btn-icon" aria-label={tt('time.alarms.add')} disabled={!onCreateAlarm} onClick={onCreateAlarm}><Plus aria-hidden="true" /></button>
       </div>
     </div>
     {state.status === 'loading' ? <p className="time-muted">{tt('time.loading')}</p> : null}

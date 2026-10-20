@@ -222,7 +222,7 @@ function AppContent() {
       onRememberCustomColor={rememberCustomColor}
     />
   );
-  modules.time = <TimeModule mode={windowMode} onOpenSettings={() => openTimeDialog()} onOpenStatistics={() => setFocusStatisticsOpen(true)} onEnterWallpaper={() => void runWindowModeSwitch(switchToWallpaper)} />;
+  modules.time = <TimeModule mode={windowMode} onCreateAlarm={() => openTimeDialog(true)} onOpenSettings={() => openTimeDialog()} onOpenStatistics={() => setFocusStatisticsOpen(true)} onEnterWallpaper={() => void runWindowModeSwitch(switchToWallpaper)} />;
 
 
   useEffect(() => {

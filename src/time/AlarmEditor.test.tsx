@@ -31,9 +31,15 @@ describe('AlarmEditor autosave', () => {
     expect(close).toHaveBeenCalledOnce();
   });
 
-  it('defaults to 09:00 weekdays with Sunday-first native checkboxes and no date or repeat dropdown', () => {
-    render(<AlarmEditor onSave={vi.fn()} onCancel={vi.fn()} />);
-    expect(screen.getByRole('button', { name: '时间' })).toHaveTextContent('09:00');
+  it('defaults to the current local time with Sunday-first weekday checkboxes and no date or repeat dropdown', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 20, 15, 17, 42));
+    try {
+      render(<AlarmEditor onSave={vi.fn()} onCancel={vi.fn()} />);
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(screen.getByRole('button', { name: '时间' })).toHaveTextContent('15:17');
     expect(screen.getByRole('checkbox', { name: '重复闹钟' })).toBeChecked();
     expect(screen.getByRole('group', { name: '自选星期' }).querySelectorAll('input')).toHaveLength(7);
     expect(Array.from(screen.getByRole('group', { name: '自选星期' }).querySelectorAll('input')).map(input => input.getAttribute('aria-label'))).toEqual(['周日', '周一', '周二', '周三', '周四', '周五', '周六']);
