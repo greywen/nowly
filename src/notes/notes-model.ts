@@ -63,7 +63,6 @@ export function noteIconSymbol(icon: NoteIcon): string {
 }
 
 export type NoteDraft = {
-  title: string;
   content: string;
   color: NoteColor;
   pinned: boolean;
@@ -72,7 +71,6 @@ export type NoteDraft = {
 
 export type Note = {
   id: string;
-  title: string;
   content: string;
   color: NoteColor;
   pinned: boolean;

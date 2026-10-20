@@ -47,9 +47,15 @@ function renderWithAttachments(notes: typeof sampleNotes, view: 'board' | 'list'
 describe('NotesWidget', () => {
   it('renders summaries in an internal scroll container with all-notes action', () => {
     render(<NotesWidget notes={sampleNotes} status="ready" {...props} />);
-    expect(screen.getByText('产品原则')).toBeInTheDocument();
+    expect(document.querySelector('.note-title')).toHaveTextContent(sampleNotes[0].content);
     expect(screen.getByTestId('notes-scroll')).toBeInTheDocument();
     expect(screen.getByRole('button', {name:'查看全部便签'})).toBeInTheDocument();
+  });
+  it('derives a changing first-line title and falls back for image-only notes', () => {
+    const { rerender } = render(<NotesWidget notes={[{...sampleNotes[0], content:'\n首行\n正文'}]} status="ready" {...props} />);
+    expect(document.querySelector('.note-title__text')).toHaveTextContent('首行');
+    rerender(<NotesWidget notes={[{...sampleNotes[0], content:content([{insert:{image:`attachment:${IMAGE_ID}`}},{insert:'\n'}])}]} status="ready" {...props} />);
+    expect(document.querySelector('.note-title__text')).toHaveTextContent('无标题便笺');
   });
   it('shows empty, error retry, and static loading states', () => {
     const {rerender}=render(<NotesWidget notes={[]} status="ready" {...props} />);
@@ -80,13 +86,13 @@ describe('NotesWidget', () => {
     rerender(<NotesWidget notes={sampleNotes} status="ready" view="board" onSetView={onSetView} {...props} />);
     expect(screen.getByTestId('notes-board')).toBeInTheDocument();
     expect(screen.queryByTestId('notes-list')).not.toBeInTheDocument();
-    expect(screen.getByText('产品原则')).toBeInTheDocument();
+    expect(document.querySelector('.sticky-note__title')).toHaveTextContent(sampleNotes[0].content);
     expect(screen.getByText('⭐')).toBeInTheDocument();
-    expect(screen.getByRole('button',{name:/产品原则/})).toHaveClass('sticky-note--style-2');
+    expect(screen.getByRole('button',{name:/只有一个主界面/})).toHaveClass('sticky-note--style-2');
   });
   it('pins board icons to a stable edge anchor for each note style', () => {
     const notes = Array.from({length:9},(_,styleVariant)=>({
-      ...sampleNotes[0], id:`note-${styleVariant}`, title:`便签 ${styleVariant}`,
+      ...sampleNotes[0], id:`note-${styleVariant}`, content:`便签 ${styleVariant}`,
       styleVariant, icon:'star' as const
     }));
     render(<NotesWidget notes={notes} status="ready" view="board" {...props} />);
@@ -107,11 +113,11 @@ describe('NotesWidget', () => {
   });
   it('keeps the tape when a board note has no icon', () => {
     render(<NotesWidget notes={[{...sampleNotes[0],icon:''}]} status="ready" view="board" {...props} />);
-    expect(screen.getByRole('button',{name:/产品原则/}).querySelector('.sticky-note__tape')).toBeInTheDocument();
+    expect(screen.getByRole('button',{name:/只有一个主界面/}).querySelector('.sticky-note__tape')).toBeInTheDocument();
   });
   it('keeps board notes static and free of folded corners', () => {
     const notes = Array.from({length:9},(_,styleVariant)=>(
-      {...sampleNotes[0],id:`style-${styleVariant}`,title:`样式 ${styleVariant}`,styleVariant}
+      {...sampleNotes[0],id:`style-${styleVariant}`,content:`样式 ${styleVariant}`,styleVariant}
     ));
     render(<NotesWidget notes={notes} status="ready" view="board" {...props} />);
 

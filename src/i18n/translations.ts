@@ -473,6 +473,8 @@ export const translations: Record<Language, Record<string, string>> = {
     'richEditor.codeBlock': '代码块',
     'richEditor.link': '链接',
     'richEditor.image': '图片',
+    'richEditor.resizeImage': '调整图片尺寸',
+    'richEditor.resizeImageHint': '拖动等比缩放；方向键调整，Shift 精调，Esc 取消',
     'richEditor.video': '视频',
     'richEditor.formula': '公式',
     'richEditor.clean': '清除格式',
@@ -634,7 +636,8 @@ export const translations: Record<Language, Record<string, string>> = {
     'eventDraft.errorReminderCount': '最多只能设置 {count} 条提醒。',
 
     // Note draft validation
-    'noteDraft.errorTitle': '请输入便签标题。',
+    'noteDraft.errorContent': '请输入便笺内容。',
+    'notesWidget.untitled': '无标题便笺',
     'noteDraft.errorColor': '请选择有效颜色。',
     'noteDraft.errorIcon': '请选择有效图标。',
 
@@ -773,7 +776,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'noteModal.editTitle': '编辑便签',
     'noteModal.deleteNote': '删除便签',
     'noteModal.saveNote': '保存便签',
-    'noteModal.title': '便签标题',
+    'noteModal.unpin': '取消置顶',
     'noteModal.content': '便签内容',
     'noteModal.color': '便签颜色',
     'noteModal.icon': '便签图标',
@@ -1439,6 +1442,8 @@ export const translations: Record<Language, Record<string, string>> = {
     'richEditor.codeBlock': 'Code block',
     'richEditor.link': 'Link',
     'richEditor.image': 'Image',
+    'richEditor.resizeImage': 'Resize image',
+    'richEditor.resizeImageHint': 'Drag to resize proportionally; arrow keys to resize, Shift for fine adjustment, Esc to cancel',
     'richEditor.video': 'Video',
     'richEditor.formula': 'Formula',
     'richEditor.clean': 'Clear formatting',
@@ -1600,7 +1605,8 @@ export const translations: Record<Language, Record<string, string>> = {
     'eventDraft.errorReminderCount': 'You can set at most {count} reminders.',
 
     // Note draft validation
-    'noteDraft.errorTitle': 'Please enter a note title.',
+    'noteDraft.errorContent': 'Please enter note content.',
+    'notesWidget.untitled': 'Untitled note',
     'noteDraft.errorColor': 'Please choose a valid color.',
     'noteDraft.errorIcon': 'Please choose a valid icon.',
 
@@ -1739,7 +1745,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'noteModal.editTitle': 'Edit note',
     'noteModal.deleteNote': 'Delete note',
     'noteModal.saveNote': 'Save note',
-    'noteModal.title': 'Note title',
+    'noteModal.unpin': 'Unpin note',
     'noteModal.content': 'Note content',
     'noteModal.color': 'Note color',
     'noteModal.icon': 'Note icon',

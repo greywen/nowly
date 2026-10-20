@@ -125,7 +125,6 @@ export const sampleTasks: MatrixTask[] = [
 export const sampleNotes: Note[] = [
   {
     id: 'note-1',
-    title: '产品原则',
     content: '只有一个主界面，所有操作通过弹窗完成。',
     color: '#E8C444',
     pinned: true,
@@ -136,7 +135,6 @@ export const sampleNotes: Note[] = [
   },
   {
     id: 'note-2',
-    title: '待办记录',
     content: '买咖啡豆；晚上看 FullCalendar basic 示例。',
     color: '#E8C444',
     pinned: false,

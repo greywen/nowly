@@ -68,7 +68,6 @@ pub struct Task {
 #[serde(rename_all = "camelCase")]
 pub struct Note {
     pub id: String,
-    pub title: String,
     pub content: String,
     pub color: String,
     pub pinned: bool,
@@ -146,7 +145,6 @@ pub struct TaskDraft {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NoteDraft {
-    pub title: String,
     pub content: String,
     pub color: String,
     pub pinned: bool,
@@ -647,6 +645,23 @@ mod tests {
     }
 
     #[test]
+    fn note_draft_needs_no_title_and_does_not_serialize_one() {
+        let payload = serde_json::json!({
+            "content": "保持简单",
+            "color": "#4F55DA",
+            "pinned": false
+        });
+        let draft: NoteDraft = serde_json::from_value(payload.clone()).unwrap();
+        assert_eq!(draft.content, "保持简单");
+        assert_eq!(draft.icon, "");
+        assert!(serde_json::to_value(&draft).unwrap().get("title").is_none());
+        let mut old_payload = payload;
+        old_payload["title"] = serde_json::json!("丢弃旧标题");
+        let old_draft: NoteDraft = serde_json::from_value(old_payload).unwrap();
+        assert_eq!(old_draft, draft);
+    }
+
+    #[test]
     fn note_draft_deserializes_camel_case() {
         let draft: NoteDraft = serde_json::from_value(serde_json::json!({
             "title": "产品原则",
@@ -656,7 +671,7 @@ mod tests {
         }))
         .unwrap();
 
-        assert_eq!(draft.title, "产品原则");
+        assert_eq!(draft.content, "保持简单");
         assert_eq!(draft.color, "purple");
         assert!(draft.pinned);
     }

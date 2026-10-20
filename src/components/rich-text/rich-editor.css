@@ -27,6 +27,7 @@
 /* One surface holds toolbar and editor, matching the single-control look of
    .good-input rather than reading as two stacked boxes. */
 .rich-editor__surface {
+  position: relative;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-default);
   background: var(--bg-subtle);
@@ -673,4 +674,44 @@
 .rich-editor[data-disabled='true'] .ql-toolbar.ql-snow button,
 .rich-editor[data-disabled='true'] .ql-toolbar.ql-snow .ql-picker-label {
   pointer-events: none;
+}
+
+.rich-editor__image-resize {
+  position: absolute;
+  z-index: 1;
+  box-sizing: border-box;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-sm);
+  pointer-events: none;
+}
+.rich-editor__image-resize-handle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: var(--space-6);
+  height: var(--space-6);
+  padding: 0;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  cursor: nwse-resize;
+  pointer-events: auto;
+  touch-action: none;
+}
+.rich-editor__image-resize-handle::after {
+  content: '';
+  display: block;
+  width: var(--space-2);
+  height: var(--space-2);
+  margin: auto;
+  border-right: 1px solid var(--color-primary-active);
+  border-bottom: 1px solid var(--color-primary-active);
+}
+.rich-editor__image-resize-handle:hover,
+.rich-editor__image-resize-handle:active {
+  background: var(--color-primary-light);
+}
+.rich-editor__image-resize-handle:focus-visible {
+  outline: 0;
+  box-shadow: var(--shadow-focus);
 }

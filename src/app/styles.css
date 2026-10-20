@@ -1392,11 +1392,39 @@ body:has(.screen-status-island-root),
 .good-button--danger-ghost:hover { color: var(--text-inverse); background: var(--color-danger); }
 
 .note-content { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-.note-title { display: flex; align-items: center; gap: 8px; }
+.note-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.note-title__text { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.sticky-note__title { max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .note-title svg { width: 16px; height: 16px; flex: none; color: var(--color-primary-active); }
-.note-dialog { width: min(640px, calc(100vw - 32px)); }
-.note-form { display: grid; gap: 20px; }
-.note-dialog__actions { width: 100%; display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.note-dialog { width: min(760px, calc(100vw - 32px)); }
+.note-form { display: grid; gap: var(--space-5); }
+.note-dialog .rich-editor .ql-editor { min-height: clamp(96px, calc(100dvh - 400px), 320px); max-height: min(480px, calc(100dvh - 320px)); }
+.note-dialog .good-dialog__footer { justify-content: space-between; flex-wrap: wrap; }
+.note-dialog__options { display: flex; align-items: center; gap: var(--space-3); }
+.note-dialog__options .color-picker__trigger,
+.note-dialog__options .select-trigger--icon { width: 28px; height: 28px; min-height: 28px; padding: 0; border-radius: var(--radius-sm); }
+.note-dialog__options .color-picker__trigger { border: 1px solid transparent !important; background: transparent !important; }
+.note-dialog__options .color-picker__trigger span { display: block; width: 16px; height: 16px; border-radius: 50%; background: inherit; }
+.note-dialog__options .color-picker__trigger:hover { background: var(--bg-subtle) !important; }
+.note-dialog__options .color-picker__trigger[aria-expanded="true"] { outline: 0; background: var(--color-primary-light) !important; }
+.note-dialog__options .color-picker__trigger:focus-visible { box-shadow: var(--shadow-focus); }
+.note-dialog__options .select-trigger--icon { display: flex; justify-content: center; align-items: center; background: transparent; color: var(--text-secondary); }
+.note-dialog__icon { display: flex; justify-content: center; align-items: center; width: 16px; height: 16px; font-size: 1.25rem; line-height: 1; }
+.note-dialog__options .select-trigger--icon svg { width: 16px; height: 16px; }
+.note-dialog__options .select-trigger--icon:hover { background: var(--bg-subtle); color: var(--color-primary-active); }
+.note-dialog__options .select-trigger--icon:focus { border-color: transparent; }
+.note-dialog__options .select-trigger--icon:focus-visible { box-shadow: var(--shadow-focus); }
+.note-dialog__options .select-trigger--icon[aria-expanded="true"] { background: var(--color-primary-light); color: var(--color-primary-active); }
+.note-dialog__options .select-field { gap: 0; }
+.note-dialog__pin { width: 28px; height: 28px; display: grid; place-items: center; color: var(--text-secondary); cursor: pointer; }
+.note-dialog__pin .form-check-input { position: absolute; inset: 0; background: transparent; border-radius: var(--radius-sm); cursor: pointer; }
+.note-dialog__pin .form-check-input:checked { background: var(--color-primary-light); }
+.note-dialog__pin .form-check-input:hover { background-color: var(--bg-subtle); }
+.note-dialog__pin .form-check-input:focus-visible { outline: 0; box-shadow: var(--shadow-focus); }
+.note-dialog__pin svg { z-index: 1; pointer-events: none; }
+.note-dialog__pin:has(:checked) { color: var(--color-primary-active); }
+.note-dialog__pin:has(:disabled) { opacity: .65; cursor: default; }
+.note-dialog__actions { flex: 1; display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: var(--space-2); }
 .note-dialog__actions .dialog-error { margin: 0 auto 0 0; }
 .notes-manager-dialog { width: min(800px, calc(100vw - 32px)); }
 .notes-manager-dialog .good-dialog__body { min-height: 0; overflow: hidden; }

@@ -26,6 +26,16 @@ function Harness({ searchable = false, disabled = false, source = options }: { s
 }
 
 describe('Select', () => {
+  it('reuses list behavior with an icon-only trigger', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<Select id="icon" label="图标" hideLabel fitContent triggerIcon={<span data-testid="smile" />} options={options} value="high" onChange={() => undefined} />);
+    const trigger = screen.getByRole('combobox', { name: '图标' });
+    expect(trigger).not.toHaveTextContent('高');
+    expect(trigger).toHaveClass('select-trigger--icon');
+    expect(container.querySelector('[data-testid="smile"]')).toBeInTheDocument();
+    await user.click(trigger);
+    expect(screen.getByRole('option', { name: '中' })).toBeInTheDocument();
+  });
   it('exposes combobox semantics and submits the controlled value', () => {
     const { container } = render(<Harness />);
     const trigger = screen.getByRole('combobox', { name: '优先级' });
@@ -111,6 +121,26 @@ describe('Select', () => {
     expect(screen.getByRole('searchbox')).toHaveClass('select-search');
     expect(screen.getByRole('option', { name: '高' })).toHaveClass('select-option');
     expect(container.querySelector('.select-popup')).toBeInTheDocument();
+  });
+
+  it('keeps an icon-trigger popup within the right viewport edge', async () => {
+    const user = userEvent.setup();
+    const original = HTMLElement.prototype.getBoundingClientRect;
+    const offset = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetWidth');
+    HTMLElement.prototype.getBoundingClientRect = function () {
+      if (this.getAttribute('role') === 'combobox') return { top: 300, bottom: 328, left: 990, right: 1018, width: 28, height: 28, x: 990, y: 300, toJSON() {} };
+      return original.call(this);
+    };
+    Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, get() { return this.classList.contains('select-popup') ? 200 : 28; } });
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 });
+    try {
+      const { container } = render(<Select id="edge" label="图标" hideLabel fitContent triggerIcon={<span />} options={options} value="high" onChange={() => undefined} />);
+      await user.click(screen.getByRole('combobox', { name: '图标' }));
+      expect(container.querySelector('.select-popup')).toHaveStyle({ left: '808px' });
+    } finally {
+      HTMLElement.prototype.getBoundingClientRect = original;
+      if (offset) Object.defineProperty(HTMLElement.prototype, 'offsetWidth', offset);
+    }
   });
 
   it('places the popup above when there is more room above the trigger', async () => {

@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { NotesManagerDialog } from './NotesManagerDialog';
 
-const note = { id:'n1', title:'产品原则', content:'保持简单', color:'#4F55DA' as const, pinned:true, styleVariant:0, icon:'heart' as const, createdAt:'x', updatedAt:'x' };
+const note = { id:'n1', content:'产品原则\n保持简单', color:'#4F55DA' as const, pinned:true, styleVariant:0, icon:'heart' as const, createdAt:'x', updatedAt:'x' };
 
 describe('NotesManagerDialog', () => {
   it('lists all notes and opens create and edit actions', async () => {

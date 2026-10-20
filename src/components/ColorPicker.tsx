@@ -22,6 +22,7 @@ type ColorPickerProps = {
   stickerPopup?: boolean;
   onChange(color: HexColor): void;
   onRememberColor?(color: HexColor): void;
+  portalWithinDialog?: boolean;
 };
 
 type Rgb = { r: number; g: number; b: number };
@@ -115,7 +116,7 @@ function pickerPosition(anchor: DOMRect): PickerPosition {
   return { left, top };
 }
 
-export function ColorPicker({ legend, name, value, presets, recentColors, disabled = false, compact = false, stickerPopup = false, onChange, onRememberColor }: ColorPickerProps) {
+export function ColorPicker({ legend, name, value, presets, recentColors, disabled = false, compact = false, stickerPopup = false, onChange, onRememberColor, portalWithinDialog = false }: ColorPickerProps) {
   const customRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -174,17 +175,19 @@ export function ColorPicker({ legend, name, value, presets, recentColors, disabl
     };
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
         finishCustomSelection();
         triggerRef.current?.focus();
       }
     };
     document.addEventListener('pointerdown', closeOutside, true);
     document.addEventListener('focusin', closeOutside, true);
-    document.addEventListener('keydown', closeOnEscape);
+    document.addEventListener('keydown', closeOnEscape, true);
     return () => {
       document.removeEventListener('pointerdown', closeOutside, true);
       document.removeEventListener('focusin', closeOutside, true);
-      document.removeEventListener('keydown', closeOnEscape);
+      document.removeEventListener('keydown', closeOnEscape, true);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -365,7 +368,7 @@ export function ColorPicker({ legend, name, value, presets, recentColors, disabl
         <p className="color-picker__recent-empty" role="group" aria-label={t('colorPicker.recent')}>{t('colorPicker.recentEmpty')}</p>
       )}
     </div>,
-    document.body
+    portalWithinDialog ? customRef.current?.closest('.good-dialog') ?? document.body : document.body
   ) : null;
 
   if (compact) return (
@@ -374,7 +377,7 @@ export function ColorPicker({ legend, name, value, presets, recentColors, disabl
         aria-label={legend} title={legend} aria-haspopup="dialog" aria-expanded={open} disabled={disabled}
         style={{ background: triggerColor ?? FALLBACK_COLOR, borderColor: triggerColor ?? FALLBACK_COLOR }}
         onClick={() => { if (open) finishCustomSelection(); else openPicker(); }}>
-        <span aria-hidden="true" />
+        <span aria-hidden="true" style={{ background: triggerColor ?? FALLBACK_COLOR }} />
       </button>
       {popover}
     </div>

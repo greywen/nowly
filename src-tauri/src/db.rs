@@ -63,7 +63,12 @@ const MIGRATIONS: &[(i64, Migration)] = &[
     (33, migration_33_alarm_notice_expiry),
     (34, migration_34_date_free_alarms),
     (35, crate::stickers::migrate),
+    (36, migration_36_note_content_titles),
 ];
+
+fn migration_36_note_content_titles(transaction: &Transaction<'_>) -> Result<()> {
+    transaction.execute_batch("ALTER TABLE notes DROP COLUMN title;")
+}
 
 fn migration_34_date_free_alarms(transaction: &Transaction<'_>) -> Result<()> {
     transaction.execute_batch(
@@ -1655,9 +1660,13 @@ mod tests {
                 VALUES('event:keep','Keep meeting','2026-10-13T10:00','2026-10-13T11:00',0,'','','','now','now');
              INSERT OR IGNORE INTO tasks(id,title,description,completed,lane_id,board_position,created_at,updated_at)
                 VALUES('task:keep','Keep task','',0,'kanban-lane-todo',0,'now','now');
-             INSERT OR IGNORE INTO notes(id,title,content,color,pinned,style_variant,icon,created_at,updated_at)
-                VALUES('note:keep','Keep note','content','#E8C444',0,0,'','now','now');",
+             INSERT OR IGNORE INTO notes(id,content,color,pinned,style_variant,icon,created_at,updated_at)
+                VALUES('note:keep','content','#E8C444',0,0,'','now','now');",
         ).unwrap();
+        let has_title: bool = connection.query_row("SELECT EXISTS(SELECT 1 FROM pragma_table_info('notes') WHERE name='title')", [], |row| row.get(0)).unwrap();
+        if has_title {
+            connection.execute("INSERT OR IGNORE INTO notes(id,title,content,color,pinned,style_variant,icon,created_at,updated_at) VALUES('note:keep','Keep note','content','#E8C444',0,0,'','now','now')", []).unwrap();
+        }
     }
 
     fn time_reset_snapshot(
@@ -2531,9 +2540,85 @@ mod tests {
     }
 
     #[test]
+    fn migration_36_discards_note_titles_preserving_all_other_data_once() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        connection.execute_batch("PRAGMA foreign_keys=ON;").unwrap();
+        migrate_through(&mut connection, 35).unwrap();
+        let contents = [
+            "",
+            " \t\n",
+            "  # 正文标题\r\n旧内容\0尾部  ",
+            r#" { "v":1, "ops":[{"insert":{"image":"attachment:0123456789abcdef0123456789abcdef.png"}},{"insert":"\n"}] } "#,
+            r#"{"v":1,"ops":[{"insert":"报告","attributes":{"link":"attachment:0123456789abcdef0123456789abcdef.pdf"}},{"insert":{"formula":"x^2"}}]}"#,
+            r#"{"v":1,"ops":[{"insert":"\n","attributes":{"header":1}}]}"#,
+        ];
+        for (index, content) in contents.iter().enumerate() {
+            connection.execute(
+                "INSERT INTO notes(id,title,content,color,pinned,style_variant,icon,created_at,updated_at)
+                 VALUES (?1,?2,?3,'#E8C444',?4,?5,'heart','created','updated')",
+                rusqlite::params![format!("note-{index}"), format!("必须丢弃旧标题-{index}"), content, index % 2, index],
+            ).unwrap();
+        }
+        connection.execute_batch(
+            "INSERT INTO attachments VALUES
+                ('0123456789abcdef0123456789abcdef.png','原图.png','attachments/original.png',123,'image/png','created'),
+                ('0123456789abcdef0123456789abcdef.pdf','报告.pdf','attachments/report.pdf',456,'application/pdf','created');
+             INSERT INTO events(id,title,start_at,end_at,all_day,category,color,note,created_at,updated_at)
+                VALUES('event-keep','事件标题','2026-10-20T10:00','2026-10-20T11:00',0,'','','','created','updated');
+             INSERT INTO tasks(id,title,description,completed,lane_id,board_position,created_at,updated_at)
+                VALUES('task-keep','任务标题','正文',0,'kanban-lane-todo',0,'created','updated');",
+        ).unwrap();
+        let snapshot = |connection: &Connection| {
+            let tables: Vec<String> = connection.prepare(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name!='schema_migrations' ORDER BY name"
+            ).unwrap().query_map([], |row| row.get(0)).unwrap().collect::<Result<_>>().unwrap();
+            tables.into_iter().map(|table| {
+                let sql = if table == "notes" {
+                    "SELECT rowid,id,content,color,pinned,style_variant,icon,created_at,updated_at FROM notes ORDER BY rowid".to_owned()
+                } else {
+                    format!("SELECT * FROM \"{table}\" ORDER BY rowid")
+                };
+                let mut statement = connection.prepare(&sql).unwrap();
+                let columns = statement.column_count();
+                let rows = statement.query_map([], |row| {
+                    (0..columns).map(|index| row.get::<_, rusqlite::types::Value>(index)).collect::<Result<Vec<_>>>()
+                }).unwrap().collect::<Result<Vec<_>>>().unwrap();
+                (table, rows)
+            }).collect::<Vec<_>>()
+        };
+        let before = snapshot(&connection);
+        migrate(&mut connection).unwrap();
+        let columns: Vec<String> = connection.prepare("PRAGMA table_info(notes)").unwrap()
+            .query_map([], |row| row.get(1)).unwrap().collect::<Result<_>>().unwrap();
+        assert!(!columns.iter().any(|column| column == "title"));
+        assert_eq!(columns, ["id", "content", "color", "pinned", "created_at", "updated_at", "style_variant", "icon"]);
+        assert_eq!(snapshot(&connection), before);
+        let migrated = crate::notes::list(&connection).unwrap();
+        assert_eq!(migrated.len(), contents.len());
+        for (index, content) in contents.iter().enumerate() {
+            let note = migrated.iter().find(|note| note.id == format!("note-{index}")).unwrap();
+            assert_eq!(note.content.as_bytes(), content.as_bytes());
+        }
+        assert!(connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='idx_notes_order')", [], |row| row.get::<_, bool>(0)
+        ).unwrap());
+        assert_eq!(connection.query_row(
+            "SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| row.get::<_, i64>(0)
+        ).unwrap(), 0);
+        assert_eq!(connection.query_row(
+            "SELECT COUNT(*) FROM schema_migrations WHERE version=36", [], |row| row.get::<_, i64>(0)
+        ).unwrap(), 1);
+        migrate(&mut connection).unwrap();
+        assert_eq!(snapshot(&connection), before);
+        assert_eq!(connection.query_row(
+            "SELECT COUNT(*) FROM schema_migrations WHERE version=36", [], |row| row.get::<_, i64>(0)
+        ).unwrap(), 1);
+    }
+
+    #[test]
     fn migration_17_adds_note_style_variant_and_icon() {
         let mut connection = Connection::open_in_memory().unwrap();
-        migrate(&mut connection).unwrap();
+        migrate_through(&mut connection, 17).unwrap();
 
         let columns: Vec<String> = connection
             .prepare("PRAGMA table_info(notes)")

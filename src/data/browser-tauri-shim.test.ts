@@ -28,6 +28,30 @@ afterEach(() => {
 const clock = { id: 'local', timeZone: 'local', label: '本地' };
 const alarmDraft = { title: 'Break', hour: 9, minute: 7, repeat: { kind: 'weekly', weekdays: [1, 5] }, enabled: true };
 
+describe('browser note persistence', () => {
+  it('drops old titles without changing content or other note fields', async () => {
+    const content = JSON.stringify({ v: 1, ops: [{ insert: '正文\n' }] });
+    const old = { id: 'note', title: '旧标题', content, color: '#E8C444', pinned: true, styleVariant: 3, icon: 'star', createdAt: 't', updatedAt: 't' };
+    localStorage.setItem(storageKey, JSON.stringify({ alarmFormatVersion: 1, notes: [old] }));
+    installBrowserTauriBackend();
+    const { title: _title, ...expected } = old;
+    expect(await invoke()('list_notes')).toEqual([expected]);
+    expect(JSON.parse(localStorage.getItem(storageKey)!).notes).toEqual([expected]);
+  });
+
+  it('creates title-free notes, rejects empty content and allows images', async () => {
+    installBrowserTauriBackend();
+    const draft = { content: '首行\n正文', color: '#E8C444', pinned: false, icon: '' };
+    const note = await invoke()('create_note', { draft: { ...draft, title: 'ignored' } }) as Record<string, unknown>;
+    expect(note.title).toBeUndefined();
+    expect(note.styleVariant).toEqual(expect.any(Number));
+    await expect(invoke()('update_note', { id: note.id, draft: { ...draft, content: '' } })).rejects.toMatchObject({ field: 'content' });
+    await expect(invoke()('create_note', { draft: { ...draft, content: '  ' } })).rejects.toMatchObject({ field: 'content' });
+    const image = JSON.stringify({ v: 1, ops: [{ insert: { image: 'attachment:image' } }, { insert: '\n' }] });
+    expect(await invoke()('create_note', { draft: { ...draft, content: image } })).toHaveProperty('content', image);
+  });
+});
+
 describe('browser time persistence', () => {
   it('clears only old alarm data once and persists the alarm format marker', async () => {
     const business = { timeSettings: defaultTimeSettings(), notes: [{ id: 'keep' }], focusSessions: [{ id: 'keep-focus' }], moduleLayout: [{ id: 'time' }], settings: { custom: 'keep' }, events: [{ id: 'keep-event' }] };
@@ -98,7 +122,7 @@ describe('browser time persistence', () => {
     } finally { vi.useRealTimers(); }
   });
   it('preserves legacy time and focus data while clearing only alarms', async () => {
-    const note = { id: 'note', title: 'Keep this', body: 'content' };
+    const note = { id: 'note', content: 'Keep this content' };
     localStorage.setItem(storageKey, JSON.stringify({
       timeSettings: { clocks: [clock] }, alarms: [{ ...alarmDraft, id: 'old' }],
       alarmNotices: [{ id: 'old-notice' }], focusSessions: [{ id: 'old-focus' }],
