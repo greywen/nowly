@@ -62,11 +62,35 @@ it.each(['North', 'South', 'East', 'West', 'NorthEast', 'NorthWest', 'SouthEast'
   expect(screen.getAllByRole('button')).toHaveLength(1);
 });
 
-it('drags the fitted image without providing manual zoom controls', async () => {
+it('drags the window only from the toolbar with the left button', async () => {
+  const { container } = render(<PinnedImageApp />);
+  await screen.findByRole('img');
+  const toolbar = container.querySelector('.screenshot-pin__toolbar')!;
+  fireEvent.pointerDown(toolbar, { button: 2 });
+  expect(native.startDragging).not.toHaveBeenCalled();
+  fireEvent.pointerDown(toolbar, { button: 0 });
+  expect(native.startDragging).toHaveBeenCalledTimes(1);
+});
+
+it('does not drag from image viewport whitespace', async () => {
+  const { container } = render(<PinnedImageApp />);
+  await screen.findByRole('img');
+  fireEvent.pointerDown(container.querySelector('.screenshot-pin__viewport')!, { button: 0 });
+  expect(native.startDragging).not.toHaveBeenCalled();
+});
+
+it('does not move the window when pressing close', async () => {
+  render(<PinnedImageApp />);
+  await screen.findByRole('img');
+  fireEvent.pointerDown(screen.getByRole('button', { name: '关闭钉图' }), { button: 0 });
+  expect(native.startDragging).not.toHaveBeenCalled();
+});
+
+it('does not drag the fitted image or provide manual zoom controls', async () => {
   render(<PinnedImageApp />);
   const image = await screen.findByRole('img');
   fireEvent.pointerDown(image, { button: 0 });
-  expect(native.startDragging).toHaveBeenCalled();
+  expect(native.startDragging).not.toHaveBeenCalled();
   expect(screen.getAllByRole('button')).toHaveLength(1);
   expect(invoke).toHaveBeenCalledExactlyOnceWith('capture_pin_image');
 });

@@ -49,6 +49,22 @@ test('pin fits its window without manual zoom and closes through restricted nati
   expect(await page.locator('button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label')))).toEqual(['关闭钉图']);
 });
 
+test('only holding the toolbar starts moving the pin', async ({ page }) => {
+  await pinShell(page);
+  await page.goto('/screenshot.html');
+  const image = page.getByRole('img', { name: '钉住的截图' });
+  await expect(image).toBeVisible();
+  await image.click();
+  await page.locator('.screenshot-pin__viewport').click({ position: { x: 20, y: 20 } });
+  expect(await calls(page, 'plugin:window|start_dragging')).toEqual([]);
+  await page.locator('.screenshot-pin__toolbar').click({ position: { x: 80, y: 20 }, button: 'right' });
+  expect(await calls(page, 'plugin:window|start_dragging')).toEqual([]);
+  await page.locator('.screenshot-pin__toolbar').click({ position: { x: 80, y: 20 } });
+  expect(await calls(page, 'plugin:window|start_dragging')).toHaveLength(1);
+  await page.getByRole('button', { name: '关闭钉图' }).click();
+  expect(await calls(page, 'plugin:window|start_dragging')).toHaveLength(1);
+});
+
 test('all pin edges and corners invoke native resize and keep the image fitted after growing and shrinking', async ({ page }) => {
   await pinShell(page, 400, 200);
   await page.setViewportSize({ width: 480, height: 320 });
