@@ -17,6 +17,31 @@ A desktop of your own for the day ahead. Nowly brings schedules, tasks, notes an
 
 For a workday, keep meetings, next actions and quick notes together. For study, pair deadlines with a focus session. For freelance delivery, keep your own board and reference notes in view. This is a personal workspace, not a shared team or cross-device cloud workspace.
 
+## See your workspace
+
+**One desktop, arranged around your day.** Keep your schedule, next actions and notes in view, then rearrange the modules as your work changes. These previews show example layouts with demo content—not a fixed setup you have to follow.
+
+### Layout videos
+
+- [Watch: customize your layout](website/assets/videos/customize-layout.mp4) — see modules move and resize on the grid.
+- [Watch: workspace overview](website/assets/videos/workspace-overview.mp4) — take a quick look at a workspace with several modules together.
+
+Open either MP4 link to watch or download the recording. The recordings use the English interface; screenshots below use the language of this README.
+
+### A few ways to make it yours
+
+**Daily workspace** — keep your calendar, priorities and quick notes together, with time always in view.
+
+![Nowly daily workspace with calendar, task matrix, notes and time](website/assets/screenshots/en/workspace.png)
+
+**Study layout** — bring deadlines, study tasks and focus time into one workspace.
+
+![Nowly study layout with planning and focus modules](website/assets/screenshots/en/study.png)
+
+**Project layout** — keep delivery tasks and reference notes close while tracking progress on a board.
+
+![Nowly project layout with a task board and reference notes](website/assets/screenshots/en/project.png)
+
 ## Start simply
 
 1. Open Nowly and use **Edit layout → Add module** to choose what belongs on your desktop. Shrink or remove a module if the grid has no free space.
