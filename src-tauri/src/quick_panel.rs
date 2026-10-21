@@ -1453,14 +1453,14 @@ pub fn close_details_for_navigation<R: Runtime>(app: &AppHandle<R>) -> Result<()
 
 fn current_notification_mode<R: Runtime>(app: &AppHandle<R>) -> String {
     let Some(db) = app.try_state::<crate::db::AppDb>() else {
-        return "persistent".to_owned();
+        return crate::models::default_notification_mode();
     };
     let Ok(connection) = db.0.lock() else {
-        return "persistent".to_owned();
+        return crate::models::default_notification_mode();
     };
     crate::settings::read_app_settings(&connection)
         .map(|settings| settings.notification_mode)
-        .unwrap_or_else(|_| "persistent".to_owned())
+        .unwrap_or_else(|_| crate::models::default_notification_mode())
 }
 
 pub fn close_details_after_outside_click<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {

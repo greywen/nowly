@@ -7,7 +7,7 @@ import type { AppSettings, NowlyRepository } from '../data/nowly-repository';
 import { useSettings } from './useSettings';
 import { DEFAULT_BAR_MENU } from '../app/bar-menu';
 
-const settings: AppSettings = { wallpaperEnabled:false, launchAtLogin:false, targetMonitorId:null, density:'balanced', weekStart:'monday', dateFormat:'localized', showWeekends:true, iconStyle:'duotone', hideTopbarInWallpaper:true, barMenu:DEFAULT_BAR_MENU.map(item=>({...item})) };
+const settings: AppSettings = { wallpaperEnabled:true, launchAtLogin:true, targetMonitorId:null, density:'compact', weekStart:'monday', dateFormat:'localized', showWeekends:true, iconStyle:'duotone', hideTopbarInWallpaper:true, barMenu:DEFAULT_BAR_MENU.map(item=>({...item})) };
 
 function repository(updateSettings = vi.fn().mockResolvedValue(settings)): NowlyRepository {
   return {

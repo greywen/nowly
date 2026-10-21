@@ -33,10 +33,10 @@ fn read_value_or<T: DeserializeOwned>(
 
 pub fn read_app_settings(connection: &Connection) -> Result<AppSettings, rusqlite::Error> {
     Ok(AppSettings {
-        wallpaper_enabled: read_value_or(connection, "wallpaper_enabled", false)?,
-        launch_at_login: read_value_or(connection, "launch_at_login", false)?,
+        wallpaper_enabled: read_value_or(connection, "wallpaper_enabled", true)?,
+        launch_at_login: read_value_or(connection, "launch_at_login", true)?,
         target_monitor_id: read_value(connection, "target_monitor_id")?.flatten(),
-        density: read_value_or(connection, "density", "balanced".to_string())?,
+        density: read_value_or(connection, "density", crate::models::default_density())?,
         week_start: read_value_or(connection, "week_start", "monday".to_string())?,
         date_format: read_value_or(connection, "date_format", "localized".to_string())?,
         show_weekends: read_value_or(connection, "show_weekends", true)?,
@@ -245,17 +245,17 @@ mod tests {
 
         assert_eq!(settings.screenshot_shortcut, "Ctrl+Alt+A");
         assert_eq!(settings.screenshot_history_shortcut, "Ctrl+Alt+H");
-        assert!(!settings.wallpaper_enabled);
-        assert!(!settings.launch_at_login);
+        assert!(settings.wallpaper_enabled);
+        assert!(settings.launch_at_login);
         assert_eq!(settings.target_monitor_id, None);
-        assert_eq!(settings.density, "balanced");
+        assert_eq!(settings.density, "compact");
         assert_eq!(settings.week_start, "monday");
         assert_eq!(settings.date_format, "localized");
         assert!(settings.show_weekends);
         assert_eq!(settings.icon_style, "duotone");
         assert!(settings.hide_topbar_in_wallpaper);
         assert!(!settings.hide_module_background_in_wallpaper);
-        assert_eq!(settings.notification_mode, "persistent");
+        assert_eq!(settings.notification_mode, "notification");
         assert_eq!(settings.bar_menu, crate::models::default_bar_menu());
     }
 

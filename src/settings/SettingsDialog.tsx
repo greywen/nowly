@@ -21,7 +21,7 @@ export function SettingsDialog({settings,monitors=[],onClose,onSave}:Props){
  // Language switches in real time via the i18n store, independent of the save
  // button, so the whole UI updates the moment the user picks a language.
  const {language,setLanguage}=useTranslation();
- const [draft,setDraft]=useState(()=>({...settings, soundSettings: normalizeSoundSettings(settings.soundSettings), barMenu: normalizeBarMenu(settings.barMenu), notificationMode: settings.notificationMode ?? 'persistent', quickPanelEnabled: true, quickPanelShortcut: settings.quickPanelShortcut ?? 'Ctrl+Space', screenshotShortcut: settings.screenshotShortcut ?? 'Ctrl+Alt+A', screenshotHistoryShortcut: settings.screenshotHistoryShortcut ?? 'Ctrl+Alt+H'})); const [saving,setSaving]=useState(false); const [error,setError]=useState<string|null>(null);
+ const [draft,setDraft]=useState(()=>({...settings, soundSettings: normalizeSoundSettings(settings.soundSettings), barMenu: normalizeBarMenu(settings.barMenu), notificationMode: settings.notificationMode ?? 'notification', quickPanelEnabled: true, quickPanelShortcut: settings.quickPanelShortcut ?? 'Ctrl+Space', screenshotShortcut: settings.screenshotShortcut ?? 'Ctrl+Alt+A', screenshotHistoryShortcut: settings.screenshotHistoryShortcut ?? 'Ctrl+Alt+H'})); const [saving,setSaving]=useState(false); const [error,setError]=useState<string|null>(null);
  const [tab,setTab]=useState<SettingsTab>('interface');
  // Resolve the monitor that should appear selected: the saved id when it still
  // matches a connected monitor, otherwise the primary (or first) one. Falling
@@ -60,7 +60,7 @@ export function SettingsDialog({settings,monitors=[],onClose,onSave}:Props){
    </TabPanel>
    <TabPanel idPrefix="settings" tabId="notifications" active={tab==='notifications'}>
     <div className="settings-grid">
-     <Select id="settings-notification-mode" label={t('settings.notificationMode')} value={draft.notificationMode ?? 'persistent'} options={[{value:'persistent',label:t('settings.notificationModePersistent')},{value:'notification',label:t('settings.notificationModeNotification')}]} onChange={value=>setDraft({...draft,notificationMode:value as NonNullable<AppSettings['notificationMode']>})}/>
+     <Select id="settings-notification-mode" label={t('settings.notificationMode')} value={draft.notificationMode ?? 'notification'} options={[{value:'persistent',label:t('settings.notificationModePersistent')},{value:'notification',label:t('settings.notificationModeNotification')}]} onChange={value=>setDraft({...draft,notificationMode:value as NonNullable<AppSettings['notificationMode']>})}/>
     </div>
     <BarMenuSettings menu={draft.barMenu} onChange={barMenu=>setDraft(current=>({...current,barMenu}))}/>
    </TabPanel>

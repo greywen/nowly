@@ -291,7 +291,10 @@ fn default_quick_panel_enabled() -> bool {
 }
 
 pub(crate) fn default_notification_mode() -> String {
-    "persistent".to_owned()
+    "notification".to_owned()
+}
+pub(crate) fn default_density() -> String {
+    "compact".to_owned()
 }
 pub(crate) fn default_screenshot_shortcut() -> String {
     "Ctrl+Alt+A".to_owned()

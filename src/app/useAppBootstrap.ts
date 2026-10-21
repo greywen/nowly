@@ -9,15 +9,16 @@ type Resource<T> =
   | { status: 'error'; data: T; message: string };
 
 const defaultSettings: AppSettings = {
-  wallpaperEnabled: false,
-  launchAtLogin: false,
+  wallpaperEnabled: true,
+  launchAtLogin: true,
   targetMonitorId: null,
-  density: 'balanced',
+  density: 'compact',
   weekStart: 'monday',
   dateFormat: 'localized',
   showWeekends: true,
   iconStyle: 'duotone',
   hideTopbarInWallpaper: true, hideModuleBackgroundInWallpaper: false,
+  notificationMode: 'notification',
   recentColors: []
 };
 

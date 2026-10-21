@@ -59,15 +59,16 @@ type Store = {
 };
 
 const defaultSettings: Dict = {
-  wallpaperEnabled: false,
-  launchAtLogin: false,
+  wallpaperEnabled: true,
+  launchAtLogin: true,
   targetMonitorId: null,
-  density: 'balanced',
+  density: 'compact',
   weekStart: 'monday',
   dateFormat: 'localized',
   showWeekends: true,
   iconStyle: 'duotone',
   hideTopbarInWallpaper: true, hideModuleBackgroundInWallpaper: false,
+  notificationMode: 'notification',
   quickPanelEnabled: true,
   quickPanelShortcut: 'Ctrl+Space',
   screenshotShortcut: 'Ctrl+Alt+A',
@@ -1030,7 +1031,7 @@ export function installBrowserTauriBackend() {
       reminders: [],
       alarmNotices: store.alarmNotices,
       expiredAlarmNotices: [],
-      notificationMode: store.settings.notificationMode ?? 'persistent',
+      notificationMode: store.settings.notificationMode ?? 'notification',
       barMenu: normalizeBarMenu(store.settings.barMenu)
     }),
     list_monitors: () => [

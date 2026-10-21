@@ -16,7 +16,8 @@ const snapshot: NativeStatusIslandSnapshot = {
   externalEvents: [],
   tasks: [],
   focus: { status: 'idle', remainingSeconds: 0, plannedSeconds: 0, sessionId: null, stageSequence: 0, stageChangedAt: null },
-  reminders: []
+  reminders: [],
+  notificationMode: 'persistent'
 };
 
 const reminderEvent = {

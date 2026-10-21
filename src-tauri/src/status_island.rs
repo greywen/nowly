@@ -1035,7 +1035,7 @@ mod tests {
                 range_end: "2026-10-11T00:00:00Z".into(),
             }],
             expired_alarm_notices: Vec::new(),
-            notification_mode: "persistent".into(),
+            notification_mode: crate::models::default_notification_mode(),
             bar_menu: crate::models::default_bar_menu(),
         };
 

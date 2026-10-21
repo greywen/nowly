@@ -134,5 +134,5 @@ export function useStatusIslandSnapshot(): {
     [resource.data?.barMenu]
   );
 
-  return { model, status: resource.status, error: resource.error, refresh, notificationMode: resource.data?.notificationMode ?? 'persistent', barMenu };
+  return { model, status: resource.status, error: resource.error, refresh, notificationMode: resource.data?.notificationMode ?? 'notification', barMenu };
 }

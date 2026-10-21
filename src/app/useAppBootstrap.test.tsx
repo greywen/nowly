@@ -10,7 +10,7 @@ const settings: AppSettings = {
   wallpaperEnabled: false,
   launchAtLogin: false,
   targetMonitorId: null,
-  density: 'balanced',
+  density: 'compact',
   weekStart: 'monday',
   dateFormat: 'localized',
   showWeekends: true,

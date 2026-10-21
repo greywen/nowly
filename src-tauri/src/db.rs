@@ -535,17 +535,17 @@ fn migration_3_indexes(transaction: &Transaction<'_>) -> Result<()> {
 
 fn migration_4_default_settings(transaction: &Transaction<'_>) -> Result<()> {
     const DEFAULTS: &[(&str, &str)] = &[
-        ("wallpaper_enabled", "false"),
-        ("launch_at_login", "false"),
+        ("wallpaper_enabled", "true"),
+        ("launch_at_login", "true"),
         ("target_monitor_id", "null"),
-        ("density", "\"balanced\""),
+        ("density", "\"compact\""),
         ("week_start", "\"monday\""),
         ("date_format", "\"localized\""),
         ("show_weekends", "true"),
         ("icon_style", "\"duotone\""),
         ("hide_topbar_in_wallpaper", "true"),
         ("hide_module_background_in_wallpaper", "false"),
-        ("notification_mode", "\"persistent\""),
+        ("notification_mode", "\"notification\""),
         ("calendar_enabled", "true"),
         ("matrix_enabled", "true"),
         ("notes_enabled", "true"),
