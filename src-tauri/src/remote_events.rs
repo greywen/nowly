@@ -80,6 +80,21 @@ fn exclusive_end_date(draft: &EventDraft) -> Result<String, CommandError> {
     Ok(date.format("%Y-%m-%d").to_string())
 }
 
+fn remote_description(note: &str) -> String {
+    let Ok(value) = serde_json::from_str::<Value>(note) else {
+        return note.to_owned();
+    };
+    let Some(ops) = value.get("ops").and_then(Value::as_array) else {
+        return note.to_owned();
+    };
+    let text: String = ops
+        .iter()
+        .filter(|op| !op.get("attributes").is_some_and(|attributes| !attributes.is_object()))
+        .filter_map(|op| op.get("insert").and_then(Value::as_str))
+        .collect();
+    text.trim_end_matches('\n').to_owned()
+}
+
 fn google_payload(draft: &EventDraft, include_description: bool) -> Result<Value, CommandError> {
     let (start, end) = if draft.all_day {
         (
@@ -104,12 +119,15 @@ fn google_payload(draft: &EventDraft, include_description: bool) -> Result<Value
         "reminders": { "useDefault": false, "overrides": overrides }
     });
     if include_description {
-        value["description"] = json!(draft.note);
+        value["description"] = json!(remote_description(&draft.note));
     }
     Ok(value)
 }
 
 fn graph_payload(draft: &EventDraft, include_description: bool) -> Result<Value, CommandError> {
+    // Draft times are device-local wall times. Keep that zone on the event so
+    // Outlook's editor does not present the equivalent UTC wall time instead.
+    let zone = crate::timezone::device_tz();
     let (start, end) = if draft.all_day {
         let start_date = &draft.start_at[..10];
         let end_date = exclusive_end_date(draft)?;
@@ -118,11 +136,11 @@ fn graph_payload(draft: &EventDraft, include_description: bool) -> Result<Value,
             json!({ "dateTime": format!("{end_date}T00:00:00"), "timeZone": "UTC" }),
         )
     } else {
-        let start = utc_datetime(&draft.start_at, "startAt")?;
-        let end = utc_datetime(&draft.end_at, "endAt")?;
+        let start = parse_wall(&draft.start_at, "startAt")?;
+        let end = parse_wall(&draft.end_at, "endAt")?;
         (
-            json!({ "dateTime": start.trim_end_matches('Z'), "timeZone": "UTC" }),
-            json!({ "dateTime": end.trim_end_matches('Z'), "timeZone": "UTC" }),
+            json!({ "dateTime": start.format("%Y-%m-%dT%H:%M:%S").to_string(), "timeZone": zone.name() }),
+            json!({ "dateTime": end.format("%Y-%m-%dT%H:%M:%S").to_string(), "timeZone": zone.name() }),
         )
     };
     let reminder = draft.reminders.iter().min().copied();
@@ -135,7 +153,7 @@ fn graph_payload(draft: &EventDraft, include_description: bool) -> Result<Value,
         "reminderMinutesBeforeStart": reminder.unwrap_or(0)
     });
     if include_description {
-        value["body"] = json!({ "contentType": "text", "content": draft.note });
+        value["body"] = json!({ "contentType": "text", "content": remote_description(&draft.note) });
     }
     Ok(value)
 }
@@ -374,7 +392,64 @@ mod tests {
         let payload = graph_payload(&draft(false), true).unwrap();
         assert_eq!(payload["isReminderOn"], true);
         assert_eq!(payload["reminderMinutesBeforeStart"], 10);
+    }
+
+    #[test]
+    fn graph_preserves_device_wall_time_and_zone() {
+        let mut value = draft(false);
+        value.start_at = "2026-10-21T11:20".into();
+        value.end_at = "2026-10-21T12:20".into();
+        let payload = graph_payload(&value, true).unwrap();
+        assert_eq!(payload["start"]["dateTime"], "2026-10-21T11:20:00");
+        assert_eq!(payload["end"]["dateTime"], "2026-10-21T12:20:00");
+        let zone = crate::timezone::device_tz();
+        assert_eq!(payload["start"]["timeZone"], zone.name());
+        assert_eq!(payload["end"]["timeZone"], zone.name());
+        let instant = crate::timezone::wall_to_utc(
+            parse_wall(&value.start_at, "startAt").unwrap(), zone,
+        );
+        assert_eq!(google_payload(&value, true).unwrap()["start"]["dateTime"],
+            instant.to_rfc3339_opts(SecondsFormat::Secs, true));
+    }
+
+    #[test]
+    fn graph_all_day_keeps_floating_dates_and_exclusive_end() {
+        let mut value = draft(true);
+        value.start_at = "2026-10-21T00:00".into();
+        value.end_at = "2026-10-22T23:59".into();
+        let payload = graph_payload(&value, true).unwrap();
+        assert_eq!(payload["start"]["dateTime"], "2026-10-21T00:00:00");
+        assert_eq!(payload["end"]["dateTime"], "2026-10-23T00:00:00");
         assert_eq!(payload["start"]["timeZone"], "UTC");
+        assert_eq!(payload["end"]["timeZone"], payload["start"]["timeZone"]);
+    }
+
+    #[test]
+    fn remote_descriptions_export_delta_text_instead_of_json() {
+        let mut value = draft(false);
+        value.note = r#"{"v":1,"ops":[{"insert":"你好google!","attributes":{"bold":true}},{"insert":"\n第二行\n"}]}"#.into();
+        assert_eq!(google_payload(&value, true).unwrap()["description"], "你好google!\n第二行");
+        assert_eq!(graph_payload(&value, true).unwrap()["body"]["content"], "你好google!\n第二行");
+    }
+
+    #[test]
+    fn remote_descriptions_preserve_plain_text_and_non_delta_json() {
+        let mut value = draft(false);
+        for note in ["", "普通备注\n第二行", r#"{"example":true}"#, "{invalid"] {
+            value.note = note.into();
+            assert_eq!(google_payload(&value, true).unwrap()["description"], note);
+            assert_eq!(graph_payload(&value, true).unwrap()["body"]["content"], note);
+        }
+    }
+
+    #[test]
+    fn remote_descriptions_skip_non_text_delta_inserts() {
+        let mut value = draft(false);
+        value.note = r#"{"v":1,"ops":[{"insert":{"image":"attachment:private.png"}},{"insert":"正文\n"},{"insert":"无效","attributes":false},{"retain":1}]}"#.into();
+        assert_eq!(google_payload(&value, true).unwrap()["description"], "正文");
+        assert_eq!(graph_payload(&value, true).unwrap()["body"]["content"], "正文");
+        value.note = r#"{"v":1,"ops":[{"insert":"\n"}]}"#.into();
+        assert_eq!(google_payload(&value, true).unwrap()["description"], "");
     }
 
     #[test]
