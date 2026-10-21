@@ -28,6 +28,22 @@ afterEach(() => {
 const clock = { id: 'local', timeZone: 'local', label: '本地' };
 const alarmDraft = { title: 'Break', hour: 9, minute: 7, repeat: { kind: 'weekly', weekdays: [1, 5] }, enabled: true };
 
+describe('browser task lane deletion', () => {
+  it('rejects deleting the last lane without changing persisted data', async () => {
+    installBrowserTauriBackend();
+    const workspace = await invoke()('get_task_workspace_snapshot') as { lanes: { id: string }[] };
+    const [remaining, ...others] = workspace.lanes;
+    for (const lane of others) {
+      await invoke()('delete_task_lane', { id: lane.id, replacementLaneId: remaining.id });
+    }
+    const before = localStorage.getItem(storageKey);
+    await expect(invoke()('delete_task_lane', { id: remaining.id, replacementLaneId: null }))
+      .rejects.toMatchObject({ code: 'validation_error', field: 'id', message: '至少保留一个泳道。' });
+    expect(localStorage.getItem(storageKey)).toBe(before);
+    expect(await invoke()('get_task_workspace_snapshot')).toMatchObject({ lanes: [{ id: remaining.id }] });
+  });
+});
+
 describe('browser note persistence', () => {
   it('drops old titles without changing content or other note fields', async () => {
     const content = JSON.stringify({ v: 1, ops: [{ insert: '正文\n' }] });

@@ -1,5 +1,5 @@
 import { defaultTimeSettings } from '../time/time-model';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -8,6 +8,12 @@ import type { NowlyRepository } from '../data/nowly-repository';
 import { TaskWorkspaceProvider } from '../tasks/TaskWorkspaceContext';
 import type { Task, TaskLane, TaskWorkspaceSnapshot } from '../tasks/task-model';
 import { KanbanWidget } from './KanbanWidget';
+import { useWorkspaceTasks } from '../tasks/useWorkspaceTasks';
+
+function MatrixErrorProbe() {
+  const matrix = useWorkspaceTasks();
+  return <output data-testid="matrix-error">{matrix.dragError}</output>;
+}
 
 function lane(id: string, name: string, position: number): TaskLane {
   return { id, name, color: '#4FC9DA', position, createdAt: 'x', updatedAt: 'x' };
@@ -78,10 +84,48 @@ function renderWidget(repo: NowlyRepository) {
       </RepositoryProvider>
     );
   }
-  return render(<KanbanWidget todayIso="2026-08-12" />, { wrapper: Wrapper });
+  return render(<><KanbanWidget todayIso="2026-08-12" /><MatrixErrorProbe /></>, { wrapper: Wrapper });
 }
 
 describe('KanbanWidget', () => {
+  it('keeps lane deletion errors in the dialog without duplicating module banners', async () => {
+    const user = userEvent.setup();
+    const { container } = renderWidget(repository({
+      deleteTaskLane: vi.fn().mockRejectedValue({
+        code: 'validation_error', field: 'id', message: '至少保留一个泳道。'
+      })
+    }));
+    await screen.findByRole('region', { name: '泳道：待处理' });
+    await user.click(screen.getByRole('button', { name: '待处理' }));
+    await user.click(screen.getByRole('button', { name: '删除泳道' }));
+    await user.click(screen.getByRole('button', { name: '永久删除' }));
+    expect(await screen.findByText('至少保留一个泳道。')).toBeInTheDocument();
+    expect(container.querySelector('.module-message')).toBeNull();
+    expect(screen.getByTestId('matrix-error')).toBeEmptyDOMElement();
+    const confirmation = screen.getByRole('button', { name: '永久删除' }).closest('[role="dialog"]') as HTMLElement;
+    await user.click(within(confirmation).getByRole('button', { name: '取消' }));
+    expect(container.querySelector('.module-message')).toBeNull();
+    expect(screen.getByTestId('matrix-error')).toBeEmptyDOMElement();
+  });
+  it('dismisses move errors with an icon-only close button', async () => {
+    const user = userEvent.setup();
+    renderWidget(repository({
+      moveTaskToLane: vi.fn().mockRejectedValue(new Error('请选择替代泳道。'))
+    }));
+    const card = await screen.findByLabelText('任务：写文档');
+    const target = screen.getByRole('region', { name: '泳道：进行中' });
+    const dataTransfer = { effectAllowed: '', dropEffect: '', setData: vi.fn(), getData: vi.fn() };
+    fireEvent.dragStart(card, { dataTransfer });
+    fireEvent.dragOver(target, { dataTransfer });
+    fireEvent.drop(target, { dataTransfer });
+    const alert = await screen.findByRole('alert');
+    const close = within(alert).getByRole('button', { name: '关闭拖放错误' });
+    expect(close.textContent).toBe('');
+    expect(close.querySelector('svg')).not.toBeNull();
+    expect(close).toHaveClass('module-message__close');
+    await user.click(close);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
   it('shows the header with add-lane and a settings button that opens task settings', async () => {
     const user = userEvent.setup();
     renderWidget(repository());

@@ -1,4 +1,4 @@
-import { Plus, Settings } from '../components/icons';
+import { Plus, Settings, X } from '../components/icons';
 import { type DragEvent, useMemo, useRef, useState } from 'react';
 import { laneCardCount } from './kanban-view';
 import { KanbanLane } from './KanbanLane';
@@ -207,8 +207,8 @@ export function KanbanWidget({
         {dragError ? (
           <div className="module-message" role="alert">
             <span>{dragError}</span>
-            <button type="button" className="link-btn" aria-label={t('kanbanWidget.dismissDragError')} onClick={kanban.dismissDragError}>
-              {t('common.close')}
+            <button type="button" className="btn btn-icon module-message__close" aria-label={t('kanbanWidget.dismissDragError')} title={t('common.close')} onClick={kanban.dismissDragError}>
+              <X aria-hidden="true" />
             </button>
           </div>
         ) : null}

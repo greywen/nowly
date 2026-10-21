@@ -786,6 +786,9 @@ export function installBrowserTauriBackend() {
       return updated;
     },
     delete_task_lane: (a) => {
+      if (store.kanban.lanes.length === 1 && store.kanban.lanes[0].id === a.id) {
+        throw { code: 'validation_error', field: 'id', message: '至少保留一个泳道。' };
+      }
       const replacement = a.replacementLaneId as string | null;
       const removedId = a.id as string;
       if (replacement) {

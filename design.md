@@ -405,7 +405,8 @@ app-shell（100vw × 100vh，grid-template-rows: 70px minmax(0, 1fr)）
 - error：边框 `--color-danger`；错误文案 `0.85rem / 500`，`--color-danger-active`。
 - disabled：文字 `--text-disabled`，`opacity: 0.65`，`pointer-events: none`。
 - 字段结构：`label`（`0.95rem / 500`，`--text-secondary`）→ `8px` → 控件；字段之间 `20px`。
-- 错误提示块：内边距 `12px 16px`，圆角 `15.2px`，底 `--color-danger-light`，文字 `0.85rem / 500`。
+- 字段错误提示块：内边距 `12px 16px`，圆角 `15.2px`，底 `--color-danger-light`，文字 `0.85rem / 500`。
+- 模块提示条（`.module-message`）统一最小高度 `56px`、内边距 `8px 16px`、间距 `12px`、圆角 `--radius-default`，文字 `0.85rem / 500 / 1.5`；错误使用 `--color-danger-light` 背景与 `--color-danger-active` 文字。长文案允许换行增高，不裁切信息。关闭操作只使用 Solar `X` 图标，不显示「关闭」文字；按钮统一标准档 `40 × 40px` / `18px` 图标、透明底，保留可访问名称、文字提示及键盘焦点。重试等业务操作保留文字，操作组间距 `8px`，按钮不收缩。
 
 #### 富文本图片尺寸调整
 

@@ -778,8 +778,14 @@ body:has(.screen-status-island-root),
 .notes-settings__option-desc { color: var(--text-muted); font-size: 0.85rem; line-height: 1.5; }
 .notes-settings__option-check { width: 20px; height: 20px; flex: none; color: var(--color-primary-active); }
 .link-btn { padding: 0; border: 0; color: var(--color-primary-active); background: transparent; font-size: 0.85rem; font-weight: 600; }
-.module-message { margin-bottom: 12px; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--color-danger-active); background: var(--color-danger-light); border-radius: var(--radius-default); font-size: 0.85rem; }
-.module-message__actions { display: flex; align-items: center; gap: 12px; }
+.module-message { box-sizing: border-box; min-height: 56px; margin-bottom: var(--space-3); padding: var(--space-2) var(--space-4); display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); color: var(--color-danger-active); background: var(--color-danger-light); border-radius: var(--radius-default); font-size: 0.85rem; font-weight: 500; line-height: 1.5; }
+.module-message > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.module-message__actions { display: flex; flex-shrink: 0; align-items: center; gap: var(--space-2); }
+.module-message > button { flex-shrink: 0; }
+.module-message .module-message__close { flex-shrink: 0; width: 40px; height: 40px; padding: 0; color: var(--text-secondary); background: transparent; }
+.module-message .module-message__close:hover,
+.module-message .module-message__close:active { color: var(--color-primary-active); background: var(--bg-subtle); }
+.module-message .module-message__close svg { width: 18px; height: 18px; }
 .icon-link { width: 24px; height: 24px; display: inline-grid; place-items: center; }
 .icon-link svg { width: 16px; height: 16px; }
 

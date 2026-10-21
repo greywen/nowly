@@ -152,7 +152,7 @@ export function MatrixWidget({
             <span>{completionError}</span>
             <span className="module-message__actions">
               <button type="button" className="link-btn" aria-label={t('matrix.retryCompletion')} onClick={onRetryCompletion}>{t('common.retry')}</button>
-              <button type="button" className="link-btn icon-link" aria-label={t('matrix.dismissError')} onClick={onDismissCompletionError}>
+              <button type="button" className="btn btn-icon module-message__close" aria-label={t('matrix.dismissError')} title={t('common.close')} onClick={onDismissCompletionError}>
                 <X aria-hidden="true" />
               </button>
             </span>
@@ -161,7 +161,7 @@ export function MatrixWidget({
         {dragError ? (
           <div className="module-message" role="alert">
             <span>{dragError}</span>
-            <button type="button" className="link-btn icon-link" aria-label={t('matrix.dismissError')} onClick={onDismissDragError}>
+            <button type="button" className="btn btn-icon module-message__close" aria-label={t('matrix.dismissError')} title={t('common.close')} onClick={onDismissDragError}>
               <X aria-hidden="true" />
             </button>
           </div>
