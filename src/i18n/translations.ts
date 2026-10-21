@@ -2,12 +2,31 @@ import type { Language } from './store';
 import { assistantTranslations } from './assistant-translations';
 import { stickerTranslations } from '../stickers/sticker-translations';
 import { scrollTranslations } from '../screenshot/scroll-translations';
+import { timeTranslations, timeBarTranslations } from './time-catalog';
+import { supplemental } from './supplemental';
+import { nativeErrorTranslations } from './native-errors';
+import { fr } from './locales/fr';
+import { es } from './locales/es';
+import { ar } from './locales/ar';
+import { ja } from './locales/ja';
+import { ko } from './locales/ko';
+import { zhHant } from './locales/zh-Hant';
 
 // Flat key -> string dictionaries per language. Keys use dot-namespaces by
 // feature for readability. Interpolation uses `{name}` placeholders resolved by
 // the `t()` helper.
 export const translations: Record<Language, Record<string, string>> = {
+  fr: { ...fr, ...nativeErrorTranslations.fr },
+  es: { ...es, ...nativeErrorTranslations.es },
+  ar: { ...ar, ...nativeErrorTranslations.ar },
+  ja: { ...ja, ...nativeErrorTranslations.ja },
+  ko: { ...ko, ...nativeErrorTranslations.ko },
+  'zh-Hant': { ...zhHant, ...nativeErrorTranslations['zh-Hant'] },
   zh: {
+    ...nativeErrorTranslations.zh,
+    ...timeTranslations.zh,
+    ...timeBarTranslations.zh,
+    ...supplemental.zh,
     ...stickerTranslations.zh,
     ...scrollTranslations.zh,
     'welcome.title': '欢迎使用 Nowly',
@@ -473,6 +492,8 @@ export const translations: Record<Language, Record<string, string>> = {
     'richEditor.codeBlock': '代码块',
     'richEditor.link': '链接',
     'richEditor.image': '图片',
+    'richEditor.resizeImage': '调整图片尺寸',
+    'richEditor.resizeImageHint': '拖动等比缩放；方向键调整，Shift 精调，Esc 取消',
     'richEditor.video': '视频',
     'richEditor.formula': '公式',
     'richEditor.clean': '清除格式',
@@ -634,7 +655,8 @@ export const translations: Record<Language, Record<string, string>> = {
     'eventDraft.errorReminderCount': '最多只能设置 {count} 条提醒。',
 
     // Note draft validation
-    'noteDraft.errorTitle': '请输入便签标题。',
+    'noteDraft.errorContent': '请输入便笺内容。',
+    'notesWidget.untitled': '无标题便笺',
     'noteDraft.errorColor': '请选择有效颜色。',
     'noteDraft.errorIcon': '请选择有效图标。',
 
@@ -773,7 +795,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'noteModal.editTitle': '编辑便签',
     'noteModal.deleteNote': '删除便签',
     'noteModal.saveNote': '保存便签',
-    'noteModal.title': '便签标题',
+    'noteModal.unpin': '取消置顶',
     'noteModal.content': '便签内容',
     'noteModal.color': '便签颜色',
     'noteModal.icon': '便签图标',
@@ -857,6 +879,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'settings.opError': '设置操作失败，请重试。',
     'settings.interface': '界面',
     'settings.notifications': 'Nowly Bar',
+    'settings.sound': '声音',
     'sounds.title': '提醒音效',
     'sounds.enabled': '启用提醒音效',
     'sounds.volume': '提醒音量',
@@ -979,6 +1002,10 @@ export const translations: Record<Language, Record<string, string>> = {
     'widget.focusTimer.desc': '番茄钟式专注计时，帮助保持节奏。'
   },
   en: {
+    ...nativeErrorTranslations.en,
+    ...timeTranslations.en,
+    ...timeBarTranslations.en,
+    ...supplemental.en,
     ...stickerTranslations.en,
     ...scrollTranslations.en,
     'welcome.title': 'Welcome to Nowly',
@@ -1438,6 +1465,8 @@ export const translations: Record<Language, Record<string, string>> = {
     'richEditor.codeBlock': 'Code block',
     'richEditor.link': 'Link',
     'richEditor.image': 'Image',
+    'richEditor.resizeImage': 'Resize image',
+    'richEditor.resizeImageHint': 'Drag to resize proportionally; arrow keys to resize, Shift for fine adjustment, Esc to cancel',
     'richEditor.video': 'Video',
     'richEditor.formula': 'Formula',
     'richEditor.clean': 'Clear formatting',
@@ -1599,7 +1628,8 @@ export const translations: Record<Language, Record<string, string>> = {
     'eventDraft.errorReminderCount': 'You can set at most {count} reminders.',
 
     // Note draft validation
-    'noteDraft.errorTitle': 'Please enter a note title.',
+    'noteDraft.errorContent': 'Please enter note content.',
+    'notesWidget.untitled': 'Untitled note',
     'noteDraft.errorColor': 'Please choose a valid color.',
     'noteDraft.errorIcon': 'Please choose a valid icon.',
 
@@ -1738,7 +1768,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'noteModal.editTitle': 'Edit note',
     'noteModal.deleteNote': 'Delete note',
     'noteModal.saveNote': 'Save note',
-    'noteModal.title': 'Note title',
+    'noteModal.unpin': 'Unpin note',
     'noteModal.content': 'Note content',
     'noteModal.color': 'Note color',
     'noteModal.icon': 'Note icon',
@@ -1822,6 +1852,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'settings.opError': 'Settings operation failed. Please try again.',
     'settings.interface': 'Interface',
     'settings.notifications': 'Nowly Bar',
+    'settings.sound': 'Sound',
     'sounds.title': 'Reminder sounds',
     'sounds.enabled': 'Enable reminder sounds',
     'sounds.volume': 'Reminder volume',

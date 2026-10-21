@@ -1044,6 +1044,9 @@ fn delete_lane_value(
 ) -> Result<TaskWorkspaceSnapshot, CommandError> {
     let transaction = connection.domain_write().map_err(CommandError::database)?;
     require_lane(&transaction, id)?;
+    if list_lanes(&transaction)?.len() <= 1 {
+        return Err(CommandError::validation("id", "至少保留一个泳道。"));
+    }
     let default_lane = default_lane_id(&transaction)?;
     let completion_lane = completion_lane_id(&transaction)?;
     let task_count: i64 = transaction
@@ -1624,6 +1627,38 @@ mod tests {
         assert_eq!(workspace.completion_lane_id, "kanban-lane-done");
         assert_eq!(workspace.lanes.len(), 3);
         assert!(workspace.tasks.is_empty());
+    }
+
+    #[test]
+    fn deleting_last_lane_reports_minimum_and_preserves_workspace() {
+        for with_task in [false, true] {
+            let mut connection = database();
+            if with_task {
+                create(&mut connection, "kanban", draft()).unwrap();
+            }
+            super::delete_lane_value(&connection, "kanban-lane-doing", None).unwrap();
+            super::delete_lane_value(
+                &connection,
+                "kanban-lane-done",
+                Some("kanban-lane-todo".into()),
+            )
+            .unwrap();
+            let before = serde_json::to_value(snapshot(&connection).unwrap()).unwrap();
+            let error = super::delete_lane_value(&connection, "kanban-lane-todo", None)
+                .unwrap_err();
+            assert_eq!(error.message, "至少保留一个泳道。");
+            assert_eq!(error.field.as_deref(), Some("id"));
+            assert_eq!(serde_json::to_value(snapshot(&connection).unwrap()).unwrap(), before);
+        }
+    }
+
+    #[test]
+    fn deleting_used_lane_without_replacement_keeps_specific_error() {
+        let connection = database();
+        let error = super::delete_lane_value(&connection, "kanban-lane-todo", None)
+            .unwrap_err();
+        assert_eq!(error.message, "请先选择替代泳道。");
+        assert_eq!(snapshot(&connection).unwrap().lanes.len(), 3);
     }
 
     #[test]

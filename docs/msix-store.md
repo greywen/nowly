@@ -31,7 +31,7 @@ Explicitly choose `-WebView2 Evergreen`. No runtime or bootstrapper is bundled, 
 
 ## Identity, startup, notifications and updates
 
-The packaged process obtains its AUMID from Windows and sends native toasts with that identity. It skips the unpackaged HKCU AUMID registration. Without package identity, the existing `com.nowly.app` registration remains in use. Identity API errors are surfaced rather than silently selecting the unpackaged channel.
+The packaged process uses its Windows package identity. Unpackaged builds set the process AUMID to `com.nowly.app` for consistent taskbar grouping. Identity API errors are logged. Nowly does not register an HKCU notification identity or send native system notifications: calendar reminders, focus completion and alarms use Nowly Bar in both packaged and unpackaged builds, with application sounds independent of Windows notification permissions.
 
 `NowlyStartup` is disabled by default. The app enables/disables it with Windows StartupTask APIs and reads actual state when settings are loaded. A user or policy disablement cannot be silently overridden; an enable request returns an actionable error. The manifest starts `nowly-startup.exe`, which resolves its sibling executable and passes `--background`. Existing wallpaper/hide-to-tray behavior is preserved. A background second launch does not bring an existing instance forward. The launcher exits after spawning Nowly.
 
@@ -72,7 +72,7 @@ Reserve the product and obtain exact Package/Identity/Name, Publisher, Publisher
 
 - Clean Windows 10 19041+ and Windows 11: install, Start launch, no unexpected elevation, icons and publisher attribution; verify WebView2 present and separately test the missing-runtime case.
 - Log off/on with startup enabled and disabled; user-disable via Settings/Task Manager; policy-disabled state; background wallpaper on/off; duplicate background launch; foreground Start activation.
-- Toast attribution, Windows notification settings, focus completion and reminder buttons, notifications after a reboot and package update. Cold toast click activation is not implemented by this change.
+- Nowly Bar calendar reminders, focus completion, alarm acknowledgment/snooze and sounds, including tray operation and after a reboot or package update. Verify that Windows Notification Center receives no Nowly system notifications and disabling Windows notifications does not affect Bar reminders or sounds.
 - Wallpaper attach/detach, multiple monitors/DPI, tray, screenshots/clipboard, shortcuts, file pickers, OAuth browser callbacks and network features under package identity.
 - Offline launch and offline About; Store product URL and absence of GitHub update requests; package upgrade retaining data; reset/uninstall and manual migration with backups; coexistence with unpackaged edition.
 - Compare cold/warm launch time, idle CPU/RAM, wallpaper frame activity, screenshot latency and focus/reminder timing against the same unpackaged version on the same machine. Startup launcher must exit promptly. Record OS/SDK/runtime versions and measurements; this change sets no unmeasured performance claims.

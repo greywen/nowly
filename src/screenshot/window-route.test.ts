@@ -23,11 +23,10 @@ describe('routeForLabel', () => {
     expect(routeForLabel('screenshot-overlay-42-12')).toBe('screenshot-overlay');
   });
 
-  it('routes unique pin windows and scoped scroll surfaces', () => {
+  it('routes unique pin windows', () => {
     expect(routeForLabel('screenshot-pin-1')).toBe('screenshot-pin');
     expect(routeForLabel('screenshot-pin-x')).toBe('main');
-    expect(routeForLabel('screenshot-scroll-control-42')).toBe('screenshot-scroll-control');
-    expect(routeForLabel('screenshot-scroll-preview-42')).toBe('screenshot-scroll-preview');
+    expect(routeForLabel('screenshot-scroll-control-42')).toBe('main');
   });
 
   it('falls back to the main app for anything unrecognised', () => {

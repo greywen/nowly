@@ -51,7 +51,7 @@ export function useWorkspaceKanban() {
 
   return {
     snapshot,
-    dragError: dragError ?? workspace.operationError,
+    dragError,
     retry: workspace.retry,
     dismissDragError: () => {
       setDragError(null);

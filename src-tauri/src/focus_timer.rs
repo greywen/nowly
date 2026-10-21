@@ -43,6 +43,8 @@ struct ActiveTimer {
 #[derive(Debug, Default)]
 pub struct FocusTimerCoordinator {
     active: Option<ActiveTimer>,
+    // Persistence acknowledgement must not dismiss the Bar's completion reminder.
+    completed: Option<NativeFocusSnapshot>,
     pending: Option<NativeFocusSnapshot>,
     stage_sequence: u64,
     stage_changed_at: Option<String>,
@@ -56,14 +58,14 @@ impl FocusTimerCoordinator {
 
     pub fn status_snapshot(&self, now: Instant) -> FocusStatusSnapshot {
         let Some(active) = self.active.as_ref() else {
-            if let Some(pending) = self.pending.as_ref() {
+            if let Some(completed) = self.completed.as_ref() {
                 return FocusStatusSnapshot {
                     status: "completed".into(),
                     remaining_seconds: 0,
-                    planned_seconds: pending.planned_seconds,
-                    focused_seconds: pending.planned_seconds,
-                    started_at: Some(pending.started_at.clone()),
-                    session_id: Some(pending.id.clone()),
+                    planned_seconds: completed.planned_seconds,
+                    focused_seconds: completed.planned_seconds,
+                    started_at: Some(completed.started_at.clone()),
+                    session_id: Some(completed.id.clone()),
                     stage_sequence: self.stage_sequence,
                     stage_changed_at: self.stage_changed_at.clone(),
                 };
@@ -103,6 +105,7 @@ impl FocusTimerCoordinator {
     }
 
     pub fn start(&mut self, snapshot: NativeFocusSnapshot, duration: Duration, now: Instant) {
+        self.completed = None;
         self.pending = None;
         self.active = Some(ActiveTimer {
             snapshot,
@@ -137,6 +140,7 @@ impl FocusTimerCoordinator {
 
     pub fn cancel(&mut self) {
         self.active = None;
+        self.completed = None;
         self.pending = None;
         self.stage_sequence = 0;
         self.stage_changed_at = None;
@@ -149,6 +153,7 @@ impl FocusTimerCoordinator {
             return None;
         }
         let completed = self.active.take()?.snapshot;
+        self.completed = Some(completed.clone());
         self.pending = Some(completed.clone());
         self.mark_stage();
         Some(completed)
@@ -345,6 +350,53 @@ mod tests {
         assert_eq!(completed.status, "completed");
         assert_eq!(completed.remaining_seconds, 0);
         timer.acknowledge("session-1");
+        assert!(timer.pending().is_none());
+    }
+
+    #[test]
+    fn saving_completion_preserves_the_bar_snapshot_until_a_new_session() {
+        let now = Instant::now();
+        let mut timer = FocusTimerCoordinator::default();
+        timer.start(snapshot(), Duration::from_secs(2), now);
+        timer.poll(now + Duration::from_secs(2));
+        let completed = timer.status_snapshot(now + Duration::from_secs(2));
+
+        timer.acknowledge("another-session");
+        assert!(timer.pending().is_some());
+        timer.acknowledge("session-1");
+        assert!(timer.pending().is_none());
+        assert_eq!(timer.status_snapshot(now + Duration::from_secs(60)), completed);
+        assert!(timer.poll(now + Duration::from_secs(60)).is_none());
+
+        let mut next = snapshot();
+        next.id = "session-2".into();
+        timer.start(next, Duration::from_secs(2), now + Duration::from_secs(61));
+        let running = timer.status_snapshot(now + Duration::from_secs(61));
+        assert_eq!(running.status, "running");
+        assert_eq!(running.session_id.as_deref(), Some("session-2"));
+        timer.cancel();
+        assert_eq!(
+            timer.status_snapshot(now + Duration::from_secs(62)).status,
+            "idle"
+        );
+    }
+
+    #[test]
+    fn cancelling_a_saved_completion_clears_the_bar_snapshot() {
+        let now = Instant::now();
+        let mut timer = FocusTimerCoordinator::default();
+        timer.start(snapshot(), Duration::from_secs(2), now);
+        timer.poll(now + Duration::from_secs(2));
+        timer.acknowledge("session-1");
+        assert_eq!(
+            timer.status_snapshot(now + Duration::from_secs(3)).status,
+            "completed"
+        );
+        timer.cancel();
+        assert_eq!(
+            timer.status_snapshot(now + Duration::from_secs(3)).status,
+            "idle"
+        );
         assert!(timer.pending().is_none());
     }
 

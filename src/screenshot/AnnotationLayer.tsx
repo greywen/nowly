@@ -1,6 +1,7 @@
 import { annotationBounds, type Annotation } from './annotation-document';
 import { handlePosition, handlesFor } from './annotation-resize';
 import { framePixelToCss, type FrameBox } from './frame-geometry';
+import { ANNOTATION_FONT_FAMILY } from './text-metrics';
 
 // Drawing the committed annotations over the frozen frame.
 //
@@ -207,6 +208,7 @@ function AnnotationShape({
           fill={object.color}
           fontSize={object.fontSize}
           fontWeight={500}
+          fontFamily={ANNOTATION_FONT_FAMILY}
         >
           {object.content.split('\n').map((line, index) => (
             <tspan key={index} x={x} dy={index === 0 ? 0 : object.fontSize * 1.4}>

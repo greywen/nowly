@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RepositoryProvider } from '../data/RepositoryContext';
 import { tauriNowlyRepository } from '../data/tauri-nowly-repository';
 import { defaultTimeSettings, type TimeSettings } from './time-model';
@@ -14,6 +14,46 @@ const focus = vi.hoisted(() => ({
 vi.mock('../focus/FocusTimerContext', () => ({ useFocusTimer: () => focus }));
 
 describe('unified time module', () => {
+  beforeEach(() => {
+    focus.state.status = 'running';
+    vi.clearAllMocks();
+  });
+
+  it('shows clocks on idle wallpaper without changing the foreground focus selection', async () => {
+    focus.state.status = 'idle';
+    const settings = { ...defaultTimeSettings(), displayContent: 'focus' as const };
+    const repo = {
+      ...tauriNowlyRepository,
+      getTimeSettings: vi.fn(async () => settings),
+      saveTimeSettings: vi.fn(async (next: TimeSettings) => next),
+      listAlarms: vi.fn(async () => [])
+    };
+    const content = (mode: 'foreground' | 'wallpaper') => <RepositoryProvider repository={repo}><TimeModule mode={mode} onOpenSettings={vi.fn()} onOpenStatistics={vi.fn()} /></RepositoryProvider>;
+    const { rerender } = render(content('wallpaper'));
+    await waitFor(() => expect(screen.getByRole('button', { name: '专注时段' })).toBeEnabled());
+    expect(screen.getByTestId('time-widget')).toBeVisible();
+    expect(screen.queryByRole('timer')).not.toBeInTheDocument();
+    expect(screen.queryByText('双击返回前台以操作专注计时')).not.toBeVisible();
+    rerender(content('foreground'));
+    expect(screen.getByTestId('time-widget')).not.toBeVisible();
+    expect(screen.getByRole('button', { name: '专注时段' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: '开始专注' })).toBeVisible();
+    expect(repo.saveTimeSettings).not.toHaveBeenCalled();
+  });
+
+  it.each(['running', 'paused', 'completed'])('preserves the selected focus display on %s wallpaper', async status => {
+    focus.state.status = status;
+    const repo = {
+      ...tauriNowlyRepository,
+      getTimeSettings: vi.fn(async () => ({ ...defaultTimeSettings(), displayContent: 'focus' as const })),
+      listAlarms: vi.fn(async () => [])
+    };
+    render(<RepositoryProvider repository={repo}><TimeModule mode="wallpaper" onOpenSettings={vi.fn()} onOpenStatistics={vi.fn()} /></RepositoryProvider>);
+    await waitFor(() => expect(screen.getByRole('button', { name: '专注时段' })).toBeEnabled());
+    expect(screen.getByTestId('time-widget')).not.toBeVisible();
+    expect(screen.getByRole('timer')).toBeVisible();
+  });
+
   it('switches display from the header icon group and shows statistics only for focus', async () => {
     let settings = defaultTimeSettings();
     const repo = {

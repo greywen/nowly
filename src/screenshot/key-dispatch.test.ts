@@ -148,19 +148,15 @@ describe('main state keys', () => {
     });
   });
 
-  it.each(['scrollPrepare', 'scrolling', 'scrollPaused', 'scrollReview'] as const)(
-    'exports nothing from %s',
-    (phase) => {
-      // §7: no scroll phase may export before the result is accepted.
-      expect(dispatchKey({ key: 'c', ctrl: true }, context({ phase }))).toEqual({
-        type: 'ignore'
-      });
-      expect(dispatchKey({ key: 's', ctrl: true }, context({ phase }))).toEqual({
-        type: 'ignore'
-      });
-      expect(dispatchKey({ key: 'Enter' }, context({ phase }))).toEqual({ type: 'ignore' });
-    }
-  );
+  it('finishes scrolling capture like a selection but never edits it', () => {
+    const scrolling = context({ phase: 'scrolling' });
+    expect(dispatchKey({ key: 'c', ctrl: true }, scrolling)).toEqual({ type: 'copyImageAndFinish' });
+    expect(dispatchKey({ key: 's', ctrl: true }, scrolling)).toEqual({ type: 'savePng' });
+    expect(dispatchKey({ key: 'Enter' }, scrolling)).toEqual({ type: 'copyImageAndFinish' });
+    expect(dispatchKey({ key: 'z', ctrl: true }, scrolling)).toEqual({ type: 'ignore' });
+    expect(dispatchKey({ key: 'y', ctrl: true }, scrolling)).toEqual({ type: 'ignore' });
+    expect(dispatchKey({ key: 'ArrowDown' }, scrolling)).toEqual({ type: 'ignore' });
+  });
 
   it('dispatches undo and redo three ways', () => {
     const ctx = context();
@@ -209,15 +205,8 @@ describe('main state keys', () => {
 
 
 
-  it.each([
-    ['aiming', 'cancelSession'],
-    ['editing', 'cancelSession'],
-    ['scrollPrepare', 'leaveScrollPrepare'],
-    ['scrolling', 'stopScrollAndReview'],
-    ['scrollPaused', 'stopScrollAndReview'],
-    ['scrollReview', 'discardLongImage']
-  ] as const)('Esc in %s consumes exactly one layer', (phase, type) => {
-    expect(dispatchKey({ key: 'Escape' }, context({ phase }))).toEqual({ type });
+  it.each(['aiming', 'editing', 'scrolling'] as const)('Esc in %s closes the capture', (phase) => {
+    expect(dispatchKey({ key: 'Escape' }, context({ phase }))).toEqual({ type: 'cancelSession' });
   });
 
   it('ignores an unrelated key instead of letting it fall through', () => {

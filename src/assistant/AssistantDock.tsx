@@ -1,4 +1,4 @@
-import { useTranslation, t, getLanguage } from '../i18n';
+import { useTranslation, t, getLocale } from '../i18n';
 import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, History, MessageCircle, Mic, Send, Sparkles, Square } from '../components/icons';
 import { assistantClient, assistantErrorSource, translateAssistantNotice, assistantNotice } from './client';
@@ -293,7 +293,7 @@ export function AssistantDock({ client = assistantClient, active = true, embedde
     const Recognizer = speechRecognition();
     if (!Recognizer) { setError('assistant.text17'); setExpanded(true); return; }
     const recognition = new Recognizer();
-    recognition.lang = language === 'zh' ? 'zh-CN' : 'en-US'; recognition.interimResults = false; recognition.continuous = false;
+    recognition.lang = getLocale(); recognition.interimResults = false; recognition.continuous = false;
     recognition.onresult = event => {
       const text = Array.from(event.results, result => result[0]?.transcript ?? '').join('').trim();
       if (text) setDraft(current => current.trim() ? `${current.trim()} ${text}` : text);

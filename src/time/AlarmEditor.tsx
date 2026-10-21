@@ -17,9 +17,9 @@ type Props = {
 const weekdays = [7, 1, 2, 3, 4, 5, 6];
 
 function baseDraft(alarm?: Alarm | null): AlarmDraft {
-  return alarm
-    ? { title: alarm.title, hour: alarm.hour, minute: alarm.minute, repeat: alarm.repeat, enabled: alarm.enabled }
-    : { title: '', hour: 9, minute: 0, repeat: { kind: 'weekly', weekdays: [1, 2, 3, 4, 5] }, enabled: true };
+  if (alarm) return { title: alarm.title, hour: alarm.hour, minute: alarm.minute, repeat: alarm.repeat, enabled: alarm.enabled };
+  const now = new Date();
+  return { title: '', hour: now.getHours(), minute: now.getMinutes(), repeat: { kind: 'weekly', weekdays: [1, 2, 3, 4, 5] }, enabled: true };
 }
 
 export function AlarmEditor({ alarm, onCancel, onSave, saveState, onRetry }: Props) {

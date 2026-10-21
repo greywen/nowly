@@ -1,4 +1,4 @@
-import { useTranslation, t, getLanguage } from '../i18n';
+import { useTranslation, t, getLocale } from '../i18n';
 import { useId, useState } from 'react';
 import { Check, ChevronDown, CircleAlert, RefreshCw, Trash2, X } from '../components/icons';
 import { DatePicker } from '../components/DatePicker';
@@ -74,7 +74,7 @@ export function PlanCard({ plan, actions, edits, selected, dirty, busy, blocked,
   return <section className="assistant-plan" aria-label={t('assistant.text81')}>
     <div className="assistant-plan-overview"><span className="assistant-eyebrow">{t('assistant.text82')}</span>
       <strong>{t('assistant.localChanges', { count })}{deletes > 0 ? t('assistant.deletes', { count: deletes }) : ''}</strong>
-      <p className="assistant-caption">{t('assistant.expires', { time: new Date(plan.expiresAt).toLocaleTimeString(language === 'zh' ? 'zh-CN' : 'en-US', { hour12: false }) })}</p></div>
+      <p className="assistant-caption">{t('assistant.expires', { time: new Date(plan.expiresAt).toLocaleTimeString(getLocale(), { hour12: false }) })}</p></div>
     {plan.warnings.map((warning, i) => <div className="assistant-warning" key={i}><CircleAlert aria-hidden="true" size={17} /><p>{warning}</p></div>)}
     {plan.changes.map((change, index) => {
       const action = actions[index]; if (!action) return null;

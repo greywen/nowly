@@ -23,6 +23,9 @@
 import { isAllowedAttachmentName } from '../lib/attachment';
 import { getBrowserStickerBoard, saveBrowserStickerBoard, uploadBrowserStickerImage, readBrowserStickerImage, discardBrowserStickerImages } from './browser-sticker-store';
 import type { StickerBoard } from '../stickers/sticker-model';
+import { validateNoteForm, toNoteDraft } from '../lib/note-draft';
+import type { NoteDraft } from '../notes/notes-model';
+import { isContentEmpty } from '../components/rich-text/content';
 import { normalizeBarMenu } from '../app/bar-menu';
 import { alarmToDraft, defaultTimeSettings, type Alarm, type AlarmDraft, type AlarmNotice, type TimeSettings } from '../time/time-model';
 
@@ -112,6 +115,11 @@ function loadStore(): Store {
       ...base,
       ...parsed,
       settings,
+      notes: (parsed.notes ?? []).map(note => {
+        const migrated = { ...note };
+        Reflect.deleteProperty(migrated, 'title');
+        return migrated;
+      }),
       kanban: { ...base.kanban, ...(parsed.kanban ?? {}) }
     };
   } catch {
@@ -778,6 +786,9 @@ export function installBrowserTauriBackend() {
       return updated;
     },
     delete_task_lane: (a) => {
+      if (store.kanban.lanes.length === 1 && store.kanban.lanes[0].id === a.id) {
+        throw { code: 'validation_error', field: 'id', message: '至少保留一个泳道。' };
+      }
       const replacement = a.replacementLaneId as string | null;
       const removedId = a.id as string;
       if (replacement) {
@@ -893,15 +904,25 @@ export function installBrowserTauriBackend() {
     // Notes
     list_notes: () => store.notes,
     create_note: (a) => {
-      const note = { id: id('n'), createdAt: nowIso(), updatedAt: nowIso(), ...(a.draft as Dict) };
+      const draft = a.draft as NoteDraft;
+      const errors = validateNoteForm(draft);
+      const field = Object.keys(errors)[0] as keyof NoteDraft | undefined;
+      if (field) throw { code: 'validation_error', field, message: errors[field] };
+      const note = { id: id('n'), createdAt: nowIso(), updatedAt: nowIso(), styleVariant: Math.floor(Math.random() * 9), ...toNoteDraft(draft) };
       store.notes.push(note);
       persist();
       return note;
     },
     update_note: (a) => {
+      const old = store.notes.find(note => note.id === a.id);
+      if (!old) throw { code: 'not_found', message: '未找到该便签。' };
+      const draft = a.draft as NoteDraft;
+      const errors = validateNoteForm(draft, isContentEmpty(String(old.content ?? '')) && draft.content === old.content);
+      const field = Object.keys(errors)[0] as keyof NoteDraft | undefined;
+      if (field) throw { code: 'validation_error', field, message: errors[field] };
       let updated: Dict | undefined;
       store.notes = store.notes.map((n) =>
-        n.id === a.id ? (updated = { ...n, ...(a.draft as Dict), updatedAt: nowIso() }) : n
+        n.id === a.id ? (updated = { ...n, ...toNoteDraft(draft), updatedAt: nowIso() }) : n
       );
       persist();
       return updated;

@@ -49,6 +49,47 @@ test('pin fits its window without manual zoom and closes through restricted nati
   expect(await page.locator('button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label')))).toEqual(['关闭钉图']);
 });
 
+test('only holding the toolbar starts moving the pin', async ({ page }) => {
+  await pinShell(page);
+  await page.goto('/screenshot.html');
+  const image = page.getByRole('img', { name: '钉住的截图' });
+  await expect(image).toBeVisible();
+  await image.click();
+  await page.locator('.screenshot-pin__viewport').click({ position: { x: 20, y: 20 } });
+  expect(await calls(page, 'plugin:window|start_dragging')).toEqual([]);
+  await page.locator('.screenshot-pin__toolbar').click({ position: { x: 80, y: 20 }, button: 'right' });
+  expect(await calls(page, 'plugin:window|start_dragging')).toEqual([]);
+  await page.locator('.screenshot-pin__toolbar').click({ position: { x: 80, y: 20 } });
+  expect(await calls(page, 'plugin:window|start_dragging')).toHaveLength(1);
+  await page.getByRole('button', { name: '关闭钉图' }).click();
+  expect(await calls(page, 'plugin:window|start_dragging')).toHaveLength(1);
+});
+
+test('all pin edges and corners invoke native resize and keep the image fitted after growing and shrinking', async ({ page }) => {
+  await pinShell(page, 400, 200);
+  await page.setViewportSize({ width: 480, height: 320 });
+  await page.goto('/screenshot.html');
+  const image = page.getByRole('img', { name: '钉住的截图' });
+  await expect(image).toBeVisible();
+  const directions = ['North', 'South', 'East', 'West', 'NorthEast', 'NorthWest', 'SouthEast', 'SouthWest'];
+  for (const direction of directions) {
+    await page.locator(`.screenshot-pin__resize--${direction}`).click();
+  }
+  expect((await calls(page, 'plugin:window|start_resize_dragging')).map(call => call.args)).toEqual(
+    directions.map(direction => ({ label: 'screenshot-pin-1', value: direction }))
+  );
+  expect(await calls(page, 'plugin:window|start_dragging')).toEqual([]);
+  for (const size of [{ width: 800, height: 600 }, { width: 240, height: 96 }]) {
+    await page.setViewportSize(size);
+    const viewport = await page.locator('.screenshot-pin__viewport').boundingBox();
+    const bounds = await image.boundingBox();
+    expect(bounds!.width).toBeLessThanOrEqual(viewport!.width);
+    expect(bounds!.height).toBeLessThanOrEqual(viewport!.height);
+    expect(await image.evaluate(img => getComputedStyle(img).objectFit)).toBe('contain');
+    await expect(page.getByRole('button', { name: '关闭钉图' })).toBeInViewport();
+  }
+});
+
 test('tall pinned image initially fits completely while close remains outside image content', async ({ page }) => {
   await pinShell(page, 200, 2000);
   await page.goto('/screenshot.html');

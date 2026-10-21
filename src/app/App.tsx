@@ -27,7 +27,7 @@ import { useRecentColors } from '../settings/useRecentColors';
 import { useUpdateCheck } from '../settings/useUpdateCheck';
 import { useNowlyRepository } from '../data/RepositoryContext';
 import { useCurrentTime } from './useCurrentTime';
-import { t, useTranslation, getLanguage } from '../i18n';
+import { t, useTranslation, getLocale } from '../i18n';
 import { TimeModule } from '../time/TimeModule';
 import { StickersWidget } from '../stickers/StickersWidget';
 import { TimeSettingsDialog } from '../time/TimeSettingsDialog';
@@ -41,7 +41,7 @@ import type { NativeStatusIslandSnapshot } from '../quick-panel/useStatusIslandS
 type WindowMode = 'wallpaper' | 'foreground';
 
 function localeTag() {
-  return getLanguage() === 'en' ? 'en-US' : 'zh-CN';
+  return getLocale();
 }
 
 function localIsoDate(date = new Date()) {
@@ -222,7 +222,7 @@ function AppContent() {
       onRememberCustomColor={rememberCustomColor}
     />
   );
-  modules.time = <TimeModule mode={windowMode} onOpenSettings={() => openTimeDialog()} onOpenStatistics={() => setFocusStatisticsOpen(true)} onEnterWallpaper={() => void runWindowModeSwitch(switchToWallpaper)} />;
+  modules.time = <TimeModule mode={windowMode} onCreateAlarm={() => openTimeDialog(true)} onOpenSettings={() => openTimeDialog()} onOpenStatistics={() => setFocusStatisticsOpen(true)} onEnterWallpaper={() => void runWindowModeSwitch(switchToWallpaper)} />;
 
 
   useEffect(() => {
@@ -310,7 +310,7 @@ function AppContent() {
       <DesktopShell
         mode={windowMode}
         time={new Intl.DateTimeFormat(localeTag(), { hour: '2-digit', minute: '2-digit', hour12: false }).format(now)}
-        dateText={new Intl.DateTimeFormat(localeTag(), { dateStyle: 'full' }).format(now)}
+        dateText={new Intl.DateTimeFormat(localeTag(), { calendar: 'gregory', dateStyle: 'full' }).format(now)}
         summary={summary}
         modules={modules}
         definitions={definitions}

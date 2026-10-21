@@ -382,14 +382,26 @@ pub(crate) fn teardown<R: tauri::Runtime>(
     session_id: u64,
     suppression: Option<crate::quick_panel::CaptureSuppression>,
 ) {
-    for window in session_windows(app, session_id) {
-        let _ = window.destroy();
-    }
     // Restore before buffer cleanup, which can wait for an in-flight encoder.
     let restore_app = app.clone();
     if let Err(error) = app.run_on_main_thread(move || {
-        // After the overlays' destroy requests, which were queued first, so the
-        // interactive layer never sits over a live desktop.
+        // Runtime hide/destroy requests can be deferred. Remove every visible
+        // surface synchronously on the UI thread, with the placeholder first.
+        let mut windows = session_windows(&restore_app, session_id);
+        windows.sort_by_key(|window| std::cmp::Reverse(super::window::presentation_priority(window.label())));
+        for window in windows {
+            #[cfg(target_os = "windows")]
+            if let Ok(hwnd) = window.hwnd() {
+                unsafe {
+                    let _ = windows::Win32::UI::WindowsAndMessaging::ShowWindow(
+                        hwnd, windows::Win32::UI::WindowsAndMessaging::SW_HIDE,
+                    );
+                }
+            }
+            #[cfg(not(target_os = "windows"))]
+            let _ = window.hide();
+            let _ = window.destroy();
+        }
         #[cfg(target_os = "windows")]
         for window in restore_app
             .state::<super::freeze::FreezeLayer>()
@@ -441,6 +453,18 @@ mod tests {
     use super::*;
     use std::sync::{mpsc, Mutex};
     use std::time::Duration;
+
+    #[test]
+    fn teardown_hides_task_switch_placeholder_before_removing_overlays() {
+        let source = include_str!("session.rs");
+        let body = source.split("pub(crate) fn teardown").nth(1).unwrap()
+            .split("fn session_windows").next().unwrap();
+        let hide = body.find("SW_HIDE").expect("hide synchronously before queued destruction");
+        let destroy = body.find("window.destroy()").unwrap();
+        assert!(hide < destroy);
+        assert!(body[..hide].contains("Reverse(super::window::presentation_priority"));
+        assert!(body[..hide].contains("run_on_main_thread"));
+    }
 
     #[test]
     fn delayed_suppression_dispatch_obeys_the_original_deadline() {

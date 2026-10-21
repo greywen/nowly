@@ -39,6 +39,8 @@ export type ScreenshotToolbarProps = {
   onSelectTool: (tool: ToolId) => void;
   onAction: (action: ActionId) => void;
   state: ToolbarState;
+  /// Replaces the fixed groups; the scrolling capture shows only its finishing controls.
+  groups?: readonly (readonly (ToolId | ActionId)[])[];
 };
 
 // Solar icon components for each tool and action.
@@ -67,7 +69,8 @@ export function ScreenshotToolbar({
   activeTool,
   onSelectTool,
   onAction,
-  state
+  state,
+  groups = TOOLBAR_GROUPS
 }: ScreenshotToolbarProps) {
   const { t } = useTranslation();
   const blocked = scrollBlockReason(state);
@@ -76,7 +79,7 @@ export function ScreenshotToolbar({
     // A toolbar role with a label, so the whole group is announced rather than
     // thirteen loose buttons.
     <div className="screenshot-toolbar" role="toolbar" aria-label={t('screenshot.toolbarLabel')}>
-      {TOOLBAR_GROUPS.map((group, index) => (
+      {groups.map((group, index) => (
         <div className="screenshot-toolbar__group" key={index}>
           {group.map((control) => {
             const label = t(CONTROL_LABEL_KEYS[control]);

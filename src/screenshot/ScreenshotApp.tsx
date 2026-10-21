@@ -30,7 +30,7 @@ import { ScreenshotToolbar } from './ScreenshotToolbar';
 import { SelectionLayer, SelectionSize } from './SelectionLayer';
 import { TextEditor } from './TextEditor';
 import { toolbarPlacement } from './toolbar-placement';
-import { DEFAULT_TOOL, type ActionId, type ToolId } from './toolbar-model';
+import { DEFAULT_TOOL, SCROLL_TOOLBAR_GROUPS, type ActionId, type ToolId } from './toolbar-model';
 import {
   defaultProperties,
   withProperty,
@@ -46,9 +46,10 @@ import { useExport } from './useExport';
 import { MosaicLayer } from './MosaicLayer';
 import { useSelection } from './useSelection';
 import { useScrollCapture } from './useScrollCapture';
-import { ScrollCapturePanel } from './ScrollCapturePanel';
-import type { ScrollState } from './scroll-model';
-import { currentImageBox } from './long-image-geometry';
+import { describeScrollError, hintPlacement, previewPlacement, PREVIEW_WIDTH, SCROLL_HINT_KEYS } from './scroll-model';
+import { ScrollPreview } from './ScrollPreview';
+
+type ScrollError = { key: string } | { message: string };
 
 
 // The two capture surfaces, mirroring the windows in
@@ -107,10 +108,7 @@ export function ScreenshotSessionApp() {
 /// The toolbar and magnifier follow in the rest of 02-editor.
 export function ScreenshotOverlayApp() {
   const { t } = useTranslation();
-  const originalFrame = useCaptureFrame();
-  const [longImage,setLongImage] = useState<{src:string;width:number;height:number}|null>(null);
-  const [zoom,setZoom] = useState(1);
-  const frame = longImage ? {...originalFrame,status:'ready' as const,frame:{...longImage,originX:0,originY:0,windowCandidates:[]}} : originalFrame;
+  const frame = useCaptureFrame();
   const framePlan = frame.status === 'ready' ? frame.frame : null;
   const displayOrigin: DisplayOrigin = framePlan
     ? { x: framePlan.originX, y: framePlan.originY }
@@ -129,16 +127,28 @@ export function ScreenshotOverlayApp() {
     onPointerUp,
     setSelection
   } = selection;
-  const adoptLong = useCallback(async (result:ScrollState) => {
-    const bytes=await invoke<ArrayBuffer>('scroll_capture_image',{revision:result.revision});
-    const src=URL.createObjectURL(new Blob([new Uint8Array(bytes)]));
-    setLongImage({src,width:result.width,height:result.height});setZoom(Math.min(1,(innerWidth-32)/result.width));
-    setDoc(emptyDocument());
-    selection.adoptImage({width:result.width,height:result.height});
-  },[selection.adoptImage]);
-  const scroll=useScrollCapture();
-  useEffect(()=>{let active=true;let stop:(()=>void)|undefined;void listen<ScrollState>('screenshot-scroll-adopted',e=>{if(active)void adoptLong(e.payload);}).then(s=>{if(active)stop=s;else s();});return()=>{active=false;stop?.();};},[adoptLong]);
-  useEffect(()=>()=>{if(longImage)URL.revokeObjectURL(longImage.src);},[longImage]);
+  const scroll = useScrollCapture(PREVIEW_WIDTH);
+  const scrolling = scroll.state !== null && scroll.state.phase !== 'cancelled';
+  // The scrolling capture's own output: it has no annotations, so it bypasses the
+  // editor export and sends the long image's full rectangle.
+  const [scrollOutput, setScrollOutput] = useState<'idle' | 'copying' | 'saving' | { error: ScrollError }>('idle');
+  const scrollBusy = useRef(false);
+  const finishScroll = useCallback(async (kind: 'copy' | 'save') => {
+    if (scrollBusy.current) return;
+    scrollBusy.current = true;
+    setScrollOutput(kind === 'copy' ? 'copying' : 'saving');
+    try {
+      const result = await scroll.finish();
+      const geometry = { x: 0, y: 0, width: result.width, height: result.height, mosaics: [], version: 0, hasOverlay: false };
+      await invoke(kind === 'copy' ? 'copy_capture_to_clipboard' : 'save_capture_to_file', { geometry });
+      setScrollOutput('idle');
+    } catch (error) {
+      setScrollOutput({ error: describeScrollError(error, kind === 'copy' ? 'screenshot.export.copyFailed' : 'screenshot.export.saveFailed') });
+    } finally {
+      scrollBusy.current = false;
+    }
+  }, [scroll.finish]);
+  const [scrollStartError, setScrollStartError] = useState<ScrollError | null>(null);
   const [tool, setTool] = useState<ToolId>(DEFAULT_TOOL);
   // §4.1 line 160: the magnifier's hint reports the copy's outcome, and the next pointer
   // move restores the plain hint.
@@ -184,7 +194,7 @@ export function ScreenshotOverlayApp() {
 
   // The rectangle on screen: the live drag while dragging, the committed one after.
   const rect = state.draft ?? state.selection;
-  const box = longImage ? {frameWidth:longImage.width,frameHeight:longImage.height,renderedWidth:longImage.width*zoom,renderedHeight:longImage.height*zoom,offsetX:frameRef.current?.getBoundingClientRect().left??0,offsetY:frameRef.current?.getBoundingClientRect().top??0} : state.box;
+  const box = state.box;
   // The pointer in CSS pixels, derived from the sampled pixel so the card follows
   // the same resolution the sample came from.
   const pointerCss =
@@ -219,10 +229,10 @@ export function ScreenshotOverlayApp() {
   // the annotations, so a single pointer stream never drives both.
   const editing = state.phase === 'editing' && state.selection !== null;
   // The selection is locked once the first annotation is drawn (WeChat behavior).
-  const selectionLocked = longImage!==null || doc.objects.length > 0;
+  const selectionLocked = scrolling || doc.objects.length > 0;
   const exporter = useExport(doc, state.selection, () => annotationRef.current, displayOrigin);
   const exporting =
-    exporter.state.status === 'copying' || exporter.state.status === 'saving' || exporter.state.status === 'pinning' || scroll.state!==null;
+    exporter.state.status === 'copying' || exporter.state.status === 'saving' || exporter.state.status === 'pinning' || scrolling;
   // Committed objects stay editable: the select tool picks one up, moves it, and
   // the keyboard deletes or nudges it. §8.1 freezes the document during an export,
   // so the hook is disabled rather than left able to start a move it cannot commit.
@@ -286,7 +296,7 @@ export function ScreenshotOverlayApp() {
   })();
   const pixelOf = useCallback(
     (event: React.PointerEvent) =>
-      box ? pointerToFramePixel({ x: event.clientX, y: event.clientY }, longImage ? currentImageBox(box,frameRef.current):box) : null,
+      box ? pointerToFramePixel({ x: event.clientX, y: event.clientY }, box) : null,
     [box]
   );
   const handleDown = useCallback(
@@ -456,14 +466,9 @@ export function ScreenshotOverlayApp() {
         'savePng',
         'copyHex'
       ].includes(action.type);
-      if (exporting && mutatesEditor && !['leaveScrollPrepare','discardLongImage','stopScrollAndReview'].includes(action.type)) return;
+      if (exporting && mutatesEditor) return;
 
       switch (action.type) {
-        case 'leaveScrollPrepare':
-        case 'discardLongImage':
-          void scroll.command('discard');return;
-        case 'stopScrollAndReview':
-          void scroll.command('stop');return;
         case 'cancelSession':
           void invoke('cancel_screen_capture').catch((error: unknown) => {
             // The window is about to be destroyed on success, so only a rejection
@@ -501,10 +506,12 @@ export function ScreenshotOverlayApp() {
           objects.beginTextEditOfSelection();
           return;
         case 'savePng':
-          void exporter.save();
+          if (scrolling) void finishScroll('save');
+          else void exporter.save();
           return;
         case 'copyImageAndFinish':
-          void exporter.copy();
+          if (scrolling) void finishScroll('copy');
+          else void exporter.copy();
           return;
         case 'moveSelection':
           if (state.selection && bounds && !selectionLocked) {
@@ -533,9 +540,6 @@ export function ScreenshotOverlayApp() {
           return;
         }
         default:
-          // copyImageAndFinish, savePng and the scroll actions belong to 03-output and
-          // 04-scroll. The scroll ones stay inert rather than pretending to have
-          // captured something.
           return;
       }
     },
@@ -552,6 +556,8 @@ export function ScreenshotOverlayApp() {
       objects,
       exporter,
       exporting,
+      scrolling,
+      finishScroll,
       selectionLocked,
       cancelCurrentGesture,
       displayOrigin
@@ -560,7 +566,7 @@ export function ScreenshotOverlayApp() {
 
   useCaptureKeyboard(
     {
-      phase: scroll.state ? ({prepare:'scrollPrepare',capturing:'scrolling',paused:'scrollPaused',review:'scrollReview',cancelled:'editing'} as const)[scroll.state.phase] : editing ? 'editing' : 'aiming',
+      phase: scrolling ? 'scrolling' : editing ? 'editing' : 'aiming',
       saveDialogOpen: false,
       // The hook merges the event's own isComposing, which is the only reliable
       // source for an unfinished composition.
@@ -640,7 +646,7 @@ export function ScreenshotOverlayApp() {
       ) {
         return;
       }
-      const pixel = pointerToFramePixel({ x: event.clientX, y: event.clientY }, longImage?currentImageBox(box,frameRef.current):box);
+      const pixel = pointerToFramePixel({ x: event.clientX, y: event.clientY }, box);
       if (!pixel) return;
       // §6 of the amendment: a double-click on a text object re-edits that object,
       // and only an empty-area double-click finishes the capture. Checked in that
@@ -679,8 +685,8 @@ export function ScreenshotOverlayApp() {
 
   return (
     <main
-      className={`screenshot-overlay${rect ? ' screenshot-overlay--editing' : ''}${longImage?' screenshot-overlay--long':''}`}
-      style={{ cursor, ...(longImage?{width:longImage.width*zoom,height:longImage.height*zoom}: {}) }}
+      className={`screenshot-overlay${rect ? ' screenshot-overlay--editing' : ''}${scrolling ? ' screenshot-overlay--scrolling' : ''}`}
+      style={{ cursor: scrolling ? 'default' : cursor }}
       aria-label={t('screenshot.overlayLabel')}
       onPointerDown={handleDown}
       onPointerMove={handleMove}
@@ -698,7 +704,6 @@ export function ScreenshotOverlayApp() {
         <img
           ref={frameRef}
           className="screenshot-overlay__frame"
-          style={longImage?{visibility:'visible'}:undefined}
           src={frame.frame.src}
           crossOrigin="anonymous"
           width={frame.frame.width}
@@ -760,8 +765,9 @@ export function ScreenshotOverlayApp() {
                   }
                 : undefined
             }
+            live={scrolling}
           />
-          <SelectionSize rect={rect} box={box} />
+          {scrolling ? null : <SelectionSize rect={rect} box={box} />}
         </>
       ) : null}
       {editing && box && state.selection ? (
@@ -866,7 +872,18 @@ export function ScreenshotOverlayApp() {
           <ScreenshotToolbar
             activeTool={tool}
             onSelectTool={setTool}
+            groups={scrolling ? SCROLL_TOOLBAR_GROUPS : undefined}
             onAction={(action: ActionId) => {
+              if (scrolling) {
+                if (action === 'done') void finishScroll('copy');
+                else if (action === 'save') void finishScroll('save');
+                else if (action === 'cancel') {
+                  void invoke('cancel_screen_capture').catch((error: unknown) => {
+                    console.error('failed to cancel the capture session', error);
+                  });
+                }
+                return;
+              }
               // Undo and redo are local to the document. Copy runs the real export;
               // save belongs to the rest of 03-output and stays inert rather than
               // pretending to succeed.
@@ -875,7 +892,14 @@ export function ScreenshotOverlayApp() {
               else if (action === 'done') void exporter.copy();
               else if (action === 'save') void exporter.save();
               else if (action === 'pin') void exporter.pin();
-              else if (action === 'scroll' && state.selection) { setTool('select'); void scroll.command('prepare',{region:{...state.selection,...toVirtualDesktop(state.selection,displayOrigin)}}); }
+              else if (action === 'scroll' && state.selection) {
+                setTool('select');
+                setScrollStartError(null);
+                const region = { ...state.selection, ...toVirtualDesktop(state.selection, displayOrigin) };
+                scroll.start(region).catch((error: unknown) => {
+                  setScrollStartError(describeScrollError(error, 'screenshot.auto.startFailed'));
+                });
+              }
               else if (action === 'cancel') {
                 void invoke('cancel_screen_capture').catch((error: unknown) => {
                   console.error('failed to cancel the capture session', error);
@@ -885,16 +909,16 @@ export function ScreenshotOverlayApp() {
             state={{
               selectionCrossesDisplays: false,
               annotationCount: doc.objects.length,
-              baseImageIsLong: longImage!==null,
+              baseImageIsLong: false,
               captureTargetUnavailable: frame.status!=='ready',
               canUndo: canUndo(doc),
               canRedo: canRedo(doc),
-              exporting
+              exporting: scrolling ? scrollOutput === 'copying' || scrollOutput === 'saving' : exporting
             }}
           />
           {/* §5.2's fixed value sets, as discrete choices. Selected object first: the rows
               then edit it rather than the next shape's defaults. */}
-          <PropertyPanel
+          {scrolling ? null : <PropertyPanel
             kind={propertyKind}
             properties={panelProperties}
             onChange={(row, value) => {
@@ -911,14 +935,24 @@ export function ScreenshotOverlayApp() {
                 )
               );
             }}
-          />
+          />}
           {/* §8.1/§2.3: a static line beside the controls. Never a toast, banner or
               spinner, and the failure keeps the session so the user can retry. */}
-          {exporter.state.status === 'copying' ? (
+          {exporter.state.status === 'copying' || scrollOutput === 'copying' ? (
             <p className="screenshot-export-status">{t('screenshot.export.copying')}</p>
           ) : null}
-          {exporter.state.status === 'saving' ? (
+          {exporter.state.status === 'saving' || scrollOutput === 'saving' ? (
             <p className="screenshot-export-status">{t('screenshot.export.saving')}</p>
+          ) : null}
+          {typeof scrollOutput === 'object' ? (
+            <p className="screenshot-export-status screenshot-export-status--failed" role="alert">
+              {'key' in scrollOutput.error ? t(scrollOutput.error.key) : scrollOutput.error.message}
+            </p>
+          ) : null}
+          {scrollStartError ? (
+            <p className="screenshot-export-status screenshot-export-status--failed" role="alert">
+              {'key' in scrollStartError ? t(scrollStartError.key) : scrollStartError.message}
+            </p>
           ) : null}
           {exporter.state.status === 'failed' ? (
             <p className="screenshot-export-status screenshot-export-status--failed" role="alert">
@@ -930,9 +964,21 @@ export function ScreenshotOverlayApp() {
           ) : null}
         </div>
       ) : null}
-      {scroll.state?<div className="scroll-capture-anchor"><ScrollCapturePanel state={scroll.state} command={(a,extra)=>void scroll.command(a,extra)} preview={scroll.preview} error={scroll.error}/></div>:null}
-      {scroll.error&&!scroll.state?<p className="screenshot-export-status" role="alert">{scroll.error}</p>:null}
-      {longImage?<div className="long-image-zoom" onPointerDown={e=>e.stopPropagation()}><label>{t('screenshot.auto.zoom')} <select aria-label={t('screenshot.auto.zoom')} value={zoom} onChange={e=>setZoom(Number(e.target.value))}>{![.25,.5,1,2].includes(zoom)?<option value={zoom}>{t('screenshot.auto.fit')}</option>:null}{[.25,.5,1,2].map(z=><option key={z} value={z}>{z*100}%</option>)}</select></label></div>:null}
+      {scrolling && scroll.state && box && state.selection ? (() => {
+        const css = framePixelToCss(state.selection, box);
+        const hint = hintPlacement(css);
+        const place = previewPlacement(css, { width: box.renderedWidth, height: box.renderedHeight });
+        return (
+          <>
+            <p className="screenshot-scroll-hint" role="status" style={{ left: hint.left, top: hint.top }}>
+              {t(scroll.state.hint ? SCROLL_HINT_KEYS[scroll.state.hint] : 'screenshot.auto.hint')}
+            </p>
+            {place ? (
+              <ScrollPreview src={scroll.preview} place={place} grewUpward={scroll.state?.grewUpward} label={t('screenshot.auto.preview')} />
+            ) : null}
+          </>
+        );
+      })() : null}
     </main>
   );
 }

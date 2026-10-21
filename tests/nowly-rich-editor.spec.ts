@@ -30,6 +30,7 @@ test.beforeEach(async ({ page }) => {
     Object.defineProperty(window, '__TAURI_INTERNALS__', { value: { invoke: async (command: string, args: any = {}) => {
       if (command === 'list_events_in_range' || command === 'list_tasks') return [];
       if (command === 'list_notes') return notes;
+      if (command === 'list_module_layout') return [{ id: 'notes', x: 0, y: 0, w: 12, h: 8 }];
       if (command === 'get_app_settings') return settings;
       if (command === 'create_note') { const note = { id:`n${sequence++}`, ...args.draft, createdAt:'x', updatedAt:'x' }; notes.push(note); return note; }
       if (command === 'save_attachment') {
@@ -70,6 +71,80 @@ async function openEditor(page: Page) {
   await expect(page.locator('.ql-editor')).toBeVisible();
   return dialog;
 }
+
+test('resizes uploaded images proportionally and persists their width', async ({ page }) => {
+  const dialog = await openEditor(page);
+  const png = await page.evaluate(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 320;
+    canvas.height = 160;
+    canvas.getContext('2d')!.fillRect(0, 0, 320, 160);
+    return canvas.toDataURL('image/png').split(',')[1];
+  });
+  await page.locator('.rich-editor input[type="file"]').setInputFiles({ name: 'resize.png', mimeType: 'image/png', buffer: Buffer.from(png, 'base64') });
+  const image = page.locator('.ql-editor img');
+  await expect(image).toBeVisible();
+  await image.click();
+  const handle = page.getByRole('slider', { name: '调整图片尺寸' });
+  await expect(handle).toBeVisible();
+  const start = (await handle.boundingBox())!;
+  await page.mouse.move(start.x + start.width / 2, start.y + start.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(start.x + start.width / 2 - 120, start.y + start.height / 2 - 60, { steps: 5 });
+  await expect.poll(async () => Math.round((await image.boundingBox())!.width)).toBe(200);
+  await page.mouse.up();
+  await expect(image).toHaveAttribute('width', '200');
+  expect((await image.boundingBox())!.height).toBeCloseTo(100, 0);
+
+  // A resize is one history entry, separate from the upload.
+  await page.keyboard.press('Control+z');
+  await expect(image).not.toHaveAttribute('width');
+  await page.keyboard.press('Control+Shift+z');
+  await expect(image).toHaveAttribute('width', '200');
+
+  await image.click();
+  const next = (await handle.boundingBox())!;
+  await page.mouse.move(next.x + next.width / 2, next.y + next.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(next.x + next.width / 2 + 60, next.y + next.height / 2 + 30);
+  await page.keyboard.press('Escape');
+  await page.mouse.up();
+  await expect(image).toHaveAttribute('width', '200');
+  await expect(dialog).toBeVisible();
+  await expect(handle).toBeHidden();
+
+  for (const delta of [1000, -1000]) {
+    await image.click();
+    const box = (await handle.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 + delta, box.y + box.height / 2);
+    await page.mouse.up();
+    const width = Number(await image.getAttribute('width'));
+    if (delta < 0) expect(width).toBe(48);
+    else {
+      expect(width).toBeGreaterThan(200);
+      expect(width).toBeLessThanOrEqual((await page.locator('.ql-editor').boundingBox())!.width);
+      const root = (await page.locator('.ql-editor').boundingBox())!;
+      const bounds = (await image.boundingBox())!;
+      expect(bounds.x + bounds.width).toBeLessThanOrEqual(root.x + root.width);
+    }
+    await page.keyboard.press('Control+z');
+    await expect(image).toHaveAttribute('width', '200');
+  }
+  await image.click();
+  await handle.focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(image).toHaveAttribute('width', '210');
+  await dialog.getByRole('button', { name: '保存便签' }).click();
+  const stored = await page.evaluate(() => JSON.parse((window as any).__notes()[0].content));
+  const op = stored.ops.find((op: any) => op.insert?.image);
+  expect(op.attributes.width).toBe('210');
+  expect(op.insert.image).toMatch(/^attachment:/);
+  expect(JSON.stringify(stored)).not.toContain('image-resize');
+  await page.locator('.note-title__text').click();
+  await expect(page.locator('.ql-editor img')).toHaveAttribute('width', '210');
+});
 
 test('renders every format control with a localised name', async ({ page }) => {
   await openEditor(page);
@@ -134,9 +209,9 @@ test('highlights a code block with real highlight.js', async ({ page }) => {
   await expect(token).toHaveText('const');
 
   // Highlighting is presentation only; the language persists, the spans do not.
-  await dialog.getByLabel('便签标题').fill('代码');
+  await expect(dialog.getByLabel('便签标题')).toHaveCount(0);
   await dialog.getByRole('button', { name: '保存便签' }).click();
-  await expect(page.getByText('代码')).toBeVisible();
+  await expect(page.locator('.note-title__text')).toHaveText('const answer = 42;');
   const stored = await page.evaluate(() => (window as unknown as { __notes(): { content: string }[] }).__notes()[0].content);
   expect(stored).toContain('"code-block":"javascript"');
   expect(stored).not.toContain('code-token');
@@ -161,7 +236,7 @@ test('inserts a table and shows the context bar only inside it', async ({ page }
 
 test('stores a Delta envelope and keeps the design palette', async ({ page }) => {
   const dialog = await openEditor(page);
-  await dialog.getByLabel('便签标题').fill('全功能');
+  await expect(dialog.getByLabel('便签标题')).toHaveCount(0);
   const surface = page.locator('.ql-editor');
   await surface.click();
 
@@ -176,7 +251,7 @@ test('stores a Delta envelope and keeps the design palette', async ({ page }) =>
   await expect(surface.locator('blockquote')).toHaveText('引用一句');
 
   await dialog.getByRole('button', { name: '保存便签' }).click();
-  await expect(page.getByText('全功能')).toBeVisible();
+  await expect(page.locator('.note-title__text')).toContainText('青绿文字');
 
   const stored = await page.evaluate(() => (window as any).__notes()[0].content);
   const parsed = JSON.parse(stored);

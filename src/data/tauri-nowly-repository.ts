@@ -1,6 +1,15 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invoke as tauriInvoke } from '@tauri-apps/api/core';
 import { emit } from '@tauri-apps/api/event';
 import type { NowlyRepository } from './nowly-repository';
+import { localizeRepositoryError } from '../i18n/localize-error';
+
+async function invoke<T>(...args: Parameters<typeof tauriInvoke>): Promise<T> {
+  try {
+    return await tauriInvoke<T>(...args);
+  } catch (error) {
+    throw localizeRepositoryError(error);
+  }
+}
 
 function invalidating<T>(operation: Promise<T>): Promise<T> {
   return operation.then(result => {

@@ -95,7 +95,9 @@ describe('TimeWidget', () => {
     render(<RepositoryProvider repository={repository(settings)}><TimeWidget settings={settings} now={() => new Date('2026-10-12T23:59:59Z')} /></RepositoryProvider>);
     const stacked = screen.getAllByTestId('time-clock-digital')[0];
     expect(stacked.querySelectorAll('span')).toHaveLength(3);
-    expect(stacked).toHaveTextContent('59 PM');
+    expect(stacked).toHaveTextContent('115959');
+    expect(screen.getAllByTestId('time-clock-period')[0]).toHaveTextContent('下午');
+    expect(stacked).not.toContainElement(screen.getAllByTestId('time-clock-period')[0]);
     expect(screen.getAllByTestId('time-clock')[1].style.getPropertyValue('--time-font-size')).toBe(`${32 / 13}rem`);
     expect(document.querySelectorAll('.time-clock__meta')).toHaveLength(2);
     await waitFor(() => expect(screen.queryByTestId('time-widget-alarm')).not.toBeInTheDocument());
@@ -213,9 +215,52 @@ describe('TimeWidget', () => {
       <TimeWidget settings={settings} now={() => new Date('2026-10-11T23:59:59Z')} />
     </RepositoryProvider>);
     expect(screen.getAllByTestId('time-clock-digital')).toHaveLength(4);
-    for (const time of screen.getAllByTestId('time-clock-digital')) expect(time).toHaveTextContent('11:59:59 PM');
+    for (const time of screen.getAllByTestId('time-clock-digital')) expect(time).toHaveTextContent('11:59:59');
+    for (const period of screen.getAllByTestId('time-clock-period')) expect(period).toHaveTextContent('下午');
     expect(screen.getByTestId('time-widget')).toHaveAttribute('data-layout-columns', '2');
     expect(Number.parseFloat(screen.getByTestId('time-widget-grid').style.getPropertyValue('--time-cell-min-width'))).toBeGreaterThan(96);
+  });
+
+  it.each([
+    ['digital', 'horizontal'], ['digital', 'stacked'], ['mixed', 'horizontal'], ['analog', 'horizontal']
+  ] as const)('separates a twelve-hour day period from the %s/%s reading', async (mode, layout) => {
+    const settings: TimeSettings = {
+      ...defaultTimeSettings(),
+      appearance: { ...defaultTimeSettings().appearance, mode, layout, hourCycle: 'h12', showDate: true },
+      clocks: [{ id: 'utc', timeZone: 'UTC', label: 'UTC' }]
+    };
+    render(<RepositoryProvider repository={repository(settings)}><TimeWidget settings={settings} now={() => new Date('2026-10-21T02:02:09Z')} /></RepositoryProvider>);
+    const period = screen.getByTestId('time-clock-period');
+    expect(period).toHaveTextContent('上午');
+    expect(period.closest('.time-clock__reading')).not.toBeNull();
+    expect(screen.getByTestId('time-clock')).toHaveAccessibleName('UTC 上午02:02');
+    if (mode !== 'analog') {
+      const digital = screen.getByTestId('time-clock-digital');
+      expect(digital).toHaveTextContent(layout === 'stacked' ? '0202' : '02:02');
+      expect(digital).not.toHaveTextContent('上午');
+      expect(digital.parentElement).toContainElement(period);
+    }
+    expect(document.querySelector('.time-clock__meta')).not.toContainElement(period);
+    await waitFor(() => expect(screen.queryByTestId('time-widget-alarm')).not.toBeInTheDocument());
+  });
+
+  it('localizes each clock period by its time zone and updates it after a language change', async () => {
+    const settings: TimeSettings = {
+      ...defaultTimeSettings(), appearance: { ...defaultTimeSettings().appearance, hourCycle: 'h12' },
+      clocks: [{ id: 'utc', timeZone: 'UTC', label: 'UTC' }, { id: 'tokyo', timeZone: 'Asia/Tokyo', label: 'Tokyo' }]
+    };
+    render(<RepositoryProvider repository={repository(settings)}><TimeWidget settings={settings} now={() => new Date('2026-10-21T08:10:00Z')} /></RepositoryProvider>);
+    expect(screen.getAllByTestId('time-clock-period').map(element => element.textContent)).toEqual(['上午', '下午']);
+    act(() => setLanguage('en'));
+    expect(screen.getAllByTestId('time-clock-period').map(element => element.textContent)).toEqual(['AM', 'PM']);
+    expect(screen.getAllByTestId('time-clock-digital').map(element => element.textContent)).toEqual(['08:10', '05:10']);
+    await act(async () => {});
+  });
+
+  it('does not render a day period in twenty-four-hour mode', async () => {
+    render(<RepositoryProvider repository={repository(defaultTimeSettings())}><TimeWidget settings={defaultTimeSettings()} now={() => new Date('2026-10-21T14:02:00Z')} /></RepositoryProvider>);
+    expect(screen.queryByTestId('time-clock-period')).not.toBeInTheDocument();
+    await act(async () => {});
   });
 
   it('responds to ResizeObserver dimensions with layout data instead of fixed city defaults', async () => {

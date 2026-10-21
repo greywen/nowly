@@ -19,6 +19,8 @@ The ordinary window, wallpaper, tray, quick panel and fullscreen focus serve dif
 - **Focus timer** — countdown sessions with a distraction-free fullscreen mode
   and session statistics. On desktop, one native timer supplies the same remaining
   time to the dashboard, fullscreen focus, and Nowly Bar; views resync on resume.
+  Nowly Bar keeps the completion reminder visible after the session record is saved,
+  until you close the reminder or start another focus session.
 - **World clocks and alarms** — an optional Time module arranges multiple time zones
   as pure digital clocks, pure analog faces, or mixed displays. City, date, and
   time-difference labels are hidden by default; layout adapts to the module size.
@@ -27,7 +29,10 @@ The ordinary window, wallpaper, tray, quick panel and fullscreen focus serve dif
   icons in the module header switch between clocks and focus; browsing settings tabs never changes the display.
   All cities share display mode, horizontal/stacked layout, hour cycle, visibility
   and automatic or slider-controlled 32–160px font sizing. Dates have an independent
-  visibility toggle; each city only has a name, time zone and order. Appearance, time zones, visibility options,
+  visibility toggle; each city only has a name, time zone and order. Twelve-hour readings
+  use two-digit hours (02:02, 02:10, 11:02), with a small localized AM/PM label at
+  the bottom-right of the time. Twenty-four-hour readings do not show this label.
+  Appearance, time zones, visibility options,
   and adding, removing, or reordering clocks apply immediately and save automatically.
   Failed saves retain edits and offer retry; closing settings does not undo changes.
   Once saved, settings survive reopening and refreshing. The comparison tool has
@@ -35,12 +40,14 @@ The ordinary window, wallpaper, tray, quick panel and fullscreen focus serve dif
   Focus settings only configure the default duration (1–720 minutes). **Focus statistics**
   is available in the module header only when focus is displayed. Switching the
   displayed content does not interrupt an active session.
-  The **Alarms** settings tab creates a new alarm requiring one explicit creation
+  The Time module header's add icon opens the **Alarms** settings tab with a new
+  alarm form. Alarms can also be added from that tab, requiring one explicit creation
   confirmation. Existing alarms expand for editing within their own list rows;
   valid edits save automatically, ending editing does not undo changes, and deletion
   still requires confirmation. The Alarms tab has no count suffix. Alarms do not
   accept dates: turn repeat off to ring once at the next selected local time, or
-  select weekdays for repeating alarms (default: 09:00, Monday–Friday).
+  select weekdays for repeating alarms (default: current local time when the form
+  opens, Monday–Friday).
   Alarm and calendar time pickers accept any minute from 00 to 59. Input, shortcuts,
   and Now remain drafts until Confirm or Enter; Escape or an outside click cancels
   unconfirmed edits. Invalid times or an empty repeat weekday selection are not saved.
@@ -57,7 +64,8 @@ The ordinary window, wallpaper, tray, quick panel and fullscreen focus serve dif
   leave a Windows scheduled alarm behind.
 - **Kanban board** — customizable lanes, cards, and fields for lightweight
   project tracking.
-- **Notes** — quick capture with a dedicated manager for organizing entries.
+- **Notes** — write directly in the wider create/edit dialog with the full rich-text editor and attachments. Module titles use the first non-empty logical line of the content; no separate title is entered or stored, and long titles are ellipsized only for display. The compact color dot, smile and pin controls select the color, decorative icon and pinned state. Use the manager to organize notes. Blank notes cannot be created; image/file-only notes are allowed and show “Untitled note” when there is no text. Upgrades discard old separate titles without changing existing content or attachments.
+- **Rich-text image resizing** — select an image in notes, task descriptions or event notes, then drag its bottom-right handle to resize proportionally within the editor. With the handle focused, arrow keys adjust by 10px, or 1px with Shift; Escape cancels the current drag. Sizes support undo/redo and are restored when saved content is reopened. Original attachments are unchanged.
 - **Stickers** — an optional image and plain-text canvas with original, rounded,
   circular and photo-frame styles, text formatting, transforms, opacity, layers,
   locking, duplication and deletion.
@@ -69,13 +77,22 @@ The ordinary window, wallpaper, tray, quick panel and fullscreen focus serve dif
   formatting, density controls, and login-on-startup.
 - **Reminder sounds** — eight bundled sounds for calendar reminders, alarms,
   missed-alarm summaries, and focus completion. Choose each sound, preview it,
-  adjust volume, or mute all reminders under **Settings → Nowly Bar**. Selecting
-  **None** mutes only that scene. Changes apply after saving; desktop reminders
-  sound in the background while Nowly is running, without duplicate system chimes.
-- **Localization** — English and Simplified Chinese, following your system
-  language on startup. Language changes synchronize across screenshot and Bar
-  windows. Missing translations fall back to English; native surfaces without
-  localization, including the calendar authorization callback, use English.
+  under **Settings → Sound**. Sounds are always enabled; use the system volume
+  or volume mixer to adjust loudness. There are no in-app mute or volume controls.
+  Previously muted scenes revert to their default sounds; other choices are preserved.
+  Changes apply after saving; desktop reminders
+  sound in the background while Nowly is running. Calendar reminders, focus completion,
+  and alarms all appear in Nowly Bar. Nowly no longer sends Windows system
+  notifications, and sounds do not depend on Windows notification permissions.
+- **Localization** — Simplified Chinese, English, French, Spanish, Arabic,
+  Japanese, Korean, and Traditional Chinese. Without a saved manual choice,
+  startup reads the current user's Windows UI language (the primary browser
+  language on web) and selects the matching app language. An unavailable or
+  unsupported language defaults to English, without trying secondary preferences.
+  Manual choices are saved and restored first. Language changes synchronize
+  across screenshot and Bar windows. Missing translations fall back to English;
+  native surfaces without localization, including the calendar authorization
+  callback, use English.
 
 ## Usage
 
@@ -129,9 +146,15 @@ assets, animated stickers, custom fonts, background removal or file export.
 
 ### Nowly Bar visibility
 
+Calendar reminders, focus completion, and alarms appear in Nowly Bar, without
+entries in Windows Notification Center or system notifications on the lock screen.
+Keep Nowly running: reminders remain available when the main window is minimized
+or hidden to the tray, but stop after fully exiting. Save failures, form validation,
+and screenshot results remain next to the relevant action.
+
 Set Nowly Bar to **Notification only** in **Settings → Notifications** to keep a thin top-edge entry when no notification needs attention, rather than hiding the Bar completely. Hovering continuously unfolds the same shell down into the full Bar; leaving folds it back up. Hover only reveals the Bar; click its status area or Logo to open a panel.
 
-Pending notifications, open reminder/menu/AI/history panels, keyboard focus within the Bar, and actions in progress keep the surface available without acknowledging notifications or interrupting input. After a panel closes, the current state determines whether it folds back. Tab can enter the strip; reduced-motion preferences make the transition immediate. Persistent mode is unchanged. Disabling the Bar or suppressing it for capture also hides the strip, and transparent areas do not intercept desktop clicks.
+Pending notifications, open reminder/menu/AI/history panels, keyboard focus within the Bar, and actions in progress keep the surface available without acknowledging notifications or interrupting input. After a panel closes, the current state determines whether it folds back. Tab can enter the strip; reduced-motion preferences make the transition immediate. Persistent mode is unchanged. Suppressing the Bar for capture also hides the strip, and transparent areas do not intercept desktop clicks.
 
 ### Screenshots and history
 
@@ -139,30 +162,32 @@ Click the **Nowly Bar Logo** to open the function menu, then choose **Screenshot
 
 **Save** writes directly to the system **Pictures\Nowly\Screenshots** folder instead of opening a Save As dialog. **Copy image and finish** archives the same final PNG before writing the image clipboard. Only cropped, annotated and redacted output is retained; cancelling creates no history. Redirected system Pictures folders are respected.
 
-Screenshot history expands directly from the top-edge Nowly Bar into an animated panel, without a separate window. The collapsed Bar is **288 × 40px**, with only the status area and Logo entry; reminders, the function menu, AI, and history all expand to **432px** wide. Enable Nowly Bar to use the history shortcut. Press **Esc**, use the close button, or click outside to collapse it; Esc first cancels an open deletion confirmation. Click the Logo again to return to the function menu. The panel shows thumbnails with image-copy and confirmed-delete actions, plus **Open folder**. Images remain until deleted; confirmation removes the archived PNG and its thumbnail cache. SQLite stores metadata, not image bytes. Thumbnail caches can be regenerated.
+Screenshot history expands directly from the top-edge Nowly Bar into an animated panel, without a separate window. The collapsed Bar is **288 × 40px**, with only the status area and Logo entry; reminders, the function menu, AI, and history all expand to **432px** wide. Press **Esc**, use the close button, or click outside to collapse it; Esc first cancels an open deletion confirmation. Click the Logo again to return to the function menu. The panel shows thumbnails with image-copy and confirmed-delete actions, plus **Open folder**. Images remain until deleted; confirmation removes the archived PNG and its thumbnail cache. SQLite stores metadata, not image bytes. Thumbnail caches can be regenerated.
 
 An archive failure preserves the editor and does not copy. If archiving succeeds but the clipboard fails, retrying the same final image reuses its history entry. Copying from history never creates another entry. Raw desktop frames are retained only for the active capture session.
 
 #### Pin an image
 
-Choose **Pin** in the screenshot toolbar to open the final cropped and annotated image in an independent always-on-top desktop window. Move or close it while using other apps. The complete image fits the window proportionally, without manual zoom controls. Both ordinary screenshots and confirmed long images can be pinned. Up to **five** pins can remain open; a sixth request keeps your editor intact and asks you to close one first. Pinning does not copy to the clipboard or replace saving a permanent image.
+Choose **Pin** in the screenshot toolbar to open the final cropped and annotated image in an independent always-on-top desktop window. Hold and drag the blank area of the top toolbar to move it, or close it while using other apps. Holding the image or its surrounding whitespace does not move the window. Drag any window edge or corner to resize it proportionally (minimum 240 × 96px). The image viewport keeps its initial aspect ratio, both axes change together, and the toolbar height stays fixed; the complete image scales proportionally to fit, without separate zoom controls. Both ordinary screenshots and confirmed long images can be pinned. Up to **five** pins can remain open; a sixth request keeps your editor intact and asks you to close one first. Pinning does not copy to the clipboard or replace saving a permanent image.
 
 Existing pins hide temporarily during another capture and return without taking focus when it ends or is cancelled. Closing a pin frees its slot. Pins are not restored after quitting the app.
 
-#### Manual scrolling capture
+#### Manual scrolling capture (temporarily hidden)
 
-1. Select a vertical content region within one monitor, avoiding unrelated windows, fixed sidebars and video. Choose **Scrolling capture** before adding annotations.
-2. Choose **Start capture** and wait for the first frame. Scroll down manually in the source window, retaining overlap and pausing briefly after each step. Nowly captures and stitches frames without sending wheel input. The controls show confirmed height and a preview, with pause, resume, stop and cancel actions.
-3. Choose **Finish and review** or press **Esc** to review the image and seams. Choose **Use long image** to annotate, copy, save or pin it. If capture stopped abnormally, explicitly choose **Use captured portion**. Cancelling the long capture restores the original ordinary screenshot.
+The scrolling capture entry is temporarily hidden due to known issues. Regular screenshots, annotations, pinning, saving and copying are unaffected. The instructions below apply once the feature is restored.
 
-During scrolling capture, the Nowly main window may hide temporarily to avoid obscuring the target. It returns to its previous visibility without changing the always-on-top preference when capture ends or is cancelled. Switching apps, moving/resizing or obscuring the target, capture failures and uncertain joins stop capture while retaining the confirmed portion. Unchanged content or reaching the end keeps capture waiting; select Finish when done. The target keeps its current scroll position after cancellation. Horizontal, cross-monitor and automatic scrolling modes are not included, and Nowly does not elevate privileges to control protected apps. Output is limited to **64 million pixels**, with neither edge exceeding **65,535 pixels**; reaching a limit preserves the captured portion for review.
+1. Select a vertical content region within one monitor, avoiding fixed headers/footers, sidebars and video. Choose **Scrolling capture** on the toolbar before adding annotations.
+2. Capture starts at once and stays in the same screenshot screen: outside the selection is dimmed but live, a hint above the selection says "Scroll the page to capture more", and a live preview of the long image appears beside it. Put the pointer inside the selection and scroll the page with the wheel; new content is stitched automatically, and nothing is added while you are not scrolling. Nowly never scrolls for you.
+3. Choose **Done** (or press Enter / Ctrl+C) to copy the long image and close the screenshot, **Save** (or Ctrl+S) to save it and close, or **Cancel** / **Esc** to close the whole screenshot.
+
+Frames are captured continuously while you scroll; there is no need to pause after each movement. Scrolling below the captured end appends new content; scrolling above the starting position prepends it. Revisiting captured content neither removes nor duplicates it. The preview follows the end that just grew. Unverified matches never overwrite confirmed pixels; feedback identifies capture or matching problems rather than asking you to control scroll speed. A selection that includes a bar that does not scroll is explained; automatic fixed-chrome removal is not included. Horizontal, cross-monitor and automatic scrolling modes are not included; the Windows frame-driven backend currently excludes rotated displays. Output is limited to **64 million pixels**, with neither edge exceeding **65,535 pixels**; at the limit you can finish with what was captured.
 
 Browser development mode can validate the UI but cannot manage real screenshot files, desktop scrolling capture or global shortcuts. Full functionality requires the Windows desktop app.
 ## Connected calendars
 
 Open the Calendar module settings and subscription manager. Local events need no connected account. For a feed, choose ICS, enter a name and HTTPS/webcal URL, then set category and refresh interval. For Google or Microsoft, connect an account in the provider's browser flow, select calendars and subscribe. Up to 50 sources are supported; intervals are 1–30 minutes (default 15). Use refresh to retry; a failed refresh retains the last successful events, so check sync status before relying on them.
 
-ICS events are read-only. Authorized Google/Microsoft sources can be selected as the destination when creating an event; ordinary event editing supports remote changes and deletion when writable. This sends event content to the provider, not just to local storage. Remote recurrence-rule creation/editing is unsupported. Disconnecting removes the local account and dependent subscriptions/cache, not the provider's grant or remote calendar; revoke access in provider settings separately if required. See [Privacy and data](privacy-and-data.en.md).
+ICS events are read-only. Authorized Google/Microsoft sources can be selected as the destination when creating an event; ordinary event editing supports remote changes and deletion when writable. This sends event content to the provider, not just to local storage. Remote writes export notes as plain text, without internal rich-text JSON or image/video embeds. Timed Outlook events retain the device's local time zone; Google uses the equivalent UTC instant. Remote recurrence-rule creation/editing is unsupported. Disconnecting removes the local account and dependent subscriptions/cache, not the provider's grant or remote calendar; revoke access in provider settings separately if required. See [Privacy and data](privacy-and-data.en.md).
 
 ## Optional AI assistant
 
@@ -208,6 +233,22 @@ npx playwright test                                 # end-to-end tests
 cargo test --manifest-path src-tauri\Cargo.toml     # Rust tests
 npm run tauri build                                 # build the Windows executable
 ```
+
+### Windows development linker errors
+
+If `npm run tauri dev` fails with `LNK2019` / `LNK1120` and the missing symbols
+are predominantly `anon.*.llvm.*`, stop the development process, then clear only
+Nowly's compiled artifacts from the repository root and retry:
+
+```powershell
+cargo clean --manifest-path src-tauri\Cargo.toml -p nowly
+npm run tauri dev
+```
+
+Stale Rust incremental artifacts can cause these errors. This command preserves
+dependency caches, the application database and user data. If rebuilding still
+fails, retain the complete linker log for further investigation; other unresolved
+symbols do not necessarily indicate a cache problem.
 
 The unified time/focus settings are a development-only breaking change; the old
 per-clock configuration is not migrated. Back up the development database before

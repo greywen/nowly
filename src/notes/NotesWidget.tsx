@@ -5,6 +5,7 @@ import { NotesSettingsDialog } from './NotesSettingsDialog';
 import { colorStyle } from '../lib/color';
 import { useNotePreviews } from './useNotePreviews';
 import { t } from '../i18n';
+import { noteTitle } from './note-title';
 
 type LoadStatus = 'loading' | 'ready' | 'error';
 
@@ -122,7 +123,7 @@ export function NotesWidget({
                 >
                   {iconFor(note) ? null : <span className="sticky-note__tape" aria-hidden="true" />}
                   {iconFor(note) ? <span className={`sticky-note__icon sticky-note__icon--${iconAnchorFor(note)}`} aria-hidden="true">{iconFor(note)}</span> : null}
-                  <span className="sticky-note__title">{note.title}</span>
+                  <span className="sticky-note__title">{noteTitle(note.content)}</span>
                   <span className="sticky-note__content">{preview?.text}</span>
                   {preview?.thumbnailUrl ? (
                     <img className="sticky-note__thumb" src={preview.thumbnailUrl} alt="" />
@@ -149,7 +150,7 @@ export function NotesWidget({
                   className="note"
                   style={colorStyle(note.color)}
                 >
-                  <div className="note-title">{iconFor(note) ? <span className="note-icon" aria-hidden="true">{iconFor(note)}</span> : null}{note.title}</div>
+                  <div className="note-title">{iconFor(note) ? <span className="note-icon" aria-hidden="true">{iconFor(note)}</span> : null}<span className="note-title__text">{noteTitle(note.content)}</span></div>
                   <div className="note-row">
                     {preview?.thumbnailUrl ? (
                       <img className="note-thumb" src={preview.thumbnailUrl} alt="" />

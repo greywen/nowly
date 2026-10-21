@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '../i18n';
 import { framePixelToCss, type FrameBox } from './frame-geometry';
+import { ANNOTATION_FONT_FAMILY } from './text-metrics';
 
 // The annotation text editor.
 //
@@ -95,6 +96,7 @@ export function TextEditor({
         top,
         color,
         fontSize: fontSize * scale,
+        fontFamily: ANNOTATION_FONT_FAMILY,
         // 1.4 matches the renderer's line spacing, so committing does not shift
         // the text.
         lineHeight: 1.4,

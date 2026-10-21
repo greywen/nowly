@@ -8,30 +8,22 @@
 // call picks up the new strings. On startup we prefer a previously saved
 // choice (persisted in localStorage, mirroring `useBlur`/`useOnboarding`) so a
 // manual switch survives reloads and restarts; with no saved choice we follow
-// the system language, falling back to English for anything we do not localize.
+// the Windows UI language (the primary browser language on web), falling back
+// to English when it is unavailable or unsupported.
 
-export type Language = 'zh' | 'en';
+import { LOCALES, matchLanguage, normalizeLanguage, SUPPORTED_LANGUAGES, type Language } from './locales';
+export { normalizeLanguage, SUPPORTED_LANGUAGES };
+export type { Language };
 
 const LANGUAGE_STORAGE_KEY = 'nowly.language';
 
-export const SUPPORTED_LANGUAGES: Language[] = ['zh', 'en'];
-
-// Map a BCP-47 tag (e.g. "zh-CN", "en-US") onto one of our supported
-// languages, defaulting to English for anything we do not localize yet.
-export function normalizeLanguage(tag: string | undefined | null): Language {
-  if (!tag) return 'en';
-  return tag.toLowerCase().startsWith('zh') ? 'zh' : 'en';
-}
-
 function detectSystemLanguage(): Language {
-  if (typeof navigator === 'undefined') return 'en';
-  const candidates = navigator.languages && navigator.languages.length
-    ? navigator.languages
-    : [navigator.language];
-  for (const candidate of candidates) {
-    if (candidate) return normalizeLanguage(candidate);
+  // The native shell injects this before any app script in every window,
+  // avoiding WebView language preferences and an asynchronous language flash.
+  if (typeof window !== 'undefined' && '__NOWLY_SYSTEM_LANGUAGE__' in window) {
+    return normalizeLanguage(window.__NOWLY_SYSTEM_LANGUAGE__);
   }
-  return 'en';
+  return normalizeLanguage(typeof navigator === 'undefined' ? null : navigator.language);
 }
 
 // Read a persisted choice, ignoring anything unrecognized (or storage errors in
@@ -39,7 +31,7 @@ function detectSystemLanguage(): Language {
 function readSavedLanguage(): Language | null {
   try {
     const saved = localStorage.getItem(LANGUAGE_STORAGE_KEY);
-    return saved === 'zh' || saved === 'en' ? saved : null;
+    return saved ? matchLanguage(saved) : null;
   } catch {
     return null;
   }
@@ -48,11 +40,21 @@ function readSavedLanguage(): Language | null {
 let current: Language = readSavedLanguage() ?? detectSystemLanguage();
 const listeners = new Set<() => void>();
 
+function updateDocumentLanguage(): void {
+  if (typeof document === 'undefined') return;
+  document.documentElement.lang = LOCALES[current].lang;
+  document.documentElement.dir = LOCALES[current].dir;
+}
+
+updateDocumentLanguage();
+
 function handleStorageChange(event: StorageEvent): void {
-  if (event.key !== LANGUAGE_STORAGE_KEY) return;
-  const next = normalizeLanguage(event.newValue);
+  if (event.key !== LANGUAGE_STORAGE_KEY && event.key !== null) return;
+  if (event.storageArea && event.storageArea !== localStorage) return;
+  const next = event.newValue === null ? detectSystemLanguage() : normalizeLanguage(event.newValue);
   if (next === current) return;
   current = next;
+  updateDocumentLanguage();
   for (const listener of listeners) listener();
 }
 
@@ -65,8 +67,10 @@ export function getLanguage(): Language {
 }
 
 export function setLanguage(next: Language): void {
-  if (next === current) return;
+  if (!SUPPORTED_LANGUAGES.includes(next)) return;
+  const changed = next !== current;
   current = next;
+  updateDocumentLanguage();
   // Persistence never blocks the UI: save best-effort, then notify subscribers.
   try {
     localStorage.setItem(LANGUAGE_STORAGE_KEY, next);
@@ -74,7 +78,15 @@ export function setLanguage(next: Language): void {
     // Ignore storage failures (private mode, quota); the in-memory value still
     // drives this session.
   }
-  for (const listener of listeners) listener();
+  if (changed) for (const listener of listeners) listener();
+}
+
+export function getLocale(): string {
+  return LOCALES[current].locale;
+}
+
+export function formatNumber(value: number, options?: Intl.NumberFormatOptions): string {
+  return new Intl.NumberFormat(getLocale(), options).format(value);
 }
 
 export function subscribe(listener: () => void): () => void {

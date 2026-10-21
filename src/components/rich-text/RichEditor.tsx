@@ -48,6 +48,7 @@ import {
   richTextToolbar
 } from './quill-setup';
 import { useAttachments } from './useAttachments';
+import { installImageResize } from './image-resize';
 import './rich-editor.css';
 
 /** Quill's table module surface, narrowed to what the context bar drives. */
@@ -235,6 +236,7 @@ export function RichEditor({ id, value, onChange, disabled = false, placeholder,
       }
     });
     quillRef.current = quill;
+    const disposeImageResize = installImageResize(quill, surfaceRef.current ?? wrapper);
 
     // Emit for every source except 'silent', which is what the load path below
     // uses. Loading normalised content must not look like a user edit, or every
@@ -282,6 +284,7 @@ export function RichEditor({ id, value, onChange, disabled = false, placeholder,
     if (tooltip instanceof HTMLElement) applyTooltipLabels(tooltip);
 
     return () => {
+      disposeImageResize();
       quill.off('text-change', emit);
       quill.off('editor-change', syncTableState);
       quill.root.removeEventListener('compositionstart', onCompositionStart);

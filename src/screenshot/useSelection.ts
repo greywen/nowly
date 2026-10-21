@@ -383,16 +383,6 @@ export function useSelection(
     commitNow({ ...current, selection });
   }, [commitNow]);
 
-  const adoptImage = useCallback((size:{width:number;height:number}) => {
-    anchor.current=null;
-    transform.current=null;
-    pressedCandidate.current=null;
-    customDrag.current=false;
-    pointerPixelRef.current=null;
-    boxCache.current=null;
-    commitNow({...live.current,phase:'editing',selection:{x:0,y:0,width:size.width,height:size.height},draft:null,pointerPixel:null,transforming:false,box:null});
-  },[commitNow]);
-
   /// Starts dragging the committed rectangle itself, from a press inside it.
   ///
   /// Returns false when there is nothing to move, so the caller can fall through
@@ -440,7 +430,6 @@ export function useSelection(
     onPointerUp,
     cancelGesture,
     reset,
-    adoptImage,
     setSelection,
     beginMove,
     beginResize

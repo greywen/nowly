@@ -90,6 +90,6 @@ export function useWorkspaceTasks() {
     dismissDragError: () => setDragError(null),
     pendingTaskIds: workspace.pendingTaskIds,
     failedCompletion,
-    dragError: dragError ?? workspace.operationError
+    dragError
   };
 }

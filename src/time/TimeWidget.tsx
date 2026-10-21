@@ -1,10 +1,10 @@
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
-import { getLanguage, useTranslation } from '../i18n';
+import { getLocale, useTranslation } from '../i18n';
 import { Bell, Plus, Settings } from '../components/icons';
 import { computeClockLayout, computeDigitalFontSize, type ClockLayout } from './clock-layout';
 import { ClockFace } from './ClockFace';
 import { normalizeTimeSettings, type Alarm, type TimeSettings, type WorldClock, type ClockAppearance } from './time-model';
-import { formatClockDate, formatClockTime, formatDifference } from './time-format';
+import { formatClockDate, formatClockDisplay, formatDifference } from './time-format';
 import { tt, timeLocalLabel } from './time-translations';
 import { useTimeSettings } from './useTimeSettings';
 import { useTimeSnapshot } from './useTimeSnapshot';
@@ -103,7 +103,8 @@ export function TimeWidget({ settings: providedSettings, now, onOpenSettings, on
 
 function ClockTile({ clock, now, layout, size }: { clock: WorldClock & ClockAppearance; now: Date; layout: ClockLayout; size: { width: number; height: number; count: number } }) {
   const label = displayClockLabel(clock);
-  const time = formatClockTime(now, clock.timeZone, clock);
+  const { time, dayPeriod, accessibleTime } = formatClockDisplay(now, clock.timeZone, clock);
+  const periodWidth = dayPeriod ? dayPeriod.length * 0.85 * 13 + 8 : 0;
   const showFace = clock.mode !== 'digital';
   const showTime = clock.mode !== 'analog';
   const optionalVisible = layout.showOptionalInfo;
@@ -112,12 +113,12 @@ function ClockTile({ clock, now, layout, size }: { clock: WorldClock & ClockAppe
   const rows = Math.ceil(size.count / layout.columns);
   const cellHeight = Math.max(layout.rowMinHeight, (size.height - (rows - 1) * 12) / rows);
   const metadataRows = Number(optionalVisible && clock.showDate) + Number(optionalVisible && clock.showDifference);
-  const fontSize = computeDigitalFontSize(cellWidth, cellHeight - (clock.showLabel ? 28 : 0) - metadataRows * 28, time, clock, digitalLayout);
+  const fontSize = computeDigitalFontSize(cellWidth - periodWidth, cellHeight - (clock.showLabel ? 28 : 0) - metadataRows * 28, time, clock, digitalLayout);
 
   return (
     <article
       className={`time-clock time-clock--${clock.mode} time-clock--${digitalLayout}`}
-      aria-label={`${label} ${time}`}
+      aria-label={`${label} ${accessibleTime}`}
       data-testid="time-clock"
       data-clock-id={clock.id}
       data-clock-mode={clock.mode}
@@ -129,8 +130,11 @@ function ClockTile({ clock, now, layout, size }: { clock: WorldClock & ClockAppe
       data-show-difference={clock.showDifference ? 'true' : 'false'}
     >
       {clock.showLabel ? <div className="time-clock__label">{label}</div> : null}
-      {showFace ? <ClockFace now={now} timeZone={clock.timeZone} label={label} showSeconds={clock.showSeconds} size={layout.faceSize} /> : null}
-      {showTime ? <div className="time-clock__time" data-testid="time-clock-digital">{clock.mode === 'digital' && digitalLayout === 'stacked' ? time.split(':').map((part, index) => <span key={index}>{part}</span>) : time}</div> : null}
+      {showFace && showTime ? <ClockFace now={now} timeZone={clock.timeZone} label={label} showSeconds={clock.showSeconds} size={layout.faceSize} /> : null}
+      <div className={`time-clock__reading${!showTime ? ' time-clock__reading--analog' : ''}`}>
+        {showTime ? <div className="time-clock__time" data-testid="time-clock-digital">{clock.mode === 'digital' && digitalLayout === 'stacked' ? time.split(':').map((part, index) => <span key={index}>{part}</span>) : time}</div> : <ClockFace now={now} timeZone={clock.timeZone} label={label} showSeconds={clock.showSeconds} size={layout.faceSize} />}
+        {dayPeriod ? <span className="time-clock__period" data-testid="time-clock-period" dir="auto">{dayPeriod}</span> : null}
+      </div>
       {optionalVisible && clock.showDate ? <div className="time-clock__meta">{formatClockDate(now, clock.timeZone)}</div> : null}
       {optionalVisible && clock.showDifference ? <div className="time-clock__meta">{formatDifference(now, clock.timeZone)}</div> : null}
     </article>
@@ -143,7 +147,7 @@ function displayClockLabel(clock: WorldClock) {
 }
 
 function formatAlarmDate(date: Date) {
-  return new Intl.DateTimeFormat(getLanguage() === 'zh' ? 'zh-CN' : 'en-GB', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(date);
+  return new Intl.DateTimeFormat(getLocale(), { calendar: 'gregory', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(date);
 }
 function earliestAlarm(alarms: Alarm[], now: Date) {
   const candidates = alarms.filter((alarm) => alarm.enabled).flatMap((alarm) => {

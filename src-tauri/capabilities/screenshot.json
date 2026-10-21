@@ -4,9 +4,7 @@
   "description": "Minimal permissions for capture session windows. Per the screenshot spec §9 these windows get no business database, AI configuration or arbitrary filesystem access, and no notification permission: they only need core IPC and events to talk to the capture session.",
   "windows": [
     "screenshot-session-*",
-    "screenshot-overlay-*",
-    "screenshot-scroll-control-*",
-    "screenshot-scroll-preview-*"
+    "screenshot-overlay-*"
   ],
   "permissions": [
     "core:default",

@@ -1,90 +1,77 @@
 use serde::Serialize;
+
+/// Scrolling capture starts the moment it is chosen and has no pause: the user
+/// scrolls to add content and stops scrolling to add nothing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) enum ScrollPhase {
-    Prepare,
     Capturing,
-    Paused,
-    Review,
+    /// The confirmed image was handed to the screenshot output; nothing more is added.
+    Finished,
     Cancelled,
 }
-#[derive(Debug)]
-pub(crate) struct ScrollMachine {
-    pub phase: ScrollPhase,
-    pub reason: Option<String>,
-    unsafe_target: bool,
-}
-impl Default for ScrollMachine {
-    fn default() -> Self {
-        Self {
-            phase: ScrollPhase::Prepare,
-            reason: None,
-            unsafe_target: false,
-        }
-    }
-}
-impl ScrollMachine {
-    pub fn start(&mut self) -> Result<(), String> {
-        if self.unsafe_target || !matches!(self.phase, ScrollPhase::Prepare | ScrollPhase::Paused) {
-            return Err("Scroll session cannot continue.".into());
-        }
-        self.phase = ScrollPhase::Capturing;
-        self.reason = None;
-        Ok(())
-    }
-    pub fn pause(&mut self, reason: &str) {
-        if self.phase == ScrollPhase::Capturing {
-            self.phase = ScrollPhase::Paused;
-            self.reason = Some(reason.into());
-        }
-    }
-    pub fn review(&mut self, reason: &str) {
-        if self.phase != ScrollPhase::Cancelled {
-            self.phase = ScrollPhase::Review;
-            self.reason = Some(reason.into());
-        }
-    }
-    pub fn fail(&mut self, reason: &str) {
-        self.unsafe_target = true;
-        self.review(reason);
-    }
-    pub fn escape(&mut self) {
-        match self.phase {
-            ScrollPhase::Capturing | ScrollPhase::Paused => {
-                self.review("Stopped; review the confirmed portion")
-            }
-            ScrollPhase::Prepare | ScrollPhase::Review => self.cancel(),
-            ScrollPhase::Cancelled => {}
-        }
-    }
-    pub fn cancel(&mut self) {
-        self.phase = ScrollPhase::Cancelled;
-    }
-    pub fn may_capture(&self) -> bool {
-        self.phase == ScrollPhase::Capturing && !self.unsafe_target
-    }
-    pub fn may_publish(&self) -> bool {
-        self.phase == ScrollPhase::Capturing
-    }
+
+/// Why the last frames added nothing, shown beside the selection. None of these
+/// ends the capture: the confirmed image is kept and the next frame is tried.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum ScrollHint {
+    /// The new view does not overlap the confirmed end, usually from scrolling too far at once.
+    LostTrack,
+    /// The selection includes rows that do not move, such as a sticky header.
+    FixedEdges,
+    /// The size limit was reached; finishing keeps everything captured so far.
+    Full,
+    /// The screen could not be read.
+    CaptureFailed,
 }
 
 #[derive(Default)]
-pub(crate) struct FrameSampler {
-    previous: Option<Vec<u8>>,
-}
+pub(crate) struct FrameSampler;
 impl FrameSampler {
     pub fn sample(&mut self, pixels: Vec<u8>, confirmed: Option<&[u8]>) -> Option<Vec<u8>> {
-        let stable = self.previous.as_deref() == Some(pixels.as_slice());
-        if confirmed == Some(pixels.as_slice()) {
-            self.previous = None;
+        if confirmed.is_some_and(|frame| frames_close(frame, &pixels)) {
             return None;
         }
-        if stable {
-            self.previous = None;
-            Some(pixels)
-        } else {
-            self.previous = Some(pixels);
-            None
+        Some(pixels)
+    }
+}
+
+/// Accept only tiny, sparse capture noise. Keeping the original pixels means this is
+/// used solely for deciding stability; it cannot blur or rewrite the stitched image.
+pub(crate) fn frames_close(left: &[u8], right: &[u8]) -> bool {
+    if left.len() != right.len() || left.is_empty() {
+        return false;
+    }
+    if left.len() % 4 != 0 {
+        return left == right;
+    }
+    let mut changed_pixels = 0usize;
+    for (a, b) in left.chunks_exact(4).zip(right.chunks_exact(4)) {
+        if a[3] != b[3] || a[..3].iter().zip(&b[..3]).any(|(x, y)| x.abs_diff(*y) > 3) {
+            changed_pixels += 1;
         }
+    }
+    changed_pixels <= (left.len() / 4).max(1) / 200
+}
+
+#[cfg(test)]
+mod tests {
+    use super::FrameSampler;
+
+    #[test]
+    fn tolerates_sparse_capture_noise_but_not_moving_content() {
+        let base = vec![100u8; 20 * 20 * 4];
+        let mut noisy = base.clone();
+        noisy[0] = 102;
+        let mut sampler = FrameSampler::default();
+        assert!(sampler.sample(base.clone(), None).is_some());
+        assert!(sampler.sample(noisy, Some(&base)).is_none());
+
+        let mut moving = base.clone();
+        moving[..4 * 20 * 4].fill(0);
+        let mut sampler = FrameSampler::default();
+        assert!(sampler.sample(base.clone(), None).is_some());
+        assert!(sampler.sample(moving, Some(&base)).is_some());
     }
 }

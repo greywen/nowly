@@ -1,5 +1,5 @@
 import { Check, ChevronDown } from '../components/icons';
-import { type KeyboardEvent, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { type KeyboardEvent, type ReactNode, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { t } from '../i18n';
 
 export type SelectOption = {
@@ -26,9 +26,10 @@ type SelectProps = {
   // compact inline selects that already have a nearby textual label.
   hideLabel?: boolean;
   fitContent?: boolean;
+  triggerIcon?: ReactNode;
 };
 
-export function Select({ id, name, label, options, value, onChange, placeholder, searchable = false, disabled = false, errorId, hideLabel = false, fitContent = false }: SelectProps) {
+export function Select({ id, name, label, options, value, onChange, placeholder, searchable = false, disabled = false, errorId, hideLabel = false, fitContent = false, triggerIcon }: SelectProps) {
   const resolvedPlaceholder = placeholder ?? t('select.placeholder');
   const listboxId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -105,7 +106,7 @@ export function Select({ id, name, label, options, value, onChange, placeholder,
   function close(restoreFocus = true) {
     setOpen(false);
     setQuery('');
-    if (restoreFocus) requestAnimationFrame(() => triggerRef.current?.focus());
+    if (restoreFocus) triggerRef.current?.focus();
   }
 
   function choose(option: SelectOption) {
@@ -160,12 +161,15 @@ export function Select({ id, name, label, options, value, onChange, placeholder,
         aria-activedescendant={open && activeOption ? `${listboxId}-${activeOption.value || 'empty'}` : undefined}
         aria-describedby={errorId}
         disabled={disabled}
-        className="select-trigger"
+        className={`select-trigger${triggerIcon ? ' select-trigger--icon' : ''}`}
+        title={triggerIcon ? `${label}: ${selected?.label ?? resolvedPlaceholder}` : undefined}
         onClick={() => open ? close(false) : openList()}
         onKeyDown={handleKeyDown}
       >
-        <span className="select-value">{selected?.color ? <span className="select-dot" style={{ background: selected.color }} aria-hidden="true" /> : null}{selected?.label ?? resolvedPlaceholder}</span>
-        <ChevronDown aria-hidden="true" />
+        {triggerIcon ? triggerIcon : <>
+          <span className="select-value">{selected?.color ? <span className="select-dot" style={{ background: selected.color }} aria-hidden="true" /> : null}{selected?.label ?? resolvedPlaceholder}</span>
+          <ChevronDown aria-hidden="true" />
+        </>}
       </button>
       {open ? (
         <div

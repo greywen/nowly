@@ -6,6 +6,7 @@ import { sortNotes } from '../lib/note-draft';
 import { noteIconSymbol, type Note } from './notes-model';
 import { useNotePreviews } from './useNotePreviews';
 import { t } from '../i18n';
+import { noteTitle } from './note-title';
 
 export function NotesManagerDialog({notes,onClose,onCreate,onEdit,restoreFocusRef}:{
   notes:Note[]; onClose():void; onCreate(trigger:HTMLElement):void;
@@ -23,8 +24,8 @@ export function NotesManagerDialog({notes,onClose,onCreate,onEdit,restoreFocusRe
       {notes.length === 0 ? <div className="empty-state"><p>{t('notesManager.empty')}</p></div> : sortNotes(notes).map(note => {
         const preview = previews.get(note.id);
         return (
-        <button key={note.id} type="button" className="note" style={colorStyle(note.color)} aria-label={t('notesManager.editNote', { title: note.title })} onClick={(e)=>onEdit(note,e.currentTarget)}>
-          <div className="note-title">{note.pinned ? <Pin aria-label={t('notesManager.pinned')} /> : null}{noteIconSymbol(note.icon) ? <span className="note-icon" aria-hidden="true">{noteIconSymbol(note.icon)}</span> : null}{note.title}</div>
+        <button key={note.id} type="button" className="note" style={colorStyle(note.color)} aria-label={t('notesManager.editNote', { title: noteTitle(note.content) })} onClick={(e)=>onEdit(note,e.currentTarget)}>
+          <div className="note-title">{note.pinned ? <Pin aria-label={t('notesManager.pinned')} /> : null}{noteIconSymbol(note.icon) ? <span className="note-icon" aria-hidden="true">{noteIconSymbol(note.icon)}</span> : null}<span className="note-title__text">{noteTitle(note.content)}</span></div>
           <div className="note-row">
             {preview?.thumbnailUrl ? <img className="note-thumb" src={preview.thumbnailUrl} alt="" /> : null}
             <div className="note-content">{preview?.text || t('notesManager.noContent')}</div>

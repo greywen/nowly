@@ -78,6 +78,7 @@ const ICON_SOURCES = {
   Send: 'plain-3',
   Settings: 'settings',
   Sparkles: 'magic-stick-3',
+  SmileCircle: 'smile-circle',
   Square: 'stop',
   SquareKanban: 'widget-2',
   Timer: 'stopwatch',

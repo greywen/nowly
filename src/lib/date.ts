@@ -1,5 +1,5 @@
 import type { CalendarDay } from '../calendar/calendar-model';
-import { getLanguage } from '../i18n';
+import { getLanguage, getLocale } from '../i18n';
 
 const weekdayNames = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
 const weekdayNamesEn = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -19,6 +19,9 @@ export function toIsoDate(date: Date): string {
 // Language-aware: Chinese uses the native year/month/day form, English uses a
 // long-form date with weekday.
 export function formatChineseDate(date: Date): string {
+  if (getLanguage() !== 'zh' && getLanguage() !== 'en') {
+    return new Intl.DateTimeFormat(getLocale(), { calendar: 'gregory', dateStyle: 'full' }).format(date);
+  }
   if (getLanguage() === 'en') {
     return `${weekdayNamesEn[date.getDay()]}, ${monthNamesEn[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
   }

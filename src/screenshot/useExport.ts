@@ -4,6 +4,7 @@ import type { Annotation, AnnotationDocument } from './annotation-document';
 import { toVirtualDesktop, type DisplayOrigin } from './frame-geometry';
 import { rasterizeAnnotations } from './rasterize';
 import type { PixelRect } from './screenshot-model';
+import { localizedRepositoryErrorMessage } from '../i18n/localize-error';
 
 const PRIMARY_ORIGIN: DisplayOrigin = { x: 0, y: 0 };
 
@@ -29,9 +30,8 @@ export type ExportState =
   /// failure was local and has no localised message of its own.
   | { status: 'failed'; message: string | null; fallbackKey: string | null };
 
-/// Rust rejections arrive as a serialised `CommandError`, whose message is already
-/// localised and phrased per 搂8.3. Anything else is a local failure whose message is
-/// developer-facing English, so it must not be shown to the user.
+/// Native CommandError messages need localization at this direct IPC boundary.
+/// Unknown failures use the operation-specific guidance, never raw diagnostics.
 function describeFailure(
   error: unknown,
   fallbackKey: string
@@ -42,15 +42,8 @@ function describeFailure(
   if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'archived_copy_failed') {
     return { message: null, fallbackKey: 'screenshot.export.savedCopyFailed' };
   }
-  if (
-    typeof error === 'object' &&
-    error !== null &&
-    !(error instanceof Error) &&
-    'message' in error &&
-    typeof (error as { message: unknown }).message === 'string'
-  ) {
-    return { message: (error as { message: string }).message, fallbackKey: null };
-  }
+  const message = localizedRepositoryErrorMessage(error);
+  if (message) return { message, fallbackKey: null };
   return { message: null, fallbackKey };
 }
 

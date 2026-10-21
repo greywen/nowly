@@ -86,6 +86,64 @@ async function editorSurface(): Promise<HTMLElement> {
 }
 
 describe('RichEditor', () => {
+  it('resizes images with the keyboard and preserves one undoable width change', async () => {
+    const onChange = vi.fn();
+    renderEditor({ value: envelope([{ insert: { image: 'https://example.com/test.png' } }, { insert: '\n' }]), onChange });
+    const surface = await editorSurface();
+    const image = surface.querySelector('img')!;
+    vi.spyOn(image, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, left: 0, top: 0, right: 200, bottom: 100, width: 200, height: 100, toJSON() {} });
+    vi.spyOn(surface, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, left: 0, top: 0, right: 500, bottom: 300, width: 500, height: 300, toJSON() {} });
+    fireEvent.pointerDown(image);
+    const handle = screen.getByRole('slider', { name: '调整图片尺寸' });
+    fireEvent.keyDown(handle, { key: 'ArrowRight' });
+    expect(image).toHaveAttribute('width', '210');
+    expect(JSON.parse(onChange.mock.lastCall![0]).ops[0].attributes.width).toBe('210');
+    const quill = Quill.find(surface.parentElement!) as Quill;
+    quill.history.undo();
+    expect(image).not.toHaveAttribute('width');
+    quill.history.redo();
+    expect(image).toHaveAttribute('width', '210');
+    fireEvent.keyDown(handle, { key: 'Escape' });
+    expect(screen.queryByRole('slider', { name: '调整图片尺寸' })).not.toBeInTheDocument();
+  });
+
+  it('clamps pointer resizing and cancels a gesture without saving its preview', async () => {
+    const onChange = vi.fn();
+    const { unmount } = renderEditor({ value: envelope([{ insert: { image: 'https://example.com/test.png' }, attributes: { width: '200' } }, { insert: '\n' }]), onChange });
+    const surface = await editorSurface();
+    const image = surface.querySelector('img')!;
+    const rect = (width: number, height: number) => ({ x: 0, y: 0, left: 0, top: 0, right: width, bottom: height, width, height, toJSON() {} });
+    vi.spyOn(image, 'getBoundingClientRect').mockReturnValue(rect(200, 100));
+    vi.spyOn(surface, 'getBoundingClientRect').mockReturnValue(rect(500, 300));
+    const pointer = (target: Node, type: string, x: number) => fireEvent(target, new MouseEvent(type, { bubbles: true, button: 0, clientX: x, clientY: 0 }));
+    pointer(image, 'pointerdown', 0);
+    const handle = screen.getByRole('slider', { name: '调整图片尺寸' });
+    pointer(handle, 'pointerdown', 0);
+    pointer(document, 'pointermove', -1000);
+    expect(image.style.width).toBe('48px');
+    expect(onChange).not.toHaveBeenCalled();
+    pointer(document, 'pointercancel', -1000);
+    expect(image.style.width).toBe('');
+    expect(image).toHaveAttribute('width', '200');
+    expect(onChange).not.toHaveBeenCalled();
+    pointer(handle, 'pointerdown', 0);
+    pointer(document, 'pointerup', 1000);
+    expect(image.getAttribute('width')).toBe(handle.getAttribute('aria-valuemax'));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    pointer(handle, 'pointerdown', 0);
+    pointer(document, 'pointermove', 20);
+    unmount();
+    pointer(document, 'pointerup', 20);
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('.rich-editor__image-resize')).toBeNull();
+  });
+
+  it('does not offer image resizing in a disabled editor', async () => {
+    renderEditor({ disabled: true, value: envelope([{ insert: { image: 'https://example.com/test.png' } }, { insert: '\n' }]) });
+    const surface = await editorSurface();
+    fireEvent.pointerDown(surface.querySelector('img')!);
+    expect(screen.queryByRole('slider', { name: '调整图片尺寸' })).not.toBeInTheDocument();
+  });
   it('shows a placeholder until the lazy dependencies arrive', async () => {
     renderEditor();
     // KaTeX must exist before Quill is constructed, so there is a real gap.

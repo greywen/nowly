@@ -1,7 +1,12 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BarMenuPanel } from './BarMenuPanel';
 import { DEFAULT_BAR_MENU } from '../bar-menu';
+import { getLanguage, setLanguage } from '../../i18n/store';
+import { t } from '../../i18n';
+
+const originalLanguage = getLanguage();
+afterEach(() => act(() => setLanguage(originalLanguage)));
 
 const invokeMock = vi.hoisted(() => vi.fn());
 vi.mock('@tauri-apps/api/core', () => ({ invoke: invokeMock }));
@@ -80,11 +85,21 @@ describe('Bar function menu', () => {
     expect(invokeMock.mock.calls.filter(call => call[0] === 'start_screen_capture')).toHaveLength(1);
     expect(capture).toBeDisabled();
     await act(async () => rejectCapture(new Error('Capture failed')));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Capture failed');
+    expect(await screen.findByRole('alert')).toHaveTextContent(t('barMenu.actionFailed'));
     expect(capture).toBeEnabled();
     invokeMock.mockImplementation((command: string) => Promise.resolve(command === 'screenshot_shortcut_status' ? shortcuts : null));
     fireEvent.click(screen.getByRole('button', { name: '重试' }));
-    await waitFor(() => expect(screen.queryByText('Capture failed')).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+  });
+
+  it('localizes a native action rejection before showing it in the menu', async () => {
+    setLanguage('fr');
+    invokeMock.mockImplementation((command: string) => command === 'start_screen_capture'
+      ? Promise.reject({ code: 'system_error', message: '截图启动失败，请重试。' })
+      : Promise.resolve(command === 'screenshot_shortcut_status' ? shortcuts : null));
+    render(<BarMenuPanel active items={DEFAULT_BAR_MENU} />);
+    fireEvent.click(screen.getAllByRole('menuitem')[0]);
+    expect(await screen.findByRole('alert')).toHaveTextContent(t('nativeError.system_error'));
   });
 
   it('reports shortcut status failure without disabling feature execution', async () => {
