@@ -63,7 +63,7 @@
 .assistant-actions { position: sticky; z-index: 2; bottom: -16px; display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin: 24px -16px -16px; padding: 16px; border-top: 1px solid var(--border-default); background: var(--bg-surface); box-shadow: var(--shadow-xs); }
 .assistant-record { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; padding: 12px 0; border-bottom: 1px solid var(--border-default); font-size: .95rem; }
 .assistant-record > span { color: var(--text-secondary); }
-.assistant-record-link { background: transparent; border: none; padding: 0; text-align: left; color: var(--text-strong); font: inherit; text-decoration: underline; overflow-wrap: anywhere; cursor: pointer; }
+.assistant-record-link { background: transparent; border: none; padding: 0; text-align: start; color: var(--text-strong); font: inherit; text-decoration: underline; overflow-wrap: anywhere; cursor: pointer; }
 .assistant-record-link:focus-visible, .assistant-panel summary:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
 .assistant-record-link:hover { color: var(--color-primary-active); }
 .assistant-panel summary { cursor: pointer; margin: 12px 0; }

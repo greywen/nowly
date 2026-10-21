@@ -84,6 +84,23 @@ async function startScrolling(page: Page) {
   await expect(page.locator('.screenshot-scroll-hint')).toHaveText('滚动页面截取更多内容');
 }
 
+test('scrolling capture entry is temporarily hidden while normal capture stays available', async ({ page }) => {
+  await overlay(page);
+  await page.mouse.move(400, 150);
+  await page.mouse.down();
+  await page.mouse.move(800, 450, { steps: 8 });
+  await page.mouse.up();
+  await expect(page.getByRole('toolbar')).toBeVisible();
+  await expect(page.getByRole('button', { name: '滚动截图' })).toHaveCount(0);
+  for (const name of ['钉住', '另存为 PNG', '取消截图', '复制图片并完成']) {
+    await expect(page.getByRole('button', { name })).toBeEnabled();
+  }
+  expect((await calls(page)).some((call) => call.command === 'scroll_capture')).toBe(false);
+});
+
+test.describe('scrolling capture (temporarily unavailable)', () => {
+  test.skip(true, 'Entry hidden until scrolling capture bugs are resolved; keep coverage for restoration.');
+
 test('scrolling capture starts at once inside the original screenshot screen', async ({ page }) => {
   await overlay(page);
   await startScrolling(page);
@@ -127,4 +144,5 @@ test('Esc closes the whole screenshot while scrolling', async ({ page }) => {
   await startScrolling(page);
   await page.keyboard.press('Escape');
   await expect.poll(async () => (await calls(page)).some((c) => c.command === 'cancel_screen_capture')).toBe(true);
+});
 });

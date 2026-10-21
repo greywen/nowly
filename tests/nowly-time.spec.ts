@@ -19,7 +19,7 @@ type Fixture = {
 async function boot(page: Page, fixture: Fixture = {}, bar = false) {
   await page.addInitScript(({ key, fixture }) => {
     localStorage.setItem('nowly:onboarding-seen', 'true');
-    localStorage.setItem('nowly.language', 'zh');
+    if (!localStorage.getItem('nowly.language')) localStorage.setItem('nowly.language', 'zh');
     // Do not reset persisted edits when the page reloads.
     if (localStorage.getItem(key)) return;
     localStorage.setItem(key, JSON.stringify({
@@ -196,7 +196,8 @@ test('clock settings add, reorder, remove, save dynamically and survive reload',
   await page.reload();
   const widget = page.getByTestId('time-widget');
   await expect(widget).toHaveAttribute('data-clock-count', '2');
-  await expect(widget.getByTestId('time-clock-digital').first()).toHaveText(/\d{1,2}:\d{2}:\d{2} (AM|PM)/);
+  await expect(widget.getByTestId('time-clock-digital').first()).toHaveText(/^\d{2}:\d{2}:\d{2}$/);
+  await expect(widget.getByTestId('time-clock-period').first()).toHaveText(/上午|下午/);
   const reopened = await openTimeSettings(page);
   await reopened.locator('.time-clock-settings-card').nth(1).getByRole('button', { name: /^删除/ }).click();
   await saveClocks(reopened);
@@ -206,6 +207,70 @@ test('clock settings add, reorder, remove, save dynamically and survive reload',
   expect((await stored(page)).timeSettings.clocks).toHaveLength(1);
   await openTimeSettings(page);
   await expect(page.getByRole('textbox', { name: '显示名称', exact: true })).toHaveValue('伦敦');
+});
+
+test('twelve-hour periods stay small at the bottom-right across layouts and languages', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.clock.setFixedTime(new Date('2026-10-21T02:02:09Z'));
+  await boot(page, { rect: { w: 12, h: 6 }, clocks: [clock('UTC'), clock('NewYork', 'America/New_York')] });
+  const cases = [
+    { language: 'zh', mode: 'digital', layout: 'horizontal', showSeconds: false, rect: { w: 12, h: 6 } },
+    { language: 'en', mode: 'digital', layout: 'stacked', showSeconds: true, rect: { w: 6, h: 6 } },
+    { language: 'ar', mode: 'digital', layout: 'horizontal', showSeconds: true, rect: { w: 4, h: 3 } },
+    { language: 'zh', mode: 'mixed', layout: 'horizontal', showSeconds: false, rect: { w: 6, h: 6 } },
+    { language: 'zh', mode: 'analog', layout: 'horizontal', showSeconds: false, rect: { w: 6, h: 6 } }
+  ] as const;
+  for (const appearance of cases) {
+    await page.evaluate(({ key, appearance }) => {
+      localStorage.setItem('nowly.language', appearance.language);
+      const fixture = JSON.parse(localStorage.getItem(key)!);
+      fixture.moduleLayout = [{ id: 'time', x: 0, y: 0, ...appearance.rect }];
+      fixture.timeSettings.appearance = { ...fixture.timeSettings.appearance, ...appearance,
+        hourCycle: 'h12', showDate: true, fontMode: 'manual', fontSize: 128 };
+      localStorage.setItem(key, JSON.stringify(fixture));
+    }, { key: storageKey, appearance });
+    await page.reload();
+    const tiles = page.getByTestId('time-clock');
+    await expect(tiles).toHaveCount(2);
+    for (let index = 0; index < 2; index += 1) {
+      const tile = tiles.nth(index);
+      const period = tile.getByTestId('time-clock-period');
+      await expect(period).toBeVisible();
+      await expect(period).toHaveCSS('font-size', '11.05px');
+      await expect(period).toHaveText(appearance.language === 'zh' ? (index === 0 ? '上午' : '下午') : appearance.language === 'en' ? (index === 0 ? 'AM' : 'PM') : (index === 0 ? 'ص' : 'م'));
+      const reading = tile.locator('.time-clock__reading');
+      const readingBox = (await reading.boundingBox())!;
+      const periodBox = (await period.boundingBox())!;
+      if (appearance.mode === 'analog') {
+        expect(Math.abs(periodBox.y + periodBox.height - readingBox.y - readingBox.height)).toBeLessThan(1);
+      }
+      expect(periodBox.x).toBeGreaterThanOrEqual(readingBox.x);
+      expect(periodBox.x + periodBox.width).toBeLessThanOrEqual(readingBox.x + readingBox.width + 1);
+      if (appearance.mode !== 'analog') {
+        const digits = tile.getByTestId('time-clock-digital');
+        const expected = await page.evaluate(({ language, showSeconds, timeZone }) => {
+          const parts = new Intl.DateTimeFormat(language, { timeZone, hourCycle: 'h12', hour: '2-digit', minute: '2-digit', second: showSeconds ? '2-digit' : undefined }).formatToParts(new Date('2026-10-21T02:02:09Z'));
+          return parts.filter(part => part.type === 'hour' || part.type === 'minute' || part.type === 'second').map(part => part.value).join(':');
+        }, { language: appearance.language, showSeconds: appearance.showSeconds, timeZone: index === 0 ? 'UTC' : 'America/New_York' });
+        await expect(digits).toHaveText(appearance.layout === 'stacked' ? expected.replaceAll(':', '') : expected);
+        const digitsBox = (await digits.boundingBox())!;
+        expect(periodBox.x).toBeGreaterThanOrEqual(digitsBox.x + digitsBox.width);
+        const baseline = async (element: Locator) => element.evaluate(target => {
+          const marker = document.createElement('span');
+          marker.style.cssText = 'display:inline-block;width:0;height:0;padding:0;margin:0;border:0;vertical-align:baseline';
+          target.appendChild(marker);
+          const y = marker.getBoundingClientRect().top;
+          marker.remove();
+          return y;
+        });
+        const lastDigits = appearance.layout === 'stacked' ? digits.locator('span').last() : digits;
+        expect(Math.abs(await baseline(lastDigits) - await baseline(period))).toBeLessThan(1);
+        const tileBox = (await tile.boundingBox())!;
+        expect(readingBox.x + readingBox.width).toBeLessThanOrEqual(tileBox.x + tileBox.width + 1);
+      }
+    }
+    expect((await stored(page)).timeSettings.appearance.hourCycle).toBe('h12');
+  }
 });
 
 test('global appearance controls persist stacked manual sizing and independent dates', async ({ page }) => {

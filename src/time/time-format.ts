@@ -1,5 +1,6 @@
 import type { ClockAppearance } from './time-model';
 import { timeLocalLabel } from './time-translations';
+import { getLocale, t } from '../i18n';
 
 export type ClockParts = {
   year: number;
@@ -38,7 +39,9 @@ export function timeZoneOptions(selectedZone?: string): TimeZoneOption[] {
 }
 
 function buildTimeZoneOptions(): TimeZoneOption[] {
-  const aliases = new Map<string, string>(COMMON_TIME_ZONES.map((zone) => [zone.value, zone.value === 'local' ? timeLocalLabel() : zone.label]));
+  const aliases = new Map<string, string>(COMMON_TIME_ZONES.map((zone) => [
+    zone.value, zone.value === 'local' ? timeLocalLabel() : zone.value === 'UTC' ? 'UTC' : t(`time.zone.${zone.value}`)
+  ]));
   const intlWithValues = Intl as typeof Intl & { supportedValuesOf?: (key: 'timeZone') => string[] };
   const supported = typeof intlWithValues.supportedValuesOf === 'function'
     ? intlWithValues.supportedValuesOf('timeZone')
@@ -50,7 +53,7 @@ function buildTimeZoneOptions(): TimeZoneOption[] {
       value: zone,
       label: aliases.get(zone) ?? zone.split('_').join(' ')
     }))
-    .sort((a, b) => (a.value === 'local' ? -1 : b.value === 'local' ? 1 : a.label.localeCompare(b.label)));
+    .sort((a, b) => (a.value === 'local' ? -1 : b.value === 'local' ? 1 : a.label.localeCompare(b.label, getLocale())));
 }
 
 export function resolveTimeZone(zone: string): string {
@@ -89,15 +92,14 @@ function getPartsFormatter(zone: string) {
 
 function getDisplayFormatter(zone: string, hourCycle: 'h23' | 'h12', showSeconds: boolean) {
   const resolved = resolveTimeZone(zone);
-  const key: TimeFormatterKey = `${resolved}|${hourCycle}|${showSeconds}`;
+  const key: TimeFormatterKey = `${getLocale()}:${resolved}|${hourCycle}|${showSeconds}`;
   const cached = displayFormatterCache.get(key);
   if (cached) return cached;
-  const formatter = new Intl.DateTimeFormat('en-US', {
+  const formatter = new Intl.DateTimeFormat(getLocale(), {
     timeZone: resolved,
     calendar: 'gregory',
-    numberingSystem: 'latn',
     hourCycle,
-    hour: 'numeric',
+    hour: '2-digit',
     minute: '2-digit',
     second: showSeconds ? '2-digit' : undefined
   });
@@ -134,8 +136,22 @@ export function formatClockTime(
   return getDisplayFormatter(zone, options.hourCycle, options.showSeconds).format(now);
 }
 
+export function formatClockDisplay(
+  now: Date,
+  zone: string,
+  options: Pick<ClockAppearance, 'hourCycle' | 'showSeconds'>
+) {
+  const parts = getDisplayFormatter(zone, options.hourCycle, options.showSeconds).formatToParts(now);
+  const digits = parts.filter(part => part.type === 'hour' || part.type === 'minute' || part.type === 'second');
+  return {
+    time: digits.map(part => part.value).join(':'),
+    dayPeriod: parts.find(part => part.type === 'dayPeriod')?.value ?? '',
+    accessibleTime: formatClockTime(now, zone, options)
+  };
+}
+
 export function formatClockDate(now: Date, zone: string) {
-  return new Intl.DateTimeFormat('zh-CN', {
+  return new Intl.DateTimeFormat(getLocale(), {
     timeZone: resolveTimeZone(zone),
     calendar: 'gregory',
     month: 'short',
@@ -166,12 +182,12 @@ export function formatDifference(now: Date, zone: string, baseZone = 'local') {
   const currentOffset = offsetMinutes(now, zone);
   const baseOffset = offsetMinutes(now, baseZone);
   const diff = currentOffset - baseOffset;
-  if (diff === 0) return '同本地';
+  if (diff === 0) return t('time.difference.same');
   const sign = diff > 0 ? '+' : '-';
   const absolute = Math.abs(diff);
   const hours = Math.floor(absolute / 60);
   const minutes = absolute % 60;
-  return minutes === 0 ? `${sign}${hours} 小时` : `${sign}${hours}小时${minutes}分`;
+  return t(minutes === 0 ? 'time.difference.hours' : 'time.difference.hoursMinutes', { sign, hours, minutes });
 }
 
 function offsetMinutes(now: Date, zone: string) {

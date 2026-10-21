@@ -21,6 +21,7 @@ mod ics_parser;
 mod layout;
 mod models;
 mod monitors;
+mod native_language;
 mod net;
 mod notes;
 mod oauth;
@@ -54,9 +55,29 @@ mod write_scope;
 
 use db::{open_database, AppDb};
 use std::sync::Mutex;
-use tauri::menu::MenuBuilder;
+use tauri::menu::{MenuBuilder, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
+
+struct NativeTrayMenu(MenuItem<tauri::Wry>);
+
+#[tauri::command]
+fn set_native_language(
+    window: tauri::WebviewWindow,
+    menu: tauri::State<'_, NativeTrayMenu>,
+    language: String,
+) -> Result<(), error::CommandError> {
+    if window.label() != "main" {
+        return Err(error::CommandError::system(
+            "Only the main window can change the native menu language",
+        ));
+    }
+    // Tauri dispatches set_text onto the native UI thread. Keep the same item
+    // and id so localization never rebuilds the tray or changes its behavior.
+    menu.0
+        .set_text(native_language::quit_label(&language))
+        .map_err(error::CommandError::system)
+}
 
 // The AI quick panel, its `Ctrl+Space` global shortcut and the AI mutual
 // exclusion logic are intentionally not registered in this version. Only the
@@ -131,6 +152,7 @@ fn main() {
     set_app_user_model_id();
 
     tauri::Builder::default()
+        .plugin(native_language::plugin())
         .manage(assistant::commands::Requests::default())
         .manage(screen_capture::ActiveCapture::default())
         .manage(screen_capture::FrameStore::default())
@@ -367,9 +389,11 @@ fn main() {
                 });
             }
 
-            let menu = MenuBuilder::new(app)
-                .text("quit", "Quit Nowly")
-                .build()?;
+            let quit_item = MenuItem::with_id(
+                app, "quit", native_language::quit_label("en"), true, None::<&str>,
+            )?;
+            let menu = MenuBuilder::new(app).item(&quit_item).build()?;
+            app.manage(NativeTrayMenu(quit_item));
 
             let mut tray_builder = TrayIconBuilder::new()
                 .menu(&menu)
@@ -561,6 +585,7 @@ fn main() {
         })
         .invoke_handler({
             let handler: Box<dyn Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync> = Box::new(tauri::generate_handler![
+            set_native_language,
             assistant::commands::assistant_get_config,
             assistant::commands::assistant_save_config,
             assistant::commands::assistant_interpret,

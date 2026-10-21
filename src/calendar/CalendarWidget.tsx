@@ -35,7 +35,7 @@ import {
 } from './calendar-model';
 import { colorStyle, isHexColor } from '../lib/color';
 import { occurrenceKey } from '../lib/recurrence';
-import { t } from '../i18n';
+import { t, formatNumber } from '../i18n';
 
 // Indexed by day-of-week (0 = Sunday … 6 = Saturday) so a column's label can be
 // looked up directly from its weekday regardless of the week-start setting.
@@ -647,7 +647,7 @@ export function CalendarWidget({
                 onClick={() => scheduleDateOpen(day.isoDate)}
                 onDoubleClick={() => createForDate(day.isoDate)}
               >
-                <span className="day-number">{day.dayOfMonth}</span>
+                <span className="day-number">{formatNumber(day.dayOfMonth)}</span>
               </button>
               {/* Per-column stack of single-day events, centered in the space
                   below the shared spanning zone. */}
@@ -731,7 +731,7 @@ export function CalendarWidget({
               onDoubleClick={() => createForDate(day.isoDate)}
             >
               <span className="week-column__weekday">{weekdayLabels[index]}</span>
-              <span className="week-column__date">{day.dayOfMonth}</span>
+              <span className="week-column__date">{formatNumber(day.dayOfMonth)}</span>
             </button>
           ))}
         </div>
@@ -925,11 +925,11 @@ export function CalendarWidget({
             </button>
           ) : null}
           <button type="button" className="btn btn-icon" aria-label={navLabels.previous} onClick={onPreviousMonth}>
-            <ChevronLeft aria-hidden="true" />
+            <ChevronLeft className="i18n-directional-icon" aria-hidden="true" />
           </button>
           <button type="button" className="btn" onClick={onToday}>{t('calendar.today')}</button>
           <button type="button" className="btn btn-icon" aria-label={navLabels.next} onClick={onNextMonth}>
-            <ChevronRight aria-hidden="true" />
+            <ChevronRight className="i18n-directional-icon" aria-hidden="true" />
           </button>
           {onOpenSettings ? (
             <button type="button" className="btn btn-icon" aria-label={t('calendarSettings.label')} onClick={onOpenSettings}>

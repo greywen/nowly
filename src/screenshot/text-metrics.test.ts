@@ -6,6 +6,23 @@ import { measureTextBox, resetTextMeasurement } from './text-metrics';
 // was, and it is what a headless export falls back to.
 
 describe('measuring a text annotation box', () => {
+  it('measures with the stable artwork font even when the UI uses an Arabic font', () => {
+    const original = HTMLCanvasElement.prototype.getContext;
+    const previousFont = document.body.style.fontFamily;
+    const context = { font: '', measureText: () => ({ width: 120 }) };
+    HTMLCanvasElement.prototype.getContext = (() => context) as never;
+    document.body.style.fontFamily = '"Segoe UI", Tahoma, sans-serif';
+    resetTextMeasurement();
+    try {
+      measureTextBox('Hello مرحباً', 24);
+      expect(context.font).toBe('500 24px Inter, "Microsoft YaHei", "PingFang SC", Helvetica, Arial, sans-serif');
+    } finally {
+      HTMLCanvasElement.prototype.getContext = original;
+      document.body.style.fontFamily = previousFont;
+      resetTextMeasurement();
+    }
+  });
+
   it('bills a CJK glyph as a full em, not 0.6', () => {
     // The bug: 你好世界 at 24px came out 4 * 24 * 0.6 = 57.6px wide, about half its
     // real width, so the right half of the text was outside the object and the

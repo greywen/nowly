@@ -1,7 +1,7 @@
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import { ScreenshotToolbar } from './ScreenshotToolbar';
+import { ScreenshotToolbar, type ScreenshotToolbarProps } from './ScreenshotToolbar';
 import { IconStyleProvider } from '../components/icons';
 import { type IconStyle } from '../components/icon-style';
 import { iconBodies } from '../components/icon-data';
@@ -21,7 +21,7 @@ function state(overrides: Partial<ToolbarState> = {}): ToolbarState {
   };
 }
 
-function renderToolbar(overrides: Partial<ToolbarState> = {}, activeTool: ToolId = 'select') {
+function renderToolbar(overrides: Partial<ToolbarState> = {}, activeTool: ToolId = 'select', groups?: ScreenshotToolbarProps['groups']) {
   const onSelectTool = vi.fn();
   const onAction = vi.fn();
   render(
@@ -30,6 +30,7 @@ function renderToolbar(overrides: Partial<ToolbarState> = {}, activeTool: ToolId
       onSelectTool={onSelectTool}
       onAction={onAction}
       state={state(overrides)}
+      groups={groups}
     />
   );
   return { onSelectTool, onAction };
@@ -52,7 +53,7 @@ describe('the toolbar', () => {
       expect(icon).toHaveAttribute('data-icon-style', style);
     }
 
-    const glyphs = { 椭圆: iconBodies.Circle, 马赛克: iconBodies.Mosaic, 文字: iconBodies.Text, 滚动截图: iconBodies.ScrollVertical };
+    const glyphs = { 椭圆: iconBodies.Circle, 马赛克: iconBodies.Mosaic, 文字: iconBodies.Text };
     for (const [label, bodies] of Object.entries(glyphs)) {
       const expected = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
       expected.innerHTML = bodies[style];
@@ -118,7 +119,7 @@ describe('the toolbar', () => {
     expect(screen.getByRole('toolbar', { name: '截图编辑工具' })).toBeInTheDocument();
   });
 
-  it('renders all thirteen controls in the documented order', () => {
+  it('renders the thirteen available controls in the documented order', () => {
     renderToolbar();
 
     const names = screen.getAllByRole('button').map((button) => button.getAttribute('aria-label'));
@@ -133,7 +134,6 @@ describe('the toolbar', () => {
       '马赛克',
       '撤销',
       '重做',
-      '滚动截图',
       '钉住',
       '另存为 PNG',
       '取消截图',
@@ -167,10 +167,10 @@ describe('the toolbar', () => {
     expect(onAction).toHaveBeenCalledWith('undo');
   });
 
-  it('explains a blocked scrolling capture on the control itself', async () => {
+  it('explains a blocked scrolling capture on the control itself when explicitly restored', async () => {
     // §2.3 rules out a toast or banner, so the reason has to be reachable from
     // the button: visible on hover and available to a screen reader.
-    renderToolbar({ annotationCount: 2 });
+    renderToolbar({ annotationCount: 2 }, 'select', [['scroll']]);
 
     const button = screen.getByRole('button', { name: '滚动截图' });
 
@@ -179,8 +179,16 @@ describe('the toolbar', () => {
     expect(button.getAttribute('title')).toContain('长截图需在标注前开始');
   });
 
-  it('gives no reason when scrolling capture is available', () => {
-    renderToolbar();
+  it.each(['zh', 'en'] as const)('temporarily hides scrolling capture in %s', (language) => {
+    setLanguage(language);
+    try {
+      renderToolbar();
+      expect(screen.queryByRole('button', { name: /滚动截图|Scrolling screenshot/i })).not.toBeInTheDocument();
+    } finally { act(() => setLanguage('zh')); }
+  });
+
+  it('gives no reason when scrolling capture is explicitly restored and available', () => {
+    renderToolbar({}, 'select', [['scroll']]);
 
     const button = screen.getByRole('button', { name: '滚动截图' });
 

@@ -33,7 +33,8 @@ export const DEFAULT_TOOL: ToolId = 'select';
 /// The three fixed groups, separated by a 1px divider in the rendered toolbar.
 export const TOOLBAR_GROUPS: readonly (readonly (ToolId | ActionId)[])[] = [
   TOOL_ORDER,
-  ['undo', 'redo', 'scroll'],
+  // Temporarily hide scrolling capture until its known bugs are resolved.
+  ['undo', 'redo'],
   ['pin', 'save', 'cancel', 'done']
 ];
 

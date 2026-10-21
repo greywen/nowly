@@ -29,7 +29,10 @@ The ordinary window, wallpaper, tray, quick panel and fullscreen focus serve dif
   icons in the module header switch between clocks and focus; browsing settings tabs never changes the display.
   All cities share display mode, horizontal/stacked layout, hour cycle, visibility
   and automatic or slider-controlled 32–160px font sizing. Dates have an independent
-  visibility toggle; each city only has a name, time zone and order. Appearance, time zones, visibility options,
+  visibility toggle; each city only has a name, time zone and order. Twelve-hour readings
+  use two-digit hours (02:02, 02:10, 11:02), with a small localized AM/PM label at
+  the bottom-right of the time. Twenty-four-hour readings do not show this label.
+  Appearance, time zones, visibility options,
   and adding, removing, or reordering clocks apply immediately and save automatically.
   Failed saves retain edits and offer retry; closing settings does not undo changes.
   Once saved, settings survive reopening and refreshing. The comparison tool has
@@ -81,10 +84,15 @@ The ordinary window, wallpaper, tray, quick panel and fullscreen focus serve dif
   sound in the background while Nowly is running. Calendar reminders, focus completion,
   and alarms all appear in Nowly Bar. Nowly no longer sends Windows system
   notifications, and sounds do not depend on Windows notification permissions.
-- **Localization** — English and Simplified Chinese, following your system
-  language on startup. Language changes synchronize across screenshot and Bar
-  windows. Missing translations fall back to English; native surfaces without
-  localization, including the calendar authorization callback, use English.
+- **Localization** — Simplified Chinese, English, French, Spanish, Arabic,
+  Japanese, Korean, and Traditional Chinese. Without a saved manual choice,
+  startup reads the current user's Windows UI language (the primary browser
+  language on web) and selects the matching app language. An unavailable or
+  unsupported language defaults to English, without trying secondary preferences.
+  Manual choices are saved and restored first. Language changes synchronize
+  across screenshot and Bar windows. Missing translations fall back to English;
+  native surfaces without localization, including the calendar authorization
+  callback, use English.
 
 ## Usage
 
@@ -164,7 +172,9 @@ Choose **Pin** in the screenshot toolbar to open the final cropped and annotated
 
 Existing pins hide temporarily during another capture and return without taking focus when it ends or is cancelled. Closing a pin frees its slot. Pins are not restored after quitting the app.
 
-#### Manual scrolling capture
+#### Manual scrolling capture (temporarily hidden)
+
+The scrolling capture entry is temporarily hidden due to known issues. Regular screenshots, annotations, pinning, saving and copying are unaffected. The instructions below apply once the feature is restored.
 
 1. Select a vertical content region within one monitor, avoiding fixed headers/footers, sidebars and video. Choose **Scrolling capture** on the toolbar before adding annotations.
 2. Capture starts at once and stays in the same screenshot screen: outside the selection is dimmed but live, a hint above the selection says "Scroll the page to capture more", and a live preview of the long image appears beside it. Put the pointer inside the selection and scroll the page with the wheel; new content is stitched automatically, and nothing is added while you are not scrolling. Nowly never scrolls for you.

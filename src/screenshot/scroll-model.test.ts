@@ -1,5 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { acceptScrollUpdate, describeScrollError, hintPlacement, previewPlacement, PREVIEW_WIDTH, type ScrollState } from './scroll-model';
+import { getLanguage, setLanguage } from '../i18n/store';
+import { nativeErrorTranslations } from '../i18n/native-errors';
+
+const originalLanguage = getLanguage();
+afterEach(() => setLanguage(originalLanguage));
 
 const base: ScrollState = {
   sessionId: '1',
@@ -38,5 +43,16 @@ describe('scroll model', () => {
     expect(describeScrollError({ code: 'scroll_nothing_yet', message: 'Nothing captured yet' }, 'x')).toEqual({ key: 'screenshot.auto.nothingYet' });
     expect(describeScrollError({ code: 'system_error', message: 'The clipboard is busy.' }, 'x')).toEqual({ message: 'The clipboard is busy.' });
     expect(describeScrollError(new Error('internal'), 'fallback')).toEqual({ key: 'fallback' });
+  });
+
+  it('localizes structured errors and uses safe fallback for unknown diagnostics', () => {
+    setLanguage('ar');
+    expect(describeScrollError({ code: 'system_error', message: '截图采集失败。' }, 'fallback')).toEqual({
+      message: nativeErrorTranslations.ar['nativeError.system_error'],
+    });
+    expect(describeScrollError({ message: '内部调用失败' }, 'fallback')).toEqual({ key: 'fallback' });
+    expect(describeScrollError({ code: 'archived_copy_failed', message: '内部调用失败' }, 'fallback')).toEqual({
+      key: 'screenshot.export.savedCopyFailed',
+    });
   });
 });

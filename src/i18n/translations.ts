@@ -2,12 +2,31 @@ import type { Language } from './store';
 import { assistantTranslations } from './assistant-translations';
 import { stickerTranslations } from '../stickers/sticker-translations';
 import { scrollTranslations } from '../screenshot/scroll-translations';
+import { timeTranslations, timeBarTranslations } from './time-catalog';
+import { supplemental } from './supplemental';
+import { nativeErrorTranslations } from './native-errors';
+import { fr } from './locales/fr';
+import { es } from './locales/es';
+import { ar } from './locales/ar';
+import { ja } from './locales/ja';
+import { ko } from './locales/ko';
+import { zhHant } from './locales/zh-Hant';
 
 // Flat key -> string dictionaries per language. Keys use dot-namespaces by
 // feature for readability. Interpolation uses `{name}` placeholders resolved by
 // the `t()` helper.
 export const translations: Record<Language, Record<string, string>> = {
+  fr: { ...fr, ...nativeErrorTranslations.fr },
+  es: { ...es, ...nativeErrorTranslations.es },
+  ar: { ...ar, ...nativeErrorTranslations.ar },
+  ja: { ...ja, ...nativeErrorTranslations.ja },
+  ko: { ...ko, ...nativeErrorTranslations.ko },
+  'zh-Hant': { ...zhHant, ...nativeErrorTranslations['zh-Hant'] },
   zh: {
+    ...nativeErrorTranslations.zh,
+    ...timeTranslations.zh,
+    ...timeBarTranslations.zh,
+    ...supplemental.zh,
     ...stickerTranslations.zh,
     ...scrollTranslations.zh,
     'welcome.title': '欢迎使用 Nowly',
@@ -983,6 +1002,10 @@ export const translations: Record<Language, Record<string, string>> = {
     'widget.focusTimer.desc': '番茄钟式专注计时，帮助保持节奏。'
   },
   en: {
+    ...nativeErrorTranslations.en,
+    ...timeTranslations.en,
+    ...timeBarTranslations.en,
+    ...supplemental.en,
     ...stickerTranslations.en,
     ...scrollTranslations.en,
     'welcome.title': 'Welcome to Nowly',

@@ -29,8 +29,9 @@ export function Tabs<Id extends string>({ idPrefix, label, items, value, onChang
     if (selectable.length === 0) return;
     const current = selectable.findIndex((item) => item.id === value);
     let next = -1;
-    if (event.key === 'ArrowRight') next = (current + 1) % selectable.length;
-    else if (event.key === 'ArrowLeft') next = (current - 1 + selectable.length) % selectable.length;
+    const direction = document.documentElement.dir === 'rtl' ? -1 : 1;
+    if (event.key === 'ArrowRight') next = (current + direction + selectable.length) % selectable.length;
+    else if (event.key === 'ArrowLeft') next = (current - direction + selectable.length) % selectable.length;
     else if (event.key === 'Home') next = 0;
     else if (event.key === 'End') next = selectable.length - 1;
     if (next < 0) return;

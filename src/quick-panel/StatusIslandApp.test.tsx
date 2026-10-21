@@ -405,7 +405,7 @@ describe('screen status island windows', () => {
     await emitPanelEvent('status-island-details-closed', { generation: 2 });
     expect(screen.queryByRole('menu')).toBeNull();
     await emitPanelEvent('status-island-details-open', { generation: 3, source: 'menu', identity: null });
-    await act(async () => rejectStartup({ message: '截图启动超时。' }));
+    await act(async () => rejectStartup({ code: 'system_error', message: '截图启动超时。' }));
     expect(button).not.toBeDisabled();
     expect(screen.getAllByRole('alert').some(alert => alert.textContent?.includes('截图启动超时。'))).toBe(true);
     expect(button).toHaveFocus();

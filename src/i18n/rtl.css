@@ -1,0 +1,58 @@
+/* Text direction follows the locale; physical canvas coordinates do not. */
+:root:lang(fr), :root:lang(es) { --font-sans: Inter, "Segoe UI", Helvetica, Arial, sans-serif; }
+:root:lang(ar) { --font-sans: "Segoe UI", Tahoma, Inter, Arial, sans-serif; }
+:root:lang(ja) { --font-sans: "Yu Gothic UI", Meiryo, Inter, sans-serif; }
+:root:lang(ko) { --font-sans: "Malgun Gothic", Inter, sans-serif; }
+:root:lang(zh-Hant) { --font-sans: "Microsoft JhengHei", "PingFang TC", Inter, sans-serif; }
+
+/* Artwork and its measurement use the original font in every UI locale. */
+.sticker-canvas__stage {
+  --font-sans: Inter, "Microsoft YaHei", "PingFang SC", Helvetica, Arial, sans-serif;
+  direction: ltr;
+}
+.screenshot-annotations, .screenshot-text-editor {
+  direction: ltr;
+}
+
+:root[dir="rtl"] .i18n-directional-icon { transform: scaleX(-1); }
+
+/* Stored positions and pointer math use left-origin physical coordinates. */
+:root[dir="rtl"] :is(.module-grid, .sticker-canvas__stage, .screenshot-overlay,
+  .calendar-grid, .calendar-week, .day-grid, .weekdays, .status-rail) {
+  direction: ltr;
+}
+:root[dir="rtl"] :is(.module-frame, .screenshot-toolbar, .screenshot-overlay__note,
+  .screenshot-action-feedback, .status-island__details, .status-island__copy,
+  .bar-menu-panel, .screenshot-history, .assistant-dock) {
+  direction: rtl;
+}
+:root[dir="rtl"] :is(.event__title, .day-grid__event-title, .week-column__weekday,
+  .calendar-list-item__title, .status-island__label) {
+  direction: rtl;
+  unicode-bidi: isolate;
+}
+:root[dir="rtl"] :is(.date-picker__popup) {
+  left: auto;
+  right: 0;
+}
+:root[dir="rtl"] :is(.time-picker__steppers, .time-picker__presets,
+  .time-clock__time, .focus-timer__time, .bar-menu-panel__shortcut,
+  .shortcut-recorder__input, input[type="url"], input[type="email"],
+  input[type="number"], pre, code, kbd) {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+/* The Bar host and close-button geometry are fixed in screen coordinates. */
+:root[dir="rtl"] .bar-menu-panel__header {
+  padding-left: var(--space-4);
+  padding-right: var(--space-12);
+}
+
+/* Long translations keep their type size and remain reachable. */
+.good-tabs { min-width: 0; overflow-x: auto; }
+.good-tabs__tab { flex-shrink: 0; }
+.good-dialog__footer { flex-wrap: wrap; }
+.settings-grid, .settings-grid > *, .select-field { min-width: 0; }
+.select-option, .select-value { overflow-wrap: anywhere; }
+.good-dialog__footer .good-button { height: auto; min-height: 40px; white-space: normal; }

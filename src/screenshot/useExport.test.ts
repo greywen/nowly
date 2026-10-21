@@ -1,14 +1,17 @@
 import { invoke } from '@tauri-apps/api/core';
 import { act, renderHook } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { addAnnotation, emptyDocument, type Annotation } from './annotation-document';
 import { rasterizeAnnotations } from './rasterize';
 import { useExport } from './useExport';
+import { getLanguage, setLanguage } from '../i18n/store';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 vi.mock('./rasterize', () => ({ rasterizeAnnotations: vi.fn() }));
 
 const selection = { x: 20, y: 30, width: 100, height: 80 };
+const originalLanguage = getLanguage();
+afterEach(() => setLanguage(originalLanguage));
 const mosaic: Annotation = {
   id: 'mask', kind: 'mosaic', x: 25, y: 37, width: 30, height: 20,
   blockSize: 8, color: '#211f1c',
@@ -83,7 +86,7 @@ describe('useExport', () => {
     const { result } = renderHook(() => useExport(doc, selection, () => null));
     await act(async () => { await result.current.copy(); });
     expect(result.current.state).toEqual({
-      status: 'failed', message: 'Clipboard unavailable', fallbackKey: null
+      status: 'failed', message: null, fallbackKey: 'screenshot.export.copyFailed'
     });
     await act(async () => { await result.current.copy(); });
     expect(invoke).toHaveBeenCalledTimes(2);
@@ -96,7 +99,7 @@ describe('useExport', () => {
     vi.mocked(invoke).mockRejectedValueOnce({ code: 'archive_failed', message: 'Archive unavailable' });
     const { result } = renderHook(() => useExport(doc, selection, () => null));
     await act(async () => { await result.current.save(); });
-    expect(result.current.state).toEqual({ status: 'failed', message: 'Archive unavailable', fallbackKey: null });
+    expect(result.current.state).toEqual({ status: 'failed', message: null, fallbackKey: 'screenshot.export.saveFailed' });
     expect(invoke).not.toHaveBeenCalledWith('cancel_screen_capture');
     expect(doc.objects).toEqual([mosaic]);
     await act(async () => { await result.current.save(); });
@@ -111,6 +114,22 @@ describe('useExport', () => {
     expect(result.current.state).toEqual({ status: 'failed', message: null, fallbackKey: 'screenshot.export.savedCopyFailed' });
     await act(async () => { await result.current.save(); });
     expect(result.current.state.status).toBe('idle');
+  });
+
+  it('localizes native save failure while retaining its selection and annotation reassurance', async () => {
+    setLanguage('fr');
+    const doc = addAnnotation(emptyDocument(), mosaic);
+    vi.mocked(invoke).mockRejectedValueOnce({
+      code: 'system_error', message: '无法保存截图，选区和标注已保留，请重试。',
+    });
+    const { result } = renderHook(() => useExport(doc, selection, () => null));
+    await act(async () => { await result.current.save(); });
+    expect(result.current.state).toEqual({
+      status: 'failed',
+      message: 'Impossible d’enregistrer la capture. La sélection et les annotations sont conservées. Réessayez.',
+      fallbackKey: null,
+    });
+    expect(doc.objects).toEqual([mosaic]);
   });
 
   it('pins the same annotated final selection and keeps quota failures retryable', async () => {

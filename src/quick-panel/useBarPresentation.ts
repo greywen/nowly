@@ -1,6 +1,8 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { t } from '../i18n';
+import { localizedRepositoryErrorMessage } from '../i18n/localize-error';
 
 export type BarPresentation = { generation: number; strip: boolean };
 type PresenceSurface = 'island' | 'keyboard' | 'details' | 'action';
@@ -16,8 +18,7 @@ export function useBarPresentation(ready: boolean) {
   }, []);
   const failed = useCallback((reason: unknown) => {
     console.error('Failed to update Nowly Bar presentation', reason);
-    setError(typeof reason === 'object' && reason !== null && 'message' in reason && typeof reason.message === 'string'
-      ? reason.message : String(reason));
+    setError(localizedRepositoryErrorMessage(reason) ?? t('statusIsland.readError'));
   }, []);
   const refresh = useCallback(() => {
     setError('');

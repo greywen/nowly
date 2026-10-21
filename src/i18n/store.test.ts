@@ -19,7 +19,7 @@ describe('language synchronization between windows', () => {
 
   it('falls back to English for an unsupported language from another window', () => {
     setLanguage('zh');
-    window.dispatchEvent(new StorageEvent('storage', { key: 'nowly.language', newValue: 'fr' }));
+    window.dispatchEvent(new StorageEvent('storage', { key: 'nowly.language', newValue: 'de' }));
     expect(getLanguage()).toBe('en');
   });
 

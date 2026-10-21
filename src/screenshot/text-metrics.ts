@@ -11,27 +11,15 @@
 // document. Measuring during render and writing the result back would be a document
 // mutation per frame, and each one would be an undo step.
 
-/// The face the annotation renderer draws with, per §5.2: the Nowly body font at
-/// weight 500. Measuring with a different face would reintroduce the same class of
-/// error the estimate had.
+/// User artwork is independent of UI locale. Rendering, editing, measuring and
+/// exported SVG all use this same original font stack.
+export const ANNOTATION_FONT_FAMILY = 'Inter, "Microsoft YaHei", "PingFang SC", Helvetica, Arial, sans-serif';
 const FONT_WEIGHT = 500;
 const LINE_HEIGHT = 1.4;
 
 /// A canvas is reused across calls: creating one per commit is wasteful, and the
 /// font string is the only thing that changes.
 let measuringContext: CanvasRenderingContext2D | null | undefined;
-
-/// The renderer inherits its family from the document, so the measurement reads it
-/// back rather than naming a font.
-///
-/// It cannot be the literal `inherit`: a canvas font is a CSS `font` shorthand, and
-/// `500 24px inherit` is invalid, so the assignment is *silently ignored* and the
-/// context keeps its 10px sans-serif default. That measured 你好世界 at 40px instead
-/// of 96 — the same under-measurement, just arrived at differently.
-function documentFontFamily(): string {
-  const family = getComputedStyle(document.body).fontFamily;
-  return family && family !== 'inherit' ? family : 'sans-serif';
-}
 
 function contextFor(fontSize: number, fontFamily: string): CanvasRenderingContext2D | null {
   if (measuringContext === undefined) {
@@ -85,8 +73,8 @@ export function measureTextBox(
   content: string,
   fontSize: number,
   /// Injected so a test can assert the layout without depending on an installed
-  /// font. Defaults to the family the renderer inherits from the document.
-  fontFamily = documentFontFamily()
+  /// font. Defaults to the stable family used by the artwork renderer.
+  fontFamily = ANNOTATION_FONT_FAMILY
 ): { width: number; height: number } {
   const lines = content.split('\n');
   const context = contextFor(fontSize, fontFamily);

@@ -1,5 +1,5 @@
 import { buildMonthGrid, toIsoDate, type WeekStart } from '../lib/date';
-import { getLanguage } from '../i18n';
+import { getLanguage, getLocale } from '../i18n';
 import type { CalendarDay, CalendarEvent, CalendarView, EventDraft, EventRange } from './calendar-model';
 
 export type DateFormat = 'localized' | 'iso';
@@ -16,6 +16,9 @@ const monthShortEn = [
 ];
 
 function weekdayName(dayIndex: number): string {
+  if (getLanguage() !== 'zh' && getLanguage() !== 'en') {
+    return new Intl.DateTimeFormat(getLocale(), { weekday: 'short' }).format(new Date(2026, 0, 4 + dayIndex));
+  }
   return getLanguage() === 'en' ? weekdayNamesEn[dayIndex] : weekdayNames[dayIndex];
 }
 
@@ -93,12 +96,16 @@ function formatDate(date: Date, dateFormat: DateFormat) {
   if (getLanguage() === 'en') {
     return `${monthShortEn[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
   }
+  if (getLanguage() !== 'zh') {
+    return new Intl.DateTimeFormat(getLocale(), { calendar: 'gregory', year: 'numeric', month: 'short', day: 'numeric' }).format(date);
+  }
   return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
 }
 
 export function monthTitle(year: number, monthIndex: number, dateFormat: DateFormat = 'localized') {
   if (dateFormat === 'iso') return `${year}-${pad(monthIndex + 1)}`;
   if (getLanguage() === 'en') return `${monthNamesEn[monthIndex]} ${year}`;
+  if (getLanguage() !== 'zh') return new Intl.DateTimeFormat(getLocale(), { calendar: 'gregory', year: 'numeric', month: 'long' }).format(new Date(year, monthIndex, 1));
   return `${year}年${monthIndex + 1}月`;
 }
 
@@ -527,6 +534,9 @@ export function listDateLabel(isoDate: string, dateFormat: DateFormat = 'localiz
   }
   if (getLanguage() === 'en') {
     return `${monthShortEn[date.getMonth()]} ${date.getDate()}, ${weekdayName(date.getDay())}`;
+  }
+  if (getLanguage() !== 'zh') {
+    return new Intl.DateTimeFormat(getLocale(), { calendar: 'gregory', month: 'short', day: 'numeric', weekday: 'short' }).format(date);
   }
   return `${date.getMonth() + 1}月${date.getDate()}日 ${weekdayName(date.getDay())}`;
 }

@@ -3,6 +3,7 @@ import type { EditScope, EventDraft } from '../calendar/calendar-model';
 import type { AlarmDraft, TimeSettings } from '../time/time-model';
 import { defaultTimeSettings } from '../time/time-model';
 import { tauriNowlyRepository } from './tauri-nowly-repository';
+import { getLanguage, setLanguage } from '../i18n/store';
 
 const invokeMock = vi.hoisted(() => vi.fn());
 const emitMock = vi.hoisted(() => vi.fn());
@@ -39,8 +40,18 @@ describe('tauriNowlyRepository', () => {
   it('propagates alarm write errors without invalidating the snapshot', async () => {
     const error = { code: 'not_found', message: 'Missing alarm' };
     invokeMock.mockRejectedValue(error);
-    await expect(tauriNowlyRepository.deleteAlarm('missing')).rejects.toBe(error);
-    expect(emitMock).not.toHaveBeenCalled();
+    const previousLanguage = getLanguage();
+    setLanguage('fr');
+    try {
+      await expect(tauriNowlyRepository.deleteAlarm('missing')).rejects.toMatchObject({
+        code: 'not_found',
+        message: 'Cet élément n’est plus disponible. Rechargez les données, puis réessayez.',
+        originalMessage: 'Missing alarm',
+      });
+      expect(emitMock).not.toHaveBeenCalled();
+    } finally {
+      setLanguage(previousLanguage);
+    }
   });
 
   it('invalidates the screen status snapshot after event and task writes', async () => {

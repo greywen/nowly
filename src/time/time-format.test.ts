@@ -1,5 +1,8 @@
-import { describe, expect, it } from 'vitest';
-import { analogAngles, clockParts, formatClockTime, formatOffset, isValidTimeZone, timeZoneOptions } from './time-format';
+import { afterEach, describe, expect, it } from 'vitest';
+import { setLanguage } from '../i18n';
+import { analogAngles, clockParts, formatClockDisplay, formatClockTime, formatOffset, isValidTimeZone, timeZoneOptions } from './time-format';
+
+afterEach(() => setLanguage('zh'));
 
 describe('time-format', () => {
   it('preserves non-hour and quarter-hour offsets for the same instant', () => {
@@ -26,7 +29,38 @@ describe('time-format', () => {
   it('formats 12-hour and 24-hour readings without mixing location text into the primary time', () => {
     const now = new Date('2026-10-11T13:05:09Z');
     expect(formatClockTime(now, 'UTC', { hourCycle: 'h23', showSeconds: false })).toBe('13:05');
-    expect(formatClockTime(now, 'UTC', { hourCycle: 'h12', showSeconds: true })).toBe('1:05:09 PM');
+    expect(formatClockTime(now, 'UTC', { hourCycle: 'h12', showSeconds: true })).toBe('下午01:05:09');
+  });
+
+  it.each([
+    ['02:02:00', '上午02:02'],
+    ['02:10:00', '上午02:10'],
+    ['11:02:00', '上午11:02'],
+    ['00:02:00', '上午12:02'],
+    ['12:02:00', '下午12:02'],
+    ['14:02:00', '下午02:02']
+  ])('pads twelve-hour readings at %s', (time, expected) => {
+    expect(formatClockTime(new Date(`2026-10-21T${time}Z`), 'UTC', { hourCycle: 'h12', showSeconds: false })).toBe(expected);
+  });
+
+  it.each(['zh', 'en', 'fr', 'es', 'ar', 'ja', 'ko', 'zh-Hant'] as const)('pads twelve-hour digits without losing localization in %s', language => {
+    setLanguage(language);
+    const now = new Date('2026-10-21T02:02:09Z');
+    const locale = new Intl.DateTimeFormat(language === 'zh-Hant' ? 'zh-TW' : language, {
+      timeZone: 'UTC', calendar: 'gregory', hourCycle: 'h12', hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
+    expect(formatClockTime(now, 'UTC', { hourCycle: 'h12', showSeconds: true })).toBe(locale.format(now));
+  });
+
+  it.each(['zh', 'en', 'fr', 'es', 'ar', 'ja', 'ko', 'zh-Hant'] as const)('separates localized digits and periods in %s', language => {
+    setLanguage(language);
+    const now = new Date('2026-10-21T14:02:09Z');
+    const display = formatClockDisplay(now, 'UTC', { hourCycle: 'h12', showSeconds: true });
+    expect(display.time).toBe('02:02:09');
+    expect(display.dayPeriod).not.toBe('');
+    expect(display.time).not.toContain(display.dayPeriod);
+    expect(display.accessibleTime).toBe(formatClockTime(now, 'UTC', { hourCycle: 'h12', showSeconds: true }));
+    expect(formatClockDisplay(now, 'UTC', { hourCycle: 'h23', showSeconds: false })).toMatchObject({ time: '14:02', dayPeriod: '' });
   });
 
   it('computes analog angles and UTC offsets from the same instant', () => {

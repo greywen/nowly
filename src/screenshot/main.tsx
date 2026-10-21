@@ -16,6 +16,7 @@ import { SurfaceIconProvider } from '../screenshot-history/SurfaceIconProvider';
 import { routeForLabel } from './window-route';
 import { PinnedImageApp } from './PinnedImageApp';
 import '../app/styles.css';
+import '../i18n/rtl.css';
 
 // Only native capture windows load this document, but the label is still read
 // defensively: a throw at module top level would blank the window, and a blank

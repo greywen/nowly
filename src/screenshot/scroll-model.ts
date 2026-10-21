@@ -1,3 +1,5 @@
+import { localizedRepositoryErrorMessage } from '../i18n/localize-error';
+
 export type ScrollHint = 'lostTrack' | 'fixedEdges' | 'full' | 'captureFailed';
 
 /// The native scrolling capture as the overlay sees it. `revision` changes only
@@ -40,13 +42,14 @@ const SCROLL_ERROR_KEYS: Readonly<Record<string, string>> = {
 };
 
 /// A rejected command as something the overlay can show: a known code becomes
-/// its own sentence, a message Rust already wrote for users is kept, and anything
-/// else falls back to `fallbackKey`.
+/// its own sentence, a structured native message is localized, and anything else
+/// falls back to `fallbackKey`.
 export function describeScrollError(error: unknown, fallbackKey: string): { key: string } | { message: string } {
   if (typeof error === 'object' && error !== null) {
-    const { code, message } = error as { code?: unknown; message?: unknown };
+    const { code } = error as { code?: unknown };
     if (typeof code === 'string' && SCROLL_ERROR_KEYS[code]) return { key: SCROLL_ERROR_KEYS[code] };
-    if (!(error instanceof Error) && typeof message === 'string' && message) return { message };
+    const message = localizedRepositoryErrorMessage(error);
+    if (message) return { message };
   }
   return { key: fallbackKey };
 }

@@ -1,4 +1,4 @@
-import { useTranslation, t, getLanguage } from '../i18n';
+import { useTranslation, t, getLocale } from '../i18n';
 import { CalendarDays, Layers, SquareKanban } from 'lucide-react';
 import { TabPanel, Tabs, type TabItem } from '../components/Tabs';
 import { ChangeDetails, displayField, kinds } from './PlanCard';
@@ -33,7 +33,7 @@ function dayLabel(time: number) {
   const distance = Math.round((dayStart(Date.now()) - dayStart(time)) / dayMs);
   if (distance === 0) return t('assistant.text31');
   if (distance === 1) return t('assistant.text32');
-  return new Date(time).toLocaleDateString(getLanguage() === 'zh' ? 'zh-CN' : 'en-US', { month: 'long', day: 'numeric', weekday: 'short' });
+  return new Date(time).toLocaleDateString(getLocale(), { calendar: 'gregory', month: 'long', day: 'numeric', weekday: 'short' });
 }
 function groupByDay(plans: Plan[]) {
   const groups: { key: number; label: string; items: Plan[] }[] = [];
@@ -81,7 +81,7 @@ export function AssistantHistory({ plans, range, openChange, busy, uncertain, on
                 <div className="assistant-timeline-head">
                   <div className="assistant-timeline-heading">
                     <strong className="assistant-timeline-title">{planSummary(plan)}</strong>
-                    <p className="assistant-timeline-meta">{t('assistant.recorded')} <time dateTime={new Date(plan.createdAt).toISOString()}>{new Date(plan.createdAt).toLocaleTimeString(language === 'zh' ? 'zh-CN' : 'en-US', { hour12: false, hour: '2-digit', minute: '2-digit' })}</time></p>
+                    <p className="assistant-timeline-meta">{t('assistant.recorded')} <time dateTime={new Date(plan.createdAt).toISOString()}>{new Date(plan.createdAt).toLocaleTimeString(getLocale(), { hour12: false, hour: '2-digit', minute: '2-digit' })}</time></p>
                   </div>
                   {plan.status === 'committed' && <button className="btn" disabled={busy || uncertain} onClick={() => onUndo(plan)}>{t('assistant.text39')}</button>}
                 </div>

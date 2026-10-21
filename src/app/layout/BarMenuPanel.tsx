@@ -3,6 +3,7 @@ import { listen } from '@tauri-apps/api/event';
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { Crop, History, Sparkles } from '../../components/icons';
 import { useTranslation } from '../../i18n';
+import { localizedRepositoryErrorMessage } from '../../i18n/localize-error';
 import { normalizeShortcutStatus, type ScreenshotShortcutStatus } from '../../screenshot-history/client';
 import { SurfaceIconProvider } from '../../screenshot-history/SurfaceIconProvider';
 import type { BarFeatureId, BarMenuItem } from '../bar-menu';
@@ -80,10 +81,7 @@ export function BarMenuPanel({ active, items }: { active: boolean; items: readon
       await invoke(commands[id]);
     } catch (reason: unknown) {
       if (!mounted.current) return;
-      const message = reason instanceof Error ? reason.message
-        : typeof reason === 'string' ? reason
-        : typeof reason === 'object' && reason !== null && 'message' in reason && typeof reason.message === 'string'
-          ? reason.message : t('barMenu.actionFailed');
+      const message = localizedRepositoryErrorMessage(reason) ?? t('barMenu.actionFailed');
       failedAction.current = id;
       setError(message || t('barMenu.actionFailed'));
     } finally {

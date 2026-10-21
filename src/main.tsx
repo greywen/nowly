@@ -6,10 +6,12 @@ import { tauriNowlyRepository } from './data/tauri-nowly-repository';
 import { installBrowserTauriBackend } from './data/browser-tauri-shim';
 import { FocusTimerProvider } from './focus/FocusTimerContext';
 import './app/styles.css';
+import './i18n/rtl.css';
 import { StatusIslandApp } from './quick-panel/StatusIslandApp';
 import { routeForLabel } from './screenshot/window-route';
 import { ScreenshotHistoryApp } from './screenshot-history/ScreenshotHistoryApp';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { startNativeLanguageSync } from './i18n/native-language';
 
 // Outside the Tauri desktop shell (e.g. the plain Vite page in a browser) there
 // is no `window.__TAURI_INTERNALS__`, so every `invoke(...)` would throw
@@ -21,6 +23,8 @@ const browserOnly = !('__TAURI_INTERNALS__' in window);
 if (browserOnly) {
   installBrowserTauriBackend();
 }
+const stopNativeLanguageSync = startNativeLanguageSync(browserOnly);
+import.meta.hot?.dispose(stopNativeLanguageSync);
 
 // Which window this document is depends on the Tauri metadata, which only the
 // real desktop shell provides. A test-injected IPC stub, or any future host that

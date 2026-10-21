@@ -11,7 +11,7 @@ import { Dialog } from '../components/Dialog';
 import { Select } from '../components/Select';
 import { TabPanel, Tabs, type TabItem } from '../components/Tabs';
 import type { AppSettings, MonitorInfo } from '../data/nowly-repository';
-import { t, useTranslation, type Language } from '../i18n';
+import { t, useTranslation, SUPPORTED_LANGUAGES, LOCALES, type Language } from '../i18n';
 
 type Props={settings:AppSettings;monitors?:MonitorInfo[];onClose():void;onSave(settings:AppSettings):Promise<AppSettings>};
 type SettingsTab='interface'|'desktop'|'notifications'|'sound'|'shortcuts';
@@ -45,7 +45,7 @@ export function SettingsDialog({settings,monitors=[],onClose,onSave}:Props){
    <Tabs idPrefix="settings" label={t('settings.title')} items={tabs} value={tab} onChange={setTab}/>
    <TabPanel idPrefix="settings" tabId="interface" active={tab==='interface'}>
     <div className="settings-grid">
-     <Select id="settings-language" label={t('settings.language')} value={language} options={[{value:'zh',label:t('settings.langZh')},{value:'en',label:t('settings.langEn')}]} onChange={value=>setLanguage(value as Language)}/>
+     <Select id="settings-language" label={t('settings.language')} value={language} options={SUPPORTED_LANGUAGES.map(value=>({value,label:LOCALES[value].name}))} onChange={value=>setLanguage(value as Language)}/>
      <Select id="settings-density" label={t('settings.density')} value={draft.density} options={[{value:'compact',label:t('settings.densityCompact')},{value:'balanced',label:t('settings.densityBalanced')},{value:'comfortable',label:t('settings.densityComfortable')}]} onChange={value=>setDraft({...draft,density:value as AppSettings['density']})}/>
      <Select id="settings-icon-style" label={t('settings.iconStyle')} value={draft.iconStyle} options={[{value:'duotone',label:t('settings.iconStyleDuotone')},{value:'solid',label:t('settings.iconStyleSolid')},{value:'outline',label:t('settings.iconStyleOutline')}]} onChange={value=>setDraft({...draft,iconStyle:value as IconStyle})}/>
     </div>

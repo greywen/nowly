@@ -63,6 +63,37 @@
   text-align: center;
 }
 
+.time-clock__reading {
+  display: flex;
+  align-items: last baseline;
+  gap: var(--space-2);
+  min-width: 0;
+  max-width: 100%;
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+.time-clock__period {
+  flex: none;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 500;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.time-clock__reading--analog {
+  position: relative;
+  align-items: flex-end;
+}
+
+.time-clock__reading--analog .time-clock__period {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  background: var(--bg-surface);
+}
+
 .time-clock__time {
   font-size: var(--time-font-size, 1.75rem);
   font-weight: 700;

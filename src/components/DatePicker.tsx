@@ -1,7 +1,7 @@
 import { CalendarDays, ChevronLeft, ChevronRight } from '../components/icons';
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { buildMonthGrid, formatChineseDate, toIsoDate } from '../lib/date';
-import { t } from '../i18n';
+import { t, formatNumber } from '../i18n';
 
 function weekdayHeadingsList() {
   return t('datePicker.weekdays').split(',');
@@ -119,8 +119,9 @@ export function DatePicker({
   function handleDateKeyDown(event: KeyboardEvent<HTMLButtonElement>, date: Date) {
     const cursor = cursorDateRef.current;
     let nextDate: Date | null = null;
-    if (event.key === 'ArrowLeft') nextDate = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() - 1);
-    if (event.key === 'ArrowRight') nextDate = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 1);
+    const direction = document.documentElement.dir === 'rtl' ? -1 : 1;
+    if (event.key === 'ArrowLeft') nextDate = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() - direction);
+    if (event.key === 'ArrowRight') nextDate = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + direction);
     if (event.key === 'ArrowUp') nextDate = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() - 7);
     if (event.key === 'ArrowDown') nextDate = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 7);
     if (event.key === 'PageUp') nextDate = new Date(cursor.getFullYear(), cursor.getMonth() - 1, cursor.getDate());
@@ -156,9 +157,9 @@ export function DatePicker({
       {open ? (
         <div id={dialogId} role="dialog" aria-label={t('datePicker.select', { label })} className="date-picker__popup">
           <div className="date-picker__header">
-            <button type="button" aria-label={t('datePicker.prevMonth')} onClick={() => changeVisibleMonth(-1)}><ChevronLeft aria-hidden="true" /></button>
+            <button type="button" aria-label={t('datePicker.prevMonth')} onClick={() => changeVisibleMonth(-1)}><ChevronLeft className="i18n-directional-icon" aria-hidden="true" /></button>
             <strong>{t('datePicker.header', { year: visibleMonth.year, month: visibleMonth.monthIndex + 1 })}</strong>
-            <button type="button" aria-label={t('datePicker.nextMonth')} onClick={() => changeVisibleMonth(1)}><ChevronRight aria-hidden="true" /></button>
+            <button type="button" aria-label={t('datePicker.nextMonth')} onClick={() => changeVisibleMonth(1)}><ChevronRight className="i18n-directional-icon" aria-hidden="true" /></button>
           </div>
           <div role="grid" aria-label={t('datePicker.grid', { year: visibleMonth.year, month: visibleMonth.monthIndex + 1 })} className="date-picker__calendar">
             <div role="row" className="date-picker__weekdays">
@@ -183,7 +184,7 @@ export function DatePicker({
                     onClick={() => choose(date)}
                     onKeyDown={(event) => handleDateKeyDown(event, date)}
                   >
-                    {day.dayOfMonth}
+                    {formatNumber(day.dayOfMonth)}
                   </button>
                 );
               })}
