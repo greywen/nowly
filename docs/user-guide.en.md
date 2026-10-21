@@ -234,6 +234,22 @@ cargo test --manifest-path src-tauri\Cargo.toml     # Rust tests
 npm run tauri build                                 # build the Windows executable
 ```
 
+### Windows development linker errors
+
+If `npm run tauri dev` fails with `LNK2019` / `LNK1120` and the missing symbols
+are predominantly `anon.*.llvm.*`, stop the development process, then clear only
+Nowly's compiled artifacts from the repository root and retry:
+
+```powershell
+cargo clean --manifest-path src-tauri\Cargo.toml -p nowly
+npm run tauri dev
+```
+
+Stale Rust incremental artifacts can cause these errors. This command preserves
+dependency caches, the application database and user data. If rebuilding still
+fails, retain the complete linker log for further investigation; other unresolved
+symbols do not necessarily indicate a cache problem.
+
 The unified time/focus settings are a development-only breaking change; the old
 per-clock configuration is not migrated. Back up the development database before
 resetting it. Debug builds can perform the one-time, scoped reset by setting

@@ -145,6 +145,19 @@ cargo test --manifest-path src-tauri\Cargo.toml     # Rust 测试
 npm run tauri build                                 # 构建 Windows 可执行文件
 ```
 
+### Windows 开发构建的链接错误
+
+如果 `npm run tauri dev` 出现 `LNK2019` / `LNK1120`，且缺失符号主要是
+`anon.*.llvm.*`，可先停止开发进程，再从仓库根目录仅清理 Nowly 包的编译缓存并重试：
+
+```powershell
+cargo clean --manifest-path src-tauri\Cargo.toml -p nowly
+npm run tauri dev
+```
+
+这类错误可能来自失效的 Rust 增量编译产物；上述命令不清理依赖包缓存，也不会删除应用数据库或用户数据。
+若重建后仍失败，应保留完整链接日志继续排查；其它类型的未解析符号不一定属于缓存问题。
+
 统一时间/专注设置是开发阶段的不兼容改动，不迁移旧的逐时钟设置。重置前应先备份开发数据库；
 仅 Debug 构建可通过 `NOWLY_RESET_DEVELOPMENT_TIME_V32` 指定数据库的准确绝对路径，
 执行一次性限定重置：时间/专注设置、闹钟及相关通知、专注记录和旧模块条目。其它数据保留，
