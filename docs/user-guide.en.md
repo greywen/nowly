@@ -13,7 +13,9 @@ The ordinary window, wallpaper, tray, quick panel and fullscreen focus serve dif
 ## Features
 
 - **Monthly calendar** — events with times, colors, and per-day detail views, so
-  today's schedule is always in sight.
+  today's schedule is always in sight. Create a category directly from the event
+  form's category selector; it is selected with its color immediately, and the
+  event can be saved without closing or reopening the form.
 - **Eisenhower matrix** — sort tasks across the urgent/important quadrants and
   keep the "do it now" quadrant honest.
 - **Focus timer** — countdown sessions with a distraction-free fullscreen mode

@@ -19,7 +19,8 @@ type CategorySelectProps = {
   categories: Category[];
   // The selected category id, or '' for "no category".
   value: string;
-  onChange: (categoryId: string) => void;
+  // Carry the record with the id: a newly created category may not be in props yet.
+  onChange: (categoryId: string, category: Category | null) => void;
   onCreate: (draft: CategoryDraft) => Promise<Category>;
   onUpdate: (id: string, draft: CategoryDraft) => Promise<Category>;
   onDelete: (id: string) => Promise<void>;
@@ -135,7 +136,7 @@ export function CategorySelect({
     setFormError('');
   }
   function choose(categoryId: string) {
-    onChange(categoryId);
+    onChange(categoryId, categories.find((category) => category.id === categoryId) ?? null);
     close();
   }
   function beginCreate() {
@@ -167,7 +168,7 @@ export function CategorySelect({
     try {
       if (editor.mode === 'create') {
         const created = await onCreate({ name, color });
-        onChange(created.id);
+        onChange(created.id, created);
         close();
       } else if (editor.mode === 'edit') {
         await onUpdate(editor.category.id, { name, color });
@@ -186,7 +187,7 @@ export function CategorySelect({
     try {
       await onDelete(confirmDelete.id);
       // The removed category leaves the field unselected if it was the choice.
-      if (value === confirmDelete.id) onChange('');
+      if (value === confirmDelete.id) onChange('', null);
       setConfirmDelete(null);
     } catch (error) {
       setFormError(errorMessage(error) || t('category.errorSave'));

@@ -1,7 +1,8 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import type { CalendarEvent, Recurrence } from '../calendar/calendar-model';
+import type { CalendarEvent, Category, CategoryDraft, Recurrence } from '../calendar/calendar-model';
 import { EventModal } from './EventModal';
 
 const now = () => new Date(2026, 6, 23, 9, 42);
@@ -367,5 +368,38 @@ describe('EventModal', () => {
     expect(screen.getByRole('combobox', { name:'提前单位' })).toHaveTextContent('天');
     await user.click(screen.getByRole('button', { name:'删除提醒' }));
     expect(screen.getByText('无提醒')).toBeInTheDocument();
+  });
+
+  it.each(['create','edit'] as const)('saves a %s draft with a category created inline before the category list reloads', async (type) => {
+    const user=userEvent.setup();
+    const createEvent=vi.fn().mockResolvedValue(existing);
+    const updateEvent=vi.fn().mockResolvedValue(undefined);
+    const mode=type==='create'?{type,dateIso:'2026-07-23'}:{type,event:editable};
+    let created: Category|undefined;
+    // 与 useCategories 一致：写入先返回新分类，列表随后才异步重载。
+    function Harness(){
+      const [categories,setCategories]=useState<Category[]>(testCategories);
+      const onCreateCategory=async(draft:CategoryDraft)=>{
+        const record: Category={ id:'urgent', ...draft, position:2, createdAt:'', updatedAt:'' };
+        created=record;
+        void Promise.resolve().then(()=>setCategories(current=>[...current,record]));
+        return record;
+      };
+      return <EventModal {...props({ mode, createEvent, updateEvent, categories, onCreateCategory })} />;
+    }
+    render(<Harness />);
+    await user.type(screen.getByLabelText('日程标题'), '重要会议');
+    await user.click(screen.getByRole('combobox', { name:'分类' }));
+    await user.click(screen.getByRole('button', { name:'新增分类' }));
+    await user.type(screen.getByPlaceholderText('分类名称'), '紧急');
+    // 编辑器的确认按钮与入口按钮同名，限定在编辑器分组内查找。
+    await user.click(within(screen.getByRole('group', { name:'新增分类' })).getByRole('button', { name:'新增分类' }));
+    // 列表重载后触发器显示新分类已选中，这正是用户看到的状态。
+    await waitFor(()=>expect(screen.getByRole('combobox', { name:'分类' })).toHaveTextContent('紧急'));
+    await user.click(screen.getByRole('button', { name:'保存' }));
+    const save=type==='create'?createEvent:updateEvent;
+    await waitFor(()=>expect(save).toHaveBeenCalledTimes(1));
+    expect(created?.color).toMatch(/^#[0-9A-F]{6}$/i);
+    expect(save.mock.calls[0][type==='create'?0:1]).toMatchObject({ category:'urgent', color:created?.color });
   });
 });

@@ -118,7 +118,7 @@ export function EventModal({ mode,restoreFocusRef,onClose,onSaved,onDeleted,crea
   const removeReminder=(index:number)=>update('reminders',form.reminders.filter((_,position)=>position!==index));
   const changeReminder=(index:number,minutes:number)=>update('reminders',form.reminders.map((value,position)=>position===index?minutes:value));
   const toggleReminderPreset=(minutes:number)=>{ if(form.reminders.includes(minutes))update('reminders',form.reminders.filter(value=>value!==minutes)); else if(form.reminders.length<MAX_REMINDERS)update('reminders',[...form.reminders,minutes]); };
-  const changeCategory=(categoryId:EventCategory)=>setForm(current=>applyCategory(current,categoryId,categories.find(c=>c.id===categoryId)?.color??''));
+  const changeCategory=(categoryId:EventCategory,category:Category|null)=>setForm(current=>applyCategory(current,categoryId,category?.color??''));
   // 选择开始时间后默认结束时间为开始加一小时（自动跨天/月/年）。
   const changeStartTime=(value:string)=>setForm(current=>applyStartTime(current,value));
 
