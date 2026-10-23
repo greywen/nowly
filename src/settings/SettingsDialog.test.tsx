@@ -131,6 +131,56 @@ describe('SettingsDialog',()=>{
     fireEvent.click(screen.getByRole('button', { name: '保存设置' }));
     expect(save).toHaveBeenCalledWith(expect.objectContaining({ screenshotShortcut:'Ctrl+Shift+K', screenshotHistoryShortcut:'Ctrl+Alt+H' }));
   });
+  it('leaves the quick-create shortcuts unset by default', async () => {
+    const save = vi.fn(async value => value);
+    render(<SettingsDialog settings={settings} onClose={vi.fn()} onSave={save}/>);
+    fireEvent.click(screen.getByRole('tab', { name: '快捷键' }));
+    const group = screen.getByRole('group', { name: '快速创建' });
+    expect(group).toHaveTextContent(t('settings.quickCreateShortcutHint'));
+    for (const name of ['新建日程', '新建四象限任务', '新建便签']) {
+      expect(screen.getByRole('textbox', { name })).toHaveValue('');
+      expect(screen.getByRole('textbox', { name })).toHaveAttribute('placeholder', '未设置');
+      expect(screen.getByRole('button', { name: `清除「${name}」快捷键` })).toBeDisabled();
+    }
+    fireEvent.click(screen.getByRole('button', { name: '保存设置' }));
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({
+      quickCreateEventShortcut: '', quickCreateTaskShortcut: '', quickCreateNoteShortcut: ''
+    }));
+  });
+  it('records, deduplicates and clears quick-create shortcuts against every shortcut', async () => {
+    const save = vi.fn(async value => value);
+    render(<SettingsDialog settings={{ ...settings, quickCreateNoteShortcut: 'Ctrl+Alt+N' }} onClose={vi.fn()} onSave={save}/>);
+    fireEvent.click(screen.getByRole('tab', { name: '快捷键' }));
+    const task = screen.getByRole('textbox', { name: '新建四象限任务' });
+    fireEvent.keyDown(task, { key: 'a', code: 'KeyA', ctrlKey: true, altKey: true });
+    expect(screen.getByRole('alert')).toHaveTextContent('快捷键不能与其他快捷键重复');
+    fireEvent.keyDown(task, { key: 'n', code: 'KeyN', ctrlKey: true, altKey: true });
+    expect(screen.getByRole('alert')).toHaveTextContent('快捷键不能与其他快捷键重复');
+    fireEvent.keyDown(task, { key: 't', code: 'KeyT', ctrlKey: true, altKey: true });
+    expect(task).toHaveValue('Ctrl+Alt+T');
+    fireEvent.keyDown(screen.getByRole('textbox', { name: '截图快捷键' }), { key: 't', code: 'KeyT', ctrlKey: true, altKey: true });
+    expect(screen.getByRole('alert')).toHaveTextContent('快捷键不能与其他快捷键重复');
+    fireEvent.click(screen.getByRole('button', { name: '清除「新建便签」快捷键' }));
+    expect(screen.getByRole('textbox', { name: '新建便签' })).toHaveValue('');
+    fireEvent.click(screen.getByRole('button', { name: '保存设置' }));
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({
+      screenshotShortcut: 'Ctrl+Alt+A', quickCreateEventShortcut: '', quickCreateTaskShortcut: 'Ctrl+Alt+T', quickCreateNoteShortcut: ''
+    }));
+  });
+  it('refuses to save a stored quick-create shortcut that duplicates another shortcut', () => {
+    const save = vi.fn(async value => value);
+    render(<SettingsDialog settings={{ ...settings, quickCreateEventShortcut: 'ctrl+alt+h' }} onClose={vi.fn()} onSave={save}/>);
+    fireEvent.click(screen.getByRole('button', { name: '保存设置' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('快捷键不能与其他快捷键重复');
+    expect(save).not.toHaveBeenCalled();
+  });
+  it('reports a native registration conflict on a quick-create shortcut', async () => {
+    const user = userEvent.setup();
+    const save = vi.fn().mockRejectedValue({ code: 'validation_error', message: 'Busy', field: 'quickCreateTaskShortcut' });
+    render(<SettingsDialog settings={{ ...settings, quickCreateTaskShortcut: 'Ctrl+Alt+T' }} onClose={vi.fn()} onSave={save}/>);
+    await user.click(screen.getByRole('button', { name: '保存设置' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(t('settings.shortcutConflict'));
+  });
   it('omits saved shortcut status information and native status queries', () => {
     vi.mocked(invoke).mockClear();
     render(<SettingsDialog settings={settings} onClose={vi.fn()} onSave={vi.fn()}/>);

@@ -6,4 +6,11 @@
 .shortcut-recorder input:focus { border-color: var(--color-primary); }
 .shortcut-recorder input[aria-invalid="true"] { border-color: var(--color-danger); }
 .shortcut-recorder input:disabled { color: var(--text-disabled); opacity: 0.65; pointer-events: none; }
+.shortcut-recorder input::placeholder { color: var(--text-muted); }
+.shortcut-recorder__field { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.shortcut-recorder__field input { flex: 1 1 auto; min-width: 0; }
+.shortcut-recorder__field .good-icon-button { flex: none; }
 .shortcut-settings { display: grid; gap: var(--space-5); }
+.shortcut-settings__group { display: grid; gap: var(--space-5); min-width: 0; margin: 0; padding: 0; border: 0; }
+.shortcut-settings__group legend { margin-bottom: var(--space-2); padding: 0; color: var(--text-secondary); font-size: 0.95rem; font-weight: 500; }
+.shortcut-settings__group > p { margin: 0; color: var(--text-secondary); font-size: 0.85rem; line-height: 1.5; }
