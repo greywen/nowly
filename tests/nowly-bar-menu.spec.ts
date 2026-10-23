@@ -12,9 +12,21 @@ async function installBar(page: Page, language = 'zh') {
     let menu = [
       { id: 'screenshot', visible: true },
       { id: 'screenshotHistory', visible: true },
-      { id: 'assistant', visible: true }
+      { id: 'assistant', visible: true },
+      { id: 'createEvent', visible: true },
+      { id: 'createTask', visible: true },
+      { id: 'createNote', visible: true }
     ];
+    // Quick-create shortcuts are optional: unset, registered, and set but unavailable.
+    let shortcuts: Record<string, unknown> = {
+      screenshot: { shortcut: 'Ctrl+Alt+A', registered: true, error: null },
+      history: { shortcut: 'Ctrl+Alt+H', registered: true, error: null },
+      createEvent: { shortcut: '', registered: false, error: null },
+      createTask: { shortcut: 'Ctrl+Alt+T', registered: true, error: null },
+      createNote: { shortcut: 'Ctrl+Alt+N', registered: false, error: 'Shortcut in use' }
+    };
     const calls: string[] = [];
+    const quickCreates: unknown[] = [];
     const callbacks = new Map<number, (event: unknown) => void>();
     const listeners = new Map<string, number>();
     const emit = (event: string, payload: unknown) => {
@@ -30,9 +42,10 @@ async function installBar(page: Page, language = 'zh') {
       setTimeout(() => emit('status-island-details-closed', { generation: closing }), 260);
     };
     Reflect.set(window, '__barTest', {
-      calls, open, close, emit,
+      calls, quickCreates, open, close, emit,
       setCaptureFails: (value: boolean) => { captureFails = value; },
-      setMenu: (value: typeof menu) => { menu = value; emit('status-island-invalidated', null); }
+      setMenu: (value: typeof menu) => { menu = value; emit('status-island-invalidated', null); },
+      setShortcuts: (value: Record<string, unknown>) => { shortcuts = { ...shortcuts, ...value }; }
     });
     Reflect.set(window, '__TAURI_EVENT_PLUGIN_INTERNALS__', { unregisterListener: () => undefined });
     Reflect.set(window, '__TAURI_INTERNALS__', {
@@ -43,20 +56,22 @@ async function installBar(page: Page, language = 'zh') {
         if (command === 'plugin:event|listen') { listeners.set(String(args.event), Number(args.handler)); return args.handler; }
         if (command.startsWith('plugin:event|')) return 1;
         if (command === 'get_app_settings') return { iconStyle: 'duotone' };
+        // Persistent mode keeps the full Bar; notification-only would fold it into the top-edge strip.
         if (command === 'get_status_island_snapshot') return {
           sampledAt: new Date().toISOString(), events: [], externalEvents: [], tasks: [], reminders: [],
-          focus: { status: 'idle', remainingSeconds: 0, plannedSeconds: 0 }, barMenu: menu
+          focus: { status: 'idle', remainingSeconds: 0, plannedSeconds: 0 }, barMenu: menu,
+          notificationMode: 'persistent'
         };
-        if (command === 'screenshot_shortcut_status') return {
-          screenshot: { shortcut: 'Ctrl+Alt+A', registered: true, error: null },
-          history: { shortcut: 'Ctrl+Alt+H', registered: true, error: null }
-        };
+        if (command === 'screenshot_shortcut_status') return shortcuts;
+        // Native `open_quick_create` collapses the menu before showing its own window.
+        if (command === 'open_quick_create') { quickCreates.push(args.kind); close(); }
         if (command === 'toggle_bar_menu') open('menu');
         if (command === 'toggle_nowly_panel') open('nowly');
         if (command === 'open_screenshot_history') open('history');
         if (command === 'close_status_island_details') close();
         if (command === 'start_screen_capture') {
-          if (captureFails) throw { message: 'Capture startup failed' };
+          // Native commands reject with the structured CommandError contract.
+          if (captureFails) throw { code: 'system_error', message: 'Capture startup failed' };
           close();
         }
         if (command === 'list_screenshot_history') return { items: [], nextCursor: null };
@@ -93,14 +108,16 @@ test('all expanded panels measure 432px while the collapsed Logo Bar is 288px', 
   await expect(page.locator('.status-rail__menu')).toHaveCSS('width', '432px');
   await expect(page.locator('.status-rail__menu')).toHaveCSS('height', '288px');
   await expect(menu.getByRole('menuitem').first()).toBeFocused();
+  await expect(menu.getByRole('menuitem')).toHaveCount(5);
+  await expect(menu.getByRole('menuitem', { name: /AI/ })).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath('bar-menu.png') });
   await menu.getByRole('menuitem', { name: /截图历史/ }).click();
   await expect(page.locator('.status-rail__history')).toHaveCSS('width', '432px');
   await expect(page.locator('.status-rail__history')).toHaveCSS('height', '560px');
   await page.screenshot({ path: testInfo.outputPath('bar-history.png') });
   await page.keyboard.press('Escape');
-  await page.getByRole('button', { name: 'Nowly', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'AI 助手' }).click();
+  // The AI entry is hidden from the menu for now; its panel still opens from the native side.
+  await page.evaluate(() => Reflect.get(window, '__barTest').open('nowly'));
   await expect(page.locator('.status-rail__assistant')).toHaveCSS('width', '432px');
   await expect(page.locator('.status-rail__assistant')).toHaveCSS('height', '440px');
   await expect(page.getByRole('textbox', { name: '告诉 Nowly 你想做什么' })).toBeFocused();
@@ -160,17 +177,42 @@ test('reopening the menu after Escape does not leave the first item hover-styled
     hovered: element.matches(':hover'),
     focusVisible: element.matches(':focus-visible')
   }))).toEqual({ hovered: false, focusVisible: true });
-  const normalColor = await page.getByRole('menuitem').nth(1).evaluate(element => getComputedStyle(element).color);
-  await expect(first).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
-  await expect(first).toHaveCSS('color', normalColor);
+  // The first item is a quick-create tile; its neighbour shows the resting tile style.
+  const normal = await page.getByRole('menuitem').nth(1).evaluate(element => {
+    const style = getComputedStyle(element);
+    return { color: style.color, background: style.backgroundColor };
+  });
+  await expect(first).toHaveCSS('background-color', normal.background);
+  await expect(first).toHaveCSS('color', normal.color);
   await first.hover();
-  await expect(first).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  await expect(first).not.toHaveCSS('background-color', normal.background);
   await page.mouse.move(431, 559);
   await expect(first).toBeFocused();
-  await expect(first).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
-  await expect(first).toHaveCSS('color', normalColor);
+  await expect(first).toHaveCSS('background-color', normal.background);
+  await expect(first).toHaveCSS('color', normal.color);
   await page.keyboard.press('ArrowDown');
   await expect(page.getByRole('menuitem').nth(1)).toBeFocused();
+});
+
+test('arrow keys move linearly across groups and Home/End jump to the ends', async ({ page }) => {
+  await installBar(page);
+  await page.getByRole('button', { name: 'Nowly', exact: true }).click();
+  const items = page.getByRole('menuitem');
+  await expect(items.first()).toBeFocused();
+  const names = ['日程', '四象限任务', '便签', '截图', '截图历史'];
+  for (let index = 1; index < names.length; index++) {
+    await page.keyboard.press(index % 2 ? 'ArrowRight' : 'ArrowDown');
+    await expect(items.nth(index)).toBeFocused();
+    await expect(items.nth(index)).toContainText(names[index]);
+  }
+  await page.keyboard.press('ArrowDown');
+  await expect(items.first()).toBeFocused();
+  await page.keyboard.press('ArrowLeft');
+  await expect(items.last()).toBeFocused();
+  await page.keyboard.press('Home');
+  await expect(items.first()).toBeFocused();
+  await page.keyboard.press('End');
+  await expect(items.last()).toBeFocused();
 });
 
 test('live menu order and visibility update without changing Bar geometry', async ({ page }) => {
@@ -180,15 +222,34 @@ test('live menu order and visibility update without changing Bar geometry', asyn
   await page.evaluate(() => Reflect.get(window, '__barTest').setMenu([
     { id: 'assistant', visible: true },
     { id: 'screenshotHistory', visible: true },
-    { id: 'screenshot', visible: false }
+    { id: 'screenshot', visible: false },
+    { id: 'createNote', visible: true },
+    { id: 'createEvent', visible: true },
+    { id: 'createTask', visible: false }
+  ]));
+  // Groups keep their fixed order; items follow the saved order inside each group.
+  await expect(page.getByRole('menuitem')).toHaveCount(3);
+  await expect(page.getByRole('group', { name: '快速创建' }).getByRole('menuitem')).toHaveText([/^便签/, /^日程/]);
+  await expect(page.getByRole('group', { name: '截图' }).getByRole('menuitem')).toHaveText([/^截图历史/]);
+  await expect(page.locator('.status-rail__menu')).toHaveCSS('width', '432px');
+  await page.evaluate(() => Reflect.get(window, '__barTest').setMenu([
+    { id: 'assistant', visible: true },
+    { id: 'screenshotHistory', visible: true },
+    { id: 'screenshot', visible: true },
+    { id: 'createNote', visible: false },
+    { id: 'createEvent', visible: false },
+    { id: 'createTask', visible: false }
   ]));
   await expect(page.getByRole('menuitem')).toHaveCount(2);
-  await expect(page.getByRole('menuitem').first()).toHaveText('AI 助手');
-  await expect(page.locator('.status-rail__menu')).toHaveCSS('width', '432px');
+  await expect(page.getByRole('group')).toHaveCount(1);
+  await expect(page.getByText('快速创建', { exact: true })).toHaveCount(0);
   await page.evaluate(() => Reflect.get(window, '__barTest').setMenu([
     { id: 'assistant', visible: false },
     { id: 'screenshotHistory', visible: false },
-    { id: 'screenshot', visible: false }
+    { id: 'screenshot', visible: false },
+    { id: 'createEvent', visible: false },
+    { id: 'createTask', visible: false },
+    { id: 'createNote', visible: false }
   ]));
   await expect(page.getByRole('menuitem')).toHaveCount(0);
   await expect(page.getByText('暂无显示的功能，请在设置 → Nowly Bar 中启用。')).toBeVisible();
@@ -214,18 +275,77 @@ test('capture startup failures remain visible and retry without an extra window'
 test('late close events cannot close a more recently selected panel', async ({ page }) => {
   await installBar(page);
   await page.getByRole('button', { name: 'Nowly', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'AI 助手' }).click();
+  await page.getByRole('menuitem', { name: /^截图历史/ }).click();
   await page.evaluate(() => Reflect.get(window, '__barTest').emit('status-island-details-closed', { generation: 1 }));
-  await expect(page.locator('.status-rail')).toHaveAttribute('data-surface', 'assistant');
-  await expect(page.getByRole('textbox', { name: '告诉 Nowly 你想做什么' })).toBeVisible();
+  await expect(page.locator('.status-rail')).toHaveAttribute('data-surface', 'history');
+  await expect(page.getByRole('heading', { name: '截图历史' })).toBeVisible();
+});
+
+test('quick create tiles show optional shortcuts and open the create window', async ({ page }) => {
+  await installBar(page);
+  await page.getByRole('button', { name: 'Nowly', exact: true }).click();
+  const create = page.getByRole('group', { name: '快速创建' });
+  const tiles = create.getByRole('menuitem');
+  await expect(tiles).toHaveCount(3);
+  const boxes = await Promise.all((await tiles.all()).map(tile => tile.boundingBox()));
+  // Three equal tiles share one row.
+  expect(new Set(boxes.map(box => Math.round(box!.y))).size).toBe(1);
+  expect(new Set(boxes.map(box => Math.round(box!.width))).size).toBe(1);
+  await expect(tiles.nth(0)).toHaveText('日程');
+  await expect(tiles.nth(1)).toContainText('Ctrl+Alt+T');
+  await expect(tiles.nth(2)).toContainText('快捷键不可用');
+  expect(await page.locator('.bar-menu-panel__body').evaluate(element => element.scrollHeight <= element.clientHeight)).toBe(true);
+
+  await tiles.nth(1).click();
+  await expect.poll(() => page.evaluate(() => Reflect.get(window, '__barTest').quickCreates)).toEqual(['task']);
+  await expect(page.locator('.status-rail')).toHaveAttribute('data-surface', 'status');
+  await expect(page.getByRole('menu')).toHaveCount(0);
 });
 
 test('English menu shows names and configured shortcuts without horizontal overflow', async ({ page }) => {
   await installBar(page, 'en');
   await page.getByRole('button', { name: 'Nowly', exact: true }).click();
   await expect(page.getByRole('menu', { name: 'Function menu' })).toBeVisible();
-  await expect(page.getByRole('menuitem')).toHaveCount(3);
+  await expect(page.getByRole('menuitem')).toHaveCount(5);
+  await expect(page.getByRole('group', { name: 'Quick create' })).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Screenshots' })).toBeVisible();
   await expect(page.getByText('Ctrl+Alt+A', { exact: true })).toBeVisible();
   await expect(page.getByText('Ctrl+Alt+H', { exact: true })).toBeVisible();
+  await expect(page.getByText('Ctrl+Alt+T', { exact: true })).toBeVisible();
+  await expect(page.getByText('Shortcut unavailable', { exact: true })).toBeVisible();
+  expect(await page.locator('.bar-menu-panel__body').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+});
+
+test('long menu text stops at two lines with an ellipsis', async ({ page }) => {
+  await installBar(page, 'fr');
+  // Deliberately longer than any real shortcut so the tile text needs more than two lines.
+  const long = 'Ctrl+Alt+Shift+Win+F12 Ctrl+Alt+Shift+Win+F11';
+  await page.evaluate(shortcut => Reflect.get(window, '__barTest').setShortcuts({
+    createTask: { shortcut, registered: true, error: null }
+  }), long);
+  await page.getByRole('button', { name: 'Nowly', exact: true }).click();
+  // The full text stays in the accessible name.
+  const tile = page.getByRole('menuitem', { name: new RegExp(long.replace(/\+/g, '\\+')) });
+  await expect(tile).toBeVisible();
+  const keys = tile.locator('.bar-menu-panel__keys');
+  await expect(keys).toHaveText(long);
+  const metrics = await keys.evaluate(element => {
+    const style = getComputedStyle(element);
+    const line = parseFloat(style.lineHeight);
+    const shown = element.getBoundingClientRect().height;
+    element.style.setProperty('-webkit-line-clamp', 'unset');
+    element.style.setProperty('display', 'block');
+    const natural = element.getBoundingClientRect().height;
+    element.removeAttribute('style');
+    return { clamp: style.webkitLineClamp, shown: Math.round(shown / line), natural: Math.round(natural / line) };
+  });
+  expect(metrics.clamp).toBe('2');
+  expect(metrics.shown).toBe(2);
+  expect(metrics.natural).toBeGreaterThan(2);
+  const texts = page.locator('.bar-menu-panel__label, .bar-menu-panel__note, .bar-menu-panel__keys, .bar-menu-panel__shortcut > span');
+  for (const text of await texts.all()) {
+    expect(await text.evaluate(element =>
+      Math.round(element.clientHeight / parseFloat(getComputedStyle(element).lineHeight)))).toBeLessThanOrEqual(2);
+  }
   expect(await page.locator('.bar-menu-panel__body').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
 });
