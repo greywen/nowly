@@ -86,6 +86,8 @@ The ordinary window, wallpaper, tray, quick panel and fullscreen focus serve dif
   sound in the background while Nowly is running. Calendar reminders, focus completion,
   and alarms all appear in Nowly Bar. Nowly no longer sends Windows system
   notifications, and sounds do not depend on Windows notification permissions.
+- **Quick create** — create events, matrix tasks, and notes from the Nowly Bar
+  function menu or optional global shortcuts, without opening the main window.
 - **Localization** — Simplified Chinese, English, French, Spanish, Arabic,
   Japanese, Korean, and Traditional Chinese. Without a saved manual choice,
   startup reads the current user's Windows UI language (the primary browser
@@ -158,9 +160,27 @@ Set Nowly Bar to **Notification only** in **Settings → Notifications** to keep
 
 Pending notifications, open reminder/menu/AI/history panels, keyboard focus within the Bar, and actions in progress keep the surface available without acknowledging notifications or interrupting input. After a panel closes, the current state determines whether it folds back. Tab can enter the strip; reduced-motion preferences make the transition immediate. Persistent mode is unchanged. Suppressing the Bar for capture also hides the strip, and transparent areas do not intercept desktop clicks.
 
+### Nowly Bar function menu
+
+Click the **Nowly Bar Logo** to open the function menu. It has two groups: **Quick create** (Event, Matrix task, Note) and **Screenshots** (Screenshot, Screenshot history). Long names and shortcuts wrap to at most two lines and end with an ellipsis. Arrow keys move through the items in display order; Home and End jump to the first and last item.
+
+Configure visibility and the order within each group under **Settings → Notifications → Nowly Bar → Function menu**; the group order is fixed. Every item is visible by default, including after an upgrade. A group whose items are all hidden is not shown. You may hide every item; the menu then explains how to enable them again. Hiding an item only removes its menu entry; shortcuts continue to work.
+
+### Quick create
+
+Choose Event, Matrix task, or Note in the **Quick create** group. The menu collapses and the matching create dialog opens just below the Bar, without opening the main window. The dialog has the same fields as in the app; matrix tasks default to **Important and urgent** and the default lane.
+
+- Saving closes the dialog and refreshes the calendar, matrix, or notes in the main window. If saving fails, the dialog stays open and shows the error.
+- Cancel, the close button, **Esc**, or **Alt+F4** closes the dialog, asking first when there are unsaved changes. Clicking outside the dialog or switching apps does not close it.
+- Choosing the same type again returns to the open dialog and keeps the draft. Choosing another type switches immediately when nothing has changed; otherwise it asks before discarding, and cancelling keeps the current draft.
+- The dialog never grows taller than the screen's work area; only its body scrolls when the content is longer.
+- The dialog is hidden while a screenshot is in progress and returns afterwards.
+
+Under **Settings → Shortcuts → Quick create**, you can record global shortcuts for **New event**, **New matrix task**, and **New note**. They are **Not set** by default. Once set, press one in any app to open the matching dialog directly; use the clear button to unset it. All global shortcuts, including the screenshot and history shortcuts, must be different.
+
 ### Screenshots and history
 
-Click the **Nowly Bar Logo** to open the function menu, then choose **Screenshot**, **Screenshot history**, or **AI assistant**. Configure visibility and order under **Settings → Notifications → Nowly Bar → Function menu**. All three functions are visible by default, including after upgrading from the old app-button settings. Hiding a function only removes its menu entry; shortcuts continue to work. You may hide every function; the menu then explains how to enable them again. Global shortcuts default to **Ctrl+Alt+A** for screenshots and **Ctrl+Alt+H** for screenshot history; change them under **Settings → Shortcuts**. Conflicts are reported without preventing app startup.
+Choose Screenshot or Screenshot history in the **Screenshots** group of the function menu. Global shortcuts default to **Ctrl+Alt+A** for screenshots and **Ctrl+Alt+H** for screenshot history; change them under **Settings → Shortcuts**. Conflicts are reported without preventing app startup.
 
 **Save** writes directly to the system **Pictures\Nowly\Screenshots** folder instead of opening a Save As dialog. **Copy image and finish** archives the same final PNG before writing the image clipboard. Only cropped, annotated and redacted output is retained; cancelling creates no history. Redirected system Pictures folders are respected.
 

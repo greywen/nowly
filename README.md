@@ -13,7 +13,7 @@ A desktop of your own for the day ahead. Nowly brings schedules, tasks, notes an
 - **Keep thoughts close:** capture notes and use an optional Sticker canvas for text and images.
 - **See your time:** add Time for world clocks, local-time alarms, focus sessions and statistics. Switch between clocks and focus without stopping a session.
 - **Arrange your desktop:** choose among six built-in modules on a 12×8 grid, resize and reposition them, and adjust density, color, blur and icon style.
-- **Reach quick tools:** Nowly Bar offers reminders, screenshots, screenshot history and an optional AI assistant. Menu order/visibility and screenshot shortcuts are configurable.
+- **Reach quick tools:** Nowly Bar offers reminders, quick creation of events, matrix tasks and notes without opening the main window, screenshots, screenshot history and an optional AI assistant. Menu order/visibility and global shortcuts are configurable; quick-create shortcuts are optional.
 
 For a workday, keep meetings, next actions and quick notes together. For study, pair deadlines with a focus session. For freelance delivery, keep your own board and reference notes in view. This is a personal workspace, not a shared team or cross-device cloud workspace.
 
