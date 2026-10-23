@@ -66,6 +66,10 @@ export type AppSettings = {
   quickPanelShortcut?: string;
   screenshotShortcut?: string;
   screenshotHistoryShortcut?: string;
+  // Quick-create shortcuts are unset by default; an empty string means not set.
+  quickCreateEventShortcut?: string;
+  quickCreateTaskShortcut?: string;
+  quickCreateNoteShortcut?: string;
   // Hidden features retain their position in the ordered menu.
   barMenu?: BarMenuItem[];
   recentColors?: HexColor[];

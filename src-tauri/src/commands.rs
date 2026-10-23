@@ -60,9 +60,10 @@ pub async fn update_app_settings(
 fn update_settings_blocking(app: tauri::AppHandle, settings: AppSettings) -> Result<AppSettings, CommandError> {
     let db = app.state::<AppDb>();
     let mut settings = normalize_status_island_settings(settings);
-    settings.screenshot_shortcut = crate::screenshot_shortcuts::normalize(&settings.screenshot_shortcut)?;
-    settings.screenshot_history_shortcut = crate::screenshot_shortcuts::normalize(&settings.screenshot_history_shortcut)
-        .map_err(|mut error| { error.field = Some("screenshotHistoryShortcut".into()); error })?;
+    let shortcuts = crate::screenshot_shortcuts::validate_keys(
+        &crate::screenshot_shortcuts::configured_keys(&settings),
+    )?;
+    crate::screenshot_shortcuts::store_keys(&mut settings, shortcuts);
     crate::settings::validate(&settings).map_err(|error| match error {
         rusqlite::Error::InvalidParameterName(field) => {
             CommandError::validation(&field, "设置值无效。")
@@ -190,6 +191,9 @@ mod tests {
             quick_panel_shortcut: "Ctrl+Space".into(),
             screenshot_shortcut: crate::models::default_screenshot_shortcut(),
             screenshot_history_shortcut: crate::models::default_screenshot_history_shortcut(),
+            quick_create_event_shortcut: String::new(),
+            quick_create_task_shortcut: String::new(),
+            quick_create_note_shortcut: String::new(),
             bar_menu: crate::models::default_bar_menu(),
             recent_colors: Vec::new(),
         }

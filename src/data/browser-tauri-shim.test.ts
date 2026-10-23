@@ -7,7 +7,10 @@ const storageKey = 'nowly:browser-backend';
 const defaultMenu = [
   { id: 'screenshot', visible: true },
   { id: 'screenshotHistory', visible: true },
-  { id: 'assistant', visible: true }
+  { id: 'assistant', visible: true },
+  { id: 'createEvent', visible: true },
+  { id: 'createTask', visible: true },
+  { id: 'createNote', visible: true }
 ];
 
 type BrowserInvoke = (command: string, args?: Record<string, unknown>) => Promise<unknown>;
@@ -340,7 +343,8 @@ describe('browser bar menu persistence', () => {
     installBrowserTauriBackend();
     const barMenu = [
       { id: 'assistant', visible: false }, { id: 'screenshotHistory', visible: false },
-      { id: 'screenshot', visible: false }
+      { id: 'createNote', visible: false }, { id: 'screenshot', visible: false },
+      { id: 'createTask', visible: true }, { id: 'createEvent', visible: false }
     ];
     const settings = await invoke()('get_app_settings') as Record<string, unknown>;
     await invoke()('update_app_settings', { settings: { ...settings, barMenu } });
@@ -358,7 +362,10 @@ describe('browser screenshot history fallback', () => {
     const status = await invoke()('screenshot_shortcut_status') as Record<string, unknown>;
     expect(status).toEqual({
       screenshot: { shortcut: 'Ctrl+Alt+A', registered: false, error: expect.any(String) },
-      history: { shortcut: 'Ctrl+Alt+H', registered: false, error: expect.any(String) }
+      history: { shortcut: 'Ctrl+Alt+H', registered: false, error: expect.any(String) },
+      createEvent: { shortcut: '', registered: false, error: expect.any(String) },
+      createTask: { shortcut: '', registered: false, error: expect.any(String) },
+      createNote: { shortcut: '', registered: false, error: expect.any(String) }
     });
     await expect(invoke()('copy_screenshot_history', { id: 'missing' })).rejects.toThrow();
     await expect(invoke()('open_screenshot_folder')).rejects.toThrow();

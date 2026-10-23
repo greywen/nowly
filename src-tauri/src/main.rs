@@ -232,7 +232,7 @@ fn main() {
                 wallpaper_enabled: true, launch_at_login: true, target_monitor_id: None, density: crate::models::default_density(),
                 week_start: "monday".into(), date_format: "localized".into(), show_weekends: true, icon_style: "duotone".into(),
                 hide_topbar_in_wallpaper: true,
-            hide_module_background_in_wallpaper: false, notification_mode: crate::models::default_notification_mode(), sound_settings: Default::default(), quick_panel_enabled: true, quick_panel_shortcut: "Ctrl+Space".into(), screenshot_shortcut: crate::models::default_screenshot_shortcut(), screenshot_history_shortcut: crate::models::default_screenshot_history_shortcut(), bar_menu: crate::models::default_bar_menu(), recent_colors: vec![]
+            hide_module_background_in_wallpaper: false, notification_mode: crate::models::default_notification_mode(), sound_settings: Default::default(), quick_panel_enabled: true, quick_panel_shortcut: "Ctrl+Space".into(), screenshot_shortcut: crate::models::default_screenshot_shortcut(), screenshot_history_shortcut: crate::models::default_screenshot_history_shortcut(), quick_create_event_shortcut: String::new(), quick_create_task_shortcut: String::new(), quick_create_note_shortcut: String::new(), bar_menu: crate::models::default_bar_menu(), recent_colors: vec![]
             });
             // Launch-at-login defaults to on, but the setting only lives in the
             // database until the OS entry exists. Bring the OS state up to the
@@ -483,14 +483,19 @@ fn main() {
             screen_capture::prewarm_after_launch(app.handle());
             screenshot_shortcuts::setup(
                 app.handle(),
-                |handle| {
-                    if screen_capture::is_active(handle) { return Ok(()); }
-                    screen_capture::start_screen_capture(handle.clone())
-                },
-                |handle| {
-                    if screen_capture::is_active(handle) { return Ok(()); }
-                    screenshot_windows::open_history(handle)
-                },
+                [
+                    |handle| {
+                        if screen_capture::is_active(handle) { return Ok(()); }
+                        screen_capture::start_screen_capture(handle.clone())
+                    },
+                    |handle| {
+                        if screen_capture::is_active(handle) { return Ok(()); }
+                        screenshot_windows::open_history(handle)
+                    },
+                    |_| Ok(()),
+                    |_| Ok(()),
+                    |_| Ok(()),
+                ],
             );
             Ok(())
         })

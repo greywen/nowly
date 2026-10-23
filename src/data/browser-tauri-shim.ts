@@ -73,6 +73,9 @@ const defaultSettings: Dict = {
   quickPanelShortcut: 'Ctrl+Space',
   screenshotShortcut: 'Ctrl+Alt+A',
   screenshotHistoryShortcut: 'Ctrl+Alt+H',
+  quickCreateEventShortcut: '',
+  quickCreateTaskShortcut: '',
+  quickCreateNoteShortcut: '',
   barMenu: normalizeBarMenu(undefined),
   recentColors: []
 };
@@ -1281,18 +1284,20 @@ export function installBrowserTauriBackend() {
     },
 
     list_screenshot_history: () => ({ items: [], nextCursor: null }),
-    screenshot_shortcut_status: () => ({
-      screenshot: {
-        shortcut: store.settings.screenshotShortcut,
+    screenshot_shortcut_status: () => {
+      const binding = (shortcut: unknown) => ({
+        shortcut: typeof shortcut === 'string' ? shortcut : '',
         registered: false,
         error: 'Global shortcuts are available only in the desktop application.'
-      },
-      history: {
-        shortcut: store.settings.screenshotHistoryShortcut,
-        registered: false,
-        error: 'Global shortcuts are available only in the desktop application.'
-      }
-    }),
+      });
+      return {
+        screenshot: binding(store.settings.screenshotShortcut),
+        history: binding(store.settings.screenshotHistoryShortcut),
+        createEvent: binding(store.settings.quickCreateEventShortcut),
+        createTask: binding(store.settings.quickCreateTaskShortcut),
+        createNote: binding(store.settings.quickCreateNoteShortcut)
+      };
+    },
     screenshot_shortcut_recording: () => undefined,
     copy_screenshot_history: () => { throw new Error('Image clipboard requires the desktop application.'); },
     delete_screenshot_history: () => { throw new Error('Screenshot files require the desktop application.'); },

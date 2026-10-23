@@ -320,10 +320,18 @@ pub struct BarMenuItem {
 }
 
 pub(crate) fn default_bar_menu() -> Vec<BarMenuItem> {
-    ["screenshot", "screenshotHistory", "assistant"]
-        .into_iter()
-        .map(|id| BarMenuItem { id: id.into(), visible: true })
-        .collect()
+    // New features are appended so stored menus normalize without reordering.
+    [
+        "screenshot",
+        "screenshotHistory",
+        "assistant",
+        "createEvent",
+        "createTask",
+        "createNote",
+    ]
+    .into_iter()
+    .map(|id| BarMenuItem { id: id.into(), visible: true })
+    .collect()
 }
 
 pub(crate) fn normalize_bar_menu(items: Vec<BarMenuItem>) -> Vec<BarMenuItem> {
@@ -372,6 +380,13 @@ pub struct AppSettings {
     pub screenshot_shortcut: String,
     #[serde(default = "default_screenshot_history_shortcut")]
     pub screenshot_history_shortcut: String,
+    /// Quick-create shortcuts are optional; an empty string means not set.
+    #[serde(default)]
+    pub quick_create_event_shortcut: String,
+    #[serde(default)]
+    pub quick_create_task_shortcut: String,
+    #[serde(default)]
+    pub quick_create_note_shortcut: String,
     /// Hidden features retain their position in the ordered menu.
     pub bar_menu: Vec<BarMenuItem>,
     #[serde(default)]
