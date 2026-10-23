@@ -40,6 +40,7 @@ type TaskWorkspaceContextValue = {
   pendingTaskIds: Set<string>;
   operationError: string | null;
   retry(): Promise<void>;
+  refresh(): Promise<void>;
   dismissOperationError(): void;
   createTask(originView: TaskView, draft: TaskDraft): Promise<Task>;
   updateTask(id: string, draft: TaskDraft): Promise<Task>;
@@ -119,9 +120,9 @@ export function TaskWorkspaceProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const retry = useCallback(async () => {
+  const readWorkspace = useCallback(async (silent: boolean) => {
     const requestId = ++requestIdRef.current;
-    setWorkspace((current) => ({ status: 'loading', data: current.data }));
+    if (!silent) setWorkspace((current) => ({ status: 'loading', data: current.data }));
     try {
       const snapshot = repository.getTaskWorkspaceSnapshot
         ? await repository.getTaskWorkspaceSnapshot()
@@ -131,11 +132,15 @@ export function TaskWorkspaceProvider({ children }: { children: ReactNode }) {
           );
       if (requestId === requestIdRef.current) applySnapshot(snapshot);
     } catch (error) {
-      if (requestId === requestIdRef.current) {
+      // A silent refresh keeps what is on screen; only an explicit read reports the failure.
+      if (!silent && requestId === requestIdRef.current) {
         setWorkspace((current) => ({ status: 'error', data: current.data, message: messageFrom(error) }));
       }
     }
   }, [applySnapshot, repository]);
+  const retry = useCallback(() => readWorkspace(false), [readWorkspace]);
+  // For tasks written by another window.
+  const refresh = useCallback(() => readWorkspace(true), [readWorkspace]);
 
   useEffect(() => { void retry(); }, [retry]);
 
@@ -308,6 +313,7 @@ export function TaskWorkspaceProvider({ children }: { children: ReactNode }) {
     pendingTaskIds,
     operationError,
     retry,
+    refresh,
     dismissOperationError: () => setOperationError(null),
     createTask,
     updateTask,
@@ -334,7 +340,7 @@ export function TaskWorkspaceProvider({ children }: { children: ReactNode }) {
     deleteCollaborator: (id) => reloadAfter(() => (repository.deleteTaskCollaborator ?? (() => missing('deleteTaskCollaborator')))(id)),
     setViewPreferences: (preferences) => snapshotWrite(() => (repository.setTaskViewPreferences ?? (() => missing('setTaskViewPreferences')))(preferences)).then(() => undefined)
   }), [
-    workspace, pendingTaskIds, operationError, retry, createTask, updateTask, deleteTask,
+    workspace, pendingTaskIds, operationError, retry, refresh, createTask, updateTask, deleteTask,
     setTaskCompleted, moveTaskToLane, moveTaskToPriority, moveTaskToDate,
     setTaskViewMemberships, snapshotWrite, reloadAfter, repository
   ]);

@@ -15,13 +15,20 @@ import { t, useTranslation, SUPPORTED_LANGUAGES, LOCALES, type Language } from '
 
 type Props={settings:AppSettings;monitors?:MonitorInfo[];onClose():void;onSave(settings:AppSettings):Promise<AppSettings>};
 type SettingsTab='interface'|'desktop'|'notifications'|'sound'|'shortcuts';
+type ShortcutField='screenshotShortcut'|'screenshotHistoryShortcut'|'quickCreateEventShortcut'|'quickCreateTaskShortcut'|'quickCreateNoteShortcut';
+const QUICK_CREATE_SHORTCUTS=[
+ {field:'quickCreateEventShortcut',id:'settings-quick-create-event-shortcut',label:'settings.quickCreateEventShortcut'},
+ {field:'quickCreateTaskShortcut',id:'settings-quick-create-task-shortcut',label:'settings.quickCreateTaskShortcut'},
+ {field:'quickCreateNoteShortcut',id:'settings-quick-create-note-shortcut',label:'settings.quickCreateNoteShortcut'}
+] as const;
+const SHORTCUT_FIELDS:readonly ShortcutField[]=['screenshotShortcut','screenshotHistoryShortcut',...QUICK_CREATE_SHORTCUTS.map(item=>item.field)];
 function errorMessage(error:unknown){return typeof error==='object'&&error!==null&&'message'in error&&typeof error.message==='string'?error.message:t('settings.saveError')}
 
 export function SettingsDialog({settings,monitors=[],onClose,onSave}:Props){
  // Language switches in real time via the i18n store, independent of the save
  // button, so the whole UI updates the moment the user picks a language.
  const {language,setLanguage}=useTranslation();
- const [draft,setDraft]=useState(()=>({...settings, soundSettings: normalizeSoundSettings(settings.soundSettings), barMenu: normalizeBarMenu(settings.barMenu), notificationMode: settings.notificationMode ?? 'notification', quickPanelEnabled: true, quickPanelShortcut: settings.quickPanelShortcut ?? 'Ctrl+Space', screenshotShortcut: settings.screenshotShortcut ?? 'Ctrl+Alt+A', screenshotHistoryShortcut: settings.screenshotHistoryShortcut ?? 'Ctrl+Alt+H'})); const [saving,setSaving]=useState(false); const [error,setError]=useState<string|null>(null);
+ const [draft,setDraft]=useState(()=>({...settings, soundSettings: normalizeSoundSettings(settings.soundSettings), barMenu: normalizeBarMenu(settings.barMenu), notificationMode: settings.notificationMode ?? 'notification', quickPanelEnabled: true, quickPanelShortcut: settings.quickPanelShortcut ?? 'Ctrl+Space', screenshotShortcut: settings.screenshotShortcut ?? 'Ctrl+Alt+A', screenshotHistoryShortcut: settings.screenshotHistoryShortcut ?? 'Ctrl+Alt+H', quickCreateEventShortcut: settings.quickCreateEventShortcut ?? '', quickCreateTaskShortcut: settings.quickCreateTaskShortcut ?? '', quickCreateNoteShortcut: settings.quickCreateNoteShortcut ?? ''})); const [saving,setSaving]=useState(false); const [error,setError]=useState<string|null>(null);
  const [tab,setTab]=useState<SettingsTab>('interface');
  // Resolve the monitor that should appear selected: the saved id when it still
  // matches a connected monitor, otherwise the primary (or first) one. Falling
@@ -32,12 +39,17 @@ export function SettingsDialog({settings,monitors=[],onClose,onSave}:Props){
  // the dropdown shows, instead of a null or stale id.
  useEffect(()=>{if(resolvedMonitorId&&resolvedMonitorId!==draft.targetMonitorId)setDraft(current=>({...current,targetMonitorId:resolvedMonitorId}));},[resolvedMonitorId,draft.targetMonitorId]);
  const toggle=(key:keyof AppSettings)=>(event:React.ChangeEvent<HTMLInputElement>)=>setDraft(current=>({...current,[key]:event.target.checked}));
+ const others=(field:ShortcutField)=>SHORTCUT_FIELDS.filter(other=>other!==field).map(other=>draft[other]);
  async function save(){
   const screenshotShortcut=normalizeShortcut(draft.screenshotShortcut);
   const screenshotHistoryShortcut=normalizeShortcut(draft.screenshotHistoryShortcut);
-  if(!screenshotShortcut||!screenshotHistoryShortcut){setError(t('settings.shortcutInvalid'));return;}
-  if(screenshotShortcut===screenshotHistoryShortcut){setError(t('settings.shortcutDuplicate'));return;}
-  setSaving(true);setError(null);try{await onSave({...draft,screenshotShortcut,screenshotHistoryShortcut,quickPanelEnabled:true});onClose();}catch(reason){setError(typeof reason==='object'&&reason!==null&&'field'in reason&&['screenshotShortcut','screenshotHistoryShortcut'].includes(String(reason.field))?t('settings.shortcutConflict'):errorMessage(reason));}finally{setSaving(false)}
+  // Quick-create shortcuts are optional: an empty value stays unset.
+  const quickCreate=QUICK_CREATE_SHORTCUTS.map(({field})=>draft[field].trim()?normalizeShortcut(draft[field]):'');
+  if(!screenshotShortcut||!screenshotHistoryShortcut||quickCreate.some(value=>value===null)){setError(t('settings.shortcutInvalid'));return;}
+  const bound=[screenshotShortcut,screenshotHistoryShortcut,...quickCreate.filter(Boolean)];
+  if(new Set(bound).size!==bound.length){setError(t('settings.shortcutDuplicate'));return;}
+  const [quickCreateEventShortcut,quickCreateTaskShortcut,quickCreateNoteShortcut]=quickCreate as string[];
+  setSaving(true);setError(null);try{await onSave({...draft,screenshotShortcut,screenshotHistoryShortcut,quickCreateEventShortcut,quickCreateTaskShortcut,quickCreateNoteShortcut,quickPanelEnabled:true});onClose();}catch(reason){setError(typeof reason==='object'&&reason!==null&&'field'in reason&&(SHORTCUT_FIELDS as readonly string[]).includes(String(reason.field))?t('settings.shortcutConflict'):errorMessage(reason));}finally{setSaving(false)}
  }
  const tabs:TabItem<SettingsTab>[]=[{id:'interface',label:t('settings.interface')},{id:'desktop',label:t('settings.desktopStartup')},{id:'notifications',label:t('settings.notifications')},{id:'sound',label:t('settings.sound')},{id:'shortcuts',label:t('settings.shortcuts')}];
  return <Dialog title={t('settings.title')} ariaLabelledBy="settings-title" onRequestClose={onClose} className="settings-dialog" headerActions={<button className="good-icon-button" aria-label={t('settings.close')} onClick={onClose}><X aria-hidden="true"/></button>} footer={<><button className="good-button" onClick={onClose}>{t('common.cancel')}</button><button className="good-button good-button--primary" disabled={saving} onClick={()=>void save()}>{saving?t('common.saving'):t('settings.saveSettings')}</button></>}>
@@ -75,8 +87,13 @@ export function SettingsDialog({settings,monitors=[],onClose,onSave}:Props){
    </TabPanel>
    <TabPanel idPrefix="settings" tabId="shortcuts" active={tab==='shortcuts'}>
     <div className="shortcut-settings">
-     <ShortcutRecorder id="settings-screenshot-shortcut" label={t('settings.screenshotShortcut')} value={draft.screenshotShortcut} otherValue={draft.screenshotHistoryShortcut} disabled={saving} onChange={screenshotShortcut=>setDraft(current=>({...current,screenshotShortcut}))}/>
-     <ShortcutRecorder id="settings-history-shortcut" label={t('settings.screenshotHistoryShortcut')} value={draft.screenshotHistoryShortcut} otherValue={draft.screenshotShortcut} disabled={saving} onChange={screenshotHistoryShortcut=>setDraft(current=>({...current,screenshotHistoryShortcut}))}/>
+     <ShortcutRecorder id="settings-screenshot-shortcut" label={t('settings.screenshotShortcut')} value={draft.screenshotShortcut} otherValues={others('screenshotShortcut')} disabled={saving} onChange={screenshotShortcut=>setDraft(current=>({...current,screenshotShortcut}))}/>
+     <ShortcutRecorder id="settings-history-shortcut" label={t('settings.screenshotHistoryShortcut')} value={draft.screenshotHistoryShortcut} otherValues={others('screenshotHistoryShortcut')} disabled={saving} onChange={screenshotHistoryShortcut=>setDraft(current=>({...current,screenshotHistoryShortcut}))}/>
+     <fieldset className="shortcut-settings__group">
+      <legend>{t('barMenu.groupCreate')}</legend>
+      <p>{t('settings.quickCreateShortcutHint')}</p>
+      {QUICK_CREATE_SHORTCUTS.map(({field,id,label})=><ShortcutRecorder key={field} id={id} label={t(label)} value={draft[field]} otherValues={others(field)} optional disabled={saving} onChange={value=>setDraft(current=>({...current,[field]:value}))}/>)}
+     </fieldset>
     </div>
    </TabPanel>
    {error?<div className="dialog-error" role="alert">{error}</div>:null}

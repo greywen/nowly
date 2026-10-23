@@ -27,6 +27,7 @@ import { validateNoteForm, toNoteDraft } from '../lib/note-draft';
 import type { NoteDraft } from '../notes/notes-model';
 import { isContentEmpty } from '../components/rich-text/content';
 import { normalizeBarMenu } from '../app/bar-menu';
+import { isQuickCreateKind } from '../quick-create/request';
 import { alarmToDraft, defaultTimeSettings, type Alarm, type AlarmDraft, type AlarmNotice, type TimeSettings } from '../time/time-model';
 
 type Dict = Record<string, unknown>;
@@ -73,6 +74,9 @@ const defaultSettings: Dict = {
   quickPanelShortcut: 'Ctrl+Space',
   screenshotShortcut: 'Ctrl+Alt+A',
   screenshotHistoryShortcut: 'Ctrl+Alt+H',
+  quickCreateEventShortcut: '',
+  quickCreateTaskShortcut: '',
+  quickCreateNoteShortcut: '',
   barMenu: normalizeBarMenu(undefined),
   recentColors: []
 };
@@ -1281,18 +1285,20 @@ export function installBrowserTauriBackend() {
     },
 
     list_screenshot_history: () => ({ items: [], nextCursor: null }),
-    screenshot_shortcut_status: () => ({
-      screenshot: {
-        shortcut: store.settings.screenshotShortcut,
+    screenshot_shortcut_status: () => {
+      const binding = (shortcut: unknown) => ({
+        shortcut: typeof shortcut === 'string' ? shortcut : '',
         registered: false,
         error: 'Global shortcuts are available only in the desktop application.'
-      },
-      history: {
-        shortcut: store.settings.screenshotHistoryShortcut,
-        registered: false,
-        error: 'Global shortcuts are available only in the desktop application.'
-      }
-    }),
+      });
+      return {
+        screenshot: binding(store.settings.screenshotShortcut),
+        history: binding(store.settings.screenshotHistoryShortcut),
+        createEvent: binding(store.settings.quickCreateEventShortcut),
+        createTask: binding(store.settings.quickCreateTaskShortcut),
+        createNote: binding(store.settings.quickCreateNoteShortcut)
+      };
+    },
     screenshot_shortcut_recording: () => undefined,
     copy_screenshot_history: () => { throw new Error('Image clipboard requires the desktop application.'); },
     delete_screenshot_history: () => { throw new Error('Screenshot files require the desktop application.'); },
@@ -1302,6 +1308,20 @@ export function installBrowserTauriBackend() {
     toggle_status_island_details: () => panelSource === 'island' ? closePanel() : openPanel('island'),
     toggle_nowly_panel: () => panelSource === 'nowly' ? closePanel() : openPanel('nowly'),
     close_status_island_details: closePanel,
+    // The browser has no native quick-create window, so the dialog opens as its own page.
+    open_quick_create: (a) => {
+      if (!isQuickCreateKind(a.kind)) throw { code: 'validation_error', message: `Invalid quick-create kind: ${String(a.kind)}` };
+      if (panelSource === 'menu') closePanel();
+      window.open(`/?surface=quick-create&kind=${a.kind}`, 'nowly-quick-create', 'popup,width=760,height=720');
+    },
+    get_quick_create_request: () => {
+      const kind = new URLSearchParams(window.location.search).get('kind');
+      return { id: 1, kind: isQuickCreateKind(kind) ? kind : 'event', maxHeight: window.innerHeight };
+    },
+    quick_create_layout: () => undefined,
+    close_quick_create: () => {
+      if (window.opener) window.close();
+    },
     get_status_island_presentation: barPresentation,
     finish_status_island_presentation: () => undefined,
     finish_status_island_details: (a) => {

@@ -21,6 +21,17 @@ fn ensure_idle<R: Runtime>(app: &AppHandle<R>) -> Result<(), CommandError> {
     Ok(())
 }
 
+/// Surfaces that open on demand stay closed while a capture holds the screen.
+pub(crate) fn capture_in_progress<R: Runtime>(app: &AppHandle<R>) -> bool {
+    let suppressed = app
+        .state::<ScreenshotWindows>()
+        .0
+        .lock()
+        .map(|suppressed| suppressed.is_some())
+        .unwrap_or(true);
+    suppressed || crate::screen_capture::is_active(app)
+}
+
 pub fn open_history<R: Runtime>(app: &AppHandle<R>) -> Result<(), CommandError> {
     ensure_idle(app)?;
     crate::quick_panel::open_history_panel(app).map_err(CommandError::system)
@@ -48,6 +59,7 @@ pub fn suppress_for_capture<R: Runtime>(app: &AppHandle<R>) {
     }
     let mut labels = app.state::<crate::screenshot_pins::ScreenshotPins>().labels();
     labels.push(HISTORY_LABEL.into());
+    labels.push(crate::quick_create::LABEL.into());
     let mut visible = Vec::new();
     for label in labels {
         if let Some(window) = app.get_webview_window(&label) {
@@ -81,6 +93,7 @@ mod tests {
         let source = include_str!("screenshot_windows.rs");
         let suppress = source.split("pub fn suppress_for_capture").nth(1).unwrap().split("pub fn restore_after_capture").next().unwrap();
         assert!(suppress.contains("ScreenshotPins"));
+        assert!(suppress.contains("quick_create::LABEL"));
         let restore = source.split("pub fn restore_after_capture").nth(1).unwrap().split("#[cfg(test)]").next().unwrap();
         assert!(restore.contains("show_without_activation"));
         assert!(!restore.contains("set_focus"));

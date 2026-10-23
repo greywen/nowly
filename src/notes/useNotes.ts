@@ -19,16 +19,20 @@ export function useNotes() {
   const [notes, setNotes] = useState<NotesResource>({status:'loading', data:[]});
   const requestIdRef = useRef(0);
 
-  const loadNotes = useCallback(async () => {
+  const readNotes = useCallback(async (silent: boolean) => {
     const requestId = ++requestIdRef.current;
-    setNotes((current) => ({status:'loading', data:current.data}));
+    if (!silent) setNotes((current) => ({status:'loading', data:current.data}));
     try {
       const data = sortNotes(await repository.listNotes());
       if (requestId === requestIdRef.current) setNotes({status:'ready', data});
     } catch (error) {
-      if (requestId === requestIdRef.current) setNotes((current) => ({status:'error', data:current.data, message:messageFrom(error)}));
+      // A silent refresh keeps what is on screen; only an explicit read reports the failure.
+      if (!silent && requestId === requestIdRef.current) setNotes((current) => ({status:'error', data:current.data, message:messageFrom(error)}));
     }
   }, [repository]);
+  const loadNotes = useCallback(() => readNotes(false), [readNotes]);
+  // For notes written by another window.
+  const refreshNotes = useCallback(() => readNotes(true), [readNotes]);
 
   useEffect(() => { void loadNotes(); }, [loadNotes]);
 
@@ -49,5 +53,5 @@ export function useNotes() {
     await loadNotes();
   }, [loadNotes, repository]);
 
-  return { notes, retryNotes:loadNotes, createNote, updateNote, deleteNote };
+  return { notes, retryNotes:loadNotes, refreshNotes, createNote, updateNote, deleteNote };
 }

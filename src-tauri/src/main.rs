@@ -27,6 +27,7 @@ mod notes;
 mod oauth;
 mod oauth_config;
 mod quick_panel;
+mod quick_create;
 mod recurrence;
 mod reminders;
 mod remote_events;
@@ -162,6 +163,7 @@ fn main() {
         .manage(screen_capture::PreviewStore::default())
         .manage(screenshot_windows::ScreenshotWindows::default())
         .manage(screenshot_pins::ScreenshotPins::default())
+        .manage(quick_create::QuickCreateState::default())
         .register_asynchronous_uri_scheme_protocol(
             screen_capture::FRAME_URI_SCHEME,
             |context, request, responder| {
@@ -232,7 +234,7 @@ fn main() {
                 wallpaper_enabled: true, launch_at_login: true, target_monitor_id: None, density: crate::models::default_density(),
                 week_start: "monday".into(), date_format: "localized".into(), show_weekends: true, icon_style: "duotone".into(),
                 hide_topbar_in_wallpaper: true,
-            hide_module_background_in_wallpaper: false, notification_mode: crate::models::default_notification_mode(), sound_settings: Default::default(), quick_panel_enabled: true, quick_panel_shortcut: "Ctrl+Space".into(), screenshot_shortcut: crate::models::default_screenshot_shortcut(), screenshot_history_shortcut: crate::models::default_screenshot_history_shortcut(), bar_menu: crate::models::default_bar_menu(), recent_colors: vec![]
+            hide_module_background_in_wallpaper: false, notification_mode: crate::models::default_notification_mode(), sound_settings: Default::default(), quick_panel_enabled: true, quick_panel_shortcut: "Ctrl+Space".into(), screenshot_shortcut: crate::models::default_screenshot_shortcut(), screenshot_history_shortcut: crate::models::default_screenshot_history_shortcut(), quick_create_event_shortcut: String::new(), quick_create_task_shortcut: String::new(), quick_create_note_shortcut: String::new(), bar_menu: crate::models::default_bar_menu(), recent_colors: vec![]
             });
             // Launch-at-login defaults to on, but the setting only lives in the
             // database until the OS entry exists. Bring the OS state up to the
@@ -483,14 +485,19 @@ fn main() {
             screen_capture::prewarm_after_launch(app.handle());
             screenshot_shortcuts::setup(
                 app.handle(),
-                |handle| {
-                    if screen_capture::is_active(handle) { return Ok(()); }
-                    screen_capture::start_screen_capture(handle.clone())
-                },
-                |handle| {
-                    if screen_capture::is_active(handle) { return Ok(()); }
-                    screenshot_windows::open_history(handle)
-                },
+                [
+                    |handle| {
+                        if screen_capture::is_active(handle) { return Ok(()); }
+                        screen_capture::start_screen_capture(handle.clone())
+                    },
+                    |handle| {
+                        if screen_capture::is_active(handle) { return Ok(()); }
+                        screenshot_windows::open_history(handle)
+                    },
+                    |handle| quick_create::open(handle, quick_create::QuickCreateKind::Event),
+                    |handle| quick_create::open(handle, quick_create::QuickCreateKind::Task),
+                    |handle| quick_create::open(handle, quick_create::QuickCreateKind::Note),
+                ],
             );
             Ok(())
         })
@@ -511,6 +518,15 @@ fn main() {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
                     let _ = window.hide();
+                }
+                return;
+            }
+            // The quick-create window is reused, and closing it may discard a
+            // draft, so Alt+F4 goes through the dialog's own close flow.
+            if window.label() == quick_create::LABEL {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = window.emit_to(quick_create::LABEL, quick_create::CLOSE_REQUESTED_EVENT, ());
                 }
                 return;
             }
@@ -704,6 +720,10 @@ fn main() {
             screen_capture::history::commands::open_screenshot_folder,
             quick_panel::toggle_bar_menu,
             screenshot_windows::open_screenshot_history,
+            quick_create::open_quick_create,
+            quick_create::get_quick_create_request,
+            quick_create::quick_create_layout,
+            quick_create::close_quick_create,
             screen_capture::start_screen_capture,
             screen_capture::cancel_screen_capture,
             screen_capture::describe_capture_frame,
@@ -786,6 +806,28 @@ mod tests {
     fn nowly_bar_close_requests_are_prevented() {
         assert!(should_prevent_close("quick-panel-handle"));
         assert!(!should_prevent_close("main"));
+    }
+
+    #[test]
+    fn the_quick_create_window_shares_the_app_ipc_capability() {
+        let capability: serde_json::Value =
+            serde_json::from_str(include_str!("../capabilities/default.json")).unwrap();
+        assert!(capability["windows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|label| label == super::quick_create::LABEL));
+    }
+
+    #[test]
+    fn quick_create_close_requests_go_through_the_dialog() {
+        let source = include_str!("main.rs").split("#[cfg(test)]").next().unwrap();
+        let start = source.find("if window.label() == quick_create::LABEL").unwrap();
+        let branch = &source[start..start + source[start..].find("return;").unwrap()];
+        assert!(branch.contains("api.prevent_close()"));
+        assert!(branch.contains("CLOSE_REQUESTED_EVENT"));
+        // It has to return before the main window's hide-to-tray handling.
+        assert!(start < source.find("request-overlay-cleanup").unwrap());
     }
 
     #[test]

@@ -6,7 +6,7 @@ import { RepositoryProvider } from '../data/RepositoryContext';
 import type { AppSettings, NowlyRepository } from '../data/nowly-repository';
 import type { CalendarEvent, EventDraft, Recurrence } from './calendar-model';
 import { resizeEventEndToDate, shiftEventToDate, shiftEventToHour } from './calendar-view';
-import { useEvents } from './useEvents';
+import { createEventWith, useEvents } from './useEvents';
 
 const settings: AppSettings = {
   wallpaperEnabled: false,
@@ -117,6 +117,26 @@ function deferred<T>() {
 
 const now = () => new Date(2026, 6, 23, 9, 42);
 
+describe('createEventWith', () => {
+  it('creates local events and returns the stored record', async () => {
+    const repository = createRepository({ createEvent: vi.fn().mockResolvedValue(event('e9')) });
+    await expect(createEventWith(repository, draft)).resolves.toEqual(event('e9'));
+    expect(repository.createEvent).toHaveBeenCalledWith(draft);
+  });
+
+  it('sends a remote create without recurrence and without a local write', async () => {
+    const createRemoteEvent = vi.fn().mockResolvedValue(undefined);
+    const repository = createRepository({ createRemoteEvent });
+    await expect(createEventWith(repository, { ...draft, recurrence: weekly }, 'google-sub')).resolves.toBeUndefined();
+    expect(createRemoteEvent).toHaveBeenCalledWith('google-sub', { ...draft, recurrence: null });
+    expect(repository.createEvent).not.toHaveBeenCalled();
+  });
+
+  it('rejects a remote create the repository cannot perform', async () => {
+    await expect(createEventWith(createRepository(), draft, 'google-sub')).rejects.toThrow();
+  });
+});
+
 describe('useEvents', () => {
   it('loads the current local month and navigates previous, next, and across years', async () => {
     const repository = createRepository();
@@ -213,6 +233,25 @@ describe('useEvents', () => {
     await act(() => result.current.updateEvent(existing, draft, 'all'));
     await act(() => result.current.deleteEvent(existing, 'all'));
     expect(repository.listEventsInRange).toHaveBeenCalledTimes(4);
+  });
+
+  it('refreshes for changes made elsewhere while keeping the shown events', async () => {
+    const reload = deferred<CalendarEvent[]>();
+    const listEventsInRange = vi.fn().mockResolvedValueOnce([event('e1')]).mockImplementationOnce(() => reload.promise);
+    const { result } = renderHook(() => useEvents({ now }), {
+      wrapper: wrapper(createRepository({ listEventsInRange }))
+    });
+    await waitFor(() => expect(result.current.events.status).toBe('ready'));
+
+    let refreshed!: Promise<void>;
+    act(() => { refreshed = result.current.refreshEvents(); });
+    expect(result.current.events).toEqual({ status: 'ready', data: [event('e1')] });
+    await act(async () => {
+      reload.resolve([event('e1'), event('e2')]);
+      await refreshed;
+    });
+    expect(result.current.events).toEqual({ status: 'ready', data: [event('e1'), event('e2')] });
+    expect(listEventsInRange).toHaveBeenLastCalledWith({ startAt: '2026-07-01T00:00', endAtExclusive: '2026-08-01T00:00' });
   });
 
   it('routes writable OAuth creates, edits, deletes, and drags to remote commands', async () => {

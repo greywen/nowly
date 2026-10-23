@@ -11,6 +11,11 @@ describe('routeForLabel', () => {
     expect(routeForLabel('quick-panel-handle')).toBe('status-island');
   });
 
+  it('routes the quick-create window', () => {
+    expect(routeForLabel('quick-create')).toBe('quick-create');
+    expect(routeForLabel('quick-create-1')).toBe('main');
+  });
+
   it('routes session-scoped capture windows to the static placeholder', () => {
     // This window owns the only taskbar/Alt+Tab entry, so it must never render
     // desktop pixels: Peek and the taskbar thumbnail would expose them.

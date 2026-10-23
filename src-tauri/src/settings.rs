@@ -60,6 +60,9 @@ pub fn read_app_settings(connection: &Connection) -> Result<AppSettings, rusqlit
         )?,
         screenshot_shortcut: read_value_or(connection, "screenshot_shortcut", crate::models::default_screenshot_shortcut())?,
         screenshot_history_shortcut: read_value_or(connection, "screenshot_history_shortcut", crate::models::default_screenshot_history_shortcut())?,
+        quick_create_event_shortcut: read_value_or(connection, "quick_create_event_shortcut", String::new())?,
+        quick_create_task_shortcut: read_value_or(connection, "quick_create_task_shortcut", String::new())?,
+        quick_create_note_shortcut: read_value_or(connection, "quick_create_note_shortcut", String::new())?,
         bar_menu: crate::models::normalize_bar_menu(read_value_or(connection, "bar_menu", crate::models::default_bar_menu())?),
         sound_settings: read_sound_settings(connection)?,
         recent_colors: read_value_or(connection, "recent_colors", Vec::new())?,
@@ -74,11 +77,10 @@ pub fn read_sound_settings(connection: &Connection) -> Result<crate::sound_setti
 
 pub(crate) fn validate(settings: &AppSettings) -> Result<(), rusqlite::Error> {
     settings.sound_settings.validate()?;
-    let screenshot = crate::screenshot_shortcuts::normalize(&settings.screenshot_shortcut)
-        .map_err(|_| rusqlite::Error::InvalidParameterName("screenshotShortcut".into()))?;
-    let history = crate::screenshot_shortcuts::normalize(&settings.screenshot_history_shortcut)
-        .map_err(|_| rusqlite::Error::InvalidParameterName("screenshotHistoryShortcut".into()))?;
-    if screenshot == history { return Err(rusqlite::Error::InvalidParameterName("screenshotHistoryShortcut".into())); }
+    crate::screenshot_shortcuts::validate_keys(&crate::screenshot_shortcuts::configured_keys(settings))
+        .map_err(|error| rusqlite::Error::InvalidParameterName(
+            error.field.unwrap_or_else(|| "screenshotShortcut".into()),
+        ))?;
     if !matches!(
         settings.density.as_str(),
         "compact" | "balanced" | "comfortable"
@@ -173,6 +175,9 @@ pub fn write_app_settings(
         ),
         ("screenshot_shortcut", serde_json::to_string(&settings.screenshot_shortcut)),
         ("screenshot_history_shortcut", serde_json::to_string(&settings.screenshot_history_shortcut)),
+        ("quick_create_event_shortcut", serde_json::to_string(&settings.quick_create_event_shortcut)),
+        ("quick_create_task_shortcut", serde_json::to_string(&settings.quick_create_task_shortcut)),
+        ("quick_create_note_shortcut", serde_json::to_string(&settings.quick_create_note_shortcut)),
         ("bar_menu", serde_json::to_string(&settings.bar_menu)),
         ("sound_settings", serde_json::to_string(&settings.sound_settings.clone().normalize())),
         (
@@ -245,6 +250,9 @@ mod tests {
 
         assert_eq!(settings.screenshot_shortcut, "Ctrl+Alt+A");
         assert_eq!(settings.screenshot_history_shortcut, "Ctrl+Alt+H");
+        assert_eq!(settings.quick_create_event_shortcut, "");
+        assert_eq!(settings.quick_create_task_shortcut, "");
+        assert_eq!(settings.quick_create_note_shortcut, "");
         assert!(settings.wallpaper_enabled);
         assert!(settings.launch_at_login);
         assert_eq!(settings.target_monitor_id, None);
@@ -257,6 +265,31 @@ mod tests {
         assert!(!settings.hide_module_background_in_wallpaper);
         assert_eq!(settings.notification_mode, "notification");
         assert_eq!(settings.bar_menu, crate::models::default_bar_menu());
+    }
+
+    #[test]
+    fn quick_create_shortcuts_are_optional_but_must_be_valid_and_unique() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        migrate(&mut connection).unwrap();
+        let before = read_app_settings(&connection).unwrap();
+        for (event, task, field) in [
+            ("Ctrl", "", "quickCreateEventShortcut"),
+            ("Ctrl+Alt+A", "", "quickCreateEventShortcut"),
+            ("Ctrl+Alt+E", "control+alt+e", "quickCreateTaskShortcut"),
+        ] {
+            let mut invalid = before.clone();
+            invalid.quick_create_event_shortcut = event.into();
+            invalid.quick_create_task_shortcut = task.into();
+            match super::write_app_settings(&mut connection, &invalid) {
+                Err(rusqlite::Error::InvalidParameterName(name)) => assert_eq!(name, field),
+                other => panic!("expected {field} rejection, got {other:?}"),
+            }
+        }
+        assert_eq!(read_app_settings(&connection).unwrap(), before);
+
+        let mut valid = before.clone();
+        valid.quick_create_note_shortcut = "Ctrl+Alt+N".into();
+        assert_eq!(super::write_app_settings(&mut connection, &valid).unwrap(), valid);
     }
 
     #[test]
@@ -343,8 +376,28 @@ mod tests {
             r#"[{"id":"assistant","visible":false},{"id":"unknown","visible":true},{"id":"assistant","visible":true}]"#
         ]).unwrap();
         let menu = read_app_settings(&connection).unwrap().bar_menu;
-        assert_eq!(menu.iter().map(|item| item.id.as_str()).collect::<Vec<_>>(), vec!["assistant", "screenshot", "screenshotHistory"]);
+        assert_eq!(
+            menu.iter().map(|item| item.id.as_str()).collect::<Vec<_>>(),
+            vec!["assistant", "screenshot", "screenshotHistory", "createEvent", "createTask", "createNote"]
+        );
         assert!(!menu[0].visible);
+    }
+
+    #[test]
+    fn legacy_three_item_menu_gains_visible_quick_create_items() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        migrate(&mut connection).unwrap();
+        connection.execute("UPDATE settings SET value=?1 WHERE key='bar_menu'", [
+            r#"[{"id":"screenshotHistory","visible":false},{"id":"screenshot","visible":true},{"id":"assistant","visible":true}]"#
+        ]).unwrap();
+        let menu = read_app_settings(&connection).unwrap().bar_menu;
+        assert_eq!(
+            menu.iter().map(|item| (item.id.as_str(), item.visible)).collect::<Vec<_>>(),
+            vec![
+                ("screenshotHistory", false), ("screenshot", true), ("assistant", true),
+                ("createEvent", true), ("createTask", true), ("createNote", true),
+            ]
+        );
     }
 
     #[test]
@@ -390,6 +443,9 @@ mod tests {
             quick_panel_shortcut: "Ctrl+Shift+K".into(),
             screenshot_shortcut: "Ctrl+Shift+A".into(),
             screenshot_history_shortcut: "Ctrl+Shift+H".into(),
+            quick_create_event_shortcut: "Ctrl+Alt+E".into(),
+            quick_create_task_shortcut: "Ctrl+Alt+T".into(),
+            quick_create_note_shortcut: "Ctrl+Alt+N".into(),
             bar_menu: crate::models::default_bar_menu().into_iter().rev().map(|mut item| { item.visible = false; item }).collect(),
             recent_colors: vec![],
         };

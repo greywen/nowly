@@ -8,8 +8,10 @@ import { FocusTimerProvider } from './focus/FocusTimerContext';
 import './app/styles.css';
 import './i18n/rtl.css';
 import { StatusIslandApp } from './quick-panel/StatusIslandApp';
+import { QuickCreateApp } from './quick-create/QuickCreateApp';
 import { routeForLabel } from './screenshot/window-route';
 import { ScreenshotHistoryApp } from './screenshot-history/ScreenshotHistoryApp';
+import { TaskWorkspaceProvider } from './tasks/TaskWorkspaceContext';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { startNativeLanguageSync } from './i18n/native-language';
 
@@ -38,7 +40,7 @@ import.meta.hot?.dispose(stopNativeLanguageSync);
 function currentWindowLabel(): string {
   if (browserOnly) {
     const surface = new URLSearchParams(window.location.search).get('surface');
-    return surface === 'screenshot-history' || surface === 'quick-panel-handle' ? surface : 'main';
+    return surface === 'screenshot-history' || surface === 'quick-panel-handle' || surface === 'quick-create' ? surface : 'main';
   }
   try {
     return getCurrentWindow().label;
@@ -50,7 +52,7 @@ function currentWindowLabel(): string {
 // `quick-panel-handle` is a compatibility label: it now hosts the whole top
 // rail — status capsule, Nowly entry and the sheet they open into — not the
 // removed AI quick panel. Screenshot surfaces load screenshot.html, not this
-// entry. The history surface uses this ordinary application entry.
+// entry. The history and quick-create surfaces use this ordinary application entry.
 const route = routeForLabel(currentWindowLabel());
 
 function surface() {
@@ -59,6 +61,14 @@ function surface() {
       return <StatusIslandApp />;
     case 'screenshot-history':
       return <ScreenshotHistoryApp />;
+    case 'quick-create':
+      return (
+        <RepositoryProvider repository={tauriNowlyRepository}>
+          <TaskWorkspaceProvider>
+            <QuickCreateApp />
+          </TaskWorkspaceProvider>
+        </RepositoryProvider>
+      );
     default:
       return (
         <RepositoryProvider repository={tauriNowlyRepository}>

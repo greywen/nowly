@@ -1,5 +1,5 @@
 import { X } from '../components/icons';
-import { type RefObject, useId, useMemo, useState } from 'react';
+import { type RefObject, useEffect, useId, useMemo, useState } from 'react';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { DatePicker } from '../components/DatePicker';
 import { Dialog } from '../components/Dialog';
@@ -26,6 +26,8 @@ type Props = {
   mode: Mode;
   restoreFocusRef?: RefObject<HTMLElement | null>;
   onClose(): void;
+  onSaved?(task: Task): void | Promise<void>;
+  onDirtyChange?(dirty: boolean): void;
 };
 
 type Form = {
@@ -45,7 +47,7 @@ function message(error: unknown) {
     : t('common.opFailed');
 }
 
-export function UnifiedTaskDialog({ mode, restoreFocusRef, onClose }: Props) {
+export function UnifiedTaskDialog({ mode, restoreFocusRef, onClose, onSaved, onDirtyChange }: Props) {
   const workspace = useTaskWorkspace();
   const snapshot = workspace.workspace.data;
   const initial = useMemo<Form>(() => {
@@ -82,6 +84,7 @@ export function UnifiedTaskDialog({ mode, restoreFocusRef, onClose }: Props) {
   const titleId = useId();
 
   const dirty = JSON.stringify(initial) !== JSON.stringify(form);
+  useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
   const activeTags = snapshot.tags.filter((tag) => !tag.archivedAt || form.tagIds.includes(tag.id));
   const activeCollaborators = snapshot.collaborators.filter(
     (person) => !person.archivedAt || form.collaboratorIds.includes(person.id)
@@ -127,11 +130,10 @@ export function UnifiedTaskDialog({ mode, restoreFocusRef, onClose }: Props) {
     setDialogError('');
     setFieldError(null);
     try {
-      if (mode.type === 'create') {
-        await workspace.createTask(mode.originView, draft());
-      } else {
-        await workspace.updateTask(mode.task.id, draft());
-      }
+      const saved = mode.type === 'create'
+        ? await workspace.createTask(mode.originView, draft())
+        : await workspace.updateTask(mode.task.id, draft());
+      await onSaved?.(saved);
       onClose();
     } catch (error) {
       const repositoryError = error as RepositoryError;
