@@ -235,6 +235,25 @@ describe('useEvents', () => {
     expect(repository.listEventsInRange).toHaveBeenCalledTimes(4);
   });
 
+  it('refreshes for changes made elsewhere while keeping the shown events', async () => {
+    const reload = deferred<CalendarEvent[]>();
+    const listEventsInRange = vi.fn().mockResolvedValueOnce([event('e1')]).mockImplementationOnce(() => reload.promise);
+    const { result } = renderHook(() => useEvents({ now }), {
+      wrapper: wrapper(createRepository({ listEventsInRange }))
+    });
+    await waitFor(() => expect(result.current.events.status).toBe('ready'));
+
+    let refreshed!: Promise<void>;
+    act(() => { refreshed = result.current.refreshEvents(); });
+    expect(result.current.events).toEqual({ status: 'ready', data: [event('e1')] });
+    await act(async () => {
+      reload.resolve([event('e1'), event('e2')]);
+      await refreshed;
+    });
+    expect(result.current.events).toEqual({ status: 'ready', data: [event('e1'), event('e2')] });
+    expect(listEventsInRange).toHaveBeenLastCalledWith({ startAt: '2026-07-01T00:00', endAtExclusive: '2026-08-01T00:00' });
+  });
+
   it('routes writable OAuth creates, edits, deletes, and drags to remote commands', async () => {
     const createRemoteEvent = vi.fn().mockResolvedValue(undefined);
     const updateRemoteEvent = vi.fn().mockResolvedValue(undefined);

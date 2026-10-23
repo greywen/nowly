@@ -335,6 +335,7 @@ export function useEvents({
     monthIndex: state.anchor.getMonth(),
     events,
     retryEvents: () => loadEvents(state),
+    refreshEvents: refreshAfterWrite,
     setView,
     goToPrevious,
     goToNext,

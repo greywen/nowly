@@ -51,4 +51,26 @@ describe('useNotes', () => {
     await act(() => result.current.retryNotes());
     expect(result.current.notes.status).toBe('ready');
   });
+
+  it('refreshes for changes made elsewhere without a loading state or a read error', async () => {
+    const added = { ...note, id:'n2', pinned:false };
+    let finish!: (notes: typeof note[]) => void;
+    const listNotes = vi.fn()
+      .mockResolvedValueOnce([note])
+      .mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }))
+      .mockRejectedValueOnce({message:'读取失败'});
+    const { result } = renderHook(() => useNotes(), { wrapper:wrapper(repository({listNotes})) });
+    await waitFor(() => expect(result.current.notes.status).toBe('ready'));
+
+    let refreshed!: Promise<void>;
+    act(() => { refreshed = result.current.refreshNotes(); });
+    expect(result.current.notes).toEqual({status:'ready', data:[note]});
+    await act(async () => {
+      finish([added, note]);
+      await refreshed;
+    });
+    expect(result.current.notes).toEqual({status:'ready', data:[note, added]});
+    await act(() => result.current.refreshNotes());
+    expect(result.current.notes).toEqual({status:'ready', data:[note, added]});
+  });
 });

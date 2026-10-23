@@ -14,7 +14,7 @@ import { isEventWritable, type EventTarget } from '../calendar/calendar-model';
 import { enterForegroundMode, enterWallpaperMode } from '../lib/window-mode';
 import { MatrixWidget } from '../matrix/MatrixWidget';
 import { KanbanWidget } from '../kanban/KanbanWidget';
-import { TaskWorkspaceProvider } from '../tasks/TaskWorkspaceContext';
+import { TaskWorkspaceProvider, useTaskWorkspace } from '../tasks/TaskWorkspaceContext';
 import { IconStyleProvider } from '../components/icons';
 import { useWorkspaceTasks } from '../tasks/useWorkspaceTasks';
 import { ModalRoot } from '../modals/ModalRoot';
@@ -37,6 +37,7 @@ import { FocusWallpaperOverlay } from '../focus/FocusWallpaperOverlay';
 import { OnboardingGuide, type GuideStep } from './onboarding/OnboardingGuide';
 import { useOnboarding } from './onboarding/useOnboarding';
 import type { NativeStatusIslandSnapshot } from '../quick-panel/useStatusIslandSnapshot';
+import { RECORDS_CHANGED_EVENT, recordsChangedKind, type RecordsChangedKind } from '../quick-create/events';
 
 type WindowMode = 'wallpaper' | 'foreground';
 
@@ -58,6 +59,7 @@ function AppContent() {
   const eventsFeature = useEvents({ weekStart: settingsFeature.settings.data.weekStart });
   const categoriesFeature = useCategories();
   const tasksFeature = useWorkspaceTasks();
+  const { refresh: refreshWorkspace } = useTaskWorkspace();
   const notesFeature = useNotes();
   const notesView = useNotesView();
   const refreshEvents = useCallback(() => eventsFeature.retryEvents(), [eventsFeature]);
@@ -252,6 +254,34 @@ function AppContent() {
     }).then(remove => removers.push(remove));
     return () => removers.forEach(remove => remove());
   }, [loadSubscriptions, refreshEvents]);
+
+  // The quick-create window writes through the same backend; reload whatever it
+  // changed, quietly, so the modules on screen do not flash a loading state.
+  const reloadChanged = useRef<(kind: RecordsChangedKind) => void>(() => undefined);
+  reloadChanged.current = (kind) => {
+    if (kind === 'event') void eventsFeature.refreshEvents();
+    if (kind === 'category') {
+      categoriesFeature.reloadCategories();
+      void eventsFeature.refreshEvents();
+    }
+    if (kind === 'task') void refreshWorkspace();
+    if (kind === 'note') void notesFeature.refreshNotes();
+  };
+  useEffect(() => {
+    let disposed = false;
+    let remove: (() => void) | null = null;
+    void listen(RECORDS_CHANGED_EVENT, (event) => {
+      const kind = recordsChangedKind(event.payload);
+      if (kind) reloadChanged.current(kind);
+    }).then((unlisten) => {
+      if (disposed) unlisten();
+      else remove = unlisten;
+    }).catch(() => undefined);
+    return () => {
+      disposed = true;
+      remove?.();
+    };
+  }, []);
 
   useEffect(() => { loadSubscriptions(); }, [loadSubscriptions]);
 

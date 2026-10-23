@@ -235,6 +235,46 @@ describe('App startup and window behavior', () => {
     expect(screen.getByRole('dialog', {name:'全部便签'})).toBeInTheDocument();
   });
 
+  it('reloads what the quick-create window saved without showing loading states', async () => {
+    const listeners = new Map<string, (event: { payload: unknown }) => void>();
+    listenMock.mockImplementation((name: string, callback: (event: { payload: unknown }) => void) => {
+      listeners.set(name, callback);
+      return Promise.resolve(() => undefined);
+    });
+    const repository = createRepository();
+    renderApp(repository);
+    await waitFor(() => expect(screen.getByText('还没有便签')).toBeInTheDocument());
+    await waitFor(() => expect(listeners.has('nowly-records-changed')).toBe(true));
+    const reads = {
+      events: vi.mocked(repository.listEventsInRange),
+      tasks: vi.mocked(repository.listTasks),
+      notes: vi.mocked(repository.listNotes),
+      categories: vi.mocked(repository.listCategories)
+    };
+    const counts = () => Object.fromEntries(Object.entries(reads).map(([name, read]) => [name, read.mock.calls.length]));
+    const changed = async (payload: unknown) => {
+      const before = counts();
+      await act(async () => listeners.get('nowly-records-changed')?.({ payload }));
+      return (name: keyof typeof reads) => reads[name].mock.calls.length - before[name];
+    };
+
+    let added = await changed({ kind: 'event' });
+    await waitFor(() => expect(added('events')).toBe(1));
+    expect([added('tasks'), added('notes'), added('categories')]).toEqual([0, 0, 0]);
+    added = await changed({ kind: 'task' });
+    await waitFor(() => expect(added('tasks')).toBe(1));
+    expect([added('events'), added('notes'), added('categories')]).toEqual([0, 0, 0]);
+    added = await changed({ kind: 'note' });
+    await waitFor(() => expect(added('notes')).toBe(1));
+    expect([added('events'), added('tasks'), added('categories')]).toEqual([0, 0, 0]);
+    expect(screen.queryByText('正在读取本地便签')).not.toBeInTheDocument();
+    added = await changed({ kind: 'category' });
+    await waitFor(() => expect([added('categories'), added('events')]).toEqual([1, 1]));
+    added = await changed({ kind: 'alarm' });
+    await act(async () => undefined);
+    expect([added('events'), added('tasks'), added('notes'), added('categories')]).toEqual([0, 0, 0, 0]);
+  });
+
   it('reflects the persisted interface density on the document root', async () => {
     renderApp(createRepository({ getSettings: vi.fn().mockResolvedValue({ ...settings, density: 'comfortable' }) }));
     await waitFor(() => expect(document.documentElement.dataset.density).toBe('comfortable'));
