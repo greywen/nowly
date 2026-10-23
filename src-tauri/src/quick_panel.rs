@@ -10,6 +10,21 @@ struct WorkArea {
     x: i32,
     y: i32,
     width: u32,
+    height: u32,
+}
+
+/// Where the collapsed Bar sits on its target monitor, in physical pixels.
+/// Surfaces that open from the Bar (the quick-create window) hang below it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct BarAnchor {
+    pub scale: f64,
+    pub center_x: i32,
+    /// The rail's lower edge.
+    pub bottom_y: i32,
+    pub work_left: i32,
+    pub work_top: i32,
+    pub work_right: i32,
+    pub work_bottom: i32,
 }
 
 /// The screen geometry a drag is resolved against, read once when the drag
@@ -820,7 +835,7 @@ fn transparent_webview_background(
 }
 
 #[cfg(target_os = "windows")]
-fn configure_transparent_webview<R: Runtime>(
+pub(crate) fn configure_transparent_webview<R: Runtime>(
     handle: &tauri::WebviewWindow<R>,
 ) -> Result<(), String> {
     use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Controller2;
@@ -853,7 +868,7 @@ fn configure_transparent_webview<R: Runtime>(
 }
 
 #[cfg(not(target_os = "windows"))]
-fn configure_transparent_webview<R: Runtime>(
+pub(crate) fn configure_transparent_webview<R: Runtime>(
     _handle: &tauri::WebviewWindow<R>,
 ) -> Result<(), String> {
     Ok(())
@@ -933,6 +948,7 @@ fn monitor_work_area(monitor: &tauri::Monitor) -> Result<WorkArea, String> {
             x: info.rcWork.left,
             y: info.rcWork.top,
             width: (info.rcWork.right - info.rcWork.left).max(0) as u32,
+            height: (info.rcWork.bottom - info.rcWork.top).max(0) as u32,
         })
     }
 }
@@ -945,6 +961,7 @@ fn monitor_work_area(monitor: &tauri::Monitor) -> Result<WorkArea, String> {
         x: position.x,
         y: position.y,
         width: size.width,
+        height: size.height,
     })
 }
 
@@ -968,7 +985,7 @@ fn normalized_handle_style(
 }
 
 #[cfg(target_os = "windows")]
-fn normalize_handle_window_style<R: Runtime>(
+pub(crate) fn normalize_handle_window_style<R: Runtime>(
     handle: &tauri::WebviewWindow<R>,
 ) -> Result<(), String> {
     let hwnd = handle.hwnd().map_err(|error| error.to_string())?.0 as isize;
@@ -1076,7 +1093,7 @@ fn normalize_handle_hwnd_style(
 }
 
 #[cfg(not(target_os = "windows"))]
-fn normalize_handle_window_style<R: Runtime>(
+pub(crate) fn normalize_handle_window_style<R: Runtime>(
     _handle: &tauri::WebviewWindow<R>,
 ) -> Result<(), String> {
     Ok(())
@@ -1774,6 +1791,34 @@ fn drag_anchor<R: Runtime>(app: &AppHandle<R>) -> Result<DragAnchor, String> {
         scale,
         width,
         y: top + (TOP_MARGIN * scale).round() as i32,
+    })
+}
+
+/// The collapsed Bar's geometry, resolved like `reposition_handle` does. Also
+/// valid while the Bar is hidden: it is where the Bar would be.
+pub(crate) fn bar_anchor<R: Runtime>(app: &AppHandle<R>) -> Result<BarAnchor, String> {
+    let handle = app
+        .get_webview_window("quick-panel-handle")
+        .ok_or_else(|| "quick-panel-handle window not found".to_owned())?;
+    let monitor = target_monitor(&handle)?;
+    let work_area = monitor_work_area(&monitor)?;
+    let scale = monitor.scale_factor();
+    let (width, _) = top_surface_size(None, scale);
+    let x = surface_x(
+        work_area.x,
+        work_area.width,
+        width,
+        app.state::<PanelController>().offset_x() * scale,
+    );
+    let top = screen_top(monitor.position().y, work_area.y);
+    Ok(BarAnchor {
+        scale,
+        center_x: x + (width / 2) as i32,
+        bottom_y: top + physical_pixels(TOP_MARGIN + RAIL_HEIGHT, scale),
+        work_left: work_area.x,
+        work_top: work_area.y,
+        work_right: work_area.x + work_area.width as i32,
+        work_bottom: work_area.y + work_area.height as i32,
     })
 }
 
@@ -2548,6 +2593,7 @@ mod tests {
                 x: 0,
                 y: 0,
                 width: 1920,
+                height: 1032,
             },
             scale: 1.0,
             width: 288,
