@@ -1,0 +1,35 @@
+/* Quick-create window (design.md §10.11.1). The native window is sized to the
+   dialog, so the page is transparent and the dialog fills it edge to edge. */
+html[data-surface="quick-create"],
+html[data-surface="quick-create"] body,
+html[data-surface="quick-create"] #root { background: transparent !important; }
+
+html[data-surface="quick-create"] .overlay:has(> :is(.event-dialog, .task-dialog, .note-dialog)) {
+  padding: 0;
+  place-items: start stretch;
+  background: transparent;
+}
+html[data-surface="quick-create"] .overlay > :is(.event-dialog, .task-dialog, .note-dialog) {
+  width: 100vw;
+  max-width: 100vw;
+  max-height: var(--quick-create-max-h, 100vh);
+  /* An outer shadow would be clipped by the window edge. */
+  box-shadow: var(--shadow-none);
+}
+/* Confirmations and editors layered on top dim only the dialog's own shape. */
+html[data-surface="quick-create"] .overlay:not(:has(> :is(.event-dialog, .task-dialog, .note-dialog))) {
+  border-radius: var(--radius-default);
+}
+
+/* The window is exactly as wide as the dialog, which would trip the narrow
+   viewport rule and stack the title over the target calendar. */
+html[data-surface="quick-create"] .event-form__lead:not(.event-form__lead--single) {
+  grid-template-columns: minmax(0, 1fr) 260px;
+}
+
+/* The window height follows the dialog, so the note editor sizes against the
+   room the window may grow into rather than the viewport. */
+html[data-surface="quick-create"] .note-dialog .rich-editor .ql-editor {
+  min-height: clamp(96px, calc(var(--quick-create-max-h, 100vh) - 400px), 320px);
+  max-height: min(480px, calc(var(--quick-create-max-h, 100vh) - 320px));
+}

@@ -31,5 +31,12 @@ describe('NoteModal',()=>{
   expect(screen.queryByRole('dialog',{name:'自定义颜色'})).not.toBeInTheDocument();
   expect(close).not.toHaveBeenCalled();
  });
+ it('reports whether the draft has unsaved changes',async()=>{
+  const user=userEvent.setup();const onDirtyChange=vi.fn();
+  render(<NoteModal mode={{type:'create'}} {...base} onDirtyChange={onDirtyChange}/>);
+  expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+  await user.click(screen.getByRole('checkbox',{name:'置顶便签'}));
+  expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+ });
  it('confirms dirty close and permanent deletion',async()=>{const user=userEvent.setup();const remove=vi.fn().mockResolvedValue(undefined);render(<NoteModal mode={{type:'edit',note}} {...base} deleteNote={remove}/>);await user.type(await screen.findByLabelText('便签内容'),'更多');await user.click(screen.getByRole('button',{name:'关闭'}));expect(screen.getByRole('dialog',{name:'放弃更改？'})).toBeInTheDocument();await user.click(screen.getByRole('dialog',{name:'放弃更改？'}).querySelector('button')!);await user.click(screen.getByRole('button',{name:'删除便签'}));expect(screen.getByRole('dialog',{name:'永久删除“产品原则”？'})).toBeInTheDocument();await user.click(screen.getByRole('button',{name:'永久删除'}));await waitFor(()=>expect(remove).toHaveBeenCalledWith(note));});
 });

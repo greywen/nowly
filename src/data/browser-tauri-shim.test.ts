@@ -330,6 +330,32 @@ describe('browser Bar shell commands', () => {
   });
 });
 
+describe('browser quick create', () => {
+  it('opens the dialog as its own page and closes the Bar menu', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true })));
+    const openWindow = vi.spyOn(window, 'open').mockReturnValue(null);
+    installBrowserTauriBackend();
+    const closed = vi.fn();
+    const remove = await listen('status-island-details-close', closed);
+    await invoke()('toggle_bar_menu');
+    await invoke()('open_quick_create', { kind: 'note' });
+    expect(closed).toHaveBeenCalledTimes(1);
+    expect(openWindow).toHaveBeenCalledWith('/?surface=quick-create&kind=note', 'nowly-quick-create', expect.any(String));
+    await expect(invoke()('open_quick_create', { kind: 'calendar' })).rejects.toMatchObject({ code: 'validation_error' });
+    expect(openWindow).toHaveBeenCalledTimes(1);
+    remove();
+  });
+
+  it('serves the request named by the page address', async () => {
+    installBrowserTauriBackend();
+    window.history.replaceState(null, '', '/?surface=quick-create&kind=task');
+    expect(await invoke()('get_quick_create_request')).toEqual({ id: 1, kind: 'task', maxHeight: window.innerHeight });
+    window.history.replaceState(null, '', '/');
+    expect(await invoke()('get_quick_create_request')).toMatchObject({ kind: 'event' });
+    await expect(invoke()('quick_create_layout', { requestId: 1, kind: 'task', height: 480 })).resolves.toBeUndefined();
+  });
+});
+
 describe('browser bar menu persistence', () => {
   it.each([{ barButtons: [] }, { barButtons: ['screenshot'] }])('replaces legacy buttons $barButtons with durable defaults', async ({ barButtons }) => {
     localStorage.setItem(storageKey, JSON.stringify({ settings: { barButtons } }));

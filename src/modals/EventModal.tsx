@@ -1,5 +1,5 @@
 import { Plus, X } from '../components/icons';
-import { type RefObject, useId, useMemo, useState } from 'react';
+import { type RefObject, useEffect, useId, useMemo, useState } from 'react';
 import { type CalendarEvent, type Category, type CategoryDraft, type EditScope, type EventCategory, type EventDraft, type Recurrence, type RecurrenceEnd, type RecurrenceFreq, type Weekday } from '../calendar/calendar-model';
 import { t } from '../i18n';
 import type { HexColor } from '../lib/color';
@@ -33,6 +33,7 @@ type EventModalProps = {
   onCreateCategory: (draft: CategoryDraft) => Promise<Category>;
   onUpdateCategory: (id: string, draft: CategoryDraft) => Promise<Category>;
   onDeleteCategory: (id: string) => Promise<void>;
+  onDirtyChange?: (dirty: boolean) => void;
 };
 
 // Reminder offsets are stored as minutes. The editor shows each as a value plus
@@ -76,7 +77,7 @@ function sameRecurrence(left:Recurrence|null,right:Recurrence|null){
     &&left.byDay.every((day,index)=>day===right.byDay[index])&&sameEnd(left.end,right.end);
 }
 
-export function EventModal({ mode,restoreFocusRef,onClose,onSaved,onDeleted,createEvent,updateEvent,deleteEvent,now=()=>new Date(),subscriptions=[],categories=[],onCreateCategory,onUpdateCategory,onDeleteCategory }:EventModalProps) {
+export function EventModal({ mode,restoreFocusRef,onClose,onSaved,onDeleted,createEvent,updateEvent,deleteEvent,now=()=>new Date(),subscriptions=[],categories=[],onCreateCategory,onUpdateCategory,onDeleteCategory,onDirtyChange }:EventModalProps) {
   const initial = useMemo(()=>mode.type==='edit'?eventToForm(mode.event):createEventDraft(mode.dateIso,now()),[mode]);
   const [form,setForm]=useState<EventFormDraft>(initial);
   // 预设不是双射（「自定义」的种子就是一条普通周规则），只在打开表单时初始化一次。
@@ -92,7 +93,9 @@ export function EventModal({ mode,restoreFocusRef,onClose,onSaved,onDeleted,crea
   const [remindersCustomOpen,setRemindersCustomOpen]=useState(()=>initial.reminders.some(minutes=>!REMINDER_PRESETS.includes(minutes as (typeof REMINDER_PRESETS)[number])));
   const titleId=useId();
   const update=<K extends keyof EventFormDraft>(key:K,value:EventFormDraft[K])=>setForm(current=>({...current,[key]:value}));
-  const requestClose=()=>{ if(busy)return; if(isEventFormDirty(initial,form))setConfirm('discard'); else onClose(); };
+  const dirty=isEventFormDirty(initial,form);
+  useEffect(()=>{ onDirtyChange?.(dirty); },[dirty,onDirtyChange]);
+  const requestClose=()=>{ if(busy)return; if(dirty)setConfirm('discard'); else onClose(); };
   const message=(error:unknown)=>typeof error==='object'&&error&&'message'in error&&typeof error.message==='string'?error.message:t('common.opFailed');
 
   const startAt=`${form.startDate}T${form.startTime}`;

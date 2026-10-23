@@ -6,7 +6,7 @@ import { RepositoryProvider } from '../data/RepositoryContext';
 import type { AppSettings, NowlyRepository } from '../data/nowly-repository';
 import type { CalendarEvent, EventDraft, Recurrence } from './calendar-model';
 import { resizeEventEndToDate, shiftEventToDate, shiftEventToHour } from './calendar-view';
-import { useEvents } from './useEvents';
+import { createEventWith, useEvents } from './useEvents';
 
 const settings: AppSettings = {
   wallpaperEnabled: false,
@@ -116,6 +116,26 @@ function deferred<T>() {
 }
 
 const now = () => new Date(2026, 6, 23, 9, 42);
+
+describe('createEventWith', () => {
+  it('creates local events and returns the stored record', async () => {
+    const repository = createRepository({ createEvent: vi.fn().mockResolvedValue(event('e9')) });
+    await expect(createEventWith(repository, draft)).resolves.toEqual(event('e9'));
+    expect(repository.createEvent).toHaveBeenCalledWith(draft);
+  });
+
+  it('sends a remote create without recurrence and without a local write', async () => {
+    const createRemoteEvent = vi.fn().mockResolvedValue(undefined);
+    const repository = createRepository({ createRemoteEvent });
+    await expect(createEventWith(repository, { ...draft, recurrence: weekly }, 'google-sub')).resolves.toBeUndefined();
+    expect(createRemoteEvent).toHaveBeenCalledWith('google-sub', { ...draft, recurrence: null });
+    expect(repository.createEvent).not.toHaveBeenCalled();
+  });
+
+  it('rejects a remote create the repository cannot perform', async () => {
+    await expect(createEventWith(createRepository(), draft, 'google-sub')).rejects.toThrow();
+  });
+});
 
 describe('useEvents', () => {
   it('loads the current local month and navigates previous, next, and across years', async () => {

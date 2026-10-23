@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNowlyRepository } from '../data/RepositoryContext';
+import type { NowlyRepository } from '../data/nowly-repository';
 import type { WeekStart } from '../lib/date';
 import type { CalendarEvent, CalendarView, EditScope, EventDraft, EventTarget } from './calendar-model';
 import { monthRange, rangeFor, resizeEventEndToDate, shiftEventToDate, shiftEventToHour } from './calendar-view';
@@ -68,6 +69,20 @@ function remoteIdentity(event: CalendarEvent): { subscriptionId: string; remoteE
 
 function unsupportedRemoteWrite(): never {
   throw new Error(t('calendar.remoteWriteUnsupported'));
+}
+
+/** Creates an event locally or in a writable subscription; only a local create returns the record. */
+export async function createEventWith(
+  repository: NowlyRepository,
+  draft: EventDraft,
+  subscriptionId: string | null = null
+): Promise<CalendarEvent | undefined> {
+  if (subscriptionId) {
+    if (!repository.createRemoteEvent) unsupportedRemoteWrite();
+    await repository.createRemoteEvent(subscriptionId, { ...draft, recurrence: null });
+    return undefined;
+  }
+  return repository.createEvent(draft);
 }
 
 export function useEvents({
@@ -211,13 +226,7 @@ export function useEvents({
 
   const createEvent = useCallback(
     async (draft: EventDraft, subscriptionId: string | null = null) => {
-      if (subscriptionId) {
-        if (!repository.createRemoteEvent) unsupportedRemoteWrite();
-        await repository.createRemoteEvent(subscriptionId, { ...draft, recurrence: null });
-        await refreshAfterWrite();
-        return undefined;
-      }
-      const created = await repository.createEvent(draft);
+      const created = await createEventWith(repository, draft, subscriptionId);
       await refreshAfterWrite();
       return created;
     },

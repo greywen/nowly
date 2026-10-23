@@ -402,4 +402,14 @@ describe('EventModal', () => {
     expect(created?.color).toMatch(/^#[0-9A-F]{6}$/i);
     expect(save.mock.calls[0][type==='create'?0:1]).toMatchObject({ category:'urgent', color:created?.color });
   });
+
+  it('reports whether the draft has unsaved changes', async () => {
+    const user=userEvent.setup(); const onDirtyChange=vi.fn();
+    render(<EventModal {...props({ onDirtyChange })} />);
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+    await user.type(screen.getByLabelText('日程标题'), '晨会');
+    expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+    await user.clear(screen.getByLabelText('日程标题'));
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+  });
 });

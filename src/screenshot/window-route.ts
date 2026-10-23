@@ -9,12 +9,15 @@
 export type WindowRoute =
   | 'main'
   | 'status-island'
+  | 'quick-create'
   | 'screenshot-session'
   | 'screenshot-overlay'
   | 'screenshot-history'
   | 'screenshot-pin';
 
 const STATUS_ISLAND_LABEL = 'quick-panel-handle';
+// Mirrors `LABEL` in `src-tauri/src/quick_create.rs`.
+const QUICK_CREATE_LABEL = 'quick-create';
 const SCREENSHOT_SESSION_PATTERN = /^screenshot-session-\d+$/;
 // Both ids require at least one digit: a bare or legacy prefix is not a window
 // belonging to the active native session.
@@ -23,6 +26,7 @@ const SCREENSHOT_OVERLAY_PATTERN = /^screenshot-overlay-\d+-\d+$/;
 export function routeForLabel(label: string): WindowRoute {
   if (/^screenshot-pin-\d+$/.test(label)) return 'screenshot-pin';
   if (label === STATUS_ISLAND_LABEL) return 'status-island';
+  if (label === QUICK_CREATE_LABEL) return 'quick-create';
   if (label === 'screenshot-history') return 'screenshot-history';
   if (SCREENSHOT_SESSION_PATTERN.test(label)) return 'screenshot-session';
   if (SCREENSHOT_OVERLAY_PATTERN.test(label)) return 'screenshot-overlay';
