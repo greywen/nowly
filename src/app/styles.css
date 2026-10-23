@@ -1483,13 +1483,26 @@ body:has(.screen-status-island-root),
 .bar-menu-panel__header { display: flex; align-items: center; padding: 0 var(--space-4); padding-right: var(--space-12); border-bottom: 1px solid var(--border-default); }
 .bar-menu-panel__header h2 { margin: 0; color: var(--text-primary); font-size: 1.25rem; font-weight: 600; line-height: 1.2; }
 .bar-menu-panel__body { min-height: 0; overflow: auto; padding: var(--space-4); }
-.bar-menu-panel [role="menu"] { display: grid; gap: var(--space-2); }
-.bar-menu-panel__item { box-sizing: border-box; display: flex; align-items: center; gap: var(--space-2); width: 100%; min-height: 44px; padding: var(--space-2) var(--space-3); border: 1px solid transparent; border-radius: var(--radius-sm); color: var(--text-secondary); background: transparent; font: inherit; font-size: 0.95rem; font-weight: 500; line-height: 1.5; text-align: start; cursor: pointer; }
-.bar-menu-panel__item svg { flex: none; }
+.bar-menu-panel__menu { display: grid; gap: var(--space-3); }
+.bar-menu-panel__group { display: grid; gap: var(--space-2); min-width: 0; }
+.bar-menu-panel__group-label { color: var(--text-muted); font-size: 0.8rem; font-weight: 600; line-height: 1.3; }
+.bar-menu-panel__items { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+.bar-menu-panel__group[data-group="create"] .bar-menu-panel__items { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.bar-menu-panel__item, .bar-menu-panel__tile { box-sizing: border-box; display: flex; align-items: center; gap: var(--space-2); width: 100%; min-width: 0; min-height: 44px; padding: var(--space-2) var(--space-3); border: 1px solid transparent; border-radius: var(--radius-sm); color: var(--text-secondary); background: transparent; font: inherit; font-size: 0.95rem; font-weight: 500; line-height: 1.5; text-align: start; cursor: pointer; }
+.bar-menu-panel__tile { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "icon keys" "label label" "note note"; align-content: start; align-items: center; gap: 0 var(--space-2); padding: var(--space-3); background: var(--bg-subtle); }
+.bar-menu-panel__tile > svg { grid-area: icon; }
+.bar-menu-panel__tile > .bar-menu-panel__label { grid-area: label; margin-block-start: var(--space-2); }
+.bar-menu-panel__tile > .bar-menu-panel__keys { grid-area: keys; justify-self: end; }
+.bar-menu-panel__tile > .bar-menu-panel__note { grid-area: note; }
+.bar-menu-panel__item svg, .bar-menu-panel__tile svg { flex: none; }
 .bar-menu-panel__item:hover, .bar-menu-panel__item:active { color: var(--color-primary-active); background: var(--bg-subtle); }
-.bar-menu-panel__item:focus-visible { outline: 0; box-shadow: inset 0 0 0 2px var(--color-primary); }
-.bar-menu-panel__item:disabled { opacity: 0.65; pointer-events: none; }
-.bar-menu-panel__shortcut { display: grid; margin-inline-start: auto; text-align: end; color: var(--text-secondary); font-size: 0.85rem; font-weight: 500; white-space: nowrap; }
+.bar-menu-panel__tile:hover, .bar-menu-panel__tile:active { color: var(--color-primary-active); background: var(--bg-secondary); }
+.bar-menu-panel__item:focus-visible, .bar-menu-panel__tile:focus-visible { outline: 0; box-shadow: inset 0 0 0 2px var(--color-primary); }
+.bar-menu-panel__item:disabled, .bar-menu-panel__tile:disabled { opacity: 0.65; pointer-events: none; }
+.bar-menu-panel__text { display: grid; flex: 1 1 auto; align-self: stretch; align-content: center; min-width: 0; }
+.bar-menu-panel__label { min-width: 0; overflow-wrap: break-word; }
+.bar-menu-panel__shortcut, .bar-menu-panel__tile > .bar-menu-panel__keys, .bar-menu-panel__note { min-width: 0; color: var(--text-secondary); font-size: 0.85rem; font-weight: 500; line-height: 1.5; overflow-wrap: break-word; }
+.bar-menu-panel__shortcut { display: grid; }
 .bar-menu-panel__empty { margin: 0; padding: var(--space-4); color: var(--text-secondary); font-size: 0.95rem; line-height: 1.5; }
 .bar-menu-panel__error { margin: var(--space-3) 0 0; padding: var(--space-3); border-radius: var(--radius-default); color: var(--color-danger-active); background: var(--color-danger-light); font-size: 0.85rem; font-weight: 500; }
 .bar-menu-panel__error button { padding: var(--space-1) var(--space-2); border: 1px solid transparent; border-radius: var(--radius-sm); color: inherit; background: transparent; font: inherit; cursor: pointer; }

@@ -36,12 +36,14 @@
   right: 0;
 }
 :root[dir="rtl"] :is(.time-picker__steppers, .time-picker__presets,
-  .time-clock__time, .focus-timer__time, .bar-menu-panel__shortcut,
+  .time-clock__time, .focus-timer__time, .bar-menu-panel__keys,
   .shortcut-recorder__input, input[type="url"], input[type="email"],
   input[type="number"], pre, code, kbd) {
   direction: ltr;
   unicode-bidi: isolate;
 }
+/* Key combinations read left to right but stay aligned with the RTL label above. */
+:root[dir="rtl"] .bar-menu-panel__keys { text-align: right; }
 
 /* The Bar host and close-button geometry are fixed in screen coordinates. */
 :root[dir="rtl"] .bar-menu-panel__header {

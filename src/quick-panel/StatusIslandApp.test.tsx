@@ -312,11 +312,10 @@ describe('screen status island windows', () => {
     expect(document.querySelector('.status-rail__app-button')).toBeNull();
     await emitPanelEvent('status-island-details-open', { generation: 1, source: 'menu', identity: null });
     expect(await screen.findByRole('menu', { name: '功能菜单' })).toBeVisible();
-    expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual([
-      expect.stringContaining('截图'), expect.stringContaining('截图历史'), expect.stringContaining('AI 助手')
+    expect(screen.getAllByRole('menuitem').map(item => item.querySelector('.bar-menu-panel__label')?.textContent)).toEqual([
+      '日程', '四象限任务', '便签', '截图', '截图历史'
     ]);
-    fireEvent.click(screen.getByRole('menuitem', { name: /AI 助手/ }));
-    await waitFor(() => expect(invocations('toggle_nowly_panel')).toHaveLength(1));
+    expect(screen.queryByRole('menuitem', { name: /AI 助手/ })).toBeNull();
     expect(invocations('acknowledge_status_island_reminder')).toHaveLength(0);
   });
 
