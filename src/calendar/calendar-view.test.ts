@@ -5,11 +5,13 @@ import {
   dayRange,
   eventCoversDate,
   groupEventsByDate,
+  layoutDayTimeline,
   layoutWeekRows,
   layoutWeekSegments,
   listDateLabel,
   rangeFor,
   resizeEventEndToDate,
+  resizeEventEndToHour,
   shiftEventToDate,
   splitIntoWeeks,
   startOfWeek,
@@ -187,6 +189,93 @@ describe('resizeEventEndToDate', () => {
     const draft = resizeEventEndToDate(event('e', '2026-07-23T09:30:00', '2026-07-25T10:00:00'), '2026-07-20');
     expect(draft.startAt).toBe('2026-07-23T09:30');
     expect(draft.endAt).toBe('2026-07-23T10:00');
+  });
+});
+
+describe('resizeEventEndToHour', () => {
+  it('stretches the end to the given hour while keeping the start fixed', () => {
+    const draft = resizeEventEndToHour(event('e', '2026-07-23T09:30:00', '2026-07-23T10:15:00'), 12);
+    expect(draft.startAt).toBe('2026-07-23T09:30');
+    expect(draft.endAt).toBe('2026-07-23T12:00');
+    expect(draft.allDay).toBe(false);
+  });
+
+  it('ends at 23:59 when stretched to the end of the day', () => {
+    const draft = resizeEventEndToHour(event('e', '2026-07-23T21:00', '2026-07-23T22:30'), 24);
+    expect(draft.endAt).toBe('2026-07-23T23:59');
+  });
+
+  it('pulls the end up to an earlier hour line', () => {
+    const draft = resizeEventEndToHour(event('e', '2026-07-23T07:00', '2026-07-23T10:00'), 9);
+    expect(draft.startAt).toBe('2026-07-23T07:00');
+    expect(draft.endAt).toBe('2026-07-23T09:00');
+  });
+
+  it('stops at the first hour line after the start when pulled above it', () => {
+    expect(resizeEventEndToHour(event('e', '2026-07-23T07:00', '2026-07-23T10:00'), 0).endAt).toBe('2026-07-23T08:00');
+    expect(resizeEventEndToHour(event('e', '2026-07-23T09:30', '2026-07-23T12:00'), 9).endAt).toBe('2026-07-23T10:00');
+    // An end already sooner than that line is kept, so pulling up never lengthens it.
+    expect(resizeEventEndToHour(event('e', '2026-07-23T09:00', '2026-07-23T09:30'), 9).endAt).toBe('2026-07-23T09:30');
+  });
+
+  it('leaves an event that already runs past midnight unchanged at the end of the day', () => {
+    const draft = resizeEventEndToHour(event('e', '2026-07-23T22:00', '2026-07-24T01:00'), 24);
+    expect(draft.endAt).toBe('2026-07-24T01:00');
+  });
+
+  it('pulls an overnight event back into its start day', () => {
+    const draft = resizeEventEndToHour(event('e', '2026-07-23T22:00', '2026-07-24T01:00'), 23);
+    expect(draft.endAt).toBe('2026-07-23T23:00');
+    // Starting in the last hour, the earliest end is the end of that day.
+    expect(resizeEventEndToHour(event('e', '2026-07-23T23:00', '2026-07-24T01:00'), 0).endAt).toBe('2026-07-23T23:59');
+  });
+});
+
+describe('layoutDayTimeline', () => {
+  const day = '2026-07-23';
+  const place = (items: ReturnType<typeof layoutDayTimeline>) =>
+    items.map(({ event: item, start, span, lane, lanes }) => `${item.id} ${start}+${span} ${lane}/${lanes}`);
+
+  it('places each timed event of the day by its start minute and length', () => {
+    const items = layoutDayTimeline(
+      [
+        event('review', '2026-07-23T09:30', '2026-07-23T11:00'),
+        event('standup', '2026-07-23T13:00', '2026-07-23T14:00'),
+        event('all-day', '2026-07-23T00:00', '2026-07-23T23:59', true),
+        event('tomorrow', '2026-07-24T09:00', '2026-07-24T10:00')
+      ],
+      day
+    );
+    expect(place(items)).toEqual(['review 570+90 0/1', 'standup 780+60 0/1']);
+  });
+
+  it('gives short events a readable minimum length', () => {
+    const items = layoutDayTimeline([event('quick', '2026-07-23T09:00', '2026-07-23T09:10')], day);
+    expect(place(items)).toEqual(['quick 540+40 0/1']);
+  });
+
+  it('runs an event that ends at 23:59 or on a later day to the bottom of the grid', () => {
+    const items = layoutDayTimeline(
+      [
+        event('late', '2026-07-23T21:00', '2026-07-23T23:59'),
+        event('overnight', '2026-07-23T22:00', '2026-07-24T02:00')
+      ],
+      day
+    );
+    expect(place(items)).toEqual(['late 1260+180 0/2', 'overnight 1320+120 1/2']);
+  });
+
+  it('sets overlapping events side by side and lets later free time span the full width', () => {
+    const items = layoutDayTimeline(
+      [
+        event('a', '2026-07-23T09:00', '2026-07-23T11:00'),
+        event('b', '2026-07-23T10:00', '2026-07-23T12:00'),
+        event('c', '2026-07-23T11:00', '2026-07-23T11:30'),
+        event('d', '2026-07-23T14:00', '2026-07-23T15:00')
+      ],
+      day
+    );
+    expect(place(items)).toEqual(['a 540+120 0/2', 'b 600+120 1/2', 'c 660+40 0/2', 'd 840+60 0/1']);
   });
 });
 

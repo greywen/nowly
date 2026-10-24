@@ -3,7 +3,14 @@ import { useNowlyRepository } from '../data/RepositoryContext';
 import type { NowlyRepository } from '../data/nowly-repository';
 import type { WeekStart } from '../lib/date';
 import type { CalendarEvent, CalendarView, EditScope, EventDraft, EventTarget } from './calendar-model';
-import { monthRange, rangeFor, resizeEventEndToDate, shiftEventToDate, shiftEventToHour } from './calendar-view';
+import {
+  monthRange,
+  rangeFor,
+  resizeEventEndToDate,
+  resizeEventEndToHour,
+  shiftEventToDate,
+  shiftEventToHour
+} from './calendar-view';
 import { externalToCalendarEvent } from './subscription-model';
 import { t } from '../i18n';
 
@@ -328,6 +335,23 @@ export function useEvents({
     [refreshAfterWrite, repository]
   );
 
+  const resizeEventToHour = useCallback(
+    async (event: CalendarEvent, endHour: number) => {
+      // The day view moves a timed event's end time from its bottom handle.
+      if (event.allDay) return;
+      const draft = resizeEventEndToHour(event, endHour);
+      if (draft.endAt === event.endAt.slice(0, 16)) return;
+      const remote = remoteIdentity(event);
+      if (remote) {
+        if (!repository.updateRemoteEvent) unsupportedRemoteWrite();
+        await repository.updateRemoteEvent(remote.subscriptionId, remote.remoteEventId, { ...draft, recurrence: null }, false);
+      }
+      else await repository.updateEvent(targetOf(event), draft, dragScope(event));
+      await refreshAfterWrite();
+    },
+    [refreshAfterWrite, repository]
+  );
+
   return {
     view: state.view,
     anchorIso: isoOf(state.anchor),
@@ -348,6 +372,7 @@ export function useEvents({
     deleteEvent,
     moveEvent,
     moveEventToHour,
-    resizeEvent
+    resizeEvent,
+    resizeEventToHour
   };
 }

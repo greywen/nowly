@@ -245,6 +245,25 @@ export const translations: Record<Language, Record<string, string>> = {
     'shell.openSettings': '打开设置',
     'shell.setWallpaper': '设为壁纸',
 
+    // Themes
+    'theme.open': '主题',
+    'theme.classic.name': '经典',
+    'theme.classic.description': '暖白底色与顶栏导航，模块以边框分层。',
+    'theme.immersive.name': '沉浸',
+    'theme.immersive.description': '全幅场景背景，模块悬浮在画面之上。',
+    'theme.gallery.label': '主题画廊',
+    'theme.gallery.previous': '上一个主题',
+    'theme.gallery.next': '下一个主题',
+    'theme.gallery.position': '预览 · {index}/{total}',
+    'theme.gallery.apply': '使用此主题',
+    'theme.gallery.current': '使用中',
+    'theme.gallery.cancel': '取消',
+    'theme.gallery.saveError': '主题未能保存，请重试。',
+    'theme.gallery.applying': '正在应用…',
+    'launcher.open': '打开菜单',
+    'launcher.menu': 'Nowly 菜单',
+    'launcher.blur': '模糊…',
+
     // About
     'about.open': '关于',
     'about.title': '关于',
@@ -1228,6 +1247,25 @@ export const translations: Record<Language, Record<string, string>> = {
     'shell.editLayout': 'Edit layout',
     'shell.openSettings': 'Open settings',
     'shell.setWallpaper': 'Set as wallpaper',
+
+    // Themes
+    'theme.open': 'Theme',
+    'theme.classic.name': 'Classic',
+    'theme.classic.description': 'Warm white canvas with a top bar; modules are layered by borders.',
+    'theme.immersive.name': 'Immersive',
+    'theme.immersive.description': 'A full-bleed scene with modules floating above it.',
+    'theme.gallery.label': 'Theme gallery',
+    'theme.gallery.previous': 'Previous theme',
+    'theme.gallery.next': 'Next theme',
+    'theme.gallery.position': 'Preview · {index}/{total}',
+    'theme.gallery.apply': 'Use this theme',
+    'theme.gallery.current': 'In use',
+    'theme.gallery.cancel': 'Cancel',
+    'theme.gallery.saveError': 'The theme could not be saved. Please try again.',
+    'theme.gallery.applying': 'Applying…',
+    'launcher.open': 'Open menu',
+    'launcher.menu': 'Nowly menu',
+    'launcher.blur': 'Blur…',
 
     // About
     'about.open': 'About',

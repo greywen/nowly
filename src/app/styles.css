@@ -635,12 +635,38 @@ body:has(.screen-status-island-root),
 .calendar-day-view { min-height: 0; flex: 1; display: flex; flex-direction: column; }
 .day-grid__allday { flex: none; margin-bottom: 12px; padding-bottom: 12px; display: flex; flex-wrap: wrap; gap: 8px; border-bottom: 1px solid var(--border-default); }
 .day-grid__allday .event { width: auto; margin-top: 0; }
-.day-grid { min-height: 0; display: grid; border-top: 1px solid var(--border-default); border-left: 1px solid var(--border-default); border-radius: var(--radius-default); overflow: hidden; }
+.day-grid { position: relative; min-height: 0; display: grid; border-top: 1px solid var(--border-default); border-left: 1px solid var(--border-default); border-radius: var(--radius-default); overflow: hidden; }
 .day-grid--full-day { flex-shrink: 0; }
-.day-grid__row { display: grid; grid-template-columns: 64px minmax(0, 1fr); min-height: 44px; }
+/* Rows share one fixed height so the block layer can place events by minute. */
+.day-grid__row { display: grid; grid-template-columns: 64px minmax(0, 1fr); height: 44px; }
 .day-grid__hour { padding: 6px 8px; display: flex; justify-content: flex-end; color: var(--text-muted); font-size: 0.85rem; font-weight: 600; border-right: 1px solid var(--border-default); border-bottom: 1px solid var(--border-default); background: var(--bg-subtle); }
 .day-grid__slot { min-width: 0; padding: 4px 8px; display: flex; flex-direction: column; justify-content: center; gap: 4px; border-right: 1px solid var(--border-default); border-bottom: 1px solid var(--border-default); background: var(--bg-surface); }
-.day-grid__event { width: 100%; min-width: 0; padding: 6px 12px; display: flex; align-items: baseline; gap: 8px; border: 0; border-radius: var(--radius-sm); text-align: start; }
+/* Layer over the slot column; empty space stays click-through to the slots. */
+.day-grid__events { position: absolute; top: 0; bottom: 0; left: 64px; right: 0; pointer-events: none; }
+/* Each block covers its start-to-end minutes (of 1440), inset 2px from the
+   hour lines; overlapping blocks split the width into lanes 4px apart. */
+.day-grid__event {
+  position: absolute;
+  top: calc(var(--day-event-start) * 100% / 1440 + 2px);
+  left: calc(8px + (100% - 12px) * var(--day-event-lane) / var(--day-event-lanes));
+  width: calc((100% - 12px) / var(--day-event-lanes) - 4px);
+  height: calc(var(--day-event-span) * 100% / 1440 - 5px);
+  min-width: 0;
+  padding: 4px 12px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-sm);
+  text-align: start;
+  pointer-events: auto;
+}
+/* Bottom edge strip that stretches the end time; its grip shows on hover, like
+   the month/week resize handle turned to the bottom center. */
+.day-grid__resize-handle { position: absolute; left: 0; right: 0; bottom: 0; height: 8px; cursor: ns-resize; touch-action: none; }
+.day-grid__resize-handle::after { content: ""; position: absolute; left: 50%; bottom: 3px; width: 12px; height: 3px; transform: translateX(-50%); border-radius: var(--radius-pill); background: currentColor; opacity: 0; }
+.day-grid__event:hover .day-grid__resize-handle::after { opacity: 0.55; }
 .day-grid__event-time { flex: none; font-size: 0.85rem; font-weight: 600; }
 .day-grid__event-title { min-width: 0; flex: 1; overflow: hidden; font-size: 0.95rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
 

@@ -170,6 +170,7 @@ function AppContent() {
         onMoveEvent={(event, isoDate) => void eventsFeature.moveEvent(event, isoDate)}
         onMoveEventToHour={(event, isoDate, startHour) => void eventsFeature.moveEventToHour(event, isoDate, startHour)}
         onResizeEvent={(event, endIsoDate) => void eventsFeature.resizeEvent(event, endIsoDate)}
+        onResizeEventToHour={(event, endHour) => void eventsFeature.resizeEventToHour(event, endHour)}
         calendarSettings={{
           weekStart: settingsFeature.settings.data.weekStart,
           dateFormat: settingsFeature.settings.data.dateFormat,

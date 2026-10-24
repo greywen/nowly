@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { RepositoryProvider } from '../data/RepositoryContext';
 import type { AppSettings, NowlyRepository } from '../data/nowly-repository';
 import type { CalendarEvent, EventDraft, Recurrence } from './calendar-model';
-import { resizeEventEndToDate, shiftEventToDate, shiftEventToHour } from './calendar-view';
+import { resizeEventEndToDate, resizeEventEndToHour, shiftEventToDate, shiftEventToHour } from './calendar-view';
 import { createEventWith, useEvents } from './useEvents';
 
 const settings: AppSettings = {
@@ -435,5 +435,44 @@ describe('useEvents', () => {
       resizeEventEndToDate(occurrence, '2026-07-25'),
       'occurrence'
     );
+
+    await act(() => result.current.resizeEventToHour(occurrence, 17));
+    expect(updateEvent).toHaveBeenLastCalledWith(
+      { id: 's1', occurrenceStartAt: '2026-07-23T14:00' },
+      resizeEventEndToHour(occurrence, 17),
+      'occurrence'
+    );
+  });
+
+  it('moves a timed event end to another hour and skips writes that change nothing', async () => {
+    const updateEvent = vi.fn().mockResolvedValue(undefined);
+    const repository = createRepository({ updateEvent });
+    const { result } = renderHook(() => useEvents({ now }), {
+      wrapper: wrapper(repository)
+    });
+    await waitFor(() => expect(result.current.events.status).toBe('ready'));
+    const single = event('e1');
+
+    await act(() => result.current.resizeEventToHour(single, 17));
+    expect(updateEvent).toHaveBeenCalledTimes(1);
+    expect(updateEvent).toHaveBeenLastCalledWith(
+      { id: 'e1', occurrenceStartAt: null },
+      { ...draft, endAt: '2026-07-23T17:00' },
+      'all'
+    );
+
+    // Pulling the handle up ends the event earlier.
+    await act(() => result.current.resizeEventToHour({ ...single, endAt: '2026-07-23T17:00' }, 16));
+    expect(updateEvent).toHaveBeenCalledTimes(2);
+    expect(updateEvent).toHaveBeenLastCalledWith(
+      { id: 'e1', occurrenceStartAt: null },
+      { ...draft, endAt: '2026-07-23T16:00' },
+      'all'
+    );
+
+    // Its current end line changes nothing, and all-day events have no end time to drag.
+    await act(() => result.current.resizeEventToHour(single, 15));
+    await act(() => result.current.resizeEventToHour({ ...single, allDay: true }, 17));
+    expect(updateEvent).toHaveBeenCalledTimes(2);
   });
 });

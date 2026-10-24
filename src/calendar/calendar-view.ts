@@ -503,6 +503,89 @@ export function shiftEventToHour(event: CalendarEvent, isoDate: string, startHou
   };
 }
 
+/**
+ * Build an EventDraft that moves a timed event's end to endHour:00 on its
+ * start day, keeping the start fixed. The end can move later or earlier, but
+ * stays after the start: at the earliest it lands on the first hour line after
+ * the start, or keeps an end that is already sooner. Line 24 is the end of
+ * the day (23:59) and keeps an end that already runs past midnight.
+ */
+export function resizeEventEndToHour(event: CalendarEvent, endHour: number): EventDraft {
+  const startDate = event.startAt.slice(0, 10);
+  const start = timeToMinutes(event.startAt.slice(11, 16));
+  // Measured from the start day's midnight, so an overnight end exceeds 1440.
+  const currentEnd =
+    dayDiff(startDate, event.endAt.slice(0, 10)) * 1440 + timeToMinutes(event.endAt.slice(11, 16));
+  const lastMinute = 23 * 60 + 59;
+  const target = endHour >= 24 ? Math.max(lastMinute, currentEnd) : endHour * 60;
+  const shortest = Math.min(currentEnd, (Math.floor(start / 60) + 1) * 60, lastMinute);
+  const nextEnd = Math.max(shortest, target);
+  return {
+    title: event.title,
+    startAt: event.startAt.slice(0, 16),
+    endAt: `${addDaysIso(startDate, Math.floor(nextEnd / 1440))}T${minutesToTime(nextEnd % 1440)}`,
+    allDay: false,
+    category: event.category,
+    color: event.color,
+    note: event.note,
+    reminders: event.reminders,
+    recurrence: event.recurrence
+  };
+}
+
+export type DayTimelineItem = {
+  event: CalendarEvent;
+  /** Minutes from midnight where the block starts. */
+  start: number;
+  /** Drawn length in minutes, never shorter than the readable minimum. */
+  span: number;
+  /** Column among the events it overlaps, and how many columns they share. */
+  lane: number;
+  lanes: number;
+};
+
+/**
+ * Lay out the timed events that start on isoDate as blocks on a 24-hour grid.
+ * Each block covers its real duration (at least minSpan minutes so its text
+ * fits). An end on a later day, or at 23:59, runs to the bottom of the grid.
+ * Overlapping blocks share their width in side-by-side lanes.
+ */
+export function layoutDayTimeline(events: CalendarEvent[], isoDate: string, minSpan = 40): DayTimelineItem[] {
+  const blocks = events
+    .filter((event) => !event.allDay && event.startAt.startsWith(isoDate))
+    .map((event) => {
+      // A short event right before midnight moves up just enough to stay readable.
+      const start = Math.min(timeToMinutes(event.startAt.slice(11, 16)), 1440 - minSpan);
+      const rawEnd = dayDiff(isoDate, event.endAt.slice(0, 10)) * 1440 + timeToMinutes(event.endAt.slice(11, 16));
+      const end = rawEnd >= 23 * 60 + 59 ? 1440 : rawEnd;
+      return { event, start, end: Math.min(1440, Math.max(end, start + minSpan)) };
+    })
+    .sort(
+      (left, right) =>
+        left.start - right.start || right.end - left.end || left.event.id.localeCompare(right.event.id)
+    );
+
+  const items: DayTimelineItem[] = [];
+  let group: Array<Omit<DayTimelineItem, 'lanes'>> = [];
+  let laneEnds: number[] = [];
+  let groupEnd = -1;
+  const closeGroup = () => {
+    for (const item of group) items.push({ ...item, lanes: laneEnds.length });
+    group = [];
+    laneEnds = [];
+  };
+  for (const block of blocks) {
+    if (block.start >= groupEnd) closeGroup();
+    let lane = laneEnds.findIndex((laneEnd) => laneEnd <= block.start);
+    if (lane === -1) lane = laneEnds.length;
+    laneEnds[lane] = block.end;
+    group.push({ event: block.event, start: block.start, span: block.end - block.start, lane });
+    groupEnd = Math.max(groupEnd, block.end);
+  }
+  closeGroup();
+  return items;
+}
+
 export function sortEvents(events: CalendarEvent[]): CalendarEvent[] {
   return [...events].sort((left, right) => {
     if (left.allDay !== right.allDay) return left.allDay ? -1 : 1;

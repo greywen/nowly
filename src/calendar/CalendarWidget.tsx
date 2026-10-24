@@ -17,8 +17,10 @@ import {
   buildMonthGrid,
   buildWeekDays,
   groupEventsByDate,
+  layoutDayTimeline,
   layoutWeekRows,
   listDateLabel,
+  resizeEventEndToHour,
   shiftEventToHour,
   sortEvents,
   splitIntoWeeks,
@@ -118,6 +120,9 @@ type CalendarWidgetProps = {
   onMoveEvent?: (event: CalendarEvent, isoDate: string) => void;
   onMoveEventToHour?: (event: CalendarEvent, isoDate: string, startHour: number) => void;
   onResizeEvent?: (event: CalendarEvent, endIsoDate: string) => void;
+  // Day view: pulling a timed event's bottom handle up or down moves its end to
+  // the hour line nearest the pointer.
+  onResizeEventToHour?: (event: CalendarEvent, endHour: number) => void;
   calendarSettings?: CalendarSettings;
   onOpenSettings?: () => void;
   // When there is at least one calendar subscription, the toolbar shows a sync
@@ -181,6 +186,7 @@ export function CalendarWidget({
   onMoveEvent,
   onMoveEventToHour,
   onResizeEvent,
+  onResizeEventToHour,
   calendarSettings,
   onOpenSettings,
   hasSubscriptions = false,
@@ -240,6 +246,7 @@ export function CalendarWidget({
   const dropEnabled = Boolean(onMoveEvent);
   const hourDropEnabled = Boolean(onMoveEventToHour);
   const resizeEnabled = Boolean(onResizeEvent);
+  const hourResizeEnabled = Boolean(onResizeEventToHour);
 
   // All views drive move/resize with pointer events instead of native HTML5
   // drag-and-drop. Native DnD is unreliable in the Tauri webview (drags often
@@ -249,7 +256,12 @@ export function CalendarWidget({
   type PointerGesture =
     | { kind: 'move-date'; event: CalendarEvent; spanDays: number; startIso: string; moved: boolean; downX: number; downY: number }
     | { kind: 'resize-date'; event: CalendarEvent; endIso: string; moved: boolean; downX: number; downY: number }
-    | { kind: 'move-hour'; event: CalendarEvent; isoDate: string; startHour: number; moved: boolean; downX: number; downY: number };
+    // downHour is the row first grabbed, so a tall block moves by the rows the
+    // pointer crosses instead of jumping its start to the pointer.
+    | { kind: 'move-hour'; event: CalendarEvent; isoDate: string; startHour: number; downHour: number; moved: boolean; downX: number; downY: number }
+    // endHour is the hour line nearest the pointer, null until the pointer
+    // first reaches an hour row.
+    | { kind: 'resize-hour'; event: CalendarEvent; endHour: number | null; moved: boolean; downX: number; downY: number };
   const gestureRef = useRef<PointerGesture | null>(null);
   // Preview carries full start/end datetimes so date moves, stretches, and
   // hour moves all render live through the same displayEvents mapping. It is
@@ -282,13 +294,28 @@ export function CalendarWidget({
     return null;
   }, [hitElementsFromPoint]);
 
-  const hourFromPoint = useCallback((clientX: number, clientY: number) => {
+  const hourSlotFromPoint = useCallback((clientX: number, clientY: number) => {
     for (const element of hitElementsFromPoint(clientX, clientY)) {
       const slot = element.closest('[data-hour]') as HTMLElement | null;
-      if (slot?.dataset.hour) return Number(slot.dataset.hour);
+      if (slot?.dataset.hour) return slot;
     }
     return null;
   }, [hitElementsFromPoint]);
+
+  const hourFromPoint = useCallback((clientX: number, clientY: number) => {
+    const slot = hourSlotFromPoint(clientX, clientY);
+    return slot ? Number(slot.dataset.hour) : null;
+  }, [hourSlotFromPoint]);
+
+  // The hour line (0–24) nearest the pointer: the top of its row in the upper
+  // half, the bottom in the lower half.
+  const hourLineFromPoint = useCallback((clientX: number, clientY: number) => {
+    const slot = hourSlotFromPoint(clientX, clientY);
+    if (!slot) return null;
+    const rect = slot.getBoundingClientRect();
+    const lowerHalf = rect.height > 0 && clientY - rect.top >= rect.height / 2;
+    return Number(slot.dataset.hour) + (lowerHalf ? 1 : 0);
+  }, [hourSlotFromPoint]);
 
   const handleGesturePointerMove = useCallback(
     (moveEvent: PointerEvent) => {
@@ -326,15 +353,24 @@ export function CalendarWidget({
           startAt: event.startAt.slice(0, 16),
           endAt: `${endIso}T${event.endAt.slice(11)}`
         });
+      } else if (gesture.kind === 'resize-hour') {
+        const line = hourLineFromPoint(moveEvent.clientX, moveEvent.clientY);
+        if (line === null || line === gesture.endHour) return;
+        gesture.endHour = line;
+        const draft = resizeEventEndToHour(event, line);
+        if (draft.endAt === event.endAt.slice(0, 16)) setPreview(null);
+        else setPreview({ eventKey: occurrenceKey(event), startAt: draft.startAt, endAt: draft.endAt });
       } else {
         const hour = hourFromPoint(moveEvent.clientX, moveEvent.clientY);
-        if (hour === null || hour === gesture.startHour) return;
-        gesture.startHour = hour;
-        const draft = shiftEventToHour(event, gesture.isoDate, hour);
+        if (hour === null) return;
+        const startHour = Math.min(23, Math.max(0, Number(event.startAt.slice(11, 13)) + hour - gesture.downHour));
+        if (startHour === gesture.startHour) return;
+        gesture.startHour = startHour;
+        const draft = shiftEventToHour(event, gesture.isoDate, startHour);
         setPreview({ eventKey: occurrenceKey(event), startAt: draft.startAt, endAt: draft.endAt });
       }
     },
-    [dayIsoFromPoint, hourFromPoint]
+    [dayIsoFromPoint, hourFromPoint, hourLineFromPoint]
   );
 
   const handleGesturePointerUp = useCallback(() => {
@@ -362,6 +398,12 @@ export function CalendarWidget({
         onResizeEvent(event, gesture.endIso);
         committed = true;
       }
+    } else if (gesture.kind === 'resize-hour') {
+      const { endHour } = gesture;
+      if (endHour !== null && resizeEventEndToHour(event, endHour).endAt !== event.endAt.slice(0, 16) && onResizeEventToHour) {
+        onResizeEventToHour(event, endHour);
+        committed = true;
+      }
     } else if (gesture.startHour !== Number(event.startAt.slice(11, 13)) && onMoveEventToHour) {
       onMoveEventToHour(event, gesture.isoDate, gesture.startHour);
       committed = true;
@@ -378,7 +420,7 @@ export function CalendarWidget({
     } else {
       setPreview(null);
     }
-  }, [handleGesturePointerMove, onMoveEvent, onResizeEvent, onMoveEventToHour]);
+  }, [handleGesturePointerMove, onMoveEvent, onResizeEvent, onMoveEventToHour, onResizeEventToHour]);
 
   const beginGesture = useCallback(
     (pointerEvent: React.PointerEvent, gesture: PointerGesture) => {
@@ -425,19 +467,37 @@ export function CalendarWidget({
     [beginGesture]
   );
 
-  const handleHourMovePointerDown = useCallback(
-    (pointerEvent: React.PointerEvent, event: CalendarEvent, isoDate: string) => {
+  const handleHourResizePointerDown = useCallback(
+    (pointerEvent: React.PointerEvent, event: CalendarEvent) => {
+      // Keep the resize gesture from also starting a move.
+      pointerEvent.stopPropagation();
       beginGesture(pointerEvent, {
-        kind: 'move-hour',
+        kind: 'resize-hour',
         event,
-        isoDate,
-        startHour: Number(event.startAt.slice(11, 13)),
+        endHour: null,
         moved: false,
         downX: pointerEvent.clientX,
         downY: pointerEvent.clientY
       });
     },
     [beginGesture]
+  );
+
+  const handleHourMovePointerDown = useCallback(
+    (pointerEvent: React.PointerEvent, event: CalendarEvent, isoDate: string) => {
+      const startHour = Number(event.startAt.slice(11, 13));
+      beginGesture(pointerEvent, {
+        kind: 'move-hour',
+        event,
+        isoDate,
+        startHour,
+        downHour: hourFromPoint(pointerEvent.clientX, pointerEvent.clientY) ?? startHour,
+        moved: false,
+        downX: pointerEvent.clientX,
+        downY: pointerEvent.clientY
+      });
+    },
+    [beginGesture, hourFromPoint]
   );
 
   const handleBarClick = useCallback(
@@ -776,14 +836,7 @@ export function CalendarWidget({
     const iso = anchorIso ?? '';
     const dayEvents = displayEvents.filter((event) => event.startAt.startsWith(iso));
     const allDayEvents = sortEvents(dayEvents.filter((event) => event.allDay));
-    const timedEvents = dayEvents.filter((event) => !event.allDay);
-    const eventsByHour = new Map<number, CalendarEvent[]>();
-    for (const event of timedEvents) {
-      const hour = Number(event.startAt.slice(11, 13));
-      const bucket = eventsByHour.get(hour);
-      if (bucket) bucket.push(event);
-      else eventsByHour.set(hour, [event]);
-    }
+    const timeline = layoutDayTimeline(dayEvents, iso);
     return (
       <div className="calendar-day-view calendar-scroll-region">
         {allDayEvents.length > 0 ? (
@@ -802,36 +855,48 @@ export function CalendarWidget({
           </div>
         ) : null}
         <div className={`day-grid day-grid--full-day${pointerActive ? ' is-dragging' : ''}`} aria-label={t('calendar.dayGrid')}>
-          {hours.map((hour) => {
-            const hourEvents = sortEvents(eventsByHour.get(hour) ?? []);
-            return (
-              <div className="day-grid__row" key={hour}>
-                <span className="day-grid__hour">{pad(hour)}:00</span>
-                <div
-                  className="day-grid__slot"
-                  data-hour={hour}
-                  onDoubleClick={() => createForDate(iso)}
-                >
-                  {hourEvents.map((event) => (
-                    <button
-                      type="button"
-                      key={occurrenceKey(event)}
-                      draggable={false}
-                      aria-label={eventLabel(event, categories)}
-                      onPointerDown={hourDropEnabled ? (pointerEvent) => handleHourMovePointerDown(pointerEvent, event, iso) : undefined}
-                      onClick={() => handleBarClick(event)}
-                      className={`day-grid__event${coloredClass(event)}${hourDropEnabled ? ' event--movable' : ''}`} style={coloredStyle(event)}
-                    >
-                      <span className="day-grid__event-time">
-                        {event.startAt.slice(11, 16)} – {event.endAt.slice(11, 16)}
-                      </span>
-                      <span className="day-grid__event-title">{repeatMark(event)}{event.title}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
+          {hours.map((hour) => (
+            <div className="day-grid__row" key={hour}>
+              <span className="day-grid__hour">{pad(hour)}:00</span>
+              <div className="day-grid__slot" data-hour={hour} onDoubleClick={() => createForDate(iso)} />
+            </div>
+          ))}
+          {/* Blocks sit in their own layer over the hour slots so each one can
+              cover the hours it lasts; the slots stay the hit-test targets. */}
+          <div className="day-grid__events">
+            {timeline.map(({ event, start, span, lane, lanes }) => (
+              <button
+                type="button"
+                key={occurrenceKey(event)}
+                draggable={false}
+                aria-label={eventLabel(event, categories)}
+                onPointerDown={hourDropEnabled ? (pointerEvent) => handleHourMovePointerDown(pointerEvent, event, iso) : undefined}
+                onClick={() => handleBarClick(event)}
+                className={`day-grid__event${coloredClass(event)}${hourDropEnabled ? ' event--movable' : ''}`}
+                style={{
+                  ...coloredStyle(event),
+                  '--day-event-start': start,
+                  '--day-event-span': span,
+                  '--day-event-lane': lane,
+                  '--day-event-lanes': lanes
+                } as React.CSSProperties}
+              >
+                <span className="day-grid__event-time">
+                  {event.startAt.slice(11, 16)} – {event.endAt.slice(11, 16)}
+                </span>
+                <span className="day-grid__event-title">{repeatMark(event)}{event.title}</span>
+                {hourResizeEnabled && isEventWritable(event) ? (
+                  <span
+                    className="day-grid__resize-handle"
+                    aria-hidden="true"
+                    onPointerDown={(pointerEvent) => handleHourResizePointerDown(pointerEvent, event)}
+                    onClick={(clickEvent) => clickEvent.stopPropagation()}
+                    onDragStart={(dragEvent) => dragEvent.preventDefault()}
+                  />
+                ) : null}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     );

@@ -31,7 +31,8 @@ const baseProps = {
   onOpenEvent: vi.fn(),
   onMoveEvent: vi.fn(),
   onMoveEventToHour: vi.fn(),
-  onResizeEvent: vi.fn()
+  onResizeEvent: vi.fn(),
+  onResizeEventToHour: vi.fn()
 };
 
 afterEach(() => {
@@ -491,6 +492,227 @@ describe('CalendarWidget', () => {
     fireEvent(window, new MouseEvent('pointerup'));
 
     expect(onResizeEvent).toHaveBeenCalledWith(allDayEvent, '2026-07-23');
+  });
+
+  it('gives writable timed events in the day view a bottom resize handle', () => {
+    const readOnly: CalendarEvent = { ...sampleEvents[1], id: 'ics-1', title: '订阅会议', subscriptionId: 's1' };
+    const { unmount } = render(
+      <CalendarWidget {...baseProps} view="day" events={[sampleEvents[0], readOnly]} />
+    );
+
+    const chip = screen.getByRole('button', { name: '09:30 站会，工作' });
+    expect(chip.querySelector('.day-grid__resize-handle')).not.toBeNull();
+    expect(screen.getByRole('button', { name: /订阅会议/ }).querySelector('.day-grid__resize-handle')).toBeNull();
+    unmount();
+
+    const { container } = render(
+      <CalendarWidget {...baseProps} view="day" onResizeEventToHour={undefined} />
+    );
+    expect(container.querySelector('.day-grid__resize-handle')).toBeNull();
+  });
+
+  // jsdom has no layout: give every hour slot a 44px box so pointer positions
+  // inside a row can be read.
+  function mockHourSlots(container: HTMLElement) {
+    const slotOf = (hour: number) => container.querySelector(`[data-hour="${hour}"]`) as HTMLElement;
+    for (let hour = 0; hour < 24; hour += 1) {
+      vi.spyOn(slotOf(hour), 'getBoundingClientRect').mockReturnValue(
+        DOMRect.fromRect({ x: 0, y: hour * 44, width: 300, height: 44 })
+      );
+    }
+    return slotOf;
+  }
+
+  const blockPlace = (block: HTMLElement) =>
+    ['start', 'span', 'lane', 'lanes'].map((name) => block.style.getPropertyValue(`--day-event-${name}`)).join(' ');
+
+  it('draws day-view events over the hours they cover, side by side when they overlap', () => {
+    const review: CalendarEvent = { ...sampleEvents[0], startAt: '2026-07-23T09:30:00', endAt: '2026-07-23T11:00:00' };
+    const sync: CalendarEvent = { ...sampleEvents[1], startAt: '2026-07-23T10:00:00', endAt: '2026-07-23T11:00:00' };
+    const { container } = render(<CalendarWidget {...baseProps} view="day" events={[review, sync]} />);
+
+    const reviewBlock = screen.getByRole('button', { name: '09:30 站会，工作' });
+    const syncBlock = screen.getByRole('button', { name: /设计评审/ });
+    // Blocks live in their own layer, not inside the start-hour slot.
+    expect(container.querySelector('[data-hour="9"] .day-grid__event')).toBeNull();
+    expect(reviewBlock.closest('.day-grid__events')).not.toBeNull();
+    expect(blockPlace(reviewBlock)).toBe('570 90 0 2');
+    expect(blockPlace(syncBlock)).toBe('600 60 1 2');
+  });
+
+  it('stretches a day-view event to the hour line nearest the pointer and keeps it there after release', () => {
+    const onResizeEventToHour = vi.fn();
+    const onMoveEventToHour = vi.fn();
+    const review: CalendarEvent = { ...sampleEvents[0], startAt: '2026-07-23T09:30:00', endAt: '2026-07-23T11:00:00' };
+    const { container, rerender } = render(
+      <CalendarWidget
+        {...baseProps}
+        view="day"
+        events={[review]}
+        onResizeEventToHour={onResizeEventToHour}
+        onMoveEventToHour={onMoveEventToHour}
+      />
+    );
+    const block = screen.getByRole('button', { name: '09:30 站会，工作' });
+    const handle = block.querySelector('.day-grid__resize-handle') as HTMLElement;
+    const slotOf = mockHourSlots(container);
+    let hovered = slotOf(11);
+    Reflect.defineProperty(document, 'elementsFromPoint', { configurable: true, value: () => [hovered] });
+
+    fireEvent(handle, new MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 100, clientY: 482 }));
+    // 11:41 is nearest the 12:00 line, so the block grows to 12:00 while held.
+    fireEvent(window, new MouseEvent('pointermove', { clientX: 100, clientY: 514 }));
+    expect(block).toHaveTextContent('09:30 – 12:00');
+    expect(blockPlace(block)).toBe('570 150 0 1');
+
+    // 13:37 is nearest the 14:00 line.
+    hovered = slotOf(13);
+    fireEvent(window, new MouseEvent('pointermove', { clientX: 100, clientY: 599 }));
+    expect(block).toHaveTextContent('09:30 – 14:00');
+    expect(blockPlace(block)).toBe('570 270 0 1');
+
+    fireEvent(window, new MouseEvent('pointerup'));
+    expect(onResizeEventToHour).toHaveBeenCalledTimes(1);
+    expect(onResizeEventToHour).toHaveBeenCalledWith(review, 14);
+    expect(onMoveEventToHour).not.toHaveBeenCalled();
+    // Released, and again once the saved event reloads: the block stays long.
+    expect(blockPlace(block)).toBe('570 270 0 1');
+    rerender(
+      <CalendarWidget
+        {...baseProps}
+        view="day"
+        events={[{ ...review, endAt: '2026-07-23T14:00' }]}
+        onResizeEventToHour={onResizeEventToHour}
+        onMoveEventToHour={onMoveEventToHour}
+      />
+    );
+    const reloaded = screen.getByRole('button', { name: '09:30 站会，工作' });
+    expect(reloaded).toHaveTextContent('09:30 – 14:00');
+    expect(blockPlace(reloaded)).toBe('570 270 0 1');
+  });
+
+  it('shrinks a day-view event when its handle is pulled up and keeps it after release', () => {
+    const onResizeEventToHour = vi.fn();
+    const workshop: CalendarEvent = { ...sampleEvents[0], startAt: '2026-07-23T09:00:00', endAt: '2026-07-23T12:00:00' };
+    const { container, rerender } = render(
+      <CalendarWidget {...baseProps} view="day" events={[workshop]} onResizeEventToHour={onResizeEventToHour} />
+    );
+    const block = screen.getByRole('button', { name: '09:00 站会，工作' });
+    const handle = block.querySelector('.day-grid__resize-handle') as HTMLElement;
+    const slotOf = mockHourSlots(container);
+    let hovered = slotOf(11);
+    Reflect.defineProperty(document, 'elementsFromPoint', { configurable: true, value: () => [hovered] });
+
+    // Grabbed at its 12:00 end, then pulled up into the lower half of the
+    // 10:00 row, which is nearest the 11:00 line.
+    fireEvent(handle, new MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 100, clientY: 526 }));
+    hovered = slotOf(10);
+    fireEvent(window, new MouseEvent('pointermove', { clientX: 100, clientY: 470 }));
+    expect(block).toHaveTextContent('09:00 – 11:00');
+    expect(blockPlace(block)).toBe('540 120 0 1');
+
+    fireEvent(window, new MouseEvent('pointerup'));
+    expect(onResizeEventToHour).toHaveBeenCalledTimes(1);
+    expect(onResizeEventToHour).toHaveBeenCalledWith(workshop, 11);
+    expect(blockPlace(block)).toBe('540 120 0 1');
+    rerender(
+      <CalendarWidget
+        {...baseProps}
+        view="day"
+        events={[{ ...workshop, endAt: '2026-07-23T11:00' }]}
+        onResizeEventToHour={onResizeEventToHour}
+      />
+    );
+    const reloaded = screen.getByRole('button', { name: '09:00 站会，工作' });
+    expect(reloaded).toHaveTextContent('09:00 – 11:00');
+    expect(blockPlace(reloaded)).toBe('540 120 0 1');
+  });
+
+  it('stops a day-view event pulled above its start at the first hour line after the start', () => {
+    const onResizeEventToHour = vi.fn();
+    const workshop: CalendarEvent = { ...sampleEvents[0], startAt: '2026-07-23T09:00:00', endAt: '2026-07-23T12:00:00' };
+    const { container } = render(
+      <CalendarWidget {...baseProps} view="day" events={[workshop]} onResizeEventToHour={onResizeEventToHour} />
+    );
+    const block = screen.getByRole('button', { name: '09:00 站会，工作' });
+    const handle = block.querySelector('.day-grid__resize-handle') as HTMLElement;
+    const slotOf = mockHourSlots(container);
+    let hovered = slotOf(11);
+    Reflect.defineProperty(document, 'elementsFromPoint', { configurable: true, value: () => [hovered] });
+
+    // Straight up to the 00:00 line, far above the 09:00 start.
+    fireEvent(handle, new MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 100, clientY: 526 }));
+    hovered = slotOf(0);
+    fireEvent(window, new MouseEvent('pointermove', { clientX: 100, clientY: 5 }));
+    expect(block).toHaveTextContent('09:00 – 10:00');
+    expect(blockPlace(block)).toBe('540 60 0 1');
+
+    fireEvent(window, new MouseEvent('pointerup'));
+    expect(onResizeEventToHour).toHaveBeenCalledTimes(1);
+    expect(onResizeEventToHour).toHaveBeenCalledWith(workshop, 0);
+  });
+
+  it('does not commit a day-view resize that leaves the end where it is', () => {
+    const onResizeEventToHour = vi.fn();
+    const { container } = render(
+      <CalendarWidget {...baseProps} view="day" events={[sampleEvents[0]]} onResizeEventToHour={onResizeEventToHour} />
+    );
+    const handle = container.querySelector('.day-grid__resize-handle') as HTMLElement;
+    const slotOf = mockHourSlots(container);
+    Reflect.defineProperty(document, 'elementsFromPoint', { configurable: true, value: () => [slotOf(8)] });
+
+    // 09:30–10:00 already ends on the first hour line after its start.
+    fireEvent(handle, new MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 100, clientY: 436 }));
+    fireEvent(window, new MouseEvent('pointermove', { clientX: 100, clientY: 360 }));
+    fireEvent(window, new MouseEvent('pointerup'));
+
+    expect(onResizeEventToHour).not.toHaveBeenCalled();
+    const block = screen.getByRole('button', { name: '09:30 站会，工作' });
+    expect(block).toHaveTextContent('09:30 – 10:00');
+    expect(blockPlace(block)).toBe('570 40 0 1');
+  });
+
+  it('does not commit a day-view resize whose pointer never reaches an hour row', () => {
+    const onResizeEventToHour = vi.fn();
+    const workshop: CalendarEvent = { ...sampleEvents[0], startAt: '2026-07-23T09:00:00', endAt: '2026-07-23T12:00:00' };
+    const { container } = render(
+      <CalendarWidget {...baseProps} view="day" events={[workshop]} onResizeEventToHour={onResizeEventToHour} />
+    );
+    const block = screen.getByRole('button', { name: '09:00 站会，工作' });
+    const handle = block.querySelector('.day-grid__resize-handle') as HTMLElement;
+    mockHourSlots(container);
+    // Dragged off over the hour labels, where no hour slot is under the pointer.
+    Reflect.defineProperty(document, 'elementsFromPoint', { configurable: true, value: () => [] });
+
+    fireEvent(handle, new MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 100, clientY: 526 }));
+    fireEvent(window, new MouseEvent('pointermove', { clientX: 20, clientY: 300 }));
+    fireEvent(window, new MouseEvent('pointerup'));
+
+    expect(onResizeEventToHour).not.toHaveBeenCalled();
+    expect(block).toHaveTextContent('09:00 – 12:00');
+    expect(blockPlace(block)).toBe('540 180 0 1');
+  });
+
+  it('moves a tall day-view event by the rows crossed, keeping the spot where it was grabbed', () => {
+    const onMoveEventToHour = vi.fn();
+    const workshop: CalendarEvent = { ...sampleEvents[0], startAt: '2026-07-23T09:00:00', endAt: '2026-07-23T12:00:00' };
+    const { container } = render(
+      <CalendarWidget {...baseProps} view="day" events={[workshop]} onMoveEventToHour={onMoveEventToHour} />
+    );
+    const block = screen.getByRole('button', { name: '09:00 站会，工作' });
+    const slotOf = mockHourSlots(container);
+    // Grabbed in its 11:00 part, then dragged two rows down.
+    let hovered = slotOf(11);
+    Reflect.defineProperty(document, 'elementsFromPoint', { configurable: true, value: () => [block, hovered] });
+
+    fireEvent(block, new MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 100, clientY: 500 }));
+    hovered = slotOf(13);
+    fireEvent(window, new MouseEvent('pointermove', { clientX: 100, clientY: 590 }));
+    expect(block).toHaveTextContent('11:00 – 14:00');
+    expect(blockPlace(block)).toBe('660 180 0 1');
+
+    fireEvent(window, new MouseEvent('pointerup'));
+    expect(onMoveEventToHour).toHaveBeenCalledWith(workshop, '2026-07-23', 11);
   });
 
 });
