@@ -281,6 +281,49 @@ test('late close events cannot close a more recently selected panel', async ({ p
   await expect(page.getByRole('heading', { name: '截图历史' })).toBeVisible();
 });
 
+for (const language of ['zh', 'en', 'fr', 'es', 'ja', 'ko', 'zh-Hant']) {
+  test(`menu entries center icons above labels (${language})`, async ({ page }) => {
+    await installBar(page, language);
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.getByRole('button', { name: 'Nowly', exact: true }).click();
+    const entries = page.getByRole('menuitem');
+    await expect(entries).toHaveCount(5);
+    await expect(page.getByText('Ctrl+Alt+T', { exact: true })).toBeVisible();
+
+    for (const entry of await entries.all()) {
+      const box = (await entry.boundingBox())!;
+      const icon = (await entry.locator('svg').boundingBox())!;
+      const label = (await entry.locator('.bar-menu-panel__label').boundingBox())!;
+      const center = box.x + box.width / 2;
+      expect(Math.abs(icon.x + icon.width / 2 - center)).toBeLessThan(1);
+      expect(Math.abs(label.x + label.width / 2 - center)).toBeLessThan(1);
+      expect(label.y - icon.y - icon.height).toBeCloseTo(8, 0);
+      await expect(entry).toHaveCSS('text-align', 'center');
+      for (const detail of await entry.locator('.bar-menu-panel__keys, .bar-menu-panel__note').all()) {
+        const detailBox = (await detail.boundingBox())!;
+        expect(detailBox.y).toBeGreaterThanOrEqual(label.y + label.height - 1);
+        expect(Math.abs(detailBox.x + detailBox.width / 2 - center)).toBeLessThan(1);
+      }
+      expect(await entry.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+    }
+    await expect(page.locator('.status-rail__menu')).toHaveCSS('height', '288px');
+    expect(await page.locator('.bar-menu-panel__body').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+  });
+}
+
+test('capture labels stay aligned when one shortcut is unavailable', async ({ page }) => {
+  await installBar(page);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.evaluate(() => Reflect.get(window, '__barTest').setShortcuts({
+    history: { shortcut: 'Ctrl+Alt+H', registered: false, error: 'Shortcut in use' }
+  }));
+  await page.getByRole('button', { name: 'Nowly', exact: true }).click();
+  const entries = page.locator('.bar-menu-panel__item');
+  await expect(entries.last()).toContainText('快捷键不可用');
+  const labels = await Promise.all((await entries.all()).map(entry => entry.locator('.bar-menu-panel__label').boundingBox()));
+  expect(labels[0]!.y).toBeCloseTo(labels[1]!.y, 0);
+});
+
 test('quick create tiles show optional shortcuts and open the create window', async ({ page }) => {
   await installBar(page);
   await page.getByRole('button', { name: 'Nowly', exact: true }).click();
