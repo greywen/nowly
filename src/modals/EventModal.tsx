@@ -11,7 +11,7 @@ import { RichEditor } from '../components/rich-text/RichEditor';
 import { Select } from '../components/Select';
 import { TimePicker } from '../components/TimePicker';
 import type { RepositoryError } from '../data/nowly-repository';
-import { applyCategory, applyStartTime, createEventDraft, eventToForm, isEventFormDirty, MAX_REMINDERS, toEventDraft, validateEventForm, type EventFieldErrors, type EventFormDraft } from '../lib/event-draft';
+import { applyCategory, applyStartTime, createEventDraft, DEFAULT_REMINDER_MINUTES, eventToForm, isEventFormDirty, MAX_REMINDERS, toEventDraft, validateEventForm, type EventFieldErrors, type EventFormDraft } from '../lib/event-draft';
 import { presetToRecurrence, recurrenceToPreset, weekdayOf, WEEKDAYS, type RecurrencePreset } from '../lib/recurrence';
 import { RecurrenceScopeDialog } from './RecurrenceScopeDialog';
 import type { CalendarSubscription } from '../calendar/subscription-model';
@@ -42,8 +42,6 @@ type EventModalProps = {
 type ReminderUnit = 'minute' | 'hour' | 'day' | 'week';
 const REMINDER_UNIT_MINUTES: Record<ReminderUnit, number> = { minute: 1, hour: 60, day: 1440, week: 10080 };
 const reminderUnitOptions = () => (['minute','hour','day','week'] as const).map(unit=>({value:unit,label:t(`reminder.unit.${unit}`)}));
-// Default a new reminder to 10 minutes before, matching the common calendar default.
-const DEFAULT_REMINDER_MINUTES = 10;
 
 function splitReminder(minutes:number):{value:number;unit:ReminderUnit}{
   for(const unit of ['week','day','hour'] as const){
@@ -117,7 +115,11 @@ export function EventModal({ mode,restoreFocusRef,onClose,onSaved,onDeleted,crea
   const changeFreq=(freq:RecurrenceFreq)=>patchRecurrence({freq,byDay:freq==='weekly'?[weekdayOf(startAt)]:[]});
   const toggleWeekday=(day:Weekday)=>{ if(!form.recurrence)return; const chosen=new Set(form.recurrence.byDay); if(!chosen.delete(day))chosen.add(day); patchRecurrence({byDay:WEEKDAYS.filter(value=>chosen.has(value))}); };
   const changeEnd=(kind:RecurrenceEnd['kind'])=>patchRecurrence({end:kind==='until'?{kind:'until',date:form.endDate}:kind==='count'?{kind:'count',count:10}:{kind:'never'}});
-  const addReminder=()=>update('reminders',[...form.reminders,DEFAULT_REMINDER_MINUTES]);
+  const addReminder=()=>{
+    let minutes=DEFAULT_REMINDER_MINUTES;
+    while(form.reminders.includes(minutes))minutes+=5;
+    update('reminders',[...form.reminders,minutes]);
+  };
   const removeReminder=(index:number)=>update('reminders',form.reminders.filter((_,position)=>position!==index));
   const changeReminder=(index:number,minutes:number)=>update('reminders',form.reminders.map((value,position)=>position===index?minutes:value));
   const toggleReminderPreset=(minutes:number)=>{ if(form.reminders.includes(minutes))update('reminders',form.reminders.filter(value=>value!==minutes)); else if(form.reminders.length<MAX_REMINDERS)update('reminders',[...form.reminders,minutes]); };
@@ -157,11 +159,11 @@ export function EventModal({ mode,restoreFocusRef,onClose,onSaved,onDeleted,crea
           <div className="event-form__range">
             <div className="event-form__range-end">
               <DatePicker id="event-start-date" label={t('eventModal.start')} hideLabel value={form.startDate} errorId={errors.startAt?'event-start-error':undefined} disabled={busy} open={openPicker==='startDate'} onOpenChange={open=>setOpenPicker(open?'startDate':null)} onChange={v=>update('startDate',v)}/>
-              {!form.allDay?<TimePicker id="event-start-time" label={t('eventModal.startTime')} hideLabel value={form.startTime} disabled={busy} open={openPicker==='startTime'} onOpenChange={open=>setOpenPicker(open?'startTime':null)} onChange={changeStartTime}/>:null}
+              {!form.allDay?<TimePicker id="event-start-time" immediate label={t('eventModal.startTime')} hideLabel value={form.startTime} disabled={busy} open={openPicker==='startTime'} onOpenChange={open=>setOpenPicker(open?'startTime':null)} onChange={changeStartTime}/>:null}
             </div>
             <div className="event-form__range-end">
               <DatePicker id="event-end-date" label={t('eventModal.end')} hideLabel value={form.endDate} errorId={errors.endAt?'event-end-error':undefined} disabled={busy} open={openPicker==='endDate'} onOpenChange={open=>setOpenPicker(open?'endDate':null)} onChange={v=>update('endDate',v)}/>
-              {!form.allDay?<TimePicker id="event-end-time" label={t('eventModal.endTime')} hideLabel value={form.endTime} disabled={busy} open={openPicker==='endTime'} onOpenChange={open=>setOpenPicker(open?'endTime':null)} onChange={v=>update('endTime',v)}/>:null}
+              {!form.allDay?<TimePicker id="event-end-time" immediate label={t('eventModal.endTime')} hideLabel value={form.endTime} disabled={busy} open={openPicker==='endTime'} onOpenChange={open=>setOpenPicker(open?'endTime':null)} onChange={v=>update('endTime',v)}/>:null}
             </div>
           </div>
           {errors.startAt?<span id="event-start-error" className="field-error">{errors.startAt}</span>:null}{errors.endAt?<span id="event-end-error" className="field-error">{errors.endAt}</span>:null}

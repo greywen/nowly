@@ -49,6 +49,49 @@ test('creates, edits, and permanently deletes an event',async({page})=>{
  await expect(page.getByRole('button',{name:/设计复盘/})).toHaveCount(0);
 });
 
+test('uses immediate calendar time choices and persists six recent times', async ({page}) => {
+ await page.getByRole('button', {name:'新建日程'}).click();
+ const dialog = page.getByRole('dialog', {name:'新建日程'});
+ await expect(dialog.getByRole('button', {name:'15 分钟前', exact:true})).toHaveAttribute('aria-pressed', 'true');
+ const start = dialog.getByRole('button', {name:'开始时间'});
+ const end = dialog.getByRole('button', {name:'结束时间'});
+ await start.click();
+ const popup = page.getByRole('dialog', {name:'选择开始时间'});
+ await expect(popup.locator('.time-picker__footer')).toHaveCount(0);
+ await popup.getByRole('button', {name:'14:00', exact:true}).click();
+ await expect(popup).toHaveCount(0);
+ await expect(start).toHaveText('14:00');
+ await expect(end).toHaveText('15:00');
+ for (const time of ['08:17', '10:22', '11:03', '13:41', '16:57', '19:08', '21:34', '13:41']) {
+  await start.click();
+  const [hour, minute] = time.split(':');
+  await popup.getByRole('spinbutton', {name:'小时'}).fill(hour);
+  await popup.getByRole('spinbutton', {name:'分钟'}).fill(minute);
+  await popup.getByRole('spinbutton', {name:'分钟'}).press('Enter');
+  await expect(start).toHaveText(time);
+ }
+ await end.click();
+ const endPopup = page.getByRole('dialog', {name:'选择结束时间'});
+ const recent = ['13:41', '21:34', '19:08', '16:57', '11:03', '10:22'];
+ await expect(endPopup.locator('.time-picker__quick-values button')).toHaveText(recent);
+ await endPopup.getByRole('button', {name:'21:34', exact:true}).click();
+ await dialog.getByLabel('日程标题').fill('最近时间日程');
+ await dialog.getByRole('button', {name:'保存', exact:true}).click();
+ await expect(dialog).toHaveCount(0);
+ expect(await page.evaluate(() => window.__NOWLY_TEST_CALLS__.find(call => call.command === 'create_event')?.args.draft))
+  .toMatchObject({startAt:expect.stringContaining('T13:41'), endAt:expect.stringContaining('T21:34'), reminders:[15]});
+ await page.reload();
+ await page.getByRole('button', {name:'新建日程'}).click();
+ await page.getByRole('button', {name:'开始时间'}).click();
+ await expect(popup.locator('.time-picker__quick-values button')).toHaveText(['21:34', '13:41', '19:08', '16:57', '11:03', '10:22']);
+ const popupBounds = await popup.boundingBox();
+ const dialogBounds = await page.getByRole('dialog', {name:'新建日程'}).boundingBox();
+ const headerBounds = await page.locator('.event-dialog .good-dialog__header').boundingBox();
+ expect(popupBounds!.x).toBeGreaterThanOrEqual(dialogBounds!.x);
+ expect(popupBounds!.x + popupBounds!.width).toBeLessThanOrEqual(dialogBounds!.x + dialogBounds!.width);
+ expect(popupBounds!.y).toBeGreaterThanOrEqual(headerBounds!.y + headerBounds!.height);
+});
+
 test('navigates exact half-open month ranges',async({page})=>{
  const initial=await page.evaluate(()=>window.__NOWLY_TEST_CALLS__.find(c=>c.command==='list_events_in_range')!.args.range);
  await page.getByRole('button',{name:'下一个月'}).click();
@@ -68,7 +111,7 @@ test('uses offline keyboard-accessible date and time controls with trapped focus
  const startTime=page.getByRole('button',{name:'开始时间'});
  await startTime.click();
  await page.getByRole('spinbutton',{name:'分钟',exact:true}).fill('17');
- await page.getByRole('button',{name:'确定',exact:true}).click();
+ await page.getByRole('spinbutton',{name:'分钟',exact:true}).press('Enter');
  await expect(startTime).toContainText(':17');
  const confirmed=await startTime.innerText();
  await startTime.click();

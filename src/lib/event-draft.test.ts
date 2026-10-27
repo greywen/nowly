@@ -76,7 +76,7 @@ describe('event draft helpers', () => {
       category: '',
       color: '',
       note: '',
-      reminders: [],
+      reminders: [15],
       recurrence: null
     });
   });

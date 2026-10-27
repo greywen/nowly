@@ -35,6 +35,53 @@ function props(overrides: Record<string, unknown> = {}) {
 }
 
 describe('EventModal', () => {
+  it('defaults new reminders to 15 minutes without changing existing reminder-free events', async () => {
+    const user = userEvent.setup(); const createEvent = vi.fn().mockResolvedValue(existing);
+    const { unmount } = render(<EventModal {...props({ createEvent })} />);
+    expect(screen.getByRole('button', { name:'15 分钟前' })).toHaveAttribute('aria-pressed', 'true');
+    await user.type(screen.getByLabelText('日程标题'), '默认提醒');
+    await user.click(screen.getByRole('button', { name:'保存' }));
+    await waitFor(() => expect(createEvent).toHaveBeenCalledTimes(1));
+    expect(createEvent.mock.calls[0][0].reminders).toEqual([15]);
+    unmount();
+    render(<EventModal {...props({ mode:{ type:'edit', event:existing } })} />);
+    expect(screen.getByRole('button', { name:'15 分钟前' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByText('无提醒')).toBeInTheDocument();
+    await screen.findByLabelText('备注');
+  });
+
+  it('shares recent start/end selections and commits calendar shortcuts without footer actions', async () => {
+    localStorage.removeItem('nowly-calendar-recent-times-v1');
+    const user = userEvent.setup();
+    render(<EventModal {...props()} />);
+    await user.click(screen.getByRole('button', { name:'开始时间' }));
+    const popup = screen.getByRole('dialog', { name:'选择开始时间' });
+    expect(within(popup).queryByRole('button', { name:'确定' })).not.toBeInTheDocument();
+    fireEvent.change(within(popup).getByRole('spinbutton', { name:'小时' }), { target:{ value:'23' } });
+    fireEvent.change(within(popup).getByRole('spinbutton', { name:'分钟' }), { target:{ value:'17' } });
+    fireEvent.keyDown(within(popup).getByRole('spinbutton', { name:'分钟' }), { key:'Enter' });
+    expect(screen.getByRole('button', { name:'开始时间' })).toHaveTextContent('23:17');
+    expect(screen.getByRole('button', { name:'结束时间' })).toHaveTextContent('00:17');
+    await user.click(screen.getByRole('button', { name:'结束时间' }));
+    const endPopup = screen.getByRole('dialog', { name:'选择结束时间' });
+    expect(within(endPopup).getByRole('button', { name:'23:17' })).toBeInTheDocument();
+    expect(within(endPopup).queryByRole('button', { name:'00:17' })).not.toBeInTheDocument();
+    await user.click(within(endPopup).getByRole('button', { name:'23:17' }));
+    expect(screen.queryByRole('dialog', { name:'选择结束时间' })).not.toBeInTheDocument();
+    localStorage.removeItem('nowly-calendar-recent-times-v1');
+  });
+
+  it('adds distinct custom reminders when the 15-minute default is already selected', async () => {
+    const user = userEvent.setup(); const createEvent = vi.fn().mockResolvedValue(existing);
+    render(<EventModal {...props({ createEvent })} />);
+    await user.click(screen.getByRole('button', { name:'自定义提醒' }));
+    await user.click(screen.getByRole('button', { name:'添加提醒' }));
+    await user.type(screen.getByLabelText('日程标题'), '两个提醒');
+    await user.click(screen.getByRole('button', { name:'保存' }));
+    await waitFor(() => expect(createEvent).toHaveBeenCalledTimes(1));
+    expect(createEvent.mock.calls[0][0].reminders).toEqual([15, 20]);
+  });
+
   it('uses the approved borderless quick-entry hierarchy without descriptive copy', async () => {
     render(<EventModal {...props()} />);
     const lead = document.querySelector('.event-form__lead');
@@ -342,21 +389,19 @@ describe('EventModal', () => {
     await user.type(screen.getByLabelText('日程标题'), '会议');
     await user.click(screen.getByRole('button', { name:'保存' }));
     await waitFor(()=>expect(createEvent).toHaveBeenCalledTimes(1));
-    expect(createEvent.mock.calls[0][0].reminders).toEqual([5]);
+    expect(createEvent.mock.calls[0][0].reminders).toEqual([5, 15]);
   });
 
   it('converts the unit into stored minutes and loads them back', async () => {
     const user=userEvent.setup(); const createEvent=vi.fn().mockResolvedValue(existing);
     render(<EventModal {...props({ createEvent })} />);
     await user.click(screen.getByRole('button', { name:'自定义提醒' }));
-    await user.click(screen.getByRole('button', { name:'添加提醒' }));
     await user.click(screen.getByRole('combobox', { name:'提前单位' }));
     await user.click(screen.getByRole('option', { name:'小时' }));
     await user.type(screen.getByLabelText('日程标题'), '会议');
     await user.click(screen.getByRole('button', { name:'保存' }));
     await waitFor(()=>expect(createEvent).toHaveBeenCalledTimes(1));
-    // 10 小时 = 600 分钟。
-    expect(createEvent.mock.calls[0][0].reminders).toEqual([600]);
+    expect(createEvent.mock.calls[0][0].reminders).toEqual([900]);
   });
 
   it('shows an existing reminder in its coarsest unit and removes it', async () => {

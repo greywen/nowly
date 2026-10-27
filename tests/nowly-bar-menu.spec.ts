@@ -263,7 +263,7 @@ test('live menu order and visibility update without changing Bar geometry', asyn
 test('capture startup failures remain visible and retry without an extra window', async ({ page }) => {
   await installBar(page);
   await page.getByRole('button', { name: 'Nowly', exact: true }).click();
-  await page.getByRole('menuitem', { name: /^截图 Ctrl/ }).click();
+  await page.getByRole('menuitem', { name: '截图', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('Capture startup failed');
   await expect(page.locator('.status-rail')).toHaveAttribute('data-surface', 'menu');
   await page.evaluate(() => Reflect.get(window, '__barTest').setCaptureFails(false));
@@ -288,7 +288,7 @@ for (const language of ['zh', 'en', 'fr', 'es', 'ja', 'ko', 'zh-Hant']) {
     await page.getByRole('button', { name: 'Nowly', exact: true }).click();
     const entries = page.getByRole('menuitem');
     await expect(entries).toHaveCount(5);
-    await expect(page.getByText('Ctrl+Alt+T', { exact: true })).toBeVisible();
+    await expect(page.locator('.bar-menu-panel__keys, .bar-menu-panel__shortcut, .bar-menu-panel__note')).toHaveCount(0);
 
     for (const entry of await entries.all()) {
       const box = (await entry.boundingBox())!;
@@ -299,11 +299,9 @@ for (const language of ['zh', 'en', 'fr', 'es', 'ja', 'ko', 'zh-Hant']) {
       expect(Math.abs(label.x + label.width / 2 - center)).toBeLessThan(1);
       expect(label.y - icon.y - icon.height).toBeCloseTo(8, 0);
       await expect(entry).toHaveCSS('text-align', 'center');
-      for (const detail of await entry.locator('.bar-menu-panel__keys, .bar-menu-panel__note').all()) {
-        const detailBox = (await detail.boundingBox())!;
-        expect(detailBox.y).toBeGreaterThanOrEqual(label.y + label.height - 1);
-        expect(Math.abs(detailBox.x + detailBox.width / 2 - center)).toBeLessThan(1);
-      }
+      const contentCenterY = (icon.y + label.y + label.height) / 2;
+      expect(Math.abs(contentCenterY - box.y - box.height / 2)).toBeLessThan(1);
+      expect(box.height).toBeGreaterThanOrEqual(80);
       expect(await entry.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
     }
     await expect(page.locator('.status-rail__menu')).toHaveCSS('height', '288px');
@@ -319,12 +317,12 @@ test('capture labels stay aligned when one shortcut is unavailable', async ({ pa
   }));
   await page.getByRole('button', { name: 'Nowly', exact: true }).click();
   const entries = page.locator('.bar-menu-panel__item');
-  await expect(entries.last()).toContainText('快捷键不可用');
+  await expect(entries).toHaveText(['截图', '截图历史']);
   const labels = await Promise.all((await entries.all()).map(entry => entry.locator('.bar-menu-panel__label').boundingBox()));
   expect(labels[0]!.y).toBeCloseTo(labels[1]!.y, 0);
 });
 
-test('quick create tiles show optional shortcuts and open the create window', async ({ page }) => {
+test('quick create tiles show only names and open the create window', async ({ page }) => {
   await installBar(page);
   await page.getByRole('button', { name: 'Nowly', exact: true }).click();
   const create = page.getByRole('group', { name: '快速创建' });
@@ -334,9 +332,7 @@ test('quick create tiles show optional shortcuts and open the create window', as
   // Three equal tiles share one row.
   expect(new Set(boxes.map(box => Math.round(box!.y))).size).toBe(1);
   expect(new Set(boxes.map(box => Math.round(box!.width))).size).toBe(1);
-  await expect(tiles.nth(0)).toHaveText('日程');
-  await expect(tiles.nth(1)).toContainText('Ctrl+Alt+T');
-  await expect(tiles.nth(2)).toContainText('快捷键不可用');
+  await expect(tiles).toHaveText(['日程', '四象限任务', '便签']);
   expect(await page.locator('.bar-menu-panel__body').evaluate(element => element.scrollHeight <= element.clientHeight)).toBe(true);
 
   await tiles.nth(1).click();
@@ -345,34 +341,27 @@ test('quick create tiles show optional shortcuts and open the create window', as
   await expect(page.getByRole('menu')).toHaveCount(0);
 });
 
-test('English menu shows names and configured shortcuts without horizontal overflow', async ({ page }) => {
+test('English menu shows only names without horizontal overflow', async ({ page }) => {
   await installBar(page, 'en');
   await page.getByRole('button', { name: 'Nowly', exact: true }).click();
   await expect(page.getByRole('menu', { name: 'Function menu' })).toBeVisible();
   await expect(page.getByRole('menuitem')).toHaveCount(5);
   await expect(page.getByRole('group', { name: 'Quick create' })).toBeVisible();
   await expect(page.getByRole('group', { name: 'Screenshots' })).toBeVisible();
-  await expect(page.getByText('Ctrl+Alt+A', { exact: true })).toBeVisible();
-  await expect(page.getByText('Ctrl+Alt+H', { exact: true })).toBeVisible();
-  await expect(page.getByText('Ctrl+Alt+T', { exact: true })).toBeVisible();
-  await expect(page.getByText('Shortcut unavailable', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Ctrl\+Alt\+/)).toHaveCount(0);
+  await expect(page.getByText('Shortcut unavailable', { exact: true })).toHaveCount(0);
   expect(await page.locator('.bar-menu-panel__body').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
 });
 
 test('long menu text stops at two lines with an ellipsis', async ({ page }) => {
   await installBar(page, 'fr');
-  // Deliberately longer than any real shortcut so the tile text needs more than two lines.
-  const long = 'Ctrl+Alt+Shift+Win+F12 Ctrl+Alt+Shift+Win+F11';
-  await page.evaluate(shortcut => Reflect.get(window, '__barTest').setShortcuts({
-    createTask: { shortcut, registered: true, error: null }
-  }), long);
+  const long = 'Un nom de fonctionnalité exceptionnellement long pour vérifier la mise en page';
   await page.getByRole('button', { name: 'Nowly', exact: true }).click();
-  // The full text stays in the accessible name.
-  const tile = page.getByRole('menuitem', { name: new RegExp(long.replace(/\+/g, '\\+')) });
-  await expect(tile).toBeVisible();
-  const keys = tile.locator('.bar-menu-panel__keys');
-  await expect(keys).toHaveText(long);
-  const metrics = await keys.evaluate(element => {
+  const tile = page.getByRole('menuitem').nth(1);
+  const label = tile.locator('.bar-menu-panel__label');
+  await label.evaluate((element, text) => { element.textContent = text; }, long);
+  await expect(tile).toHaveAccessibleName(long);
+  const metrics = await label.evaluate(element => {
     const style = getComputedStyle(element);
     const line = parseFloat(style.lineHeight);
     const shown = element.getBoundingClientRect().height;
@@ -385,7 +374,7 @@ test('long menu text stops at two lines with an ellipsis', async ({ page }) => {
   expect(metrics.clamp).toBe('2');
   expect(metrics.shown).toBe(2);
   expect(metrics.natural).toBeGreaterThan(2);
-  const texts = page.locator('.bar-menu-panel__label, .bar-menu-panel__note, .bar-menu-panel__keys, .bar-menu-panel__shortcut > span');
+  const texts = page.locator('.bar-menu-panel__label');
   for (const text of await texts.all()) {
     expect(await text.evaluate(element =>
       Math.round(element.clientHeight / parseFloat(getComputedStyle(element).lineHeight)))).toBeLessThanOrEqual(2);

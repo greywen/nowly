@@ -1,8 +1,7 @@
 import { Clock3 } from '../components/icons';
 import { type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { t } from '../i18n';
-
-const QUICK_TIMES = ['09:00', '09:30', '12:00', '14:00', '15:00', '18:00'] as const;
+import { calendarQuickTimes, DEFAULT_QUICK_TIMES, rememberCalendarTime } from '../lib/recent-calendar-times';
 
 type TimePickerProps = {
   id: string;
@@ -11,6 +10,7 @@ type TimePickerProps = {
   value: string;
   errorId?: string;
   disabled?: boolean;
+  immediate?: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onChange: (value: string) => void;
@@ -27,40 +27,61 @@ function parseTime(value: string, fallback: Date): TimeValue {
     : { hour: pad(fallback.getHours()), minute: pad(fallback.getMinutes()) };
 }
 
-export function TimePicker({ id, label, hideLabel = false, value, errorId, disabled = false,
+export function TimePicker({ id, label, hideLabel = false, value, errorId, disabled = false, immediate = false,
   open, onOpenChange, onChange, now = () => new Date() }: TimePickerProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const popupRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [time, setTime] = useState(() => parseTime(value, now()));
+  const timeRef = useRef(time);
+  const lastEmittedRef = useRef(value);
+  const hasChosenRef = useRef(false);
+  const hasEditedRef = useRef(false);
+  const [quickTimes, setQuickTimes] = useState(() => immediate ? calendarQuickTimes() : DEFAULT_QUICK_TIMES);
   const [position, setPosition] = useState<{ left: number; top: number; width: number; maxHeight: number }>();
   const [showError, setShowError] = useState(false);
   const composingRef = useRef(false);
   const activeRef = useRef(false);
   const shouldRestoreFocusRef = useRef(false);
   const dialogId = id + '-dialog';
+  function setDraft(next: TimeValue, edited = false) {
+    if (edited) hasEditedRef.current = true;
+    timeRef.current = next; setTime(next);
+  }
+  function applyTime(next: TimeValue) {
+    if (!immediate || !activeRef.current || !hasEditedRef.current || disabled || composingRef.current || !valid(next.hour, 23) || !valid(next.minute, 59)) return;
+    const formatted = pad(Number(next.hour)) + ':' + pad(Number(next.minute));
+    if (formatted !== lastEmittedRef.current) {
+      lastEmittedRef.current = formatted; hasChosenRef.current = true; onChange(formatted);
+    }
+  }
   function close() {
+    if (immediate && activeRef.current && hasChosenRef.current) rememberCalendarTime(lastEmittedRef.current);
     activeRef.current = false; shouldRestoreFocusRef.current = true; onOpenChange(false);
   }
   function commit(next: string) {
     if (!activeRef.current || disabled) return;
-    activeRef.current = false; onChange(next); close();
+    if (immediate) {
+      hasEditedRef.current = true; applyTime(parseTime(next, now())); hasChosenRef.current = true;
+    } else onChange(next);
+    close();
   }
   function confirm() {
     if (composingRef.current) return;
-    if (!valid(time.hour, 23) || !valid(time.minute, 59)) {
+    const current = timeRef.current;
+    if (!valid(current.hour, 23) || !valid(current.minute, 59)) {
       setShowError(true);
-      popupRef.current?.querySelector<HTMLInputElement>(!valid(time.hour, 23) ? '[data-unit="hour"]' : '[data-unit="minute"]')?.focus();
+      popupRef.current?.querySelector<HTMLInputElement>(!valid(current.hour, 23) ? '[data-unit="hour"]' : '[data-unit="minute"]')?.focus();
       return;
     }
-    commit(pad(Number(time.hour)) + ':' + pad(Number(time.minute)));
+    commit(pad(Number(current.hour)) + ':' + pad(Number(current.minute)));
   }
   function adjust(unit: 'hour' | 'minute', offset: number) {
-    setTime(current => {
-      const cycle = unit === 'hour' ? 24 : 60;
-      const base = valid(current[unit], cycle - 1) ? Number(current[unit]) : 0;
-      return { ...current, [unit]: pad(((base + offset) % cycle + cycle) % cycle) };
-    });
+    const current = timeRef.current;
+    const cycle = unit === 'hour' ? 24 : 60;
+    const base = valid(current[unit], cycle - 1) ? Number(current[unit]) : 0;
+    const next = { ...current, [unit]: pad(((base + offset) % cycle + cycle) % cycle) };
+    setDraft(next, true); applyTime(next);
   }
   function handleSpinKey(event: KeyboardEvent<HTMLInputElement>, unit: 'hour' | 'minute') {
     if (event.nativeEvent.isComposing || composingRef.current) return;
@@ -69,17 +90,22 @@ export function TimePicker({ id, label, hideLabel = false, value, errorId, disab
     if (event.key in offsets) { event.preventDefault(); adjust(unit, offsets[event.key]); }
     else if (event.key === 'Home' || event.key === 'End') {
       event.preventDefault(); const next = event.key === 'Home' ? '00' : unit === 'hour' ? '23' : '59';
-      setTime(current => ({ ...current, [unit]: next }));
+      const updated = { ...timeRef.current, [unit]: next };
+      setDraft(updated, true); applyTime(updated);
     }
   }
   useEffect(() => {
     if (!open || disabled) { activeRef.current = false; return; }
-    activeRef.current = true; setTime(parseTime(value, now())); setShowError(false);
+    activeRef.current = true; lastEmittedRef.current = value; hasChosenRef.current = false; hasEditedRef.current = false;
+    setDraft(parseTime(value, now())); setShowError(false);
+    setQuickTimes(immediate ? calendarQuickTimes() : DEFAULT_QUICK_TIMES);
     popupRef.current?.querySelector<HTMLInputElement>('input')?.focus({ preventScroll: true });
-    function outside(event: PointerEvent) { if (!rootRef.current?.contains(event.target as Node)) close(); }
+    function outside(event: PointerEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) { applyTime(timeRef.current); close(); }
+    }
     document.addEventListener('pointerdown', outside);
     return () => { activeRef.current = false; document.removeEventListener('pointerdown', outside); };
-  }, [open, disabled]);
+  }, [open, disabled, immediate]);
   useEffect(() => {
     if (!open && shouldRestoreFocusRef.current) {
       shouldRestoreFocusRef.current = false; triggerRef.current?.focus({ preventScroll: true });
@@ -154,9 +180,13 @@ export function TimePicker({ id, label, hideLabel = false, value, errorId, disab
                   aria-invalid={showError && !valid(time[unit], index ? 59 : 23) || undefined}
                   aria-describedby={showError && !valid(time[unit], index ? 59 : 23) ? id + '-error' : undefined}
                   className="time-picker__value" value={time[unit]} onFocus={event => event.target.select()} onClick={event => event.currentTarget.select()}
-                  onChange={event => { const next = event.target.value; setTime(current => ({ ...current, [unit]: next })); if (!composingRef.current) setShowError(true); }}
+                  onChange={event => { setDraft({ ...timeRef.current, [unit]: event.target.value }, true); if (!composingRef.current) setShowError(true); }}
                   onCompositionStart={() => { composingRef.current = true; }} onCompositionEnd={() => { composingRef.current = false; setShowError(true); }}
-                  onBlur={() => { if (valid(time[unit], index ? 59 : 23)) setTime(current => ({ ...current, [unit]: pad(Number(current[unit])) })); }}
+                  onBlur={() => {
+                    if (composingRef.current || !valid(timeRef.current[unit], index ? 59 : 23)) return;
+                    const next = { ...timeRef.current, [unit]: pad(Number(timeRef.current[unit])) };
+                    setDraft(next); applyTime(next);
+                  }}
                   onKeyDown={event => handleSpinKey(event, unit)} />
                 <button type="button" aria-label={t(index ? 'timePicker.increaseMinute' : 'timePicker.increaseHour')} onClick={() => adjust(unit, index ? 5 : 1)}><span aria-hidden="true">+</span></button>
               </div>
@@ -165,15 +195,15 @@ export function TimePicker({ id, label, hideLabel = false, value, errorId, disab
           </div>
           {showError && (!valid(time.hour, 23) || !valid(time.minute, 59)) ? <p id={id + '-error'} role="alert" className="time-picker__error">{t('timePicker.invalid')}</p> : null}
           <div className="time-picker__quick-values">
-            {QUICK_TIMES.map(quickTime => <button type="button" key={quickTime}
+            {quickTimes.map(quickTime => <button type="button" key={quickTime}
               aria-pressed={quickTime === time.hour + ':' + time.minute}
-              onClick={() => { setTime(parseTime(quickTime, now())); setShowError(false); }}>{quickTime}</button>)}
+              onClick={() => { if (immediate) commit(quickTime); else setDraft(parseTime(quickTime, now())); setShowError(false); }}>{quickTime}</button>)}
           </div>
-          <div className="time-picker__footer">
+          {!immediate ? <div className="time-picker__footer">
             <button type="button" aria-label={t('timePicker.clear')} onClick={() => commit('')}>{t('timePicker.clearShort')}</button>
-            <button type="button" onClick={() => { setTime(parseTime('', now())); setShowError(false); }}>{t('timePicker.now')}</button>
+            <button type="button" onClick={() => { setDraft(parseTime('', now())); setShowError(false); }}>{t('timePicker.now')}</button>
             <button type="button" className="time-picker__confirm" onClick={confirm}>{t('timePicker.confirm')}</button>
-          </div>
+          </div> : null}
         </div>
       ) : null}
     </div>

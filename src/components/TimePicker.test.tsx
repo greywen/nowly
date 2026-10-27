@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TimePicker } from './TimePicker';
 
 const now = () => new Date(2026, 6, 23, 9, 42);
@@ -11,13 +11,15 @@ function Harness({
   initiallyOpen = false,
   onChange = vi.fn(),
   onOpenChange = vi.fn(),
-  disabled = false
+  disabled = false,
+  immediate = false
 }: {
   initialValue?: string;
   initiallyOpen?: boolean;
   onChange?: (value: string) => void;
   onOpenChange?: (open: boolean) => void;
   disabled?: boolean;
+  immediate?: boolean;
 } = {}) {
   const [value, setValue] = useState(initialValue);
   const [open, setOpen] = useState(initiallyOpen);
@@ -28,6 +30,7 @@ function Harness({
       value={value}
       open={open}
       disabled={disabled}
+      immediate={immediate}
       now={now}
       onOpenChange={(next) => { setOpen(next); onOpenChange(next); }}
       onChange={(next) => { setValue(next); onChange(next); }}
@@ -36,6 +39,130 @@ function Harness({
 }
 
 describe('TimePicker', () => {
+  beforeEach(() => localStorage.clear());
+  afterEach(() => vi.restoreAllMocks());
+
+  it('omits footer actions in immediate calendar mode and commits a shortcut once', async () => {
+    const user = userEvent.setup(); const onChange = vi.fn();
+    render(<Harness initiallyOpen immediate onChange={onChange} />);
+    expect(screen.queryByRole('button', { name: '清除时间' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '现在' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '确定' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '14:00' }));
+    expect(onChange).toHaveBeenCalledExactlyOnceWith('14:00');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '开始时间' })).toHaveFocus();
+  });
+
+  it('immediately applies stepper and keyboard choices while keeping units editable', async () => {
+    const user = userEvent.setup(); const onChange = vi.fn();
+    render(<Harness initialValue="23:55" initiallyOpen immediate onChange={onChange} />);
+    await user.click(screen.getByRole('button', { name: '增加小时' }));
+    expect(onChange).toHaveBeenLastCalledWith('00:55');
+    await user.click(screen.getByRole('button', { name: '增加分钟' }));
+    expect(onChange).toHaveBeenLastCalledWith('00:00');
+    const minute = screen.getByRole('spinbutton', { name: '分钟' });
+    fireEvent.keyDown(minute, { key: 'End' });
+    expect(onChange).toHaveBeenLastCalledWith('00:59');
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    fireEvent.pointerDown(document.body);
+    expect(onChange).toHaveBeenCalledTimes(3);
+  });
+
+  it('applies arbitrary typed minutes on blur without requiring confirmation', () => {
+    const onChange = vi.fn();
+    render(<Harness initiallyOpen immediate onChange={onChange} />);
+    const minute = screen.getByRole('spinbutton', { name: '分钟' });
+    fireEvent.change(minute, { target: { value: '7' } });
+    fireEvent.blur(minute);
+    expect(onChange).toHaveBeenCalledExactlyOnceWith('09:07');
+    expect(minute).toHaveValue('07');
+    fireEvent.keyDown(minute, { key: 'Enter' });
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('commits a valid typed time on outside input but discards an uncommitted Escape draft', async () => {
+    const user = userEvent.setup(); const onChange = vi.fn();
+    render(<Harness initiallyOpen immediate onChange={onChange} />);
+    fireEvent.change(screen.getByRole('spinbutton', { name: '分钟' }), { target: { value: '17' } });
+    fireEvent.pointerDown(document.body);
+    expect(onChange).toHaveBeenCalledExactlyOnceWith('09:17');
+    await user.click(screen.getByRole('button', { name: '开始时间' }));
+    fireEvent.change(screen.getByRole('spinbutton', { name: '分钟' }), { target: { value: '42' } });
+    await user.keyboard('{Escape}');
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: '开始时间' })).toHaveTextContent('09:17');
+  });
+
+  it('does not commit invalid or composing calendar input', () => {
+    const onChange = vi.fn();
+    render(<Harness initiallyOpen immediate onChange={onChange} />);
+    const minute = screen.getByRole('spinbutton', { name: '分钟' });
+    fireEvent.change(minute, { target: { value: '60' } });
+    fireEvent.blur(minute);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(minute).toHaveAttribute('aria-invalid', 'true');
+    fireEvent.compositionStart(minute);
+    fireEvent.change(minute, { target: { value: '17' } });
+    fireEvent.keyDown(minute, { key: 'Enter', isComposing: true });
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.compositionEnd(minute);
+    fireEvent.keyDown(minute, { key: 'Enter' });
+    expect(onChange).toHaveBeenCalledExactlyOnceWith('09:17');
+  });
+
+  it('persists the six latest distinct calendar choices across remounts', async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(<Harness immediate />);
+    for (const time of ['08:17', '10:22', '11:03', '13:41', '16:57', '19:08', '21:34', '13:41']) {
+      await user.click(screen.getByRole('button', { name: '开始时间' }));
+      const [hour, minute] = time.split(':');
+      fireEvent.change(screen.getByRole('spinbutton', { name: '小时' }), { target: { value: hour } });
+      fireEvent.change(screen.getByRole('spinbutton', { name: '分钟' }), { target: { value: minute } });
+      fireEvent.keyDown(screen.getByRole('spinbutton', { name: '分钟' }), { key: 'Enter' });
+    }
+    unmount();
+    const { container } = render(<Harness immediate initiallyOpen />);
+    expect(Array.from(container.querySelectorAll('.time-picker__quick-values button'), node => node.textContent))
+      .toEqual(['13:41', '21:34', '19:08', '16:57', '11:03', '10:22']);
+    expect(screen.queryByRole('button', { name: '08:17' })).not.toBeInTheDocument();
+  });
+
+  it('fills unused recent slots with defaults and sanitizes stored history', () => {
+    localStorage.setItem('nowly-calendar-recent-times-v1', JSON.stringify(['08:17', '08:17', '24:00', 42, '09:3', '23:59']));
+    const { container } = render(<Harness immediate initiallyOpen />);
+    expect(Array.from(container.querySelectorAll('.time-picker__quick-values button'), node => node.textContent))
+      .toEqual(['08:17', '23:59', '09:00', '09:30', '12:00', '14:00']);
+  });
+
+  it('does not select the fallback clock time when an empty calendar picker is merely closed', async () => {
+    const onChange = vi.fn();
+    render(<Harness initialValue="" immediate initiallyOpen onChange={onChange} />);
+    fireEvent.pointerDown(document.body);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(localStorage.getItem('nowly-calendar-recent-times-v1')).toBeNull();
+  });
+
+  it('remembers only the final stepper selection rather than intermediate adjustments', async () => {
+    const user = userEvent.setup();
+    render(<Harness immediate initiallyOpen />);
+    await user.click(screen.getByRole('button', { name:'增加小时' }));
+    await user.click(screen.getByRole('button', { name:'增加小时' }));
+    await user.click(screen.getByRole('button', { name:'增加分钟' }));
+    fireEvent.pointerDown(document.body);
+    expect(JSON.parse(localStorage.getItem('nowly-calendar-recent-times-v1')!)).toEqual(['11:35']);
+  });
+
+  it('still commits calendar choices when preference storage is unavailable', async () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('unavailable'); });
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('unavailable'); });
+    const user = userEvent.setup(); const onChange = vi.fn();
+    render(<Harness immediate initiallyOpen onChange={onChange} />);
+    await user.click(screen.getByRole('button', { name: '14:00' }));
+    expect(onChange).toHaveBeenCalledExactlyOnceWith('14:00');
+  });
+
   it('places each editable unit between its decrease and increase controls', () => {
     const { container } = render(<Harness initiallyOpen />);
     for (const stepper of container.querySelectorAll('.time-picker__stepper')) {

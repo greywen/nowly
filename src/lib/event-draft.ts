@@ -32,6 +32,7 @@ export type EventFieldErrors = Partial<
 export const MAX_REMINDER_MINUTES = 4 * 7 * 24 * 60;
 // The most reminders a single event may carry, matching the backend cap.
 export const MAX_REMINDERS = 5;
+export const DEFAULT_REMINDER_MINUTES = 15;
 
 function pad(value: number) {
   return String(value).padStart(2, '0');
@@ -81,7 +82,7 @@ export function createEventDraft(dateIso: string, now: Date): EventFormDraft {
     category: '',
     color: '',
     note: '',
-    reminders: [],
+    reminders: [DEFAULT_REMINDER_MINUTES],
     recurrence: null
   };
 }

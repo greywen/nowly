@@ -1,10 +1,8 @@
 import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
-import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { CalendarDays, Crop, FileText, History, LayoutGrid, Sparkles, type AppIcon } from '../../components/icons';
 import { useTranslation } from '../../i18n';
 import { localizedRepositoryErrorMessage } from '../../i18n/localize-error';
-import { normalizeShortcutStatus, type ScreenshotShortcutStatus, type ShortcutBinding } from '../../screenshot-history/client';
 import { SurfaceIconProvider } from '../../screenshot-history/SurfaceIconProvider';
 import { groupBarMenu, quickCreateKindOf, type BarFeatureId, type BarMenuItem } from '../bar-menu';
 
@@ -23,18 +21,6 @@ const icons: Record<BarFeatureId, AppIcon> = {
 };
 const groupLabels = { create: 'barMenu.groupCreate', capture: 'barMenu.groupCapture' } as const;
 
-function bindingOf(status: ScreenshotShortcutStatus | null, id: BarFeatureId): ShortcutBinding | null {
-  if (!status) return null;
-  switch (id) {
-    case 'screenshot': return status.screenshot;
-    case 'screenshotHistory': return status.history;
-    case 'createEvent': return status.createEvent;
-    case 'createTask': return status.createTask;
-    case 'createNote': return status.createNote;
-    default: return null;
-  }
-}
-
 export function BarMenuPanel({ active, items }: { active: boolean; items: readonly BarMenuItem[] }) {
   const { t } = useTranslation();
   const groupId = useId();
@@ -45,38 +31,15 @@ export function BarMenuPanel({ active, items }: { active: boolean; items: readon
   const focusPending = useRef(false);
   const buttons = useRef<Array<HTMLButtonElement | null>>([]);
   const body = useRef<HTMLDivElement>(null);
-  const [shortcuts, setShortcuts] = useState<ScreenshotShortcutStatus | null>(null);
-  const [statusFailed, setStatusFailed] = useState(false);
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
   const busy = useRef(false);
   const mounted = useRef(true);
-  const requestId = useRef(0);
   const failedAction = useRef<BarFeatureId | null>(null);
-  const refresh = useCallback(() => {
-    const request = ++requestId.current;
-    setStatusFailed(false);
-    setShortcuts(null);
-    void invoke<unknown>('screenshot_shortcut_status').then(normalizeShortcutStatus).then(status => {
-      if (mounted.current && request === requestId.current) setShortcuts(status);
-    }).catch(() => {
-      if (mounted.current && request === requestId.current) setStatusFailed(true);
-    });
-  }, []);
   useEffect(() => {
     mounted.current = true;
-    return () => { mounted.current = false; requestId.current++; };
+    return () => { mounted.current = false; };
   }, []);
-  useEffect(() => {
-    if (!active) return;
-    refresh();
-    let disposed = false;
-    let remove: (() => void) | undefined;
-    void listen('nowly-data-changed', refresh).then(unlisten => {
-      if (disposed) unlisten(); else remove = unlisten;
-    }).catch(() => { if (!disposed) setStatusFailed(true); });
-    return () => { disposed = true; remove?.(); requestId.current++; };
-  }, [active, refresh]);
   useEffect(() => {
     if (!active) focusPending.current = false;
     if (active && (!wasActive.current || focusPending.current || document.activeElement === document.body)) {
@@ -93,8 +56,8 @@ export function BarMenuPanel({ active, items }: { active: boolean; items: readon
   }, [active, pending, visibleIds]);
   useEffect(() => {
     // The grouped menu has little spare height, so keep a new alert in view.
-    if ((error || statusFailed) && body.current) body.current.scrollTop = body.current.scrollHeight;
-  }, [error, statusFailed]);
+    if (error && body.current) body.current.scrollTop = body.current.scrollHeight;
+  }, [error]);
 
   async function activate(id: BarFeatureId) {
     if (busy.current) return;
@@ -133,24 +96,12 @@ export function BarMenuPanel({ active, items }: { active: boolean; items: readon
   function entry(item: BarMenuItem, tile: boolean) {
     const index = visible.indexOf(item);
     const Icon = icons[item.id];
-    const binding = bindingOf(shortcuts, item.id);
-    const unavailable = binding && !binding.registered ? t('barMenu.shortcutUnavailable') : '';
-    const label = <span className="bar-menu-panel__label">{t(`barMenu.${item.id}`)}</span>;
-    const keys = binding && <span className="bar-menu-panel__keys">{binding.shortcut}</span>;
     return <button key={item.id} type="button" role="menuitem"
       className={tile ? 'bar-menu-panel__tile' : 'bar-menu-panel__item'}
       ref={element => { buttons.current[index] = element; }} disabled={pending}
       onClick={() => void activate(item.id)}>
       <Icon size={18} />
-      {/* Quick-create shortcuts are optional, so a tile shows keys only once one is set. */}
-      {tile ? <>{label}{keys}{unavailable && <span className="bar-menu-panel__note">{unavailable}</span>}</>
-        : <span className="bar-menu-panel__text">
-          {label}
-          <span className="bar-menu-panel__shortcut">
-            {keys || <span>{t(statusFailed ? 'barMenu.shortcutUnavailable' : 'barMenu.loadingShortcut')}</span>}
-            {unavailable && <span>{unavailable}</span>}
-          </span>
-        </span>}
+      <span className="bar-menu-panel__label">{t(`barMenu.${item.id}`)}</span>
     </button>;
   }
 
@@ -167,9 +118,6 @@ export function BarMenuPanel({ active, items }: { active: boolean; items: readon
         })}
       </div>
       {!visible.length && <p className="bar-menu-panel__empty">{t('barMenu.empty')}</p>}
-      {statusFailed && <p className="bar-menu-panel__error" role="alert">
-        {t('barMenu.statusFailed')} <button type="button" onClick={refresh}>{t('common.retry')}</button>
-      </p>}
       {error && <p className="bar-menu-panel__error" role="alert">
         {error} <button type="button" disabled={pending} onClick={() => {
           if (failedAction.current) void activate(failedAction.current);

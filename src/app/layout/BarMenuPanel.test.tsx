@@ -32,7 +32,6 @@ describe('Bar function menu', () => {
 
   it('hides the AI entry even when an existing preference enables it', async () => {
     render(<BarMenuPanel active items={[{ id: 'assistant', visible: true }]} />);
-    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith('screenshot_shortcut_status'));
     expect(screen.queryByRole('menuitem')).not.toBeInTheDocument();
     expect(screen.getByText('暂无显示的功能，请在设置 → Nowly Bar 中启用。')).toBeVisible();
     expect(invokeMock).not.toHaveBeenCalledWith('toggle_nowly_panel');
@@ -76,15 +75,17 @@ describe('Bar function menu', () => {
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith('open_quick_create', { kind: 'event' }));
   });
 
-  it('shows a tile shortcut only when one is set', async () => {
+  it('renders only icons and names without querying shortcut status', async () => {
     render(<BarMenuPanel active items={DEFAULT_BAR_MENU} />);
-    const task = screen.getByRole('menuitem', { name: /四象限任务/ });
-    await waitFor(() => expect(task).toHaveTextContent('Ctrl+Alt+T'));
-    expect(task).not.toHaveTextContent('快捷键不可用');
-    const note = screen.getByRole('menuitem', { name: /便签/ });
-    expect(note).toHaveTextContent('Ctrl+Alt+N');
-    expect(note).toHaveTextContent('快捷键不可用');
-    expect(screen.getByRole('menuitem', { name: /日程/ })).toHaveTextContent(/^日程$/);
+    await act(async () => undefined);
+    const items = screen.getAllByRole('menuitem');
+    const labels = ['日程', '四象限任务', '便签', '截图', '截图历史'];
+    items.forEach((item, index) => {
+      expect(item).toHaveTextContent(new RegExp(`^${labels[index]}$`));
+      expect(item).toHaveAccessibleName(labels[index]);
+      expect(item.querySelector('svg')).toBeInTheDocument();
+    });
+    expect(invokeMock).not.toHaveBeenCalledWith('screenshot_shortcut_status');
   });
 
   it('moves focus through every visible entry in visual order', async () => {
@@ -120,8 +121,7 @@ describe('Bar function menu', () => {
     expect(items[0]).toHaveTextContent('截图历史');
     expect(items[1]).toHaveTextContent('截图');
     expect(items[0]).toHaveFocus();
-    expect(items[0]).toHaveTextContent('Ctrl+Alt+H');
-    expect(items[0]).toHaveTextContent('快捷键不可用');
+    expect(items[0]).toHaveAccessibleName('截图历史');
     fireEvent.keyDown(items[0], { key: 'ArrowDown' });
     expect(items[1]).toHaveFocus();
     fireEvent.keyDown(items[1], { key: 'Home' });
@@ -179,11 +179,13 @@ describe('Bar function menu', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(t('nativeError.system_error'));
   });
 
-  it('reports shortcut status failure without disabling feature execution', async () => {
+  it('does not depend on shortcut status to execute a feature', async () => {
     invokeMock.mockImplementation((command: string) => command === 'screenshot_shortcut_status'
       ? Promise.reject(new Error('Unavailable')) : Promise.resolve(null));
     render(<BarMenuPanel active items={DEFAULT_BAR_MENU} />);
-    expect(await screen.findByRole('alert')).toHaveTextContent('无法读取快捷键');
+    await act(async () => undefined);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(invokeMock).not.toHaveBeenCalledWith('screenshot_shortcut_status');
     const history = screen.getByRole('menuitem', { name: /截图历史/ });
     expect(history).toBeEnabled();
     fireEvent.click(history);

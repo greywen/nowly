@@ -14,7 +14,7 @@
 | 便签、日程、任务等富文本附件 | 应用数据目录 `attachments` 下的文件，数据库保存引用/元数据；既有附件上限为 1 MiB |
 | 贴纸图片 | 应用数据目录 `stickers` 下的文件，画布与资源元数据在 SQLite |
 | 最终截图 | 系统 `图片\Nowly\Screenshots` 下的 PNG；尊重系统图片目录重定向；SQLite 保存元数据，缩略图缓存独立且可重建 |
-| 部分界面偏好 | WebView localStorage，例如模糊程度与欢迎引导状态 |
+| 部分界面偏好 | WebView localStorage，例如模糊程度、欢迎引导状态与日历最近选择的 6 个时间 |
 
 浏览器开发后端与桌面存储隔离：多数模拟记录使用 localStorage，贴纸作品及图片使用 IndexedDB，富文本附件字节只留在内存。浏览器数据不是桌面的 SQLite，也不具备完整原生功能。
 

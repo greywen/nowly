@@ -14,7 +14,7 @@ This describes the current source implementation, not a promise that every featu
 | Rich-text attachments (including notes, events and tasks) | Files in application-data `attachments`; database references/metadata; the existing attachment limit is 1 MiB |
 | Sticker images | Files in application-data `stickers`; canvas and asset metadata in SQLite |
 | Final screenshots | PNG files in the system `Pictures\Nowly\Screenshots` directory, which follows redirected Pictures locations; metadata in SQLite and separate regenerable thumbnail caches |
-| Some UI preferences | WebView local storage, including blur and onboarding state |
+| Some UI preferences | WebView local storage, including blur, onboarding state and the six most recently selected calendar times |
 
 The browser development backend is separate: most simulated records use localStorage, sticker artwork/images use IndexedDB, and rich-text attachment bytes are held in memory. Browser data is not the desktop SQLite database and browser mode does not implement the full native feature set.
 

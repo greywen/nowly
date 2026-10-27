@@ -15,7 +15,15 @@ The ordinary window, wallpaper, tray, quick panel and fullscreen focus serve dif
 - **Monthly calendar** — events with times, colors, and per-day detail views, so
   today's schedule is always in sight. Create a category directly from the event
   form's category selector; it is selected with its color immediately, and the
-  event can be saved without closing or reopening the form.
+  event can be saved without closing or reopening the form. New events default to
+  a 15-minute reminder; existing reminders are unchanged and reminders can be removed.
+  Calendar time panels have no Clear, Now or Confirm buttons: shortcuts apply and
+  close immediately, steppers and arrow keys apply immediately, and typed values
+  apply on blur or Enter (Enter also closes). Outside clicks apply valid input;
+  Escape discards only uncommitted input, without undoing applied choices.
+  Start and end share the six most recently selected distinct times, saved locally
+  in most-recent-first order. Unused slots use common defaults; automatically
+  calculated end times are not remembered.
 - **Eisenhower matrix** — sort tasks across the urgent/important quadrants and
   keep the "do it now" quadrant honest.
 - **Focus timer** — countdown sessions with a distraction-free fullscreen mode
@@ -50,9 +58,10 @@ The ordinary window, wallpaper, tray, quick panel and fullscreen focus serve dif
   accept dates: turn repeat off to ring once at the next selected local time, or
   select weekdays for repeating alarms (default: current local time when the form
   opens, Monday–Friday).
-  Alarm and calendar time pickers accept any minute from 00 to 59. Input, shortcuts,
-  and Now remain drafts until Confirm or Enter; Escape or an outside click cancels
-  unconfirmed edits. Invalid times or an empty repeat weekday selection are not saved.
+  Alarm time pickers accept any minute from 00 to 59 and retain confirmation mode.
+  Input, fixed shortcuts, and Now remain drafts until Confirm or Enter; Escape or
+  an outside click cancels unconfirmed edits. Invalid times or an empty repeat
+  weekday selection are not saved.
   Upgrading to this date-free alarm format clears old alarms, alarm notices, and
   alarm scheduler state once; calendar events, tasks, focus records, clocks, and
   other settings are retained.
@@ -162,7 +171,7 @@ Pending notifications, open reminder/menu/AI/history panels, keyboard focus with
 
 ### Nowly Bar function menu
 
-Click the **Nowly Bar Logo** to open the function menu. It has two groups: **Quick create** (Event, Matrix task, Note) and **Screenshots** (Screenshot, Screenshot history). Long names and shortcuts wrap to at most two lines and end with an ellipsis. Arrow keys move through the items in display order; Home and End jump to the first and last item.
+Click the **Nowly Bar Logo** to open the function menu. It has two groups: **Quick create** (Event, Matrix task, Note) and **Screenshots** (Screenshot, Screenshot history). Each item shows only an icon and name, centered together horizontally and vertically, without shortcut labels. Long names wrap to at most two lines and end with an ellipsis. Arrow keys move through the items in display order; Home and End jump to the first and last item.
 
 Configure visibility and the order within each group under **Settings → Notifications → Nowly Bar → Function menu**; the group order is fixed. Every item is visible by default, including after an upgrade. A group whose items are all hidden is not shown. You may hide every item; the menu then explains how to enable them again. Hiding an item only removes its menu entry; shortcuts continue to work.
 
