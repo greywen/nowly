@@ -189,7 +189,7 @@ Under **Settings → Shortcuts → Quick create**, you can record global shortcu
 
 ### Screenshots and history
 
-Choose Screenshot or Screenshot history in the **Screenshots** group of the function menu. Global shortcuts default to **Ctrl+Alt+A** for screenshots and **Ctrl+Alt+H** for screenshot history; change them under **Settings → Shortcuts**. Conflicts are reported without preventing app startup.
+Choose Screenshot or Screenshot history in the **Screenshots** group of the function menu. Global shortcuts default to **Ctrl+Alt+A** for screenshots and **Ctrl+Alt+H** for screenshot history. All five shortcuts under **Settings → Shortcuts** work the same way: click an input and press a key combination to record it; use its **×** clear button or press Backspace / Delete in the input to return to **Not set**. Changes take effect after **Save settings**. Clearing unregisters that global shortcut and stays unset when settings reopen or the app restarts; its function menu entry remains available. Set shortcuts must be different. Conflicts are reported without preventing app startup.
 
 **Save** writes directly to the system **Pictures\Nowly\Screenshots** folder instead of opening a Save As dialog. **Copy image and finish** archives the same final PNG before writing the image clipboard. Only cropped, annotated and redacted output is retained; cancelling creates no history. Redirected system Pictures folders are respected.
 

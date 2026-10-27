@@ -268,6 +268,22 @@ mod tests {
     }
 
     #[test]
+    fn cleared_shortcuts_round_trip_without_restoring_screenshot_defaults() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        migrate(&mut connection).unwrap();
+        let mut settings = read_app_settings(&connection).unwrap();
+        crate::screenshot_shortcuts::store_keys(&mut settings, Default::default());
+        let saved = super::write_app_settings(&mut connection, &settings).unwrap();
+        assert_eq!(saved, settings);
+        assert_eq!(read_app_settings(&connection).unwrap(), saved);
+        settings.quick_create_event_shortcut = "Ctrl+Alt+A".into();
+        let saved = super::write_app_settings(&mut connection, &settings).unwrap();
+        assert!(saved.screenshot_shortcut.is_empty());
+        assert!(saved.screenshot_history_shortcut.is_empty());
+        assert_eq!(saved.quick_create_event_shortcut, "Ctrl+Alt+A");
+    }
+
+    #[test]
     fn quick_create_shortcuts_are_optional_but_must_be_valid_and_unique() {
         let mut connection = Connection::open_in_memory().unwrap();
         migrate(&mut connection).unwrap();

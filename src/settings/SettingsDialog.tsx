@@ -41,14 +41,11 @@ export function SettingsDialog({settings,monitors=[],onClose,onSave}:Props){
  const toggle=(key:keyof AppSettings)=>(event:React.ChangeEvent<HTMLInputElement>)=>setDraft(current=>({...current,[key]:event.target.checked}));
  const others=(field:ShortcutField)=>SHORTCUT_FIELDS.filter(other=>other!==field).map(other=>draft[other]);
  async function save(){
-  const screenshotShortcut=normalizeShortcut(draft.screenshotShortcut);
-  const screenshotHistoryShortcut=normalizeShortcut(draft.screenshotHistoryShortcut);
-  // Quick-create shortcuts are optional: an empty value stays unset.
-  const quickCreate=QUICK_CREATE_SHORTCUTS.map(({field})=>draft[field].trim()?normalizeShortcut(draft[field]):'');
-  if(!screenshotShortcut||!screenshotHistoryShortcut||quickCreate.some(value=>value===null)){setError(t('settings.shortcutInvalid'));return;}
-  const bound=[screenshotShortcut,screenshotHistoryShortcut,...quickCreate.filter(Boolean)];
+  const shortcuts=SHORTCUT_FIELDS.map(field=>draft[field].trim()?normalizeShortcut(draft[field]):'');
+  if(shortcuts.some(value=>value===null)){setError(t('settings.shortcutInvalid'));return;}
+  const bound=shortcuts.filter(Boolean);
   if(new Set(bound).size!==bound.length){setError(t('settings.shortcutDuplicate'));return;}
-  const [quickCreateEventShortcut,quickCreateTaskShortcut,quickCreateNoteShortcut]=quickCreate as string[];
+  const [screenshotShortcut,screenshotHistoryShortcut,quickCreateEventShortcut,quickCreateTaskShortcut,quickCreateNoteShortcut]=shortcuts as string[];
   setSaving(true);setError(null);try{await onSave({...draft,screenshotShortcut,screenshotHistoryShortcut,quickCreateEventShortcut,quickCreateTaskShortcut,quickCreateNoteShortcut,quickPanelEnabled:true});onClose();}catch(reason){setError(typeof reason==='object'&&reason!==null&&'field'in reason&&(SHORTCUT_FIELDS as readonly string[]).includes(String(reason.field))?t('settings.shortcutConflict'):errorMessage(reason));}finally{setSaving(false)}
  }
  const tabs:TabItem<SettingsTab>[]=[{id:'interface',label:t('settings.interface')},{id:'desktop',label:t('settings.desktopStartup')},{id:'notifications',label:t('settings.notifications')},{id:'sound',label:t('settings.sound')},{id:'shortcuts',label:t('settings.shortcuts')}];
@@ -87,8 +84,8 @@ export function SettingsDialog({settings,monitors=[],onClose,onSave}:Props){
    </TabPanel>
    <TabPanel idPrefix="settings" tabId="shortcuts" active={tab==='shortcuts'}>
     <div className="shortcut-settings">
-     <ShortcutRecorder id="settings-screenshot-shortcut" label={t('settings.screenshotShortcut')} value={draft.screenshotShortcut} otherValues={others('screenshotShortcut')} disabled={saving} onChange={screenshotShortcut=>setDraft(current=>({...current,screenshotShortcut}))}/>
-     <ShortcutRecorder id="settings-history-shortcut" label={t('settings.screenshotHistoryShortcut')} value={draft.screenshotHistoryShortcut} otherValues={others('screenshotHistoryShortcut')} disabled={saving} onChange={screenshotHistoryShortcut=>setDraft(current=>({...current,screenshotHistoryShortcut}))}/>
+     <ShortcutRecorder id="settings-screenshot-shortcut" label={t('settings.screenshotShortcut')} value={draft.screenshotShortcut} otherValues={others('screenshotShortcut')} optional disabled={saving} onChange={screenshotShortcut=>setDraft(current=>({...current,screenshotShortcut}))}/>
+     <ShortcutRecorder id="settings-history-shortcut" label={t('settings.screenshotHistoryShortcut')} value={draft.screenshotHistoryShortcut} otherValues={others('screenshotHistoryShortcut')} optional disabled={saving} onChange={screenshotHistoryShortcut=>setDraft(current=>({...current,screenshotHistoryShortcut}))}/>
      <fieldset className="shortcut-settings__group">
       <legend>{t('barMenu.groupCreate')}</legend>
       <p>{t('settings.quickCreateShortcutHint')}</p>

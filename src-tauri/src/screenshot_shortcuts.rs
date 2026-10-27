@@ -1,5 +1,5 @@
-//! Global shortcuts: the two screenshot bindings and the three optional
-//! quick-create bindings share one registry so they can never collide.
+//! The screenshot and quick-create bindings are all optional and share one
+//! registry so they can never collide.
 use crate::{db::AppDb, error::CommandError, models::AppSettings};
 use serde::Serialize;
 use std::{
@@ -22,9 +22,6 @@ const FIELDS: [&str; SLOT_COUNT] = [
     "quickCreateTaskShortcut",
     "quickCreateNoteShortcut",
 ];
-/// Screenshot bindings always exist; quick-create bindings are unset by default.
-const REQUIRED: [bool; SLOT_COUNT] = [true, true, false, false, false];
-
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BindingStatus {
@@ -112,15 +109,15 @@ pub(crate) fn store_keys(settings: &mut AppSettings, keys: Keys) {
     settings.quick_create_task_shortcut = task;
     settings.quick_create_note_shortcut = note;
 }
-fn is_unset(index: usize, key: &str) -> bool {
-    !REQUIRED[index] && key.trim().is_empty()
+fn is_unset(key: &str) -> bool {
+    key.trim().is_empty()
 }
 /// Normalizes every binding; unset optional bindings stay empty. The error
 /// names the field of the first invalid or repeated binding.
 pub(crate) fn validate_keys(keys: &Keys) -> Result<Keys, CommandError> {
     let mut normalized = Keys::default();
     for (index, key) in keys.iter().enumerate() {
-        if is_unset(index, key) {
+        if is_unset(key) {
             continue;
         }
         let value = normalize(key).map_err(|mut error| {
@@ -162,7 +159,7 @@ struct Registry {
 impl Registry {
     fn new(configured: Keys) -> Self {
         let errors = std::array::from_fn(|index| {
-            (!is_unset(index, &configured[index])).then(|| "pending".to_owned())
+            (!is_unset(&configured[index])).then(|| "pending".to_owned())
         });
         Self {
             configured,
@@ -176,7 +173,7 @@ impl Registry {
     fn register_startup(&mut self, native: &mut impl Registration) {
         for index in 0..SLOT_COUNT {
             let raw = self.configured[index].clone();
-            if is_unset(index, &raw) {
+            if is_unset(&raw) {
                 self.configured[index].clear();
                 self.errors[index] = None;
                 continue;
@@ -461,8 +458,8 @@ mod tests {
             keys(["Ctrl+Alt+A", "Ctrl+Alt+H", "", "Ctrl+Alt+T", ""])
         );
         for (values, field) in [
-            (["", "Ctrl+Alt+H", "", "", ""], "screenshotShortcut"),
-            (["Ctrl+Alt+A", "", "", "", ""], "screenshotHistoryShortcut"),
+            (["Ctrl", "Ctrl+Alt+H", "", "", ""], "screenshotShortcut"),
+            (["Ctrl+Alt+A", "Ctrl", "", "", ""], "screenshotHistoryShortcut"),
             (["Ctrl+Alt+A", "Ctrl+Alt+H", "Ctrl", "", ""], "quickCreateEventShortcut"),
             (["Ctrl+Alt+A", "Ctrl+Alt+H", "Ctrl+Alt+A", "", ""], "quickCreateEventShortcut"),
             (["Ctrl+Alt+A", "Ctrl+Alt+H", "", "Ctrl+Alt+H", ""], "quickCreateTaskShortcut"),
@@ -471,6 +468,61 @@ mod tests {
             let error = validate_keys(&keys(values)).unwrap_err();
             assert_eq!(error.field.as_deref(), Some(field), "{values:?}");
         }
+    }
+    #[test]
+    fn every_shortcut_can_be_unset_and_empty_slots_do_not_collide() {
+        assert_eq!(validate_keys(&keys(["", " ", "", "", ""])).unwrap(), Keys::default());
+        assert_eq!(
+            validate_keys(&keys(["", "", "control+alt+a", "", ""])).unwrap(),
+            keys(["", "", "Ctrl+Alt+A", "", ""])
+        );
+    }
+    #[test]
+    fn cleared_screenshot_slots_stay_unregistered_at_startup() {
+        let mut native = Fake::default();
+        let mut registry = Registry::new(keys(["", " ", "Ctrl+Alt+A", "", ""]));
+        registry.register_startup(&mut native);
+        assert_eq!(native.keys, registered(&keys(["", "", "Ctrl+Alt+A", "", ""])));
+        let status = registry.status();
+        for binding in [status.screenshot, status.history] {
+            assert!(binding.shortcut.is_empty());
+            assert!(!binding.registered);
+            assert!(binding.error.is_none());
+        }
+        assert!(status.create_event.registered);
+    }
+    #[test]
+    fn clearing_screenshot_bindings_unregisters_them_and_allows_rerecording() {
+        let old = pair("Ctrl+Alt+A", "Ctrl+Alt+H");
+        let mut native = Fake::default();
+        let mut registry = active_registry(&old, &mut native);
+        let mut persisted = false;
+        registry.replace(&mut native, Keys::default(), || {
+            persisted = true;
+            Ok(())
+        }).unwrap();
+        assert!(persisted);
+        assert!(native.keys.is_empty());
+        assert!(registry.status().screenshot.error.is_none());
+        assert!(registry.status().history.error.is_none());
+        assert_eq!(registry.action(&old[0], true), None);
+        registry.replace(&mut native, old.clone(), || Ok(())).unwrap();
+        assert_eq!(native.keys, registered(&old));
+        assert!(registry.status().screenshot.registered);
+        assert!(registry.status().history.registered);
+        assert_eq!(registry.action(&old[0], true), Some(0));
+    }
+    #[test]
+    fn failed_clear_keeps_original_screenshot_bindings() {
+        let old = pair("Ctrl+Alt+A", "Ctrl+Alt+H");
+        let mut native = Fake::default();
+        let mut registry = active_registry(&old, &mut native);
+        let error = registry.replace(&mut native, Keys::default(), || {
+            Err(CommandError::database("failed"))
+        }).unwrap_err();
+        assert_eq!(error.code, "database_error");
+        assert_eq!(registry.configured, old);
+        assert_eq!(native.keys, registered(&old));
     }
     #[test]
     fn configured_keys_round_trip_through_settings() {

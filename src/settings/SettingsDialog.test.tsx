@@ -131,6 +131,60 @@ describe('SettingsDialog',()=>{
     fireEvent.click(screen.getByRole('button', { name: '保存设置' }));
     expect(save).toHaveBeenCalledWith(expect.objectContaining({ screenshotShortcut:'Ctrl+Shift+K', screenshotHistoryShortcut:'Ctrl+Alt+H' }));
   });
+  it('uses clearable controls for every shortcut and saves them all unset', async () => {
+    const user = userEvent.setup();
+    const save = vi.fn(async value => value);
+    const close = vi.fn();
+    render(<SettingsDialog settings={settings} onClose={close} onSave={save}/>);
+    await user.click(screen.getByRole('tab', { name: '快捷键' }));
+    for (const name of ['截图快捷键', '截图历史快捷键', '新建日程', '新建四象限任务', '新建便签']) {
+      const input = screen.getByRole('textbox', { name });
+      const clear = screen.getByRole('button', { name: `清除「${name}」快捷键` });
+      expect(input).toHaveAttribute('placeholder', '未设置');
+      if (clear.hasAttribute('disabled')) continue;
+      await user.click(clear);
+      expect(input).toHaveValue('');
+      expect(clear).toBeDisabled();
+    }
+    await user.click(screen.getByRole('button', { name: '保存设置' }));
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({
+      screenshotShortcut: '', screenshotHistoryShortcut: '',
+      quickCreateEventShortcut: '', quickCreateTaskShortcut: '', quickCreateNoteShortcut: ''
+    }));
+    expect(close).toHaveBeenCalledOnce();
+  });
+  it('keeps cleared screenshot shortcuts unset when reopening and saving other settings', async () => {
+    const user = userEvent.setup();
+    const save = vi.fn(async value => value);
+    render(<SettingsDialog settings={{ ...settings, screenshotShortcut: '', screenshotHistoryShortcut: '' }} onClose={vi.fn()} onSave={save}/>);
+    await user.click(screen.getByRole('tab', { name: '快捷键' }));
+    expect(screen.getByRole('textbox', { name: '截图快捷键' })).toHaveValue('');
+    expect(screen.getByRole('textbox', { name: '截图历史快捷键' })).toHaveValue('');
+    await user.click(screen.getByRole('tab', { name: '桌面与启动' }));
+    await user.click(screen.getByRole('checkbox', { name: '开机自动启动' }));
+    await user.click(screen.getByRole('button', { name: '保存设置' }));
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({
+      screenshotShortcut: '', screenshotHistoryShortcut: '', launchAtLogin: true
+    }));
+  });
+  it.each([
+    ['截图快捷键', 'Backspace'], ['截图历史快捷键', 'Delete']
+  ])('clears %s with %s and lets quick-create reuse the released combination', async (name, key) => {
+    const save = vi.fn(async value => value);
+    render(<SettingsDialog settings={settings} onClose={vi.fn()} onSave={save}/>);
+    fireEvent.click(screen.getByRole('tab', { name: '快捷键' }));
+    const input = screen.getByRole('textbox', { name });
+    const previous = (input as HTMLInputElement).value;
+    fireEvent.keyDown(input, { key, code: key });
+    expect(input).toHaveValue('');
+    fireEvent.keyDown(screen.getByRole('textbox', { name: '新建日程' }), {
+      key: previous.endsWith('A') ? 'a' : 'h', code: previous.endsWith('A') ? 'KeyA' : 'KeyH', ctrlKey: true, altKey: true
+    });
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: '新建日程' })).toHaveValue(previous);
+    fireEvent.click(screen.getByRole('button', { name: '保存设置' }));
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ quickCreateEventShortcut: previous }));
+  });
   it('leaves the quick-create shortcuts unset by default', async () => {
     const save = vi.fn(async value => value);
     render(<SettingsDialog settings={settings} onClose={vi.fn()} onSave={save}/>);
