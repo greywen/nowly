@@ -1,0 +1,18 @@
+/* Each locale only overrides the shared font token; sizes and spacing stay the same. */
+:root:lang(fr), :root:lang(es) { --font-sans: Inter, "Segoe UI", Helvetica, Arial, sans-serif; }
+:root:lang(ja) { --font-sans: "Yu Gothic UI", Meiryo, Inter, sans-serif; }
+:root:lang(ko) { --font-sans: "Malgun Gothic", Inter, sans-serif; }
+:root:lang(zh-Hant) { --font-sans: "Microsoft JhengHei", "PingFang TC", Inter, sans-serif; }
+
+/* Artwork and its measurement use the original font in every UI locale. */
+.sticker-canvas__stage {
+  --font-sans: Inter, "Microsoft YaHei", "PingFang SC", Helvetica, Arial, sans-serif;
+}
+
+/* Long translations keep their type size and remain reachable. */
+.good-tabs { min-width: 0; overflow-x: auto; }
+.good-tabs__tab { flex-shrink: 0; }
+.good-dialog__footer { flex-wrap: wrap; }
+.settings-grid, .settings-grid > *, .select-field { min-width: 0; }
+.select-option, .select-value { overflow-wrap: anywhere; }
+.good-dialog__footer .good-button { height: auto; min-height: 40px; white-space: normal; }

@@ -6,7 +6,7 @@ import { tauriNowlyRepository } from './data/tauri-nowly-repository';
 import { installBrowserTauriBackend } from './data/browser-tauri-shim';
 import { FocusTimerProvider } from './focus/FocusTimerContext';
 import './app/styles.css';
-import './i18n/rtl.css';
+import './i18n/locale.css';
 import { StatusIslandApp } from './quick-panel/StatusIslandApp';
 import { QuickCreateApp } from './quick-create/QuickCreateApp';
 import { routeForLabel } from './screenshot/window-route';

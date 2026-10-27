@@ -35,14 +35,6 @@ export const nativeErrorTranslations: Record<Language, Record<string, string>> =
     'nativeError.system_error': 'La operación del sistema falló. Inténtalo de nuevo.',
     'nativeError.screenshotSaveFailed': 'No se pudo guardar la captura. La selección y las anotaciones se conservan. Inténtalo de nuevo.',
   },
-  ar: {
-    'nativeError.conflict': 'تم تعديل هذه البيانات في مكان آخر. أعد تحميلها ثم حاول مرة أخرى.',
-    'nativeError.not_found': 'لم يعد هذا العنصر متاحًا. أعد تحميل البيانات ثم حاول مرة أخرى.',
-    'nativeError.validation_error': 'تحقق من الحقل المحدد ثم حاول مرة أخرى.',
-    'nativeError.database_error': 'تعذرت قراءة البيانات المحلية. حاول مرة أخرى.',
-    'nativeError.system_error': 'فشلت عملية النظام. حاول مرة أخرى.',
-    'nativeError.screenshotSaveFailed': 'تعذر حفظ لقطة الشاشة. تم الاحتفاظ بالتحديد والتعليقات التوضيحية. حاول مرة أخرى.',
-  },
   ja: {
     'nativeError.conflict': 'このデータは別の場所で変更されました。再読み込みして、もう一度お試しください。',
     'nativeError.not_found': 'この項目は利用できなくなりました。再読み込みして、もう一度お試しください。',

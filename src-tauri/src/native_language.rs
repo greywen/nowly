@@ -41,7 +41,6 @@ pub fn quit_label(language: &str) -> &'static str {
         "zh" => "退出 Nowly",
         "fr" => "Quitter Nowly",
         "es" => "Salir de Nowly",
-        "ar" => "إنهاء Nowly",
         "ja" => "Nowly を終了",
         "ko" => "Nowly 종료",
         "zh-Hant" => "結束 Nowly",
@@ -60,7 +59,6 @@ mod tests {
             ("en", "Quit Nowly"),
             ("fr", "Quitter Nowly"),
             ("es", "Salir de Nowly"),
-            ("ar", "إنهاء Nowly"),
             ("ja", "Nowly を終了"),
             ("ko", "Nowly 종료"),
             ("zh-Hant", "結束 Nowly"),
@@ -72,6 +70,7 @@ mod tests {
     #[test]
     fn unsupported_language_uses_english() {
         assert_eq!(quit_label("unknown"), "Quit Nowly");
+        assert_eq!(quit_label("ar"), "Quit Nowly");
     }
 
     #[test]

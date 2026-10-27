@@ -25,7 +25,7 @@ describe('Bar presentation errors', () => {
   });
 
   it('does not render raw IPC rejection strings', () => {
-    setLanguage('ar');
+    setLanguage('ja');
     vi.spyOn(console, 'error').mockImplementation(() => {});
     const { result } = renderHook(() => useBarPresentation(false));
     act(() => result.current.failed('Unknown IPC exception'));

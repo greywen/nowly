@@ -28,7 +28,6 @@ for (const language of SUPPORTED_LANGUAGES) {
     await boot(page, language);
     const strings = translations[language];
     await expect(page.locator('html')).toHaveAttribute('lang', LOCALES[language].lang);
-    await expect(page.locator('html')).toHaveAttribute('dir', LOCALES[language].dir);
     await expect(page.locator('[data-guide="settings"]')).toHaveAccessibleName(strings['shell.openSettings']);
     await expect(page.getByRole('button', { name: strings['calendar.newEvent'], exact: true })).toBeVisible();
     const modulesBefore = await page.locator('.module-frame').evaluateAll(nodes => nodes.map(node => {
@@ -38,8 +37,8 @@ for (const language of SUPPORTED_LANGUAGES) {
     await page.locator('[data-guide="settings"]').click();
     const dialog = page.getByRole('dialog', { name: strings['settings.title'], exact: true });
     await expect(dialog).toBeVisible();
-    if (['fr', 'es', 'ar', 'ja', 'ko', 'zh-Hant'].includes(language)) {
-      const fonts: Record<string, string> = { fr: 'Segoe UI', es: 'Segoe UI', ar: 'Segoe UI', ja: 'Yu Gothic UI', ko: 'Malgun Gothic', 'zh-Hant': 'Microsoft JhengHei' };
+    if (['fr', 'es', 'ja', 'ko', 'zh-Hant'].includes(language)) {
+      const fonts: Record<string, string> = { fr: 'Segoe UI', es: 'Segoe UI', ja: 'Yu Gothic UI', ko: 'Malgun Gothic', 'zh-Hant': 'Microsoft JhengHei' };
       expect(await dialog.locator('#settings-language').evaluate(element => getComputedStyle(element).fontFamily)).toContain(fonts[language]);
     }
     await dialog.locator('#settings-language').click();
@@ -59,7 +58,7 @@ for (const language of SUPPORTED_LANGUAGES) {
     await page.locator('[data-guide="settings"]').click();
     await page.locator('#settings-language').click();
     await page.getByRole('option', { name: 'English', exact: true }).click();
-    await expect(page.locator('html')).toHaveAttribute('dir', 'ltr');
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en');
     await page.getByRole('button', { name: translations.en['settings.close'], exact: true }).click();
     expect(await page.locator('.module-frame').evaluateAll(nodes => nodes.map(node => {
       const rect = node.getBoundingClientRect();
@@ -79,15 +78,15 @@ test('real secondary history window follows a language change in the main window
   await expect(history.getByRole('heading', { name: translations.en['screenshotHistory.title'], exact: true })).toBeVisible();
   await page.locator('[data-guide="settings"]').click();
   await page.locator('#settings-language').click();
-  await page.getByRole('option', { name: 'العربية', exact: true }).click();
-  await expect(history.locator('html')).toHaveAttribute('dir', 'rtl');
-  await expect(history.getByRole('heading', { name: translations.ar['screenshotHistory.title'], exact: true })).toBeVisible();
+  await page.getByRole('option', { name: '日本語', exact: true }).click();
+  await expect(history.locator('html')).toHaveAttribute('lang', 'ja');
+  await expect(history.getByRole('heading', { name: translations.ja['screenshotHistory.title'], exact: true })).toBeVisible();
   await history.close();
 });
 
-test('dedicated capture document loads Arabic typography and direction rules', async ({ page }) => {
+test('dedicated capture document loads localized typography rules', async ({ page }) => {
   await page.addInitScript(() => {
-    localStorage.setItem('nowly.language', 'ar');
+    localStorage.setItem('nowly.language', 'ja');
     let callbackId = 0;
     const canvas = document.createElement('canvas');
     canvas.width = innerWidth;
@@ -110,19 +109,17 @@ test('dedicated capture document loads Arabic typography and direction rules', a
     });
   });
   await page.goto('/screenshot.html');
-  await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
-  await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--font-sans'))).toContain('Segoe UI');
+  await expect(page.locator('html')).toHaveAttribute('lang', 'ja');
+  await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--font-sans'))).toContain('Yu Gothic UI');
   const overlay = page.locator('.screenshot-overlay');
   await expect(overlay).toBeVisible();
-  expect(await overlay.evaluate(element => getComputedStyle(element).direction)).toBe('ltr');
   await page.mouse.move(100, 100);
   await page.mouse.down();
   await page.mouse.move(600, 400);
   await page.mouse.up();
   const toolbar = page.locator('.screenshot-toolbar');
   await expect(toolbar).toBeVisible();
-  expect(await toolbar.evaluate(element => getComputedStyle(element).direction)).toBe('rtl');
-  await page.getByRole('button', { name: translations.ar['screenshot.tool.text'], exact: true }).click();
+  await page.getByRole('button', { name: translations.ja['screenshot.tool.text'], exact: true }).click();
   await page.mouse.click(200, 200);
   const editor = page.locator('.screenshot-text-editor');
   await expect(editor).toBeVisible();
@@ -130,7 +127,7 @@ test('dedicated capture document loads Arabic typography and direction rules', a
   const before = await editor.evaluate(element => ({ font: getComputedStyle(element).fontFamily, x: element.getBoundingClientRect().x }));
   await page.evaluate(() => window.dispatchEvent(new StorageEvent('storage', { key: 'nowly.language', newValue: 'en' })));
   expect(await editor.evaluate(element => ({ font: getComputedStyle(element).fontFamily, x: element.getBoundingClientRect().x }))).toEqual(before);
-  await page.evaluate(() => window.dispatchEvent(new StorageEvent('storage', { key: 'nowly.language', newValue: 'ar' })));
+  await page.evaluate(() => window.dispatchEvent(new StorageEvent('storage', { key: 'nowly.language', newValue: 'ja' })));
   await editor.press('Control+Enter');
   const annotation = page.locator('.screenshot-annotations text');
   await expect(annotation).toHaveText('Hello world! مرحباً');

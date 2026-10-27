@@ -990,11 +990,11 @@ export function CalendarWidget({
             </button>
           ) : null}
           <button type="button" className="btn btn-icon" aria-label={navLabels.previous} onClick={onPreviousMonth}>
-            <ChevronLeft className="i18n-directional-icon" aria-hidden="true" />
+            <ChevronLeft aria-hidden="true" />
           </button>
           <button type="button" className="btn" onClick={onToday}>{t('calendar.today')}</button>
           <button type="button" className="btn btn-icon" aria-label={navLabels.next} onClick={onNextMonth}>
-            <ChevronRight className="i18n-directional-icon" aria-hidden="true" />
+            <ChevronRight aria-hidden="true" />
           </button>
           {onOpenSettings ? (
             <button type="button" className="btn btn-icon" aria-label={t('calendarSettings.label')} onClick={onOpenSettings}>

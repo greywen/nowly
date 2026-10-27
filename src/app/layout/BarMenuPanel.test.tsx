@@ -8,7 +8,6 @@ import { t } from '../../i18n';
 const originalLanguage = getLanguage();
 afterEach(() => {
   act(() => setLanguage(originalLanguage));
-  document.documentElement.removeAttribute('dir');
 });
 
 const invokeMock = vi.hoisted(() => vi.fn());
@@ -107,17 +106,6 @@ describe('Bar function menu', () => {
     fireEvent.keyDown(items[0], { key: 'ArrowUp' });
     expect(items[4]).toHaveFocus();
     fireEvent.keyDown(items[4], { key: 'Home' });
-    expect(items[0]).toHaveFocus();
-  });
-
-  it('swaps the horizontal arrow keys for right-to-left layouts', async () => {
-    document.documentElement.setAttribute('dir', 'rtl');
-    render(<BarMenuPanel active items={DEFAULT_BAR_MENU} />);
-    const items = screen.getAllByRole('menuitem');
-    await waitFor(() => expect(items[0]).toHaveFocus());
-    fireEvent.keyDown(items[0], { key: 'ArrowLeft' });
-    expect(items[1]).toHaveFocus();
-    fireEvent.keyDown(items[1], { key: 'ArrowRight' });
     expect(items[0]).toHaveFocus();
   });
 

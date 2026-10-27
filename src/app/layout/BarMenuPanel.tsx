@@ -118,10 +118,9 @@ export function BarMenuPanel({ active, items }: { active: boolean; items: readon
   }
 
   function navigate(event: KeyboardEvent<HTMLDivElement>) {
-    // Movement is linear in visual order; horizontal keys follow the reading direction.
-    const rtl = document.documentElement.dir === 'rtl';
-    const forward = ['ArrowDown', rtl ? 'ArrowLeft' : 'ArrowRight'];
-    const backward = ['ArrowUp', rtl ? 'ArrowRight' : 'ArrowLeft'];
+    // Movement is linear in visual order.
+    const forward = ['ArrowDown', 'ArrowRight'];
+    const backward = ['ArrowUp', 'ArrowLeft'];
     const step = forward.includes(event.key) ? 1 : backward.includes(event.key) ? -1 : 0;
     if ((!step && event.key !== 'Home' && event.key !== 'End') || !visible.length || pending) return;
     event.preventDefault();

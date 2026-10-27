@@ -43,7 +43,7 @@ describe('time-format', () => {
     expect(formatClockTime(new Date(`2026-10-21T${time}Z`), 'UTC', { hourCycle: 'h12', showSeconds: false })).toBe(expected);
   });
 
-  it.each(['zh', 'en', 'fr', 'es', 'ar', 'ja', 'ko', 'zh-Hant'] as const)('pads twelve-hour digits without losing localization in %s', language => {
+  it.each(['zh', 'en', 'fr', 'es', 'ja', 'ko', 'zh-Hant'] as const)('pads twelve-hour digits without losing localization in %s', language => {
     setLanguage(language);
     const now = new Date('2026-10-21T02:02:09Z');
     const locale = new Intl.DateTimeFormat(language === 'zh-Hant' ? 'zh-TW' : language, {
@@ -52,7 +52,7 @@ describe('time-format', () => {
     expect(formatClockTime(now, 'UTC', { hourCycle: 'h12', showSeconds: true })).toBe(locale.format(now));
   });
 
-  it.each(['zh', 'en', 'fr', 'es', 'ar', 'ja', 'ko', 'zh-Hant'] as const)('separates localized digits and periods in %s', language => {
+  it.each(['zh', 'en', 'fr', 'es', 'ja', 'ko', 'zh-Hant'] as const)('separates localized digits and periods in %s', language => {
     setLanguage(language);
     const now = new Date('2026-10-21T14:02:09Z');
     const display = formatClockDisplay(now, 'UTC', { hourCycle: 'h12', showSeconds: true });

@@ -20,7 +20,7 @@ it('uses English when the primary language is unsupported, not a secondary prefe
 it.each([
   ['zh-CN', 'zh'], ['zh-TW', 'zh-Hant'], ['zh-HK', 'zh-Hant'],
   ['en-GB', 'en'], ['fr-CA', 'fr'], ['es-MX', 'es'],
-  ['ar-SA', 'ar'], ['ja-JP', 'ja'], ['ko-KR', 'ko'],
+  ['ja-JP', 'ja'], ['ko-KR', 'ko'], ['ar-SA', 'en'],
 ])('matches the primary %s language to %s', async (tag, expected) => {
   vi.resetModules();
   localStorage.clear();
@@ -70,10 +70,17 @@ it('follows Windows again when the saved choice is cleared in another window', a
   }
 });
 
-it.each(['fr', 'es', 'ar', 'ja', 'ko', 'zh-Hant'])('restores saved %s across module reloads', async language => {
+it.each(['fr', 'es', 'ja', 'ko', 'zh-Hant'])('restores saved %s across module reloads', async language => {
   vi.resetModules();
   localStorage.setItem('nowly.language', language);
   expect((await import('./store')).getLanguage()).toBe(language);
+});
+
+it('follows the system language when the saved choice is the removed Arabic language', async () => {
+  vi.resetModules();
+  localStorage.setItem('nowly.language', 'ar');
+  Object.defineProperty(window, '__NOWLY_SYSTEM_LANGUAGE__', { configurable: true, value: 'fr-FR' });
+  expect((await import('./store')).getLanguage()).toBe('fr');
 });
 
 it('ignores a corrupt saved value and detects Traditional Chinese from the system', async () => {

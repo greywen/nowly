@@ -6,12 +6,12 @@ import { measureTextBox, resetTextMeasurement } from './text-metrics';
 // was, and it is what a headless export falls back to.
 
 describe('measuring a text annotation box', () => {
-  it('measures with the stable artwork font even when the UI uses an Arabic font', () => {
+  it('measures with the stable artwork font even when the UI uses a localized font', () => {
     const original = HTMLCanvasElement.prototype.getContext;
     const previousFont = document.body.style.fontFamily;
     const context = { font: '', measureText: () => ({ width: 120 }) };
     HTMLCanvasElement.prototype.getContext = (() => context) as never;
-    document.body.style.fontFamily = '"Segoe UI", Tahoma, sans-serif';
+    document.body.style.fontFamily = '"Yu Gothic UI", Meiryo, Inter, sans-serif';
     resetTextMeasurement();
     try {
       measureTextBox('Hello مرحباً', 24);

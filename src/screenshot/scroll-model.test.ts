@@ -46,9 +46,9 @@ describe('scroll model', () => {
   });
 
   it('localizes structured errors and uses safe fallback for unknown diagnostics', () => {
-    setLanguage('ar');
+    setLanguage('ja');
     expect(describeScrollError({ code: 'system_error', message: '截图采集失败。' }, 'fallback')).toEqual({
-      message: nativeErrorTranslations.ar['nativeError.system_error'],
+      message: nativeErrorTranslations.ja['nativeError.system_error'],
     });
     expect(describeScrollError({ message: '内部调用失败' }, 'fallback')).toEqual({ key: 'fallback' });
     expect(describeScrollError({ code: 'archived_copy_failed', message: '内部调用失败' }, 'fallback')).toEqual({

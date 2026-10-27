@@ -63,7 +63,7 @@ describe('native tray language sync', () => {
     stop = startNativeLanguageSync(false);
     await Promise.resolve();
     expect(warning).toHaveBeenCalled();
-    setLanguage('ar');
-    expect(mocks.invoke).toHaveBeenLastCalledWith('set_native_language', { language: 'ar' });
+    setLanguage('ja');
+    expect(mocks.invoke).toHaveBeenLastCalledWith('set_native_language', { language: 'ja' });
   });
 });

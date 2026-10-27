@@ -19,12 +19,12 @@ describe('localizeRepositoryError', () => {
     expect(error.message).toBe('日程保存状态已变化，请重试。');
   });
 
-  it('keeps Arabic validation attached to the original field', () => {
-    setLanguage('ar');
+  it('keeps Spanish validation attached to the original field', () => {
+    setLanguage('es');
     const error = { code: 'validation_error', field: 'occurrenceStartAt', message: '此重复日程实例不可编辑。' };
     expect(localizeRepositoryError(error)).toEqual({
       ...error,
-      message: 'تحقق من الحقل المحدد ثم حاول مرة أخرى.',
+      message: 'Revisa el campo indicado e inténtalo de nuevo.',
       originalMessage: error.message,
     });
   });

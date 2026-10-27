@@ -10,7 +10,7 @@ vi.mock('./FocusTimerContext',async(importOriginal)=>({...await importOriginal<t
 beforeEach(()=>{setLanguage('zh');api.statistics.status='ready';vi.clearAllMocks()});
 afterEach(()=>{cleanup();setLanguage('zh')});
 
-it.each(['fr','es','ar','ja','ko','zh-Hant'] as const)('keeps completed and interrupted labels in %s',language=>{
+it.each(['fr','es','ja','ko','zh-Hant'] as const)('keeps completed and interrupted labels in %s',language=>{
  setLanguage(language);
  render(<FocusStatisticsDialog onClose={vi.fn()}/>);
  const summaries=document.querySelectorAll('.focus-statistics__summaries > div');

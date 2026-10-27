@@ -69,8 +69,6 @@
   gap: var(--space-2);
   min-width: 0;
   max-width: 100%;
-  direction: ltr;
-  unicode-bidi: isolate;
 }
 
 .time-clock__period {

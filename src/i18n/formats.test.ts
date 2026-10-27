@@ -7,7 +7,7 @@ import { clockParts, formatClockDate, formatClockTime, formatDifference, timeZon
 afterEach(() => setLanguage('zh'));
 
 it.each([
-  ['fr', 'fr-FR'], ['es', 'es-ES'], ['ar', 'ar'], ['ja', 'ja-JP'], ['ko', 'ko-KR'], ['zh-Hant', 'zh-TW']
+  ['fr', 'fr-FR'], ['es', 'es-ES'], ['ja', 'ja-JP'], ['ko', 'ko-KR'], ['zh-Hant', 'zh-TW']
 ] as const)('formats calendar and clock dates in %s', (language, locale) => {
   setLanguage(language);
   const date = new Date(2026, 9, 21, 13, 24, 35);
@@ -18,8 +18,8 @@ it.each([
   expect(formatClockDate(date, 'UTC')).toBe(new Intl.DateTimeFormat(locale, { timeZone: 'UTC', calendar: 'gregory', month: 'short', day: 'numeric', weekday: 'short' }).format(date));
 });
 
-it('does not change machine-readable dates or clock parts in Arabic', () => {
-  setLanguage('ar');
+it('does not change machine-readable dates or clock parts in Japanese', () => {
+  setLanguage('ja');
   expect(monthTitle(2026, 9, 'iso')).toBe('2026-10');
   expect(clockParts(new Date('2026-10-21T13:24:35Z'), 'UTC')).toEqual({ year: 2026, month: 10, day: 21, hour: 13, minute: 24, second: 35 });
 });
@@ -28,10 +28,10 @@ it('does not reuse a display formatter from a previous language', () => {
   const date = new Date('2026-10-21T13:24:35Z');
   setLanguage('en');
   const en = formatClockTime(date, 'UTC', { hourCycle: 'h12', showSeconds: false });
-  setLanguage('ar');
-  const ar = formatClockTime(date, 'UTC', { hourCycle: 'h12', showSeconds: false });
-  expect(ar).not.toBe(en);
-  expect(ar).toBe(new Intl.DateTimeFormat('ar', { timeZone: 'UTC', calendar: 'gregory', hourCycle: 'h12', hour: '2-digit', minute: '2-digit' }).format(date));
+  setLanguage('ko');
+  const ko = formatClockTime(date, 'UTC', { hourCycle: 'h12', showSeconds: false });
+  expect(ko).not.toBe(en);
+  expect(ko).toBe(new Intl.DateTimeFormat('ko-KR', { timeZone: 'UTC', calendar: 'gregory', hourCycle: 'h12', hour: '2-digit', minute: '2-digit' }).format(date));
 });
 
 it('localizes city names and offset labels without exposing Chinese', () => {

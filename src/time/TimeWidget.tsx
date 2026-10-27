@@ -133,7 +133,7 @@ function ClockTile({ clock, now, layout, size }: { clock: WorldClock & ClockAppe
       {showFace && showTime ? <ClockFace now={now} timeZone={clock.timeZone} label={label} showSeconds={clock.showSeconds} size={layout.faceSize} /> : null}
       <div className={`time-clock__reading${!showTime ? ' time-clock__reading--analog' : ''}`}>
         {showTime ? <div className="time-clock__time" data-testid="time-clock-digital">{clock.mode === 'digital' && digitalLayout === 'stacked' ? time.split(':').map((part, index) => <span key={index}>{part}</span>) : time}</div> : <ClockFace now={now} timeZone={clock.timeZone} label={label} showSeconds={clock.showSeconds} size={layout.faceSize} />}
-        {dayPeriod ? <span className="time-clock__period" data-testid="time-clock-period" dir="auto">{dayPeriod}</span> : null}
+        {dayPeriod ? <span className="time-clock__period" data-testid="time-clock-period">{dayPeriod}</span> : null}
       </div>
       {optionalVisible && clock.showDate ? <div className="time-clock__meta">{formatClockDate(now, clock.timeZone)}</div> : null}
       {optionalVisible && clock.showDifference ? <div className="time-clock__meta">{formatDifference(now, clock.timeZone)}</div> : null}

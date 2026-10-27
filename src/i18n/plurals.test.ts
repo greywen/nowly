@@ -7,12 +7,12 @@ afterEach(() => {
   setLanguage('zh');
 });
 
-it('uses all six Arabic plural categories and formats the count', () => {
-  translations.ar ??= {};
-  translations.ar['test.plural'] = '{count, plural, zero {zero #} one {one #} two {two #} few {few #} many {many #} other {other #}}';
-  setLanguage('ar');
-  for (const [count, category] of [[0, 'zero'], [1, 'one'], [2, 'two'], [3, 'few'], [11, 'many'], [100, 'other']] as const) {
-    expect(translate('test.plural', { count })).toBe(`${category} ${new Intl.NumberFormat('ar', { useGrouping: false }).format(count)}`);
+it('selects plural categories with the active language rules', () => {
+  // French treats zero as singular, unlike English.
+  translations.fr['test.plural'] = '{count, plural, one {one #} other {other #}}';
+  setLanguage('fr');
+  for (const [count, category] of [[0, 'one'], [1, 'one'], [2, 'other'], [100, 'other']] as const) {
+    expect(translate('test.plural', { count })).toBe(`${category} ${new Intl.NumberFormat('fr-FR', { useGrouping: false }).format(count)}`);
   }
 });
 

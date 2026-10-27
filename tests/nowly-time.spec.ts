@@ -216,7 +216,7 @@ test('twelve-hour periods stay small at the bottom-right across layouts and lang
   const cases = [
     { language: 'zh', mode: 'digital', layout: 'horizontal', showSeconds: false, rect: { w: 12, h: 6 } },
     { language: 'en', mode: 'digital', layout: 'stacked', showSeconds: true, rect: { w: 6, h: 6 } },
-    { language: 'ar', mode: 'digital', layout: 'horizontal', showSeconds: true, rect: { w: 4, h: 3 } },
+    { language: 'es', mode: 'digital', layout: 'horizontal', showSeconds: true, rect: { w: 4, h: 3 } },
     { language: 'zh', mode: 'mixed', layout: 'horizontal', showSeconds: false, rect: { w: 6, h: 6 } },
     { language: 'zh', mode: 'analog', layout: 'horizontal', showSeconds: false, rect: { w: 6, h: 6 } }
   ] as const;
@@ -237,7 +237,7 @@ test('twelve-hour periods stay small at the bottom-right across layouts and lang
       const period = tile.getByTestId('time-clock-period');
       await expect(period).toBeVisible();
       await expect(period).toHaveCSS('font-size', '11.05px');
-      await expect(period).toHaveText(appearance.language === 'zh' ? (index === 0 ? '上午' : '下午') : appearance.language === 'en' ? (index === 0 ? 'AM' : 'PM') : (index === 0 ? 'ص' : 'م'));
+      await expect(period).toHaveText(appearance.language === 'zh' ? (index === 0 ? '上午' : '下午') : appearance.language === 'en' ? (index === 0 ? 'AM' : 'PM') : (index === 0 ? 'a. m.' : 'p. m.'));
       const reading = tile.locator('.time-clock__reading');
       const readingBox = (await reading.boundingBox())!;
       const periodBox = (await period.boundingBox())!;

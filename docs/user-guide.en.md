@@ -88,8 +88,8 @@ The ordinary window, wallpaper, tray, quick panel and fullscreen focus serve dif
   notifications, and sounds do not depend on Windows notification permissions.
 - **Quick create** — create events, matrix tasks, and notes from the Nowly Bar
   function menu or optional global shortcuts, without opening the main window.
-- **Localization** — Simplified Chinese, English, French, Spanish, Arabic,
-  Japanese, Korean, and Traditional Chinese. Without a saved manual choice,
+- **Localization** — Simplified Chinese, English, French, Spanish, Japanese,
+  Korean, and Traditional Chinese. Without a saved manual choice,
   startup reads the current user's Windows UI language (the primary browser
   language on web) and selects the matching app language. An unavailable or
   unsupported language defaults to English, without trying secondary preferences.

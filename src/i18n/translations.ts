@@ -7,7 +7,6 @@ import { supplemental } from './supplemental';
 import { nativeErrorTranslations } from './native-errors';
 import { fr } from './locales/fr';
 import { es } from './locales/es';
-import { ar } from './locales/ar';
 import { ja } from './locales/ja';
 import { ko } from './locales/ko';
 import { zhHant } from './locales/zh-Hant';
@@ -18,7 +17,6 @@ import { zhHant } from './locales/zh-Hant';
 export const translations: Record<Language, Record<string, string>> = {
   fr: { ...fr, ...nativeErrorTranslations.fr },
   es: { ...es, ...nativeErrorTranslations.es },
-  ar: { ...ar, ...nativeErrorTranslations.ar },
   ja: { ...ja, ...nativeErrorTranslations.ja },
   ko: { ...ko, ...nativeErrorTranslations.ko },
   'zh-Hant': { ...zhHant, ...nativeErrorTranslations['zh-Hant'] },

@@ -43,7 +43,6 @@ const listeners = new Set<() => void>();
 function updateDocumentLanguage(): void {
   if (typeof document === 'undefined') return;
   document.documentElement.lang = LOCALES[current].lang;
-  document.documentElement.dir = LOCALES[current].dir;
 }
 
 updateDocumentLanguage();
