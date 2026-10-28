@@ -151,6 +151,23 @@ const browserTaskPriorities = [
   'not_important_not_urgent'
 ];
 
+// Mirrors the native rules: owned ids keep their step, anything else gets a new
+// id, titles are trimmed, and a missing list keeps the current steps.
+function shimSteps(value: unknown, current: unknown): Dict[] {
+  const existing = Array.isArray(current) ? (current as Dict[]) : [];
+  if (!Array.isArray(value)) return existing;
+  const owned = new Set(existing.map((step) => step.id));
+  const used = new Set<unknown>();
+  return value.map((raw) => {
+    const step = raw as Dict;
+    const title = typeof step.title === 'string' ? step.title.trim() : '';
+    if (!title) throw { code: 'validation_error', field: 'steps', message: '请输入步骤内容。' };
+    const stepId = typeof step.id === 'string' && owned.has(step.id) && !used.has(step.id) ? step.id : id('s');
+    used.add(stepId);
+    return { id: stepId, title, completed: step.completed === true };
+  });
+}
+
 function ensureTaskWorkspace(store: Store) {
   if (store.kanban.lanes.length === 0) {
     const stamp = nowIso();
@@ -161,7 +178,9 @@ function ensureTaskWorkspace(store: Store) {
     ];
   }
   store.tasks = store.tasks.map((task, index) => {
-    if ('laneId' in task && 'boardPosition' in task && 'views' in task) return task;
+    if ('laneId' in task && 'boardPosition' in task && 'views' in task) {
+      return Array.isArray(task.steps) ? task : { ...task, steps: [] };
+    }
     const priority = typeof task.quadrant === 'string' && browserTaskPriorities.includes(task.quadrant)
       ? task.quadrant
       : null;
@@ -179,6 +198,7 @@ function ensureTaskWorkspace(store: Store) {
       tagIds: [],
       collaboratorIds: [],
       views: ['kanban', ...(priority ? ['matrix'] : [])],
+      steps: [],
       createdAt: task.createdAt ?? nowIso(),
       updatedAt: task.updatedAt ?? nowIso()
     };
@@ -661,7 +681,8 @@ export function installBrowserTauriBackend() {
     get_task_workspace_snapshot: taskWorkspaceSnapshot,
     list_tasks: () => store.tasks,
     create_task: (a) => {
-      const draft = a.draft as Dict;
+      const { steps, ...draft } = a.draft as Dict;
+      const normalizedSteps = shimSteps(steps, []);
       const laneId = (draft.laneId as string) ?? 'kanban-lane-todo';
       const task: Dict = {
         id: id('t'),
@@ -676,7 +697,8 @@ export function installBrowserTauriBackend() {
         views: ['kanban'],
         createdAt: nowIso(),
         updatedAt: nowIso(),
-        ...draft
+        ...draft,
+        steps: normalizedSteps
       };
       coordinateViews(task);
       store.tasks.push(task);
@@ -684,10 +706,12 @@ export function installBrowserTauriBackend() {
       return task;
     },
     update_task: (a) => {
+      const current = store.tasks.find((task) => task.id === a.id);
+      const steps = shimSteps((a.draft as Dict).steps, current?.steps);
       let updated: Dict | undefined;
       store.tasks = store.tasks.map((task) => {
         if (task.id !== a.id) return task;
-        updated = { ...task, ...(a.draft as Dict), updatedAt: nowIso() };
+        updated = { ...task, ...(a.draft as Dict), steps, updatedAt: nowIso() };
         coordinateViews(updated);
         return updated;
       });

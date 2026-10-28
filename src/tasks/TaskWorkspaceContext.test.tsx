@@ -9,7 +9,7 @@ import type { Task, TaskWorkspaceSnapshot } from './task-model';
 function task(id: string): Task {
   return {
     id, title: id, description: '', priority: 'important_urgent', dueDate: null, completed: false,
-    laneId: 'lane-a', boardPosition: 0, tagIds: [], collaboratorIds: [], views: ['kanban', 'matrix'],
+    laneId: 'lane-a', boardPosition: 0, tagIds: [], collaboratorIds: [], views: ['kanban', 'matrix'], steps: [],
     createdAt: 'x', updatedAt: 'x'
   };
 }
@@ -56,5 +56,13 @@ describe('TaskWorkspaceProvider', () => {
     await act(() => result.current.refresh());
     expect(result.current.workspace.status).toBe('ready');
     expect(result.current.workspace.data.tasks).toHaveLength(2);
+  });
+
+  it('gives tasks from snapshots that predate steps an empty step list', async () => {
+    const { steps: _steps, ...legacy } = task('t1');
+    const getTaskWorkspaceSnapshot = vi.fn().mockResolvedValue(snapshot([legacy as Task]));
+    const { result } = renderHook(() => useTaskWorkspace(), { wrapper: wrapper({ getTaskWorkspaceSnapshot }) });
+    await waitFor(() => expect(result.current.workspace.status).toBe('ready'));
+    expect(result.current.workspace.data.tasks[0].steps).toEqual([]);
   });
 });

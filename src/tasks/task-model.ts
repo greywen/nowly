@@ -8,6 +8,19 @@ export type TaskPriority =
 
 export type TaskView = 'kanban' | 'matrix';
 
+export type TaskStep = {
+  id: string;
+  title: string;
+  completed: boolean;
+};
+
+// `id` is null for a step that has not been saved yet.
+export type TaskStepDraft = {
+  id: string | null;
+  title: string;
+  completed: boolean;
+};
+
 export type Task = {
   id: string;
   title: string;
@@ -20,6 +33,7 @@ export type Task = {
   tagIds: string[];
   collaboratorIds: string[];
   views: TaskView[];
+  steps: TaskStep[];
   createdAt: string;
   updatedAt: string;
 };
@@ -34,6 +48,8 @@ export type TaskDraft = {
   tagIds: string[];
   collaboratorIds: string[];
   views?: TaskView[];
+  // Omitted keeps the stored steps; a list replaces them in order.
+  steps?: TaskStepDraft[];
 };
 
 export type TaskLane = {
@@ -120,4 +136,17 @@ export function sortTaskWorkspace(snapshot: TaskWorkspaceSnapshot): TaskWorkspac
     (a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id)
   );
   return { ...snapshot, tasks, lanes, tags, collaborators };
+}
+
+export function stepProgress(steps: readonly Pick<TaskStep, 'completed'>[] | undefined) {
+  const list = steps ?? [];
+  return { done: list.filter((step) => step.completed).length, total: list.length };
+}
+
+// Snapshots from older builds, the website showcase and test doubles have no steps.
+export function normalizeTaskWorkspace(snapshot: TaskWorkspaceSnapshot): TaskWorkspaceSnapshot {
+  return {
+    ...snapshot,
+    tasks: snapshot.tasks.map((task) => (Array.isArray(task.steps) ? task : { ...task, steps: [] }))
+  };
 }

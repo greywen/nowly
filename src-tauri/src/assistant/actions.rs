@@ -285,6 +285,7 @@ pub fn perform(db: &Connection, action: &Action) -> Result<Change, CommandError>
                 date(value)?;
             }
             draft.views = None;
+            draft.steps = None;
             let after = task_workspace::update(db, id, draft)?;
             Ok(Change {
                 key: format!("tasks:{id}"),

@@ -109,7 +109,7 @@ export function ModalRoot({
                 id:modal.task.id, title:modal.task.title, description:modal.task.note,
                 priority:modal.task.quadrant, dueDate:modal.task.dueAt, completed:modal.task.completed,
                 laneId:workspace.workspace.data.defaultLaneId, boardPosition:0, tagIds:[], collaboratorIds:[],
-                views:['kanban','matrix'],
+                views:['kanban','matrix'], steps:modal.task.steps ?? [],
                 createdAt:modal.task.createdAt, updatedAt:modal.task.updatedAt
               } }
         }

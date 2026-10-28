@@ -33,6 +33,7 @@ export function taskToMatrixTask(task: Task, tags: TaskTag[] = []): MatrixTask |
     completed: task.completed,
     note: task.description,
     tags: resolvedTags,
+    steps: task.steps,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt
   };
@@ -78,6 +79,7 @@ export function workspaceTaskFromMatrix(
     tagIds: [],
     collaboratorIds: [],
     views,
+    steps: task.steps ?? [],
     createdAt: task.createdAt,
     updatedAt: task.updatedAt
   };
@@ -101,6 +103,7 @@ export function workspaceTaskFromKanbanCard(card: KanbanCard, snapshot: TaskWork
     tagIds: card.tagIds,
     collaboratorIds: card.collaboratorIds,
     views,
+    steps: card.steps ?? [],
     createdAt: card.createdAt,
     updatedAt: card.updatedAt
   };
@@ -155,6 +158,7 @@ export function taskToKanbanCard(task: Task): KanbanCard {
     position: task.boardPosition,
     tagIds: task.tagIds,
     collaboratorIds: task.collaboratorIds,
+    steps: task.steps,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt
   };

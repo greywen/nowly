@@ -75,6 +75,13 @@ The ordinary window, wallpaper, tray, quick panel and fullscreen focus serve dif
   leave a Windows scheduled alarm behind.
 - **Kanban board** — customizable lanes, cards, and fields for lightweight
   project tracking.
+- **Task steps** — in the task dialog of the board or the matrix, add a checklist
+  below the description: press Enter or **Add**, click a step to rename it, and
+  drag its handle (or focus the handle and press the Up and Down arrow keys) to
+  reorder. Steps are saved with **Save task**; checking every step does not
+  complete the task. Board cards and matrix rows show done/total. Earlier AI
+  operations remain undoable after upgrading; adding or changing steps on a
+  related task blocks undo to protect those later changes.
 - **Notes** — write directly in the wider create/edit dialog with the full rich-text editor and attachments. Module titles use the first non-empty logical line of the content; no separate title is entered or stored, and long titles are ellipsized only for display. The compact color dot, smile and pin controls select the color, decorative icon and pinned state. Use the manager to organize notes. Blank notes cannot be created; image/file-only notes are allowed and show “Untitled note” when there is no text. Upgrades discard old separate titles without changing existing content or attachments.
 - **Rich-text image resizing** — select an image in notes, task descriptions or event notes, then drag its bottom-right handle to resize proportionally within the editor. With the handle focused, arrow keys adjust by 10px, or 1px with Shift; Escape cancels the current drag. Sizes support undo/redo and are restored when saved content is reopened. Original attachments are unchanged.
 - **Stickers** — an optional image and plain-text canvas with original, rounded,

@@ -64,7 +64,26 @@ const MIGRATIONS: &[(i64, Migration)] = &[
     (34, migration_34_date_free_alarms),
     (35, crate::stickers::migrate),
     (36, migration_36_note_content_titles),
+    (37, migration_37_task_steps),
 ];
+
+// A task's ordered checklist. Rows cascade with their task, and the assistant
+// tracks the table, so its revision triggers are reinstalled after creating it.
+fn migration_37_task_steps(transaction: &Transaction<'_>) -> Result<()> {
+    transaction.execute_batch(
+        "CREATE TABLE task_steps (
+            id TEXT PRIMARY KEY,
+            task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+            title TEXT NOT NULL,
+            completed INTEGER NOT NULL DEFAULT 0 CHECK (completed IN (0, 1)),
+            position INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+         );
+         CREATE INDEX idx_task_steps_task ON task_steps(task_id, position);",
+    )?;
+    crate::assistant::store::install_triggers(transaction)
+}
 
 fn migration_36_note_content_titles(transaction: &Transaction<'_>) -> Result<()> {
     transaction.execute_batch("ALTER TABLE notes DROP COLUMN title;")
@@ -2570,7 +2589,7 @@ mod tests {
         ).unwrap();
         let snapshot = |connection: &Connection| {
             let tables: Vec<String> = connection.prepare(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name!='schema_migrations' ORDER BY name"
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT IN ('schema_migrations','task_steps') ORDER BY name"
             ).unwrap().query_map([], |row| row.get(0)).unwrap().collect::<Result<_>>().unwrap();
             tables.into_iter().map(|table| {
                 let sql = if table == "notes" {
@@ -2612,6 +2631,34 @@ mod tests {
         assert_eq!(snapshot(&connection), before);
         assert_eq!(connection.query_row(
             "SELECT COUNT(*) FROM schema_migrations WHERE version=36", [], |row| row.get::<_, i64>(0)
+        ).unwrap(), 1);
+    }
+
+    #[test]
+    fn migration_37_adds_cascading_tracked_task_steps_once() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        connection.execute_batch("PRAGMA foreign_keys=ON;").unwrap();
+        migrate_through(&mut connection, 36).unwrap();
+        assert!(!table_exists(&connection, "task_steps"));
+        connection.execute_batch(
+            "INSERT INTO tasks(id,title,description,completed,lane_id,board_position,created_at,updated_at)
+                VALUES('t1','任务','',0,'kanban-lane-todo',0,'c','u');",
+        ).unwrap();
+        migrate(&mut connection).unwrap();
+        migrate(&mut connection).unwrap();
+        assert!(table_exists(&connection, "task_steps"));
+        let triggers: Vec<String> = connection.prepare(
+            "SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name='task_steps' ORDER BY name",
+        ).unwrap().query_map([], |row| row.get(0)).unwrap().collect::<Result<Vec<String>>>().unwrap();
+        assert_eq!(triggers, ["assistant_task_steps_DELETE", "assistant_task_steps_INSERT", "assistant_task_steps_UPDATE"]);
+        connection.execute_batch(
+            "INSERT INTO task_steps(id,task_id,title,completed,position,created_at,updated_at)
+                VALUES('s1','t1','步骤',0,0,'c','u');
+             DELETE FROM tasks WHERE id='t1';",
+        ).unwrap();
+        assert_eq!(connection.query_row("SELECT COUNT(*) FROM task_steps", [], |row| row.get::<_, i64>(0)).unwrap(), 0);
+        assert_eq!(connection.query_row(
+            "SELECT COUNT(*) FROM schema_migrations WHERE version=37", [], |row| row.get::<_, i64>(0)
         ).unwrap(), 1);
     }
 

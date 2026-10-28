@@ -2,6 +2,7 @@
 // represent status, so cards have no independent completion flag.
 import { DESIGN_COLORS, type ColorPreset, type HexColor } from '../lib/color';
 import { t } from '../i18n';
+import type { TaskStep } from '../tasks/task-model';
 
 export type KanbanColor = HexColor;
 
@@ -47,6 +48,7 @@ export type KanbanCard = {
   position: number;
   tagIds: string[];
   collaboratorIds: string[];
+  steps?: TaskStep[];
   createdAt: string;
   updatedAt: string;
 };

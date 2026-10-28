@@ -2,6 +2,7 @@ import type { DragEvent } from 'react';
 import { formatTaskMeta } from '../lib/task-draft';
 import type { MatrixTask } from './matrix-model';
 import { t } from '../i18n';
+import { TaskStepCount } from '../tasks/TaskStepCount';
 
 type TaskRowProps = {
   task: MatrixTask;
@@ -56,7 +57,10 @@ export function TaskRow({ task, today, pending, dragging = false, onToggle, onOp
             </span>
           ) : null}
         </div>
-        <span className="task-row__meta">{formatTaskMeta(task, today)}</span>
+        <div className="task-row__meta-line">
+          <span className="task-row__meta">{formatTaskMeta(task, today)}</span>
+          <TaskStepCount steps={task.steps} />
+        </div>
       </div>
     </div>
   );

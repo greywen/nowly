@@ -10,6 +10,7 @@ import { t } from '../i18n';
 import { KanbanMultiSelect } from '../kanban/KanbanMultiSelect';
 import { quadrantLabel } from '../matrix/matrix-model';
 import { useTaskWorkspace } from './TaskWorkspaceContext';
+import { TaskStepsField, type TaskStepItem } from './TaskStepsField';
 import {
   taskPriorityOrder,
   type Task,
@@ -39,6 +40,8 @@ type Form = {
   laneId: string;
   tagIds: string[];
   collaboratorIds: string[];
+  steps: TaskStepItem[];
+  stepInput: string;
 };
 
 function message(error: unknown) {
@@ -60,7 +63,11 @@ export function UnifiedTaskDialog({ mode, restoreFocusRef, onClose, onSaved, onD
         completed: mode.task.completed,
         laneId: mode.task.laneId,
         tagIds: mode.task.tagIds,
-        collaboratorIds: mode.task.collaboratorIds
+        collaboratorIds: mode.task.collaboratorIds,
+        steps: (mode.task.steps ?? []).map((step) => ({
+          key: step.id, id: step.id, title: step.title, completed: step.completed
+        })),
+        stepInput: ''
       };
     }
     const priority = mode.originView === 'matrix' ? 'important_urgent' : '';
@@ -72,7 +79,9 @@ export function UnifiedTaskDialog({ mode, restoreFocusRef, onClose, onSaved, onD
       completed: false,
       laneId: mode.laneId ?? snapshot.defaultLaneId,
       tagIds: [],
-      collaboratorIds: []
+      collaboratorIds: [],
+      steps: [],
+      stepInput: ''
     };
   }, [mode, snapshot.defaultLaneId]);
   const [form, setForm] = useState(initial);
@@ -117,7 +126,12 @@ export function UnifiedTaskDialog({ mode, restoreFocusRef, onClose, onSaved, onD
       completed: form.completed,
       laneId: form.laneId,
       tagIds: form.tagIds,
-      collaboratorIds: form.collaboratorIds
+      collaboratorIds: form.collaboratorIds,
+      steps: [
+        ...form.steps.map(({ id, title, completed }) => ({ id, title: title.trim(), completed })),
+        // Text typed but not yet added is kept as the last step rather than lost.
+        ...(form.stepInput.trim() ? [{ id: null, title: form.stepInput.trim(), completed: false }] : [])
+      ]
     };
   }
 
@@ -191,7 +205,14 @@ export function UnifiedTaskDialog({ mode, restoreFocusRef, onClose, onSaved, onD
         <div className="good-field">
           <label htmlFor="unified-task-title">{t('taskModal.title')}</label>
           <input id="unified-task-title" className="good-input" autoComplete="off" value={form.title} disabled={busy}
-            onChange={(event) => update('title', event.target.value)} />
+            onChange={(event) => update('title', event.target.value)}
+            onKeyDown={(event) => {
+              // A second text box (the step input) turns off the browser's
+              // implicit Enter submission, so the title keeps Enter-to-save here.
+              if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
+              event.preventDefault();
+              void save();
+            }} />
           {fieldError?.field === 'title' ? <span className="field-error">{fieldError.message}</span> : null}
         </div>
         <div className="good-field">
@@ -200,6 +221,10 @@ export function UnifiedTaskDialog({ mode, restoreFocusRef, onClose, onSaved, onD
             value={form.description} disabled={busy} placeholder={t('richEditor.placeholder')}
             onChange={(markdown) => update('description', markdown)} />
         </div>
+        <TaskStepsField steps={form.steps} input={form.stepInput} disabled={busy}
+          error={fieldError?.field === 'steps' ? fieldError.message : undefined}
+          onStepsChange={(steps) => update('steps', steps)}
+          onInputChange={(value) => update('stepInput', value)} />
         <Select id="unified-task-priority" label={t('taskModal.quadrant')} options={priorityOptions}
           value={form.priority} disabled={busy} onChange={(value) => update('priority', value as TaskPriority | '')} />
         <DatePicker id="unified-task-due-date" label={t('taskModal.dueDate')} value={form.dueDate}

@@ -22,7 +22,7 @@ function lane(id: string, name: string, position: number): TaskLane {
 function task(id: string, laneId: string, boardPosition: number, overrides: Partial<Task> = {}): Task {
   return {
     id, title: id, description: '', priority: null, dueDate: null, completed: false,
-    laneId, boardPosition, tagIds: [], collaboratorIds: [], views: ['kanban'],
+    laneId, boardPosition, tagIds: [], collaboratorIds: [], views: ['kanban'], steps: [],
     createdAt: 'x', updatedAt: 'x', ...overrides
   };
 }

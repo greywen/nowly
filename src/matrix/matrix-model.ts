@@ -1,3 +1,5 @@
+import type { TaskStep } from '../tasks/task-model';
+
 export type Quadrant = 'important_urgent' | 'important_not_urgent' | 'not_important_urgent' | 'not_important_not_urgent';
 
 export type TaskPriority = 1 | 2 | 3;
@@ -19,13 +21,14 @@ export type MatrixTask = {
   completed: boolean;
   note: string;
   tags: MatrixTaskTag[];
+  steps?: TaskStep[];
   createdAt: string;
   updatedAt: string;
 };
 
-// Tags are resolved for display, not edited through the matrix draft, so they
-// are excluded here alongside the identity/audit fields.
-export type TaskDraft = Omit<MatrixTask, 'id' | 'createdAt' | 'updatedAt' | 'tags'>;
+// Tags and steps are shown, not edited, through the matrix draft, so they are
+// excluded here alongside the identity/audit fields.
+export type TaskDraft = Omit<MatrixTask, 'id' | 'createdAt' | 'updatedAt' | 'tags' | 'steps'>;
 
 export const quadrantOrder: Quadrant[] = [
   'important_urgent',

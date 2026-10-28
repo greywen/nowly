@@ -37,7 +37,7 @@ const secondReminderEvent = {
 const urgentTask = {
   id: 'task-1', title: '发布检查', description: '', priority: 'important_urgent' as const,
   dueDate: '2026-09-12', completed: false, laneId: 'todo', boardPosition: 0,
-  tagIds: [], collaboratorIds: [], views: ['matrix' as const], createdAt: 'x', updatedAt: '2026-09-01T00:00:00Z'
+  tagIds: [], collaboratorIds: [], views: ['matrix' as const], steps: [], createdAt: 'x', updatedAt: '2026-09-01T00:00:00Z'
 };
 
 // Mirrors the reported defect: an undated task and an overdue one, both

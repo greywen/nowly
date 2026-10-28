@@ -1,8 +1,8 @@
 use crate::db::AppDb;
 use crate::error::CommandError;
 use crate::models::{
-    Task, TaskCollaborator, TaskCollaboratorDraft, TaskDraft, TaskLane, TaskLaneDraft, TaskTag,
-    TaskTagDraft, TaskWorkspaceSnapshot,
+    Task, TaskCollaborator, TaskCollaboratorDraft, TaskDraft, TaskLane, TaskLaneDraft, TaskStep,
+    TaskStepDraft, TaskTag, TaskTagDraft, TaskWorkspaceSnapshot,
 };
 use crate::write_scope::DomainWrite;
 use chrono::{NaiveDate, SecondsFormat, Utc};
@@ -146,6 +146,7 @@ fn read_task_base(row: &Row<'_>) -> rusqlite::Result<Task> {
         collaborator_ids: Vec::new(),
         linked_event_id: row.get(8)?,
         views: Vec::new(),
+        steps: Vec::new(),
         created_at: row.get(9)?,
         updated_at: row.get(10)?,
     })
@@ -177,6 +178,22 @@ fn task_links(connection: &Connection, task: &mut Task) -> Result<(), CommandErr
         .query_map([&task.id], |row| row.get(0))
         .map_err(CommandError::database)?
         .collect::<rusqlite::Result<Vec<String>>>()
+        .map_err(CommandError::database)?;
+    task.steps = connection
+        .prepare(
+            "SELECT id,title,completed FROM task_steps WHERE task_id=?1
+             ORDER BY position,created_at,id",
+        )
+        .map_err(CommandError::database)?
+        .query_map([&task.id], |row| {
+            Ok(TaskStep {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                completed: row.get::<_, i64>(2)? == 1,
+            })
+        })
+        .map_err(CommandError::database)?
+        .collect::<rusqlite::Result<Vec<TaskStep>>>()
         .map_err(CommandError::database)?;
     Ok(())
 }
@@ -362,6 +379,14 @@ fn validate_draft(mut draft: TaskDraft) -> Result<TaskDraft, CommandError> {
     draft.title = draft.title.trim().to_owned();
     if draft.title.is_empty() {
         return Err(CommandError::validation("title", "请输入任务标题。"));
+    }
+    if let Some(steps) = draft.steps.as_mut() {
+        for step in steps.iter_mut() {
+            step.title = step.title.trim().to_owned();
+            if step.title.is_empty() {
+                return Err(CommandError::validation("steps", "请输入步骤内容。"));
+            }
+        }
     }
     if let Some(priority) = draft.priority.as_deref() {
         if !PRIORITIES.contains(&priority) {
@@ -559,6 +584,62 @@ fn replace_task_links(
     Ok(())
 }
 
+// Replaces a task's steps in draft order. Ids the task owns keep their row and,
+// when nothing changed, their timestamps; any other id (another task's, a
+// repeat, or none) becomes a new step. Owned steps left out are deleted.
+fn replace_task_steps(
+    transaction: &Connection,
+    task_id: &str,
+    steps: &[TaskStepDraft],
+    now: &str,
+) -> Result<(), CommandError> {
+    let owned = transaction
+        .prepare("SELECT id FROM task_steps WHERE task_id=?1")
+        .map_err(CommandError::database)?
+        .query_map([task_id], |row| row.get(0))
+        .map_err(CommandError::database)?
+        .collect::<rusqlite::Result<HashSet<String>>>()
+        .map_err(CommandError::database)?;
+    let mut kept = HashSet::new();
+    for (position, step) in steps.iter().enumerate() {
+        let position = position as i64;
+        let completed = i64::from(step.completed);
+        match step.id.as_deref() {
+            Some(id) if owned.contains(id) && kept.insert(id.to_owned()) => {
+                transaction
+                    .execute(
+                        "UPDATE task_steps SET title=?2,completed=?3,position=?4,updated_at=?5
+                         WHERE id=?1 AND (title<>?2 OR completed<>?3 OR position<>?4)",
+                        params![id, step.title, completed, position, now],
+                    )
+                    .map_err(sql_write_error)?;
+            }
+            _ => {
+                transaction
+                    .execute(
+                        "INSERT INTO task_steps(id,task_id,title,completed,position,created_at,updated_at)
+                         VALUES (?1,?2,?3,?4,?5,?6,?6)",
+                        params![
+                            Uuid::new_v4().hyphenated().to_string(),
+                            task_id,
+                            step.title,
+                            completed,
+                            position,
+                            now
+                        ],
+                    )
+                    .map_err(sql_write_error)?;
+            }
+        }
+    }
+    for id in owned.difference(&kept) {
+        transaction
+            .execute("DELETE FROM task_steps WHERE id=?1", [id])
+            .map_err(sql_write_error)?;
+    }
+    Ok(())
+}
+
 fn membership(
     transaction: &Connection,
     task_id: &str,
@@ -719,6 +800,9 @@ pub fn create(
         )
         .map_err(sql_write_error)?;
     replace_task_links(&transaction, &id, &draft.tag_ids, &draft.collaborator_ids)?;
+    if let Some(steps) = draft.steps.as_deref() {
+        replace_task_steps(&transaction, &id, steps, &now)?;
+    }
     if linking_enabled(&transaction)? {
         coordinate_memberships(&transaction, &id)?;
     } else if let Some(views) = draft.views.as_ref() {
@@ -789,6 +873,9 @@ pub fn update(connection: &Connection, id: &str, draft: TaskDraft) -> Result<Tas
         renumber_lane(&transaction, &target_lane)?;
     }
     replace_task_links(&transaction, id, &draft.tag_ids, &draft.collaborator_ids)?;
+    if let Some(steps) = draft.steps.as_deref() {
+        replace_task_steps(&transaction, id, steps, &now)?;
+    }
     if linking_enabled(&transaction)? {
         coordinate_memberships(&transaction, id)?;
     } else if let Some(views) = draft.views.as_ref() {
@@ -1593,7 +1680,7 @@ pub fn set_task_view_preferences(
 mod tests {
     use super::{create, create_tag_value, set_linking, snapshot};
     use crate::db::migrate;
-    use crate::models::{TaskDraft, TaskTagDraft};
+    use crate::models::{TaskDraft, TaskStepDraft, TaskTagDraft};
     use rusqlite::Connection;
 
     fn database() -> Connection {
@@ -1615,7 +1702,113 @@ mod tests {
             collaborator_ids: Vec::new(),
             linked_event_id: None,
             views: None,
+            steps: None,
         }
+    }
+
+    fn step(id: Option<&str>, title: &str, completed: bool) -> TaskStepDraft {
+        TaskStepDraft { id: id.map(str::to_owned), title: title.into(), completed }
+    }
+
+    fn stored(connection: &Connection, id: &str) -> crate::models::Task {
+        snapshot(connection).unwrap().tasks.into_iter().find(|task| task.id == id).unwrap()
+    }
+
+    #[test]
+    fn create_stores_trimmed_steps_in_order_with_fresh_ids() {
+        let connection = database();
+        let task = create(&connection, "kanban", TaskDraft {
+            steps: Some(vec![step(Some("client-id"), "  起草  ", false), step(None, "评审", true)]),
+            ..draft()
+        }).unwrap();
+        let shape: Vec<_> = task.steps.iter().map(|s| (s.title.as_str(), s.completed)).collect();
+        assert_eq!(shape, [("起草", false), ("评审", true)]);
+        assert_ne!(task.steps[0].id, "client-id");
+        assert_ne!(task.steps[0].id, task.steps[1].id);
+        assert_eq!(stored(&connection, &task.id).steps, task.steps);
+    }
+
+    #[test]
+    fn update_reorders_keeps_owned_ids_and_drops_removed_steps() {
+        let connection = database();
+        let task = create(&connection, "kanban", TaskDraft {
+            steps: Some(vec![step(None, "一", false), step(None, "二", false), step(None, "三", false)]),
+            ..draft()
+        }).unwrap();
+        let (one, two, three) = (task.steps[0].id.clone(), task.steps[1].id.clone(), task.steps[2].id.clone());
+        let updated = super::update(&connection, &task.id, TaskDraft {
+            steps: Some(vec![step(Some(&three), "三", true), step(None, "四", false), step(Some(&one), "一", false)]),
+            ..draft()
+        }).unwrap();
+        assert_eq!(updated.steps[0].id, three);
+        assert!(updated.steps[0].completed);
+        assert_eq!(updated.steps[1].title, "四");
+        assert!(![&one, &two, &three].contains(&&updated.steps[1].id));
+        assert_eq!(updated.steps[2].id, one);
+        let kept: bool = connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM task_steps WHERE id=?1)", [&two], |row| row.get(0),
+        ).unwrap();
+        assert!(!kept);
+    }
+
+    #[test]
+    fn update_without_steps_keeps_them_and_unchanged_steps_keep_timestamps() {
+        let connection = database();
+        let task = create(&connection, "kanban", TaskDraft {
+            steps: Some(vec![step(None, "一", false), step(None, "二", true)]),
+            ..draft()
+        }).unwrap();
+        connection.execute("UPDATE task_steps SET updated_at='before'", []).unwrap();
+        let renamed = super::update(&connection, &task.id, TaskDraft { title: "改名".into(), ..draft() }).unwrap();
+        assert_eq!(renamed.steps, task.steps);
+        let same = task.steps.iter().map(|s| step(Some(&s.id), &s.title, s.completed)).collect();
+        super::update(&connection, &task.id, TaskDraft { steps: Some(same), ..draft() }).unwrap();
+        let stamps: Vec<String> = connection.prepare("SELECT updated_at FROM task_steps ORDER BY position")
+            .unwrap().query_map([], |row| row.get(0)).unwrap()
+            .collect::<rusqlite::Result<_>>().unwrap();
+        assert_eq!(stamps, ["before", "before"]);
+    }
+
+    #[test]
+    fn foreign_and_repeated_step_ids_become_new_steps() {
+        let connection = database();
+        let other = create(&connection, "kanban", TaskDraft {
+            steps: Some(vec![step(None, "别人的", false)]), ..draft()
+        }).unwrap();
+        let task = create(&connection, "kanban", TaskDraft {
+            steps: Some(vec![step(None, "自己的", false)]), ..draft()
+        }).unwrap();
+        let (own, foreign) = (task.steps[0].id.clone(), other.steps[0].id.clone());
+        let updated = super::update(&connection, &task.id, TaskDraft {
+            steps: Some(vec![step(Some(&own), "一", false), step(Some(&own), "二", false), step(Some(&foreign), "三", false)]),
+            ..draft()
+        }).unwrap();
+        assert_eq!(updated.steps[0].id, own);
+        assert_ne!(updated.steps[1].id, own);
+        assert_ne!(updated.steps[2].id, foreign);
+        assert_eq!(stored(&connection, &other.id).steps, other.steps);
+    }
+
+    #[test]
+    fn blank_step_title_is_rejected_before_writing() {
+        let connection = database();
+        let error = create(&connection, "kanban", TaskDraft {
+            steps: Some(vec![step(None, "一", false), step(None, "   ", false)]), ..draft()
+        }).unwrap_err();
+        assert_eq!(error.field.as_deref(), Some("steps"));
+        assert_eq!(error.message, "请输入步骤内容。");
+        assert!(snapshot(&connection).unwrap().tasks.is_empty());
+    }
+
+    #[test]
+    fn deleting_a_task_removes_its_steps() {
+        let connection = database();
+        let task = create(&connection, "kanban", TaskDraft {
+            steps: Some(vec![step(None, "一", false)]), ..draft()
+        }).unwrap();
+        super::delete(&connection, &task.id).unwrap();
+        let count: i64 = connection.query_row("SELECT COUNT(*) FROM task_steps", [], |row| row.get(0)).unwrap();
+        assert_eq!(count, 0);
     }
 
     #[test]

@@ -39,6 +39,28 @@ pub struct Event {
     pub subscription_id: Option<String>,
 }
 
+// One item of a task's ordered checklist. Completing every step never
+// completes the task, and completing the task leaves its steps alone.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskStep {
+    pub id: String,
+    pub title: String,
+    pub completed: bool,
+}
+
+// A step inside a task draft. `id` names a stored step of the same task; None,
+// or an id the task does not own, creates a new step.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskStepDraft {
+    #[serde(default)]
+    pub id: Option<String>,
+    pub title: String,
+    #[serde(default)]
+    pub completed: bool,
+}
+
 // Unified task. A task is the single source of truth projected into the
 // kanban and matrix views. `priority` is one of the four fixed values or None
 // (unclassified). `views` lists the view memberships the task currently belongs
@@ -60,6 +82,8 @@ pub struct Task {
     pub collaborator_ids: Vec<String>,
     pub linked_event_id: Option<String>,
     pub views: Vec<String>,
+    #[serde(default)]
+    pub steps: Vec<TaskStep>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -140,6 +164,10 @@ pub struct TaskDraft {
     pub linked_event_id: Option<String>,
     #[serde(default)]
     pub views: Option<Vec<String>>,
+    // None keeps the stored steps, so callers that never edit steps (the
+    // assistant, quick toggles) cannot drop them; Some replaces them in order.
+    #[serde(default)]
+    pub steps: Option<Vec<TaskStepDraft>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -481,7 +509,7 @@ pub struct TaskWorkspaceSnapshot {
 mod tests {
     use super::{
         CalendarSubscription, EditScope, Event, EventDraft, EventTarget, ExternalEvent, NoteDraft,
-        SubscriptionDraft, TaskDraft,
+        SubscriptionDraft, TaskDraft, TaskStepDraft,
     };
     use crate::recurrence::{Freq, Recurrence, RecurrenceEnd};
     use serde_json::{json, Value};
@@ -716,6 +744,22 @@ mod tests {
         assert_eq!(draft.tag_ids, vec!["t1".to_string()]);
         assert_eq!(draft.collaborator_ids, vec!["c1".to_string()]);
         assert_eq!(draft.views, None);
+    }
+
+    #[test]
+    fn task_draft_steps_default_to_keep_and_parse_new_steps() {
+        let keep: TaskDraft = serde_json::from_value(serde_json::json!({
+            "title": "t", "laneId": "kanban-lane-todo"
+        })).unwrap();
+        assert_eq!(keep.steps, None);
+        let replace: TaskDraft = serde_json::from_value(serde_json::json!({
+            "title": "t", "laneId": "kanban-lane-todo",
+            "steps": [{ "id": null, "title": "一" }, { "id": "s1", "title": "二", "completed": true }]
+        })).unwrap();
+        assert_eq!(replace.steps, Some(vec![
+            TaskStepDraft { id: None, title: "一".into(), completed: false },
+            TaskStepDraft { id: Some("s1".into()), title: "二".into(), completed: true },
+        ]));
     }
 
     #[test]

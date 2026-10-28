@@ -18,6 +18,21 @@ const open: MatrixTask = {
 };
 
 describe('TaskRow', () => {
+  it('shows the step count next to the meta text', () => {
+    render(
+      <TaskRow
+        task={{ ...open, steps: [{ id: 's1', title: '一', completed: true }, { id: 's2', title: '二', completed: false }] }}
+        today={new Date(2026, 6, 23)}
+        pending={false}
+        onToggle={vi.fn()}
+        onOpen={vi.fn()}
+      />
+    );
+    expect(screen.getByText('今天到期 · 高优先级')).toBeInTheDocument();
+    expect(screen.getByText('1/2')).toBeInTheDocument();
+    expect(screen.getByText('已完成 1/2 个步骤')).toBeInTheDocument();
+  });
+
   it('renders an accessible two-line row and emits separate completion and edit intents', async () => {
     const user = userEvent.setup();
     const onToggle = vi.fn();

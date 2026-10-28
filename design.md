@@ -596,6 +596,22 @@ app-shell（100vw × 100vh，grid-template-rows: 70px minmax(0, 1fr)）
 - 拖拽目标态：边框 `--color-primary`，底 `--color-primary-light`。
 - 拖拽手柄光标 `grab` / `grabbing`；拖拽中的卡片 `opacity: 0.5`。
 
+### 10.14 任务步骤
+
+任务步骤是任务的有序子清单，在统一任务弹框（看板、四象限、快速创建共用）中编辑，随「保存任务」一起提交，新建任务时也可添加。步骤完成与任务完成互相独立：勾完全部步骤不会自动完成任务，完成任务也不改动步骤。
+
+- 位置：「描述」字段之后，遵循字段间距 `20px`。区块用 `role="group"` 并以标题「步骤」命名；它是可编辑清单而非选项组，不套用 §10.6 的 `fieldset` 规则。
+- 标题行：左侧「步骤」`0.95rem / 500 / 1.5`、`--text-secondary`；右侧完成计数「已完成数/总数」`0.85rem / 600 / 1.5`、`--text-muted`、等宽数字。没有步骤时只显示标题。
+- 进度条：标题行下 `8px`，高 `4px`，`--radius-pill`，轨道 `--bg-secondary`，填充 `--color-primary`，宽度即时更新、无过渡；没有步骤时不显示。使用 `role="progressbar"`，`aria-valuetext` 为「已完成 x/y 个步骤」。
+- 列表：进度条下 `8px`，行间距 `4px`，每行最小高 `48px`（与行内编辑的单行输入框等高，进入编辑不跳动）。行内依次为：拖拽手柄 → `8px` → Checkbox（§10.6，`28 × 28px`）→ `12px` → 步骤文字 → `8px` → 删除。
+- 手柄与删除：标准档图标按钮（`40 × 40px` / `18px`），透明底，文字色 `--text-tertiary`；hover 文字 `--color-primary`、底 `--bg-secondary`；`focus-visible` 为 `--shadow-focus`。手柄用 Solar `menu-dots`，光标 `grab` / `grabbing`；删除用 `trash-bin-trash`。
+- 步骤文字：`1rem / 400 / 1.5`，`--text-secondary`，长文本换行不截断，hover `--color-primary-active`，`focus-visible` 为 `--shadow-focus`（圆角 `--radius-sm`）。已完成为 `--text-muted` 加删除线，状态同时由 Checkbox 表达。
+- 行内编辑：点击文字换成 §10.4 单行输入框并聚焦。`Enter` 或失焦保存；`Esc` 取消，不关闭弹框；内容为空视为取消。输入法组合中的 `Enter` 不提交。
+- 添加行：列表下 `8px`，单行输入框（占位「添加步骤」）+ `8px` + 次按钮「添加」。`Enter` 或点击按钮把步骤加到末尾，输入框清空并保留焦点；内容为空时按钮禁用。保存任务时，输入框里尚未添加的文字作为最后一步一并保存。
+- 排序：拖动手柄即时重排，拖动中的行 `opacity: 0.5`；在列表外松开或按 `Esc` 取消时恢复原顺序。手柄获得焦点时按 `↑` / `↓` 每次移动一位，焦点留在手柄上，并通过 `aria-live="polite"` 播报新位置。
+- 只读计数：看板卡片顶行右侧（附件数之前）和四象限任务行元信息之后显示 Solar `list-check` `16px` 图标 + 「x/y」，`0.85rem / 500`、`--text-muted`，图标与数字间距 `4px`，图标继承文字色。计数不可点击；没有步骤时不显示；辅助技术读到「已完成 x/y 个步骤」。
+- 所有状态即时切换，无动画（§12）。
+
 ---
 
 ## 11. 交互状态

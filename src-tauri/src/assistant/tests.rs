@@ -525,3 +525,102 @@ fn unrelated_settings_writes_do_not_invalidate_a_pending_plan() {
     assert!(store::revision(&db).unwrap() > before);
     assert!(store::execute(&db, &plan.id, &permissions()).is_err());
 }
+
+fn task_with_steps(db: &Connection, title: &str) -> crate::models::Task {
+    crate::task_workspace::create(
+        db,
+        "kanban",
+        serde_json::from_value(json!({
+            "title": title, "laneId": "kanban-lane-todo",
+            "steps": [{"title": "one"}, {"title": "two", "completed": true}]
+        }))
+        .unwrap(),
+    )
+    .unwrap()
+}
+
+fn stored_task(db: &Connection, id: &str) -> crate::models::Task {
+    crate::task_workspace::snapshot(db).unwrap().tasks.into_iter().find(|t| t.id == id).unwrap()
+}
+
+#[test]
+fn undoing_an_ai_task_delete_restores_its_steps() {
+    let db = db();
+    let task = task_with_steps(&db, "with steps");
+    let p = prepare(&db, vec![Action::DeleteTask { id: task.id.clone() }]);
+    store::execute(&db, &p.id, &permissions()).unwrap();
+    assert_eq!(db.query_row("SELECT count(*) FROM task_steps", [], |r| r.get::<_, i64>(0)).unwrap(), 0);
+    store::undo(&db, &p.id, &permissions()).unwrap();
+    assert_eq!(stored_task(&db, &task.id).steps, task.steps);
+}
+
+#[test]
+fn ai_task_update_keeps_steps() {
+    let db = db();
+    let task = task_with_steps(&db, "rename me");
+    let p = prepare(&db, vec![Action::UpdateTask { id: task.id.clone(), patch: json!({"title": "renamed"}) }]);
+    store::execute(&db, &p.id, &permissions()).unwrap();
+    let updated = stored_task(&db, &task.id);
+    assert_eq!(updated.title, "renamed");
+    assert_eq!(updated.steps, task.steps);
+}
+
+fn remove_legacy_step_guard(db: &Connection, plan_id: &str) {
+    let encoded: String = db
+        .query_row(
+            "SELECT undo_guard FROM assistant_plans WHERE id=?1",
+            [plan_id],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let mut guard: serde_json::Value = serde_json::from_str(&encoded).unwrap();
+    assert_eq!(guard.as_object_mut().unwrap().remove("task_steps"), Some(json!({})));
+    db.execute(
+        "UPDATE assistant_plans SET undo_guard=?1 WHERE id=?2",
+        rusqlite::params![serde_json::to_string(&guard).unwrap(), plan_id],
+    )
+    .unwrap();
+}
+
+#[test]
+fn legacy_task_plan_can_be_undone_without_a_step_guard() {
+    let db = db();
+    let plan = prepare(&db, vec![Action::CreateTask { draft: json!({"title": "legacy task"}) }]);
+    store::execute(&db, &plan.id, &permissions()).unwrap();
+    remove_legacy_step_guard(&db, &plan.id);
+
+    assert_eq!(store::undo(&db, &plan.id, &permissions()).unwrap().status, "undone");
+    assert!(crate::task_workspace::snapshot(&db).unwrap().tasks.is_empty());
+}
+
+#[test]
+fn legacy_task_plan_undo_rejects_steps_added_after_upgrade() {
+    let db = db();
+    let plan = prepare(&db, vec![Action::CreateTask { draft: json!({"title": "legacy task"}) }]);
+    store::execute(&db, &plan.id, &permissions()).unwrap();
+    remove_legacy_step_guard(&db, &plan.id);
+    let task = crate::task_workspace::snapshot(&db).unwrap().tasks.remove(0);
+    db.execute(
+        "INSERT INTO task_steps (id,task_id,title,completed,position,created_at,updated_at)
+         VALUES ('new-step',?1,'keep me',0,0,?2,?2)",
+        rusqlite::params![task.id, task.updated_at],
+    )
+    .unwrap();
+
+    assert_eq!(store::undo(&db, &plan.id, &permissions()).unwrap_err().code, "conflict");
+    assert_eq!(stored_task(&db, &task.id).steps[0].title, "keep me");
+    assert_eq!(store::get(&db, &plan.id).unwrap().status, "committed");
+}
+
+#[test]
+fn legacy_event_plan_undo_preserves_unrelated_steps() {
+    let db = db();
+    let plan = prepare(&db, vec![create("AI-legacy")]);
+    store::execute(&db, &plan.id, &permissions()).unwrap();
+    remove_legacy_step_guard(&db, &plan.id);
+    let task = task_with_steps(&db, "unrelated");
+
+    store::undo(&db, &plan.id, &permissions()).unwrap();
+    assert_eq!(count(&db), 0);
+    assert_eq!(stored_task(&db, &task.id).steps, task.steps);
+}

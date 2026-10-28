@@ -12,6 +12,7 @@ import { useNowlyRepository } from '../data/RepositoryContext';
 import { t } from '../i18n';
 import {
   emptyTaskWorkspace,
+  normalizeTaskWorkspace,
   sortTaskWorkspace,
   type Task,
   type TaskCollaboratorDraft,
@@ -92,7 +93,7 @@ export function TaskWorkspaceProvider({ children }: { children: ReactNode }) {
   const dataRef = useRef(workspace.data);
 
   const applySnapshot = useCallback((snapshot: TaskWorkspaceSnapshot) => {
-    const sorted = sortTaskWorkspace(snapshot);
+    const sorted = sortTaskWorkspace(normalizeTaskWorkspace(snapshot));
     dataRef.current = sorted;
     setWorkspace({ status: 'ready', data: sorted });
     return sorted;
@@ -213,7 +214,8 @@ export function TaskWorkspaceProvider({ children }: { children: ReactNode }) {
             createdAt: current?.createdAt ?? updated.createdAt,
             updatedAt: updated.updatedAt,
             boardPosition: current?.boardPosition ?? 0,
-            views: current?.views ?? ['kanban', 'matrix']
+            views: current?.views ?? ['kanban', 'matrix'],
+            steps: current?.steps ?? []
           }
         : missing('legacy update projection');
     });

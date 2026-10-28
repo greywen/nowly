@@ -39,6 +39,23 @@ function props(overrides: Partial<Parameters<typeof KanbanCard>[0]> = {}): Param
 }
 
 describe('KanbanCard', () => {
+  it('shows a read-only step count in the top band', () => {
+    render(<KanbanCard {...props({ resolved: resolved({ steps: [
+      { id: 's1', title: '一', completed: true },
+      { id: 's2', title: '二', completed: false },
+      { id: 's3', title: '三', completed: false }
+    ] }) })} />);
+    expect(screen.getByText('1/3')).toBeInTheDocument();
+    expect(screen.getByText('已完成 1/3 个步骤')).toBeInTheDocument();
+    expect(document.querySelector('.kanban-card--no-top')).toBeNull();
+  });
+
+  it('omits the step count when the task has no steps', () => {
+    render(<KanbanCard {...props({ resolved: resolved({ steps: [] }) })} />);
+    expect(document.querySelector('.task-step-count')).toBeNull();
+    expect(document.querySelector('.kanban-card--no-top')).not.toBeNull();
+  });
+
   it('always shows the title and omits empty optional fields', () => {
     render(<KanbanCard {...props()} />);
     expect(screen.getByText('写设计稿')).toBeInTheDocument();

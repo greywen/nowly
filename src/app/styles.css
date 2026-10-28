@@ -723,7 +723,8 @@ body:has(.screen-status-island-root),
 .task-row__tags { flex: none; display: inline-flex; align-items: center; gap: 8px; overflow: hidden; }
 .task-tag { display: inline-flex; align-items: center; gap: 2px; font-size: 0.85rem; font-weight: 500; white-space: nowrap; }
 .task-tag__hash { color: inherit; opacity: 0.7; }
-.task-row__meta { overflow: hidden; color: var(--text-muted); font-size: 0.85rem; line-height: 1.5; text-overflow: ellipsis; white-space: nowrap; }
+.task-row__meta { min-width: 0; overflow: hidden; color: var(--text-muted); font-size: 0.85rem; line-height: 1.5; text-overflow: ellipsis; white-space: nowrap; }
+.task-row__meta-line { min-width: 0; display: flex; align-items: center; gap: 8px; }
 .task-row--completed .task-row__title { color: var(--text-muted); text-decoration: line-through; }
 .task-row--completed .task-tag { opacity: .6; }
 .empty-copy, .empty-state p { margin: 0; color: var(--text-muted); font-size: 0.85rem; }
@@ -1406,6 +1407,34 @@ body:has(.screen-status-island-root),
 .task-quadrants legend { width: 100%; margin-bottom: 8px; color: var(--text-secondary); font-size: 0.95rem; font-weight: 500; }
 .task-dialog__actions { width: 100%; display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 .task-dialog__actions .dialog-error { margin: 0 auto 0 0; }
+/* Task steps in the task dialog (design.md §10.14). */
+.task-steps { min-width: 0; display: grid; gap: 8px; }
+.task-steps__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.task-steps__label { color: var(--text-secondary); font-size: 0.95rem; font-weight: 500; line-height: 1.5; }
+.task-steps__count { color: var(--text-muted); font-size: 0.85rem; font-weight: 600; line-height: 1.5; font-variant-numeric: tabular-nums; }
+.task-steps__progress { height: 4px; overflow: hidden; border-radius: var(--radius-pill); background: var(--bg-secondary); }
+.task-steps__progress-fill { display: block; height: 100%; border-radius: inherit; background: var(--color-primary); }
+.task-steps__list { margin: 0; padding: 0; display: grid; gap: 4px; list-style: none; }
+.task-step { min-width: 0; min-height: 48px; display: flex; align-items: center; gap: 8px; }
+.task-step--dragging { opacity: .5; }
+.task-step__handle,
+.task-step__delete { flex: none; color: var(--text-tertiary); background: transparent; }
+.task-step__handle { cursor: grab; }
+.task-step__handle:active { cursor: grabbing; }
+.task-step__handle:hover,
+.task-step__delete:hover { color: var(--color-primary); background: var(--bg-secondary); }
+.task-step__handle:focus-visible,
+.task-step__delete:focus-visible,
+.task-step__title:focus-visible,
+.task-step__check .form-check-input:focus-visible { outline: 0; box-shadow: var(--shadow-focus); }
+.task-step__check { flex: none; margin-inline-end: 4px; }
+.task-step__title { min-width: 0; flex: 1; padding: 0; border: 0; border-radius: var(--radius-sm); color: var(--text-secondary); background: transparent; font: 400 1rem/1.5 var(--font-sans); text-align: start; overflow-wrap: anywhere; cursor: text; }
+.task-step__title:hover { color: var(--color-primary-active); }
+.task-step--completed .task-step__title { color: var(--text-muted); text-decoration: line-through; }
+.task-step__input { min-width: 0; flex: 1; font-size: 1rem; }
+.task-steps__add { display: flex; align-items: center; gap: 8px; }
+.task-steps__add .good-input { min-width: 0; flex: 1; }
+.task-steps__add .good-button { flex: none; }
 .form-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .form-check { position: relative; display: inline-flex; align-items: center; gap: 12px; }
 .form-check-input { box-sizing: border-box; width: 28px; height: 28px; margin: 0; padding: 0; flex: none; appearance: none; border: 0; border-radius: var(--radius-sm); background: var(--border-emphasis); }
@@ -1769,6 +1798,10 @@ body:has(.screen-status-island-root),
 .kanban-card__desc { margin: 0; min-width: 0; display: -webkit-box; overflow: hidden; color: var(--text-muted); font-size: 0.85rem; line-height: 1.5; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; white-space: pre-line; }
 .kanban-card__clip { display: inline-flex; align-items: center; gap: 4px; flex: none; color: var(--text-muted); font-size: 0.85rem; font-weight: 500; }
 .kanban-card__clip svg { width: 16px; height: 16px; flex: none; color: var(--text-tertiary); }
+/* Step count on cards and matrix rows (design.md §10.14). The icon inherits the
+   text colour instead of overriding it (§13.3). */
+.task-step-count { display: inline-flex; flex: none; align-items: center; gap: 4px; color: var(--text-muted); font-size: 0.85rem; font-weight: 500; line-height: 1.5; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.task-step-count svg { width: 16px; height: 16px; flex: none; }
 .kanban-card__top-right .kanban-menu .good-icon-button { width: 28px; height: 28px; min-height: 28px; }
 .kanban-card__footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .kanban-card__people { display: inline-flex; align-items: center; min-width: 0; }

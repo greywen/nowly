@@ -5,6 +5,8 @@ import { contentAttachments, contentToPlainText } from '../components/rich-text/
 import type { ResolvedCard } from './kanban-view';
 import { formatDueDate } from './kanban-view';
 import { t } from '../i18n';
+import { TaskStepCount } from '../tasks/TaskStepCount';
+import { stepProgress } from '../tasks/task-model';
 
 type KanbanCardProps = {
   resolved: ResolvedCard;
@@ -53,7 +55,8 @@ export function KanbanCard({
     : { fileIds: [] };
   const attachmentCount = fileIds.length;
 
-  const hasTop = Boolean(card.dueDate) || Boolean(priority) || attachmentCount > 0;
+  const hasSteps = stepProgress(card.steps).total > 0;
+  const hasTop = Boolean(card.dueDate) || Boolean(priority) || attachmentCount > 0 || hasSteps;
 
   return (
     <article
@@ -74,6 +77,7 @@ export function KanbanCard({
             <span className="kanban-card__date kanban-card__date--empty" aria-hidden="true" />
           )}
           <div className="kanban-card__top-right">
+            <TaskStepCount steps={card.steps} />
             {attachmentCount > 0 ? (
               <span
                 className="kanban-card__clip"

@@ -57,6 +57,7 @@ const ICON_SOURCES = {
   Layers: 'layers-minimalistic',
   LayoutGrid: 'widget-5',
   List: 'list',
+  ListCheck: 'list-check',
   Lock: 'lock-keyhole',
   Unlock: 'lock-keyhole-unlocked',
   Mail: 'letter',

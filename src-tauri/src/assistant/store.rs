@@ -18,6 +18,7 @@ const TABLES: &[&str] = &[
     "task_tag_links",
     "task_collaborator_links",
     "task_view_memberships",
+    "task_steps",
 ];
 const SNAPSHOT_TABLES: &[&str] = &[
     "events",
@@ -30,6 +31,7 @@ const SNAPSHOT_TABLES: &[&str] = &[
     "task_tags",
     "task_collaborators",
     "settings",
+    "task_steps",
 ];
 const WATCHED: &[&str] = &[
     "events",
@@ -42,6 +44,7 @@ const WATCHED: &[&str] = &[
     "task_tags",
     "task_collaborators",
     "settings",
+    "task_steps",
 ];
 // `settings` is rewritten wholesale by unrelated UI actions (picking a colour
 // touches `recent_colors`), so only the keys a plan actually depends on count.
@@ -115,6 +118,15 @@ pub fn install_triggers(db: &Connection) -> rusqlite::Result<()> {
     }
     let keys = watched_settings_list();
     for table in WATCHED {
+        // Migrations 23, 24 and 27 reinstall triggers before later tables exist.
+        let exists: bool = db.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name=?1)",
+            [*table],
+            |r| r.get(0),
+        )?;
+        if !exists {
+            continue;
+        }
         for event in ["INSERT", "UPDATE", "DELETE"] {
             let guard = match (*table, event) {
                 ("settings", "INSERT") => format!(" WHEN NEW.key IN ({keys})"),
@@ -637,7 +649,10 @@ fn private(db: &Connection, id: &str) -> Result<(Vec<Patch>, Snapshot), CommandE
             |r| Ok((r.get(0)?, r.get(1)?)),
         )
         .map_err(CommandError::database)?;
-    Ok((decode(&patch)?, decode(&guard)?))
+    let mut guard: Snapshot = decode(&guard)?;
+    // Plans saved before migration 37 have no step rows or step-table entry.
+    guard.entry("task_steps".to_string()).or_default();
+    Ok((decode(&patch)?, guard))
 }
 pub fn execute(db: &Connection, id: &str, permissions: &Permissions) -> Result<Plan, CommandError> {
     let outer = WriteScope::new(db).map_err(CommandError::database)?;
