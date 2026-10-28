@@ -64,12 +64,12 @@ function createRepository(overrides: Partial<NowlyRepository> = {}): NowlyReposi
     ]),
     saveModuleLayout: vi.fn().mockImplementation((layout) => Promise.resolve(layout)),
     createFocusSession:vi.fn().mockImplementation((session)=>Promise.resolve(session)), listFocusSessions:vi.fn().mockResolvedValue([]), getFocusStatistics:vi.fn().mockResolvedValue({totalFocusedSeconds:0,completedCount:0,interruptedCount:0,completionRate:0,points:[]}),
-    getKanbanSnapshot: vi.fn().mockResolvedValue({ lanes: [], cards: [], priorities: [], tags: [], collaborators: [] }),
+    getKanbanSnapshot: vi.fn().mockResolvedValue({ lanes: [], cards: [], priorities: [], tags: [] }),
     createKanbanLane: vi.fn(), updateKanbanLane: vi.fn(), deleteKanbanLane: vi.fn(), reorderKanbanLanes: vi.fn(),
     createKanbanCard: vi.fn(), updateKanbanCard: vi.fn(), deleteKanbanCard: vi.fn(), moveKanbanCard: vi.fn(),
     createKanbanPriority: vi.fn(), updateKanbanPriority: vi.fn(), deleteKanbanPriority: vi.fn(), reorderKanbanPriorities: vi.fn(),
     createKanbanTag: vi.fn(), updateKanbanTag: vi.fn(), deleteKanbanTag: vi.fn(),
-    createKanbanCollaborator: vi.fn(), updateKanbanCollaborator: vi.fn(), deleteKanbanCollaborator: vi.fn(), listCategories: vi.fn().mockResolvedValue([]), createCategory: vi.fn(), updateCategory: vi.fn(), deleteCategory: vi.fn(), listCalendarSubscriptions: vi.fn().mockResolvedValue([]), createCalendarSubscription: vi.fn(), updateCalendarSubscription: vi.fn(), deleteCalendarSubscription: vi.fn(), refreshCalendarSubscription: vi.fn(), startOAuthLogin: vi.fn(), listOAuthAccounts: vi.fn().mockResolvedValue([]), disconnectOAuthAccount: vi.fn(), listRemoteCalendars: vi.fn().mockResolvedValue([]), subscribeRemoteCalendar: vi.fn(), updateSubscriptionDisplay: vi.fn(), listExternalEventsInRange: vi.fn().mockResolvedValue([]),
+    listCategories: vi.fn().mockResolvedValue([]), createCategory: vi.fn(), updateCategory: vi.fn(), deleteCategory: vi.fn(), listCalendarSubscriptions: vi.fn().mockResolvedValue([]), createCalendarSubscription: vi.fn(), updateCalendarSubscription: vi.fn(), deleteCalendarSubscription: vi.fn(), refreshCalendarSubscription: vi.fn(), startOAuthLogin: vi.fn(), listOAuthAccounts: vi.fn().mockResolvedValue([]), disconnectOAuthAccount: vi.fn(), listRemoteCalendars: vi.fn().mockResolvedValue([]), subscribeRemoteCalendar: vi.fn(), updateSubscriptionDisplay: vi.fn(), listExternalEventsInRange: vi.fn().mockResolvedValue([]),
     ...overrides
   };
 }
@@ -122,7 +122,7 @@ describe('App startup and window behavior', () => {
     expect(screen.queryByText('正在读取本地任务')).not.toBeInTheDocument();
     expect(screen.queryByText('正在读取本地便签')).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByText('本月暂无日程')).toBeInTheDocument());
-    expect(screen.getAllByText('暂无任务')).toHaveLength(4);
+    expect(screen.getAllByRole('button', { name: /^添加到「/ })).toHaveLength(4);
     expect(screen.getByText('还没有便签')).toBeInTheDocument();
     expect(screen.queryByText('设计评审')).not.toBeInTheDocument();
     expect(screen.queryByText('产品原则')).not.toBeInTheDocument();
@@ -166,7 +166,7 @@ describe('App startup and window behavior', () => {
     renderApp(createRepository({ listNotes: vi.fn().mockRejectedValue({ message: '便签读取失败' }) }));
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('便签读取失败'));
     expect(screen.getByText('本月暂无日程')).toBeInTheDocument();
-    expect(screen.getAllByText('暂无任务')).toHaveLength(4);
+    expect(screen.getAllByRole('button', { name: /^添加到「/ })).toHaveLength(4);
   });
 
   it('queries month ranges, navigates, and creates an event from the header', async () => {

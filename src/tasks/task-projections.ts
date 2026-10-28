@@ -2,9 +2,9 @@ import type { KanbanCard, KanbanPriority, KanbanSnapshot } from '../kanban/kanba
 import type { MatrixTask, TaskDraft as MatrixTaskDraft, TaskPriority as LegacyTaskPriority } from '../matrix/matrix-model';
 import { DESIGN_COLORS, type HexColor } from '../lib/color';
 import { quadrantLabel } from '../matrix/matrix-model';
-import type { Task, TaskDraft, TaskPriority, TaskTag, TaskView, TaskWorkspaceSnapshot } from './task-model';
+import { defaultTaskPriority, type Task, type TaskDraft, type TaskPriority, type TaskTag, type TaskWorkspaceSnapshot } from './task-model';
 
-const priorityColors: Record<TaskPriority, HexColor> = {
+export const priorityColors: Record<TaskPriority, HexColor> = {
   important_urgent: DESIGN_COLORS.danger,
   important_not_urgent: DESIGN_COLORS.primary,
   not_important_urgent: DESIGN_COLORS.warning,
@@ -17,8 +17,7 @@ export function legacyPriority(priority: TaskPriority): LegacyTaskPriority {
   return 3;
 }
 
-export function taskToMatrixTask(task: Task, tags: TaskTag[] = []): MatrixTask | null {
-  if (!task.priority || !task.views.includes('matrix')) return null;
+export function taskToMatrixTask(task: Task, tags: TaskTag[] = []): MatrixTask {
   const tagById = new Map(tags.map((tag) => [tag.id, tag]));
   const resolvedTags = task.tagIds
     .map((id) => tagById.get(id))
@@ -40,9 +39,7 @@ export function taskToMatrixTask(task: Task, tags: TaskTag[] = []): MatrixTask |
 }
 
 export function matrixTasksFromWorkspace(snapshot: TaskWorkspaceSnapshot): MatrixTask[] {
-  return snapshot.tasks
-    .map((task) => taskToMatrixTask(task, snapshot.tags))
-    .filter((task): task is MatrixTask => task !== null);
+  return snapshot.tasks.map((task) => taskToMatrixTask(task, snapshot.tags));
 }
 
 export function matrixDraftToWorkspace(
@@ -57,8 +54,7 @@ export function matrixDraftToWorkspace(
     dueDate: draft.dueAt,
     completed: draft.completed,
     laneId: current?.laneId ?? (draft.completed ? snapshot.completionLaneId : snapshot.defaultLaneId),
-    tagIds: current?.tagIds ?? [],
-    collaboratorIds: current?.collaboratorIds ?? []
+    tagIds: current?.tagIds ?? []
   };
 }
 
@@ -66,7 +62,6 @@ export function workspaceTaskFromMatrix(
   task: MatrixTask,
   snapshot: TaskWorkspaceSnapshot
 ): Task {
-  const views: TaskView[] = ['kanban', 'matrix'];
   return {
     id: task.id,
     title: task.title,
@@ -77,8 +72,6 @@ export function workspaceTaskFromMatrix(
     laneId: task.completed ? snapshot.completionLaneId : snapshot.defaultLaneId,
     boardPosition: snapshot.tasks.filter((item) => item.laneId === snapshot.defaultLaneId).length,
     tagIds: [],
-    collaboratorIds: [],
-    views,
     steps: task.steps ?? [],
     createdAt: task.createdAt,
     updatedAt: task.updatedAt
@@ -88,9 +81,7 @@ export function workspaceTaskFromMatrix(
 export function workspaceTaskFromKanbanCard(card: KanbanCard, snapshot: TaskWorkspaceSnapshot): Task {
   const priority = card.priorityId && priorityColors[card.priorityId as TaskPriority]
     ? card.priorityId as TaskPriority
-    : null;
-  const views: TaskView[] = ['kanban'];
-  if (priority) views.push('matrix');
+    : defaultTaskPriority;
   return {
     id: card.id,
     title: card.title,
@@ -101,8 +92,6 @@ export function workspaceTaskFromKanbanCard(card: KanbanCard, snapshot: TaskWork
     laneId: card.laneId,
     boardPosition: card.position,
     tagIds: card.tagIds,
-    collaboratorIds: card.collaboratorIds,
-    views,
     steps: card.steps ?? [],
     createdAt: card.createdAt,
     updatedAt: card.updatedAt
@@ -120,8 +109,6 @@ export function workspaceFromLegacy(matrixTasks: MatrixTask[], kanban: KanbanSna
     tasks: [],
     lanes,
     tags: kanban.tags.map((tag) => ({ ...tag, archivedAt: null })),
-    collaborators: kanban.collaborators.map((person) => ({ ...person, archivedAt: null })),
-    linkingEnabled: true,
     defaultLaneId: lanes.some((lane) => lane.id === 'kanban-lane-todo') ? 'kanban-lane-todo' : lanes[0].id,
     completionLaneId: lanes.some((lane) => lane.id === 'kanban-lane-done') ? 'kanban-lane-done' : lanes[lanes.length - 1].id,
     viewPreferences: {}
@@ -157,7 +144,6 @@ export function taskToKanbanCard(task: Task): KanbanCard {
     priorityId: task.priority,
     position: task.boardPosition,
     tagIds: task.tagIds,
-    collaboratorIds: task.collaboratorIds,
     steps: task.steps,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt
@@ -165,12 +151,10 @@ export function taskToKanbanCard(task: Task): KanbanCard {
 }
 
 export function kanbanSnapshotFromWorkspace(snapshot: TaskWorkspaceSnapshot): KanbanSnapshot {
-  const visibleTasks = snapshot.tasks.filter((task) => task.views.includes('kanban'));
   return {
     lanes: snapshot.lanes,
-    cards: visibleTasks.map(taskToKanbanCard),
+    cards: snapshot.tasks.map(taskToKanbanCard),
     priorities: fixedPriorities(),
-    tags: snapshot.tags.map(({ archivedAt: _archivedAt, ...tag }) => tag),
-    collaborators: snapshot.collaborators.map(({ archivedAt: _archivedAt, ...person }) => person)
+    tags: snapshot.tags.map(({ archivedAt: _archivedAt, ...tag }) => tag)
   };
 }

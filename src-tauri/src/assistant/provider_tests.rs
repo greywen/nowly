@@ -456,7 +456,6 @@ fn excluded_warning_survives_receipt_lookup() {
         save_config(&guard, config(), Some("test-secret".into()), false).unwrap();
         crate::task_workspace::create(
             &guard,
-            "kanban",
             serde_json::from_value(json!({"title":"not selected","laneId":"kanban-lane-todo"}))
                 .unwrap(),
         )
@@ -497,7 +496,6 @@ fn incomplete_query_cannot_be_laundered_through_later_narrow_query() {
         for i in 0..201 {
             let task = crate::task_workspace::create(
                 &guard,
-                "kanban",
                 serde_json::from_value(
                     json!({"title":format!("task-{i}"),"laneId":"kanban-lane-todo"}),
                 )

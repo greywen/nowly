@@ -21,7 +21,7 @@ test('shows the persisted-data empty dashboard without page overflow or motion',
           if (command === 'get_app_settings') return settings;
           // The app reads the shared task workspace, not just legacy list_tasks.
           if (command === 'get_task_workspace_snapshot') return {
-            tasks: [], lanes: [], tags: [], collaborators: [], linkingEnabled: true,
+            tasks: [], lanes: [], tags: [],
             defaultLaneId: 'kanban-lane-todo', completionLaneId: 'kanban-lane-done', viewPreferences: {}
           };
           if (command === 'list_events_in_range' || command === 'list_tasks' || command === 'list_notes') return [];
@@ -42,7 +42,7 @@ test('shows the persisted-data empty dashboard without page overflow or motion',
   await page.goto('/');
 
   await expect(page.getByText('本月暂无日程')).toBeVisible();
-  await expect(page.getByText('暂无任务')).toHaveCount(4);
+  await expect(page.getByRole('button', { name: /^添加到「/ })).toHaveCount(4);
   await expect(page.getByText('还没有便签')).toBeVisible();
   await expect(page.getByText('设计评审')).toHaveCount(0);
 

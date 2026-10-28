@@ -64,12 +64,16 @@ describe('tauriNowlyRepository', () => {
     expect(emitMock).toHaveBeenCalledWith('status-island-invalidated');
   });
 
-  it('keeps the legacy linking command enabled even when a caller requests false', async () => {
-    invokeMock.mockResolvedValue({ linkingEnabled: true });
+  it('creates workspace tasks with only the draft', async () => {
+    invokeMock.mockResolvedValue({ id: 't1' });
+    const draft = {
+      title: '写周报', description: '', priority: 'not_important_not_urgent' as const, dueDate: null,
+      completed: false, laneId: 'kanban-lane-todo', tagIds: []
+    };
 
-    await tauriNowlyRepository.setTaskViewLinking?.(false);
+    await tauriNowlyRepository.createWorkspaceTask?.(draft);
 
-    expect(invokeMock).toHaveBeenCalledWith('set_task_view_linking', { enabled: true });
+    expect(invokeMock).toHaveBeenCalledWith('create_task', { draft });
   });
 
   it('owns the exact event and startup IPC contracts', async () => {

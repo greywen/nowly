@@ -9,7 +9,7 @@ const steps = [
 
 const task: Task = {
   id: 't1', title: '发布', description: '', priority: 'important_urgent', dueDate: null, completed: false,
-  laneId: 'lane-a', boardPosition: 0, tagIds: [], collaboratorIds: [], views: ['kanban', 'matrix'], steps,
+  laneId: 'lane-a', boardPosition: 0, tagIds: [], steps,
   createdAt: 'x', updatedAt: 'x'
 };
 

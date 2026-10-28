@@ -1,9 +1,8 @@
 import { CalendarDays, Paperclip } from '../components/icons';
-import { colorStyle } from '../lib/color';
 import type { DragEvent } from 'react';
-import { contentAttachments, contentToPlainText } from '../components/rich-text/content';
+import { contentAttachments } from '../components/rich-text/content';
 import type { ResolvedCard } from './kanban-view';
-import { formatDueDate } from './kanban-view';
+import { formatDueDate, isOverdue } from './kanban-view';
 import { t } from '../i18n';
 import { TaskStepCount } from '../tasks/TaskStepCount';
 import { stepProgress } from '../tasks/task-model';
@@ -11,126 +10,83 @@ import { stepProgress } from '../tasks/task-model';
 type KanbanCardProps = {
   resolved: ResolvedCard;
   todayIso: string;
+  done?: boolean;
   onOpen: () => void;
   onDragStart: (event: DragEvent<HTMLElement>) => void;
   onDragEnd: () => void;
 };
 
-// How many collaborator avatars render before collapsing the rest into "+N".
-const MAX_AVATARS = 3;
-
-// First character of a name, used as the avatar initial. Works for both CJK
-// and Latin names since we only ever surface a single glyph.
-function initial(name: string): string {
-  return name.trim().slice(0, 1) || '?';
-}
-
-// A single task card laid out in three bands: a top row with the due date on
-// the left and priority / actions on the right, the title in the middle, and a
-// footer with collaborator avatars on the left and tags on the right. Optional
-// fields render only when present, so empty cards stay compact. The card body
-// drags; the title button opens the editor.
+// A task card: a quadrant dot and the title, then one meta line that only
+// renders the fields the task actually has. The card body drags; the title
+// button opens the editor.
 export function KanbanCard({
   resolved,
   todayIso,
+  done = false,
   onOpen,
   onDragStart,
   onDragEnd
 }: KanbanCardProps) {
-  const { card, priority, tags, collaborators } = resolved;
+  const { card, priority, tags } = resolved;
 
-  const visibleCollaborators = collaborators.slice(0, MAX_AVATARS);
-  const overflowCount = collaborators.length - visibleCollaborators.length;
-  const hasFooter = collaborators.length > 0 || tags.length > 0;
-
-  // The description is stored rich text; flatten it, because a clamped preview
-  // reads badly as rendered markup and this keeps innerHTML out of the card.
-  const description = card.description ? contentToPlainText(card.description) : '';
   // Counting attachments is a pure content parse, so a card costs no IO to show
-  // its paperclip. Files only: an inline image is content rather than an
-  // attachment, and its alt text is left out of the description for the same
-  // reason.
+  // its paperclip. Files only: an inline image is content, not an attachment.
   const { fileIds } = card.description
     ? contentAttachments(card.description)
     : { fileIds: [] };
   const attachmentCount = fileIds.length;
-
   const hasSteps = stepProgress(card.steps).total > 0;
-  const hasTop = Boolean(card.dueDate) || Boolean(priority) || attachmentCount > 0 || hasSteps;
+  const overdue = Boolean(card.dueDate) && !done && isOverdue(card.dueDate!, todayIso);
+  const hasMeta = Boolean(card.dueDate) || hasSteps || attachmentCount > 0 || tags.length > 0;
 
   return (
     <article
-      className={`kanban-card${hasTop ? '' : ' kanban-card--no-top'}`}
+      className={`kanban-card${done ? ' kanban-card--done' : ''}`}
       draggable
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       aria-label={t('kanbanCard.task', { title: card.title })}
     >
-      {hasTop ? (
-        <div className="kanban-card__top">
+      <div className="kanban-card__head">
+        {priority ? (
+          <span
+            className="kanban-card__quadrant"
+            style={{ background: priority.color }}
+            role="img"
+            aria-label={priority.name}
+            title={priority.name}
+          />
+        ) : null}
+        <button type="button" className="kanban-card__title" onClick={onOpen}>
+          {card.title}
+        </button>
+      </div>
+
+      {hasMeta ? (
+        <div className="kanban-card__meta">
           {card.dueDate ? (
-            <span className="kanban-card__date">
+            <span className={`kanban-card__date${overdue ? ' kanban-card__date--overdue' : ''}`}>
               <CalendarDays aria-hidden="true" />
               {formatDueDate(card.dueDate, todayIso)}
+              {overdue ? <span className="visually-hidden">{t('kanbanCard.overdue')}</span> : null}
             </span>
-          ) : (
-            <span className="kanban-card__date kanban-card__date--empty" aria-hidden="true" />
-          )}
-          <div className="kanban-card__top-right">
-            <TaskStepCount steps={card.steps} />
-            {attachmentCount > 0 ? (
-              <span
-                className="kanban-card__clip"
-                aria-label={t('kanbanCard.attachments', { count: attachmentCount })}
-              >
-                <Paperclip aria-hidden="true" />
-                {attachmentCount}
-              </span>
-            ) : null}
-            {priority ? (
-              <span className="kanban-badge" style={colorStyle(priority.color)}>
-                {priority.name}
-              </span>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
-
-      <button type="button" className="kanban-card__title" onClick={onOpen}>
-        {card.title}
-      </button>
-
-      {description ? <p className="kanban-card__desc">{description}</p> : null}
-
-      {hasFooter ? (
-        <div className="kanban-card__footer">
-          {collaborators.length > 0 ? (
+          ) : null}
+          <TaskStepCount steps={card.steps} />
+          {attachmentCount > 0 ? (
             <span
-              className="kanban-card__people"
-              aria-label={t('kanbanCard.collaborators', { names: collaborators.map((person) => person.name).join('、') })}
+              className="kanban-card__clip"
+              aria-label={t('kanbanCard.attachments', { count: attachmentCount })}
             >
-              {visibleCollaborators.map((person) => (
-                <span key={person.id} className="kanban-avatar" title={person.name} aria-hidden="true">
-                  {initial(person.name)}
-                </span>
-              ))}
-              {overflowCount > 0 ? (
-                <span className="kanban-avatar kanban-avatar--more" aria-hidden="true">
-                  +{overflowCount}
-                </span>
-              ) : null}
+              <Paperclip aria-hidden="true" />
+              {attachmentCount}
             </span>
           ) : null}
-          {tags.length > 0 ? (
-            <span className="kanban-card__tags">
-              {tags.map((tag) => (
-                <span key={tag.id} className="kanban-tag" style={{ color: tag.color }}>
-                  <span className="kanban-tag__hash" aria-hidden="true">#</span>
-                  {tag.name}
-                </span>
-              ))}
+          {tags.map((tag) => (
+            <span key={tag.id} className="kanban-tag" style={{ color: tag.color }}>
+              <span className="kanban-tag__hash" aria-hidden="true">#</span>
+              {tag.name}
             </span>
-          ) : null}
+          ))}
         </div>
       ) : null}
     </article>

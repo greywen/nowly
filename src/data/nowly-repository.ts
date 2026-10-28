@@ -11,8 +11,6 @@ import type { CalendarSubscription, ExternalEvent, OAuthAccount, RemoteCalendar,
 import type {
   KanbanCard,
   KanbanCardDraft,
-  KanbanCollaborator,
-  KanbanCollaboratorDraft,
   KanbanLane,
   KanbanLaneDraft,
   KanbanPriority,
@@ -26,14 +24,11 @@ import type { Attachment } from '../lib/attachment';
 import type { Note, NoteDraft } from '../notes/notes-model';
 import type {
   Task as WorkspaceTask,
-  TaskCollaborator,
-  TaskCollaboratorDraft,
   TaskDraft as WorkspaceTaskDraft,
   TaskLane,
   TaskLaneDraft,
   TaskTag,
   TaskTagDraft,
-  TaskView,
   TaskViewPreferences,
   TaskWorkspaceSnapshot
 } from '../tasks/task-model';
@@ -186,15 +181,13 @@ export type NowlyRepository = {
   // feature-test repositories that still exercise the legacy adapters remain
   // lightweight; the desktop repository implements the complete contract.
   getTaskWorkspaceSnapshot?(): Promise<TaskWorkspaceSnapshot>;
-  createWorkspaceTask?(originView: TaskView, draft: WorkspaceTaskDraft): Promise<WorkspaceTask>;
+  createWorkspaceTask?(draft: WorkspaceTaskDraft): Promise<WorkspaceTask>;
   updateWorkspaceTask?(id: string, draft: WorkspaceTaskDraft): Promise<WorkspaceTask>;
   deleteWorkspaceTask?(id: string): Promise<void>;
   setWorkspaceTaskCompleted?(id: string, completed: boolean): Promise<WorkspaceTask>;
   moveTaskToLane?(id: string, laneId: string, targetIndex: number): Promise<WorkspaceTask>;
   moveTaskToPriority?(id: string, priority: WorkspaceTask['priority']): Promise<WorkspaceTask>;
   moveTaskToDate?(id: string, dueDate: string | null): Promise<WorkspaceTask>;
-  setTaskViewMemberships?(id: string, views: TaskView[]): Promise<WorkspaceTask>;
-  setTaskViewLinking?(enabled: boolean): Promise<TaskWorkspaceSnapshot>;
   createTaskLane?(draft: TaskLaneDraft): Promise<TaskLane>;
   updateTaskLane?(id: string, draft: TaskLaneDraft): Promise<TaskLane>;
   deleteTaskLane?(id: string, replacementLaneId?: string | null): Promise<TaskWorkspaceSnapshot>;
@@ -205,10 +198,6 @@ export type NowlyRepository = {
   updateTaskTag?(id: string, draft: TaskTagDraft): Promise<TaskTag>;
   archiveTaskTag?(id: string, archived: boolean): Promise<TaskTag>;
   deleteTaskTag?(id: string): Promise<void>;
-  createTaskCollaborator?(draft: TaskCollaboratorDraft): Promise<TaskCollaborator>;
-  updateTaskCollaborator?(id: string, draft: TaskCollaboratorDraft): Promise<TaskCollaborator>;
-  archiveTaskCollaborator?(id: string, archived: boolean): Promise<TaskCollaborator>;
-  deleteTaskCollaborator?(id: string): Promise<void>;
   setTaskViewPreferences?(preferences: TaskViewPreferences): Promise<TaskWorkspaceSnapshot>;
   listNotes(): Promise<Note[]>;
   createNote(draft: NoteDraft): Promise<Note>;
@@ -260,7 +249,4 @@ export type NowlyRepository = {
   createKanbanTag(draft: KanbanTagDraft): Promise<KanbanTag>;
   updateKanbanTag(id: string, draft: KanbanTagDraft): Promise<KanbanTag>;
   deleteKanbanTag(id: string): Promise<void>;
-  createKanbanCollaborator(draft: KanbanCollaboratorDraft): Promise<KanbanCollaborator>;
-  updateKanbanCollaborator(id: string, draft: KanbanCollaboratorDraft): Promise<KanbanCollaborator>;
-  deleteKanbanCollaborator(id: string): Promise<void>;
 };

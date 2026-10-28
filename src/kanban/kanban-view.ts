@@ -1,6 +1,5 @@
 import type {
   KanbanCard,
-  KanbanCollaborator,
   KanbanLane,
   KanbanPriority,
   KanbanSnapshot,
@@ -15,20 +14,14 @@ export type ResolvedCard = {
   card: KanbanCard;
   priority: KanbanPriority | null;
   tags: KanbanTag[];
-  collaborators: KanbanCollaborator[];
 };
 
 export function resolveCard(card: KanbanCard, snapshot: KanbanSnapshot): ResolvedCard {
-  const priority = card.priorityId
-    ? snapshot.priorities.find((item) => item.id === card.priorityId) ?? null
-    : null;
+  const priority = snapshot.priorities.find((item) => item.id === card.priorityId) ?? null;
   const tags = card.tagIds
     .map((id) => snapshot.tags.find((tag) => tag.id === id))
     .filter((tag): tag is KanbanTag => tag !== undefined);
-  const collaborators = card.collaboratorIds
-    .map((id) => snapshot.collaborators.find((person) => person.id === id))
-    .filter((person): person is KanbanCollaborator => person !== undefined);
-  return { card, priority, tags, collaborators };
+  return { card, priority, tags };
 }
 
 // Total number of cards across every lane, shown in the module header.
@@ -50,6 +43,11 @@ export function formatDueDate(dueDate: string, todayIso: string): string {
   const day = Number(dueDate.slice(8, 10));
   if (!month || !day) return dueDate;
   return t('kanbanDue.monthDay', { month, day });
+}
+
+// ISO dates compare lexically, so a due date before today is overdue.
+export function isOverdue(dueDate: string, todayIso: string): boolean {
+  return dueDate < todayIso;
 }
 
 // The lane order as ids, used as the base for keyboard "move left / right".
@@ -85,7 +83,7 @@ export function laneCardCount(snapshot: KanbanSnapshot, laneId: string): number 
   return snapshot.cards.filter((card) => card.laneId === laneId).length;
 }
 
-// How many cards reference a given priority / tag / collaborator, shown before
+// How many cards reference a given priority / tag, shown before
 // deleting a global field so the user understands the impact.
 export function priorityUsage(snapshot: KanbanSnapshot, priorityId: string): number {
   return snapshot.cards.filter((card) => card.priorityId === priorityId).length;
@@ -93,10 +91,6 @@ export function priorityUsage(snapshot: KanbanSnapshot, priorityId: string): num
 
 export function tagUsage(snapshot: KanbanSnapshot, tagId: string): number {
   return snapshot.cards.filter((card) => card.tagIds.includes(tagId)).length;
-}
-
-export function collaboratorUsage(snapshot: KanbanSnapshot, collaboratorId: string): number {
-  return snapshot.cards.filter((card) => card.collaboratorIds.includes(collaboratorId)).length;
 }
 
 // The neighbouring lane id in a direction, or null at the boundary. Used to

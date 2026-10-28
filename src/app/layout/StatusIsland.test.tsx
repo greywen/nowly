@@ -29,7 +29,7 @@ function event(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
 function task(overrides: Partial<Task> = {}): Task {
   return {
     id: 'task-1', title: '发布检查', description: '', priority: 'important_urgent', dueDate: '2026-09-12',
-    completed: false, laneId: 'todo', boardPosition: 0, tagIds: [], collaboratorIds: [], views: ['matrix'], steps: [],
+    completed: false, laneId: 'todo', boardPosition: 0, tagIds: [], steps: [],
     createdAt: 'x', updatedAt: 'x',
     ...overrides
   };

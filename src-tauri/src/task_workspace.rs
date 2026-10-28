@@ -1,8 +1,8 @@
 use crate::db::AppDb;
 use crate::error::CommandError;
 use crate::models::{
-    Task, TaskCollaborator, TaskCollaboratorDraft, TaskDraft, TaskLane, TaskLaneDraft, TaskStep,
-    TaskStepDraft, TaskTag, TaskTagDraft, TaskWorkspaceSnapshot,
+    Task, TaskDraft, TaskLane, TaskLaneDraft, TaskStep, TaskStepDraft, TaskTag, TaskTagDraft,
+    TaskWorkspaceSnapshot,
 };
 use crate::write_scope::DomainWrite;
 use chrono::{NaiveDate, SecondsFormat, Utc};
@@ -19,8 +19,8 @@ const PRIORITIES: &[&str] = &[
     "not_important_urgent",
     "not_important_not_urgent",
 ];
-const VIEWS: &[&str] = &["kanban", "matrix"];
-const LINKING_KEY: &str = "task_view_linking_enabled";
+// Quadrant for tasks created without one (board quick add, assistant, etc.).
+pub const DEFAULT_PRIORITY: &str = "not_important_not_urgent";
 const DEFAULT_LANE_KEY: &str = "default_task_lane_id";
 const COMPLETION_LANE_KEY: &str = "completion_task_lane_id";
 const VIEW_PREFERENCES_KEY: &str = "task_view_preferences";
@@ -75,11 +75,6 @@ fn write_setting<T: Serialize>(
     Ok(())
 }
 
-fn linking_enabled(connection: &Connection) -> Result<bool, CommandError> {
-    let _: bool = read_setting(connection, LINKING_KEY, true)?;
-    Ok(true)
-}
-
 fn default_lane_id(connection: &Connection) -> Result<String, CommandError> {
     read_setting(connection, DEFAULT_LANE_KEY, "kanban-lane-todo".to_owned())
 }
@@ -122,16 +117,6 @@ fn read_tag(row: &Row<'_>) -> rusqlite::Result<TaskTag> {
     })
 }
 
-fn read_collaborator(row: &Row<'_>) -> rusqlite::Result<TaskCollaborator> {
-    Ok(TaskCollaborator {
-        id: row.get(0)?,
-        name: row.get(1)?,
-        archived_at: row.get(2)?,
-        created_at: row.get(3)?,
-        updated_at: row.get(4)?,
-    })
-}
-
 fn read_task_base(row: &Row<'_>) -> rusqlite::Result<Task> {
     Ok(Task {
         id: row.get(0)?,
@@ -143,9 +128,7 @@ fn read_task_base(row: &Row<'_>) -> rusqlite::Result<Task> {
         lane_id: row.get(6)?,
         board_position: row.get(7)?,
         tag_ids: Vec::new(),
-        collaborator_ids: Vec::new(),
         linked_event_id: row.get(8)?,
-        views: Vec::new(),
         steps: Vec::new(),
         created_at: row.get(9)?,
         updated_at: row.get(10)?,
@@ -155,25 +138,6 @@ fn read_task_base(row: &Row<'_>) -> rusqlite::Result<Task> {
 fn task_links(connection: &Connection, task: &mut Task) -> Result<(), CommandError> {
     task.tag_ids = connection
         .prepare("SELECT tag_id FROM task_tag_links WHERE task_id=?1 ORDER BY tag_id")
-        .map_err(CommandError::database)?
-        .query_map([&task.id], |row| row.get(0))
-        .map_err(CommandError::database)?
-        .collect::<rusqlite::Result<Vec<String>>>()
-        .map_err(CommandError::database)?;
-    task.collaborator_ids = connection
-        .prepare(
-            "SELECT collaborator_id FROM task_collaborator_links WHERE task_id=?1 ORDER BY collaborator_id",
-        )
-        .map_err(CommandError::database)?
-        .query_map([&task.id], |row| row.get(0))
-        .map_err(CommandError::database)?
-        .collect::<rusqlite::Result<Vec<String>>>()
-        .map_err(CommandError::database)?;
-    task.views = connection
-        .prepare(
-            "SELECT view FROM task_view_memberships WHERE task_id=?1
-             ORDER BY CASE view WHEN 'kanban' THEN 0 ELSE 1 END",
-        )
         .map_err(CommandError::database)?
         .query_map([&task.id], |row| row.get(0))
         .map_err(CommandError::database)?
@@ -259,70 +223,11 @@ fn list_tags(connection: &Connection) -> Result<Vec<TaskTag>, CommandError> {
         .map_err(CommandError::database)
 }
 
-fn list_collaborators(connection: &Connection) -> Result<Vec<TaskCollaborator>, CommandError> {
-    connection
-        .prepare(
-            "SELECT id,name,archived_at,created_at,updated_at
-             FROM task_collaborators ORDER BY archived_at IS NOT NULL,name COLLATE NOCASE,id",
-        )
-        .map_err(CommandError::database)?
-        .query_map([], read_collaborator)
-        .map_err(CommandError::database)?
-        .collect::<rusqlite::Result<Vec<_>>>()
-        .map_err(CommandError::database)
-}
-
-fn linking_invariants_stale(connection: &Connection) -> Result<bool, CommandError> {
-    if !read_setting(connection, LINKING_KEY, true)? {
-        return Ok(true);
-    }
-    connection
-        .query_row(
-            "SELECT EXISTS(
-                SELECT 1
-                FROM tasks t
-                WHERE NOT EXISTS(
-                    SELECT 1 FROM task_view_memberships m
-                    WHERE m.task_id=t.id AND m.view='kanban'
-                )
-                OR (t.priority IS NOT NULL) != EXISTS(
-                    SELECT 1 FROM task_view_memberships m
-                    WHERE m.task_id=t.id AND m.view='matrix'
-                )
-            )",
-            [],
-            |row| row.get(0),
-        )
-        .map_err(CommandError::database)
-}
-
-fn ensure_linking_invariants(connection: &Connection) -> Result<(), CommandError> {
-    if !linking_invariants_stale(connection)? {
-        return Ok(());
-    }
-    let transaction = connection.domain_write().map_err(CommandError::database)?;
-    write_setting(&transaction, LINKING_KEY, &true)?;
-    let ids = transaction
-        .prepare("SELECT id FROM tasks ORDER BY id")
-        .map_err(CommandError::database)?
-        .query_map([], |row| row.get::<_, String>(0))
-        .map_err(CommandError::database)?
-        .collect::<rusqlite::Result<Vec<_>>>()
-        .map_err(CommandError::database)?;
-    for id in ids {
-        coordinate_memberships(&transaction, &id)?;
-    }
-    transaction.commit().map_err(sql_write_error)
-}
-
 pub fn snapshot(connection: &Connection) -> Result<TaskWorkspaceSnapshot, CommandError> {
-    ensure_linking_invariants(connection)?;
     Ok(TaskWorkspaceSnapshot {
         tasks: list_tasks(connection)?,
         lanes: list_lanes(connection)?,
         tags: list_tags(connection)?,
-        collaborators: list_collaborators(connection)?,
-        linking_enabled: linking_enabled(connection)?,
         default_lane_id: default_lane_id(connection)?,
         completion_lane_id: completion_lane_id(connection)?,
         view_preferences: view_preferences(connection)?,
@@ -343,36 +248,12 @@ fn normalize_color(color: &str) -> Result<String, CommandError> {
         .ok_or_else(|| CommandError::validation("color", "请选择有效颜色。"))
 }
 
-fn validate_view(view: &str) -> Result<(), CommandError> {
-    if VIEWS.contains(&view) {
-        Ok(())
-    } else {
-        Err(CommandError::validation("views", "请选择有效任务视图。"))
+fn normalize_priority(priority: Option<&str>) -> Result<String, CommandError> {
+    match priority {
+        None => Ok(DEFAULT_PRIORITY.to_owned()),
+        Some(priority) if PRIORITIES.contains(&priority) => Ok(priority.to_owned()),
+        Some(_) => Err(CommandError::validation("priority", "请选择有效优先分类。")),
     }
-}
-
-fn normalize_views(views: &[String]) -> Result<Vec<String>, CommandError> {
-    let mut unique = HashSet::new();
-    let mut normalized = Vec::new();
-    for view in views {
-        validate_view(view)?;
-        if unique.insert(view.clone()) {
-            normalized.push(view.clone());
-        }
-    }
-    if normalized.is_empty() {
-        return Err(CommandError::validation(
-            "views",
-            "任务至少需要显示在一个视图中。",
-        ));
-    }
-    normalized.sort_by_key(|view| {
-        VIEWS
-            .iter()
-            .position(|candidate| candidate == view)
-            .unwrap()
-    });
-    Ok(normalized)
 }
 
 fn validate_draft(mut draft: TaskDraft) -> Result<TaskDraft, CommandError> {
@@ -388,18 +269,11 @@ fn validate_draft(mut draft: TaskDraft) -> Result<TaskDraft, CommandError> {
             }
         }
     }
-    if let Some(priority) = draft.priority.as_deref() {
-        if !PRIORITIES.contains(&priority) {
-            return Err(CommandError::validation("priority", "请选择有效优先分类。"));
-        }
-    }
+    draft.priority = Some(normalize_priority(draft.priority.as_deref())?);
     if let Some(due_date) = draft.due_date.as_deref() {
         if NaiveDate::parse_from_str(due_date, "%Y-%m-%d").is_err() {
             return Err(CommandError::validation("dueDate", "截止日期格式无效。"));
         }
-    }
-    if let Some(views) = draft.views.as_mut() {
-        *views = normalize_views(views)?;
     }
     Ok(draft)
 }
@@ -547,37 +421,16 @@ fn replace_task_links(
     transaction: &Connection,
     task_id: &str,
     tag_ids: &[String],
-    collaborator_ids: &[String],
 ) -> Result<(), CommandError> {
     require_ids(transaction, "task_tags", "tagIds", tag_ids)?;
-    require_ids(
-        transaction,
-        "task_collaborators",
-        "collaboratorIds",
-        collaborator_ids,
-    )?;
     transaction
         .execute("DELETE FROM task_tag_links WHERE task_id=?1", [task_id])
-        .map_err(sql_write_error)?;
-    transaction
-        .execute(
-            "DELETE FROM task_collaborator_links WHERE task_id=?1",
-            [task_id],
-        )
         .map_err(sql_write_error)?;
     for tag_id in tag_ids.iter().collect::<HashSet<_>>() {
         transaction
             .execute(
                 "INSERT INTO task_tag_links(task_id,tag_id) VALUES (?1,?2)",
                 params![task_id, tag_id],
-            )
-            .map_err(sql_write_error)?;
-    }
-    for collaborator_id in collaborator_ids.iter().collect::<HashSet<_>>() {
-        transaction
-            .execute(
-                "INSERT INTO task_collaborator_links(task_id,collaborator_id) VALUES (?1,?2)",
-                params![task_id, collaborator_id],
             )
             .map_err(sql_write_error)?;
     }
@@ -640,120 +493,11 @@ fn replace_task_steps(
     Ok(())
 }
 
-fn membership(
-    transaction: &Connection,
-    task_id: &str,
-    view: &str,
-    present: bool,
-) -> Result<(), CommandError> {
-    if present {
-        transaction
-            .execute(
-                "INSERT OR IGNORE INTO task_view_memberships(task_id,view,position,created_at)
-                 VALUES (?1,?2,NULL,strftime('%Y-%m-%dT%H:%M:%fZ','now'))",
-                params![task_id, view],
-            )
-            .map_err(sql_write_error)?;
-    } else {
-        transaction
-            .execute(
-                "DELETE FROM task_view_memberships WHERE task_id=?1 AND view=?2",
-                params![task_id, view],
-            )
-            .map_err(sql_write_error)?;
-    }
-    Ok(())
-}
-
-fn task_structure(
-    connection: &Connection,
-    task_id: &str,
-) -> Result<(Option<String>, Option<String>), CommandError> {
-    connection
-        .query_row(
-            "SELECT priority,due_date FROM tasks WHERE id=?1",
-            [task_id],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
-        .optional()
-        .map_err(CommandError::database)?
-        .ok_or_else(|| CommandError::not_found("未找到该任务。"))
-}
-
-fn coordinate_memberships(transaction: &Connection, task_id: &str) -> Result<(), CommandError> {
-    let (priority, _due_date) = task_structure(transaction, task_id)?;
-    membership(transaction, task_id, "kanban", true)?;
-    membership(transaction, task_id, "matrix", priority.is_some())?;
-    Ok(())
-}
-
-fn prune_invalid_memberships(transaction: &Connection, task_id: &str) -> Result<(), CommandError> {
-    let (priority, _due_date) = task_structure(transaction, task_id)?;
-    if priority.is_none() {
-        membership(transaction, task_id, "matrix", false)?;
-    }
-    let count: i64 = transaction
-        .query_row(
-            "SELECT COUNT(*) FROM task_view_memberships WHERE task_id=?1",
-            [task_id],
-            |row| row.get(0),
-        )
-        .map_err(CommandError::database)?;
-    if count == 0 {
-        membership(transaction, task_id, "kanban", true)?;
-    }
-    Ok(())
-}
-
-fn set_memberships(
-    transaction: &Connection,
-    task_id: &str,
-    views: &[String],
-) -> Result<(), CommandError> {
-    let views = normalize_views(views)?;
-    let (priority, _due_date) = task_structure(transaction, task_id)?;
-    if views.iter().any(|view| view == "matrix") && priority.is_none() {
-        return Err(CommandError::validation(
-            "views",
-            "加入四象限前请先设置优先分类。",
-        ));
-    }
-    transaction
-        .execute(
-            "DELETE FROM task_view_memberships WHERE task_id=?1",
-            [task_id],
-        )
-        .map_err(sql_write_error)?;
-    for view in views {
-        membership(transaction, task_id, &view, true)?;
-    }
-    Ok(())
-}
-
-fn reconcile_memberships(transaction: &Connection, task_id: &str) -> Result<(), CommandError> {
-    if linking_enabled(transaction)? {
-        coordinate_memberships(transaction, task_id)
-    } else {
-        prune_invalid_memberships(transaction, task_id)
-    }
-}
-
-pub fn create(
-    connection: &Connection,
-    origin_view: &str,
-    draft: TaskDraft,
-) -> Result<Task, CommandError> {
-    validate_view(origin_view)?;
+pub fn create(connection: &Connection, draft: TaskDraft) -> Result<Task, CommandError> {
     let draft = validate_draft(draft)?;
     let transaction = connection.domain_write().map_err(CommandError::database)?;
     require_lane(&transaction, &draft.lane_id)?;
     require_ids(&transaction, "task_tags", "tagIds", &draft.tag_ids)?;
-    require_ids(
-        &transaction,
-        "task_collaborators",
-        "collaboratorIds",
-        &draft.collaborator_ids,
-    )?;
     if let Some(event_id) = draft.linked_event_id.as_deref() {
         require_event(&transaction, event_id)?;
     }
@@ -799,20 +543,9 @@ pub fn create(
             params![id, draft.linked_event_id],
         )
         .map_err(sql_write_error)?;
-    replace_task_links(&transaction, &id, &draft.tag_ids, &draft.collaborator_ids)?;
+    replace_task_links(&transaction, &id, &draft.tag_ids)?;
     if let Some(steps) = draft.steps.as_deref() {
         replace_task_steps(&transaction, &id, steps, &now)?;
-    }
-    if linking_enabled(&transaction)? {
-        coordinate_memberships(&transaction, &id)?;
-    } else if let Some(views) = draft.views.as_ref() {
-        set_memberships(&transaction, &id, views)?;
-    } else {
-        let mut views = vec!["kanban".to_owned()];
-        if origin_view != "kanban" {
-            views.push(origin_view.to_owned());
-        }
-        set_memberships(&transaction, &id, &views)?;
     }
     let task = task_by_id(&transaction, &id)?
         .ok_or_else(|| CommandError::conflict("任务保存状态已变化，请重试。"))?;
@@ -872,16 +605,9 @@ pub fn update(connection: &Connection, id: &str, draft: TaskDraft) -> Result<Tas
         renumber_lane(&transaction, &existing.lane_id)?;
         renumber_lane(&transaction, &target_lane)?;
     }
-    replace_task_links(&transaction, id, &draft.tag_ids, &draft.collaborator_ids)?;
+    replace_task_links(&transaction, id, &draft.tag_ids)?;
     if let Some(steps) = draft.steps.as_deref() {
         replace_task_steps(&transaction, id, steps, &now)?;
-    }
-    if linking_enabled(&transaction)? {
-        coordinate_memberships(&transaction, id)?;
-    } else if let Some(views) = draft.views.as_ref() {
-        set_memberships(&transaction, id, views)?;
-    } else {
-        prune_invalid_memberships(&transaction, id)?;
     }
     let task =
         task_by_id(&transaction, id)?.ok_or_else(|| CommandError::not_found("未找到该任务。"))?;
@@ -987,11 +713,7 @@ fn update_priority(
     id: &str,
     priority: Option<String>,
 ) -> Result<Task, CommandError> {
-    if let Some(priority) = priority.as_deref() {
-        if !PRIORITIES.contains(&priority) {
-            return Err(CommandError::validation("priority", "请选择有效优先分类。"));
-        }
-    }
+    let priority = normalize_priority(priority.as_deref())?;
     let transaction = connection.domain_write().map_err(CommandError::database)?;
     let affected = transaction
         .execute(
@@ -1002,7 +724,6 @@ fn update_priority(
     if affected != 1 {
         return Err(CommandError::not_found("未找到该任务。"));
     }
-    reconcile_memberships(&transaction, id)?;
     let task =
         task_by_id(&transaction, id)?.ok_or_else(|| CommandError::not_found("未找到该任务。"))?;
     transaction.commit().map_err(sql_write_error)?;
@@ -1029,40 +750,10 @@ fn update_date(
     if affected != 1 {
         return Err(CommandError::not_found("未找到该任务。"));
     }
-    reconcile_memberships(&transaction, id)?;
     let task =
         task_by_id(&transaction, id)?.ok_or_else(|| CommandError::not_found("未找到该任务。"))?;
     transaction.commit().map_err(sql_write_error)?;
     Ok(task)
-}
-
-fn set_task_memberships(
-    connection: &Connection,
-    id: &str,
-    views: Vec<String>,
-) -> Result<Task, CommandError> {
-    let transaction = connection.domain_write().map_err(CommandError::database)?;
-    if linking_enabled(&transaction)? {
-        return Err(CommandError::conflict(
-            "任务视图联动开启时不能手动修改显示视图。",
-        ));
-    }
-    if task_by_id(&transaction, id)?.is_none() {
-        return Err(CommandError::not_found("未找到该任务。"));
-    }
-    set_memberships(&transaction, id, &views)?;
-    let task =
-        task_by_id(&transaction, id)?.ok_or_else(|| CommandError::not_found("未找到该任务。"))?;
-    transaction.commit().map_err(sql_write_error)?;
-    Ok(task)
-}
-
-fn set_linking(
-    connection: &Connection,
-    _enabled: bool,
-) -> Result<TaskWorkspaceSnapshot, CommandError> {
-    ensure_linking_invariants(connection)?;
-    snapshot(connection)
 }
 
 fn lane_by_id(connection: &Connection, id: &str) -> Result<Option<TaskLane>, CommandError> {
@@ -1327,80 +1018,6 @@ fn archive_tag_value(
     tag_by_id(connection, id)?.ok_or_else(|| CommandError::not_found("未找到该标签。"))
 }
 
-fn collaborator_by_id(
-    connection: &Connection,
-    id: &str,
-) -> Result<Option<TaskCollaborator>, CommandError> {
-    connection
-        .query_row(
-            "SELECT id,name,archived_at,created_at,updated_at
-             FROM task_collaborators WHERE id=?1",
-            [id],
-            read_collaborator,
-        )
-        .optional()
-        .map_err(CommandError::database)
-}
-
-fn create_collaborator_value(
-    connection: &Connection,
-    draft: TaskCollaboratorDraft,
-) -> Result<TaskCollaborator, CommandError> {
-    let name = normalize_name(&draft.name, "name", "请输入协作人名称。")?;
-    if duplicate_name(connection, "task_collaborators", &name, None)? {
-        return Err(CommandError::validation("name", "协作人名称已存在。"));
-    }
-    let id = Uuid::new_v4().hyphenated().to_string();
-    let now = timestamp();
-    connection
-        .execute(
-            "INSERT INTO task_collaborators(id,name,archived_at,created_at,updated_at)
-             VALUES (?1,?2,NULL,?3,?3)",
-            params![id, name, now],
-        )
-        .map_err(sql_write_error)?;
-    collaborator_by_id(connection, &id)?
-        .ok_or_else(|| CommandError::conflict("协作人保存失败，请重试。"))
-}
-
-fn update_collaborator_value(
-    connection: &Connection,
-    id: &str,
-    draft: TaskCollaboratorDraft,
-) -> Result<TaskCollaborator, CommandError> {
-    let name = normalize_name(&draft.name, "name", "请输入协作人名称。")?;
-    if duplicate_name(connection, "task_collaborators", &name, Some(id))? {
-        return Err(CommandError::validation("name", "协作人名称已存在。"));
-    }
-    let affected = connection
-        .execute(
-            "UPDATE task_collaborators SET name=?2,updated_at=?3 WHERE id=?1",
-            params![id, name, timestamp()],
-        )
-        .map_err(sql_write_error)?;
-    if affected != 1 {
-        return Err(CommandError::not_found("未找到该协作人。"));
-    }
-    collaborator_by_id(connection, id)?.ok_or_else(|| CommandError::not_found("未找到该协作人。"))
-}
-
-fn archive_collaborator_value(
-    connection: &Connection,
-    id: &str,
-    archived: bool,
-) -> Result<TaskCollaborator, CommandError> {
-    let affected = connection
-        .execute(
-            "UPDATE task_collaborators SET archived_at=?2,updated_at=?3 WHERE id=?1",
-            params![id, archived.then(timestamp), timestamp()],
-        )
-        .map_err(sql_write_error)?;
-    if affected != 1 {
-        return Err(CommandError::not_found("未找到该协作人。"));
-    }
-    collaborator_by_id(connection, id)?.ok_or_else(|| CommandError::not_found("未找到该协作人。"))
-}
-
 #[tauri::command]
 pub fn get_task_workspace_snapshot(
     db: State<'_, AppDb>,
@@ -1410,13 +1027,9 @@ pub fn get_task_workspace_snapshot(
 }
 
 #[tauri::command]
-pub fn create_task(
-    db: State<'_, AppDb>,
-    origin_view: String,
-    draft: TaskDraft,
-) -> Result<Task, CommandError> {
+pub fn create_task(db: State<'_, AppDb>, draft: TaskDraft) -> Result<Task, CommandError> {
     let mut connection = db.0.lock().map_err(CommandError::database)?;
-    let task = create(&mut connection, &origin_view, draft)?;
+    let task = create(&mut connection, draft)?;
     drop(connection);
     crate::status_island::invalidate_registered()?;
     Ok(task)
@@ -1494,25 +1107,6 @@ pub fn move_task_to_date(
     drop(connection);
     crate::status_island::invalidate_registered()?;
     Ok(task)
-}
-
-#[tauri::command]
-pub fn set_task_view_memberships(
-    db: State<'_, AppDb>,
-    id: String,
-    views: Vec<String>,
-) -> Result<Task, CommandError> {
-    let mut connection = db.0.lock().map_err(CommandError::database)?;
-    set_task_memberships(&mut connection, &id, views)
-}
-
-#[tauri::command]
-pub fn set_task_view_linking(
-    db: State<'_, AppDb>,
-    enabled: bool,
-) -> Result<TaskWorkspaceSnapshot, CommandError> {
-    let mut connection = db.0.lock().map_err(CommandError::database)?;
-    set_linking(&mut connection, enabled)
 }
 
 #[tauri::command]
@@ -1617,48 +1211,6 @@ pub fn delete_task_tag(db: State<'_, AppDb>, id: String) -> Result<(), CommandEr
 }
 
 #[tauri::command]
-pub fn create_task_collaborator(
-    db: State<'_, AppDb>,
-    draft: TaskCollaboratorDraft,
-) -> Result<TaskCollaborator, CommandError> {
-    let mut connection = db.0.lock().map_err(CommandError::database)?;
-    create_collaborator_value(&mut connection, draft)
-}
-
-#[tauri::command]
-pub fn update_task_collaborator(
-    db: State<'_, AppDb>,
-    id: String,
-    draft: TaskCollaboratorDraft,
-) -> Result<TaskCollaborator, CommandError> {
-    let mut connection = db.0.lock().map_err(CommandError::database)?;
-    update_collaborator_value(&mut connection, &id, draft)
-}
-
-#[tauri::command]
-pub fn archive_task_collaborator(
-    db: State<'_, AppDb>,
-    id: String,
-    archived: bool,
-) -> Result<TaskCollaborator, CommandError> {
-    let mut connection = db.0.lock().map_err(CommandError::database)?;
-    archive_collaborator_value(&mut connection, &id, archived)
-}
-
-#[tauri::command]
-pub fn delete_task_collaborator(db: State<'_, AppDb>, id: String) -> Result<(), CommandError> {
-    let connection = db.0.lock().map_err(CommandError::database)?;
-    let affected = connection
-        .execute("DELETE FROM task_collaborators WHERE id=?1", [id])
-        .map_err(sql_write_error)?;
-    if affected == 1 {
-        Ok(())
-    } else {
-        Err(CommandError::not_found("未找到该协作人。"))
-    }
-}
-
-#[tauri::command]
 pub fn set_task_view_preferences(
     db: State<'_, AppDb>,
     preferences: Value,
@@ -1678,7 +1230,7 @@ pub fn set_task_view_preferences(
 
 #[cfg(test)]
 mod tests {
-    use super::{create, create_tag_value, set_linking, snapshot};
+    use super::{create, create_tag_value, snapshot};
     use crate::db::migrate;
     use crate::models::{TaskDraft, TaskStepDraft, TaskTagDraft};
     use rusqlite::Connection;
@@ -1699,9 +1251,7 @@ mod tests {
             completed: false,
             lane_id: "kanban-lane-todo".into(),
             tag_ids: Vec::new(),
-            collaborator_ids: Vec::new(),
             linked_event_id: None,
-            views: None,
             steps: None,
         }
     }
@@ -1717,7 +1267,7 @@ mod tests {
     #[test]
     fn create_stores_trimmed_steps_in_order_with_fresh_ids() {
         let connection = database();
-        let task = create(&connection, "kanban", TaskDraft {
+        let task = create(&connection, TaskDraft {
             steps: Some(vec![step(Some("client-id"), "  起草  ", false), step(None, "评审", true)]),
             ..draft()
         }).unwrap();
@@ -1731,7 +1281,7 @@ mod tests {
     #[test]
     fn update_reorders_keeps_owned_ids_and_drops_removed_steps() {
         let connection = database();
-        let task = create(&connection, "kanban", TaskDraft {
+        let task = create(&connection, TaskDraft {
             steps: Some(vec![step(None, "一", false), step(None, "二", false), step(None, "三", false)]),
             ..draft()
         }).unwrap();
@@ -1754,7 +1304,7 @@ mod tests {
     #[test]
     fn update_without_steps_keeps_them_and_unchanged_steps_keep_timestamps() {
         let connection = database();
-        let task = create(&connection, "kanban", TaskDraft {
+        let task = create(&connection, TaskDraft {
             steps: Some(vec![step(None, "一", false), step(None, "二", true)]),
             ..draft()
         }).unwrap();
@@ -1772,10 +1322,10 @@ mod tests {
     #[test]
     fn foreign_and_repeated_step_ids_become_new_steps() {
         let connection = database();
-        let other = create(&connection, "kanban", TaskDraft {
+        let other = create(&connection, TaskDraft {
             steps: Some(vec![step(None, "别人的", false)]), ..draft()
         }).unwrap();
-        let task = create(&connection, "kanban", TaskDraft {
+        let task = create(&connection, TaskDraft {
             steps: Some(vec![step(None, "自己的", false)]), ..draft()
         }).unwrap();
         let (own, foreign) = (task.steps[0].id.clone(), other.steps[0].id.clone());
@@ -1792,7 +1342,7 @@ mod tests {
     #[test]
     fn blank_step_title_is_rejected_before_writing() {
         let connection = database();
-        let error = create(&connection, "kanban", TaskDraft {
+        let error = create(&connection, TaskDraft {
             steps: Some(vec![step(None, "一", false), step(None, "   ", false)]), ..draft()
         }).unwrap_err();
         assert_eq!(error.field.as_deref(), Some("steps"));
@@ -1803,7 +1353,7 @@ mod tests {
     #[test]
     fn deleting_a_task_removes_its_steps() {
         let connection = database();
-        let task = create(&connection, "kanban", TaskDraft {
+        let task = create(&connection, TaskDraft {
             steps: Some(vec![step(None, "一", false)]), ..draft()
         }).unwrap();
         super::delete(&connection, &task.id).unwrap();
@@ -1812,10 +1362,9 @@ mod tests {
     }
 
     #[test]
-    fn fresh_workspace_has_defaults_and_linking_enabled() {
+    fn fresh_workspace_has_default_lanes() {
         let connection = database();
         let workspace = snapshot(&connection).unwrap();
-        assert!(workspace.linking_enabled);
         assert_eq!(workspace.default_lane_id, "kanban-lane-todo");
         assert_eq!(workspace.completion_lane_id, "kanban-lane-done");
         assert_eq!(workspace.lanes.len(), 3);
@@ -1827,7 +1376,7 @@ mod tests {
         for with_task in [false, true] {
             let mut connection = database();
             if with_task {
-                create(&mut connection, "kanban", draft()).unwrap();
+                create(&mut connection, draft()).unwrap();
             }
             super::delete_lane_value(&connection, "kanban-lane-doing", None).unwrap();
             super::delete_lane_value(
@@ -1855,104 +1404,43 @@ mod tests {
     }
 
     #[test]
-    fn create_coordinates_all_eligible_views() {
-        let mut connection = database();
-        let task = create(&mut connection, "kanban", draft()).unwrap();
+    fn create_keeps_the_chosen_quadrant() {
+        let connection = database();
+        let task = create(&connection, draft()).unwrap();
         assert_eq!(task.title, "发布 Nowly");
-        assert_eq!(task.views, vec!["kanban", "matrix"]);
-        assert_eq!(task.priority.as_deref(), Some("important_urgent"));
+        assert_eq!(task.priority, "important_urgent");
         assert_eq!(task.due_date.as_deref(), Some("2026-08-26"));
     }
 
     #[test]
-    fn linking_cannot_be_disabled_and_rebuilds_memberships() {
-        let mut connection = database();
-        let task = create(&mut connection, "kanban", draft()).unwrap();
-        connection
-            .execute(
-                "UPDATE settings SET value='false' WHERE key='task_view_linking_enabled'",
-                [],
-            )
-            .unwrap();
-        connection
-            .execute(
-                "DELETE FROM task_view_memberships WHERE task_id=?1 AND view IN ('matrix')",
-                [&task.id],
-            )
-            .unwrap();
-
-        let workspace = set_linking(&mut connection, false).unwrap();
-        assert!(workspace.linking_enabled);
-        let task = workspace
-            .tasks
-            .iter()
-            .find(|item| item.id == task.id)
-            .unwrap();
-        assert_eq!(task.views, vec!["kanban", "matrix"]);
-
-        let stored: String = connection
-            .query_row(
-                "SELECT value FROM settings WHERE key='task_view_linking_enabled'",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
-        assert_eq!(stored, "true");
+    fn missing_quadrant_defaults_to_not_important_not_urgent() {
+        let connection = database();
+        let task = create(&connection, TaskDraft { priority: None, ..draft() }).unwrap();
+        assert_eq!(task.priority, super::DEFAULT_PRIORITY);
+        let moved = super::update_priority(&connection, &task.id, Some("important_urgent".into())).unwrap();
+        assert_eq!(moved.priority, "important_urgent");
+        let cleared = super::update_priority(&connection, &task.id, None).unwrap();
+        assert_eq!(cleared.priority, super::DEFAULT_PRIORITY);
     }
 
     #[test]
-    fn snapshot_repairs_legacy_linking_once_for_every_consumer() {
-        let mut connection = database();
-        let task = create(&mut connection, "kanban", draft()).unwrap();
-        connection
-            .execute(
-                "UPDATE settings SET value='false' WHERE key='task_view_linking_enabled'",
-                [],
-            )
-            .unwrap();
-        connection
-            .execute(
-                "DELETE FROM task_view_memberships WHERE task_id=?1 AND view IN ('matrix')",
-                [&task.id],
-            )
-            .unwrap();
-
-        let before_repair: i64 = connection
-            .query_row(
-                "SELECT revision FROM assistant_clock WHERE id=1",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
-        let workspace = snapshot(&connection).unwrap();
-        let repaired = workspace
-            .tasks
-            .iter()
-            .find(|item| item.id == task.id)
-            .unwrap();
-        assert!(workspace.linking_enabled);
-        assert_eq!(repaired.views, vec!["kanban", "matrix"]);
-
-        let after_repair: i64 = connection
-            .query_row(
-                "SELECT revision FROM assistant_clock WHERE id=1",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
-        assert!(after_repair > before_repair);
-
-        snapshot(&connection).unwrap();
-        let after_second_snapshot: i64 = connection
-            .query_row(
-                "SELECT revision FROM assistant_clock WHERE id=1",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
-        assert_eq!(after_second_snapshot, after_repair);
+    fn unknown_quadrant_is_rejected() {
+        let connection = database();
+        let error = create(&connection, TaskDraft { priority: Some("later".into()), ..draft() }).unwrap_err();
+        assert_eq!(error.field.as_deref(), Some("priority"));
     }
 
+    #[test]
+    fn completing_moves_to_the_completion_lane_and_back() {
+        let connection = database();
+        let task = create(&connection, draft()).unwrap();
+        let done = super::set_completed_value(&connection, &task.id, true).unwrap();
+        assert!(done.completed);
+        assert_eq!(done.lane_id, "kanban-lane-done");
+        let reopened = super::set_completed_value(&connection, &task.id, false).unwrap();
+        assert!(!reopened.completed);
+        assert_eq!(reopened.lane_id, "kanban-lane-todo");
+    }
     #[test]
     fn tag_names_are_case_insensitively_unique() {
         let mut connection = database();

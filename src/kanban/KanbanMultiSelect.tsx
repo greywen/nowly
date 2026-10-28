@@ -1,5 +1,5 @@
 // A simple accessible multi-select rendered as a fieldset of native checkboxes.
-// Used for a card's tags and collaborators so keyboard users get real controls
+// Used for a card's tags so keyboard users get real controls
 // and no custom widget behaviour is required. Shows a static empty hint when no
 // options exist yet.
 type MultiOption = { id: string; label: string };

@@ -31,8 +31,6 @@ const workspace: TaskWorkspaceSnapshot = {
   tasks: [],
   lanes: [{ id: 'lane-a', name: '待处理', color: '#4FC9DA', position: 0, createdAt: 'x', updatedAt: 'x' }],
   tags: [],
-  collaborators: [],
-  linkingEnabled: true,
   defaultLaneId: 'lane-a',
   completionLaneId: 'lane-a',
   viewPreferences: {}
@@ -47,7 +45,7 @@ function createRepository() {
     createNote: vi.fn().mockImplementation(async (draft: object) => ({ id: 'n1', ...draft, styleVariant: 0, createdAt: 'x', updatedAt: 'x' })),
     getTaskWorkspaceSnapshot: vi.fn().mockResolvedValue(workspace),
     createWorkspaceTask: vi.fn().mockImplementation(async (_view: string, draft: object) => ({
-      id: 't1', ...draft, boardPosition: 0, views: ['kanban', 'matrix'], createdAt: 'x', updatedAt: 'x'
+      id: 't1', ...draft, boardPosition: 0, createdAt: 'x', updatedAt: 'x'
     }))
   };
 }
@@ -125,15 +123,15 @@ describe('QuickCreateApp', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('saves a matrix task into the default lane and notifies the main window', async () => {
+  it('saves a task into the default lane and fourth quadrant and notifies the main window', async () => {
     const user = userEvent.setup();
     pending = { id: 4, kind: 'task', maxHeight: 700 };
     const repository = renderApp();
     await user.type(await screen.findByLabelText('任务标题'), '写周报');
     await user.click(screen.getByRole('button', { name: '保存任务' }));
     await waitFor(() => expect(tauri.emit).toHaveBeenCalledWith('nowly-records-changed', { kind: 'task' }));
-    expect(repository.createWorkspaceTask).toHaveBeenCalledWith('matrix', expect.objectContaining({
-      title: '写周报', priority: 'important_urgent', laneId: 'lane-a'
+    expect(repository.createWorkspaceTask).toHaveBeenCalledWith(expect.objectContaining({
+      title: '写周报', priority: 'not_important_not_urgent', laneId: 'lane-a'
     }));
     expect(tauri.invoke).toHaveBeenCalledWith('close_quick_create', { requestId: 4 });
   });

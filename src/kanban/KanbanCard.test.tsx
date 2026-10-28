@@ -4,6 +4,8 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ResolvedCard } from './kanban-view';
 import { KanbanCard } from './KanbanCard';
 
+const quadrant = { id: 'important_urgent', name: '重要且紧急', color: '#F06445', position: 0, createdAt: 'x', updatedAt: 'x' };
+
 function resolved(overrides: Partial<ResolvedCard['card']> = {}, extra: Partial<ResolvedCard> = {}): ResolvedCard {
   return {
     card: {
@@ -12,17 +14,15 @@ function resolved(overrides: Partial<ResolvedCard['card']> = {}, extra: Partial<
       title: '写设计稿',
       description: null,
       dueDate: null,
-      priorityId: null,
+      priorityId: 'important_urgent',
       position: 0,
       tagIds: [],
-      collaboratorIds: [],
       createdAt: 'x',
       updatedAt: 'x',
       ...overrides
     },
-    priority: null,
+    priority: quadrant,
     tags: [],
-    collaborators: [],
     ...extra
   };
 }
@@ -39,7 +39,15 @@ function props(overrides: Partial<Parameters<typeof KanbanCard>[0]> = {}): Param
 }
 
 describe('KanbanCard', () => {
-  it('shows a read-only step count in the top band', () => {
+  it('shows the title with a labelled quadrant dot and no meta line when nothing else is set', () => {
+    render(<KanbanCard {...props()} />);
+    expect(screen.getByRole('button', { name: '写设计稿' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: '重要且紧急' })).toBeInTheDocument();
+    expect(document.querySelector('.kanban-card__meta')).toBeNull();
+    expect(document.querySelector('.kanban-badge')).toBeNull();
+  });
+
+  it('shows a read-only step count on the meta line', () => {
     render(<KanbanCard {...props({ resolved: resolved({ steps: [
       { id: 's1', title: '一', completed: true },
       { id: 's2', title: '二', completed: false },
@@ -47,59 +55,32 @@ describe('KanbanCard', () => {
     ] }) })} />);
     expect(screen.getByText('1/3')).toBeInTheDocument();
     expect(screen.getByText('已完成 1/3 个步骤')).toBeInTheDocument();
-    expect(document.querySelector('.kanban-card--no-top')).toBeNull();
   });
 
-  it('omits the step count when the task has no steps', () => {
-    render(<KanbanCard {...props({ resolved: resolved({ steps: [] }) })} />);
-    expect(document.querySelector('.task-step-count')).toBeNull();
-    expect(document.querySelector('.kanban-card--no-top')).not.toBeNull();
-  });
-
-  it('always shows the title and omits empty optional fields', () => {
-    render(<KanbanCard {...props()} />);
-    expect(screen.getByText('写设计稿')).toBeInTheDocument();
-    expect(screen.queryByText('今天到期')).not.toBeInTheDocument();
-    // No description paragraph, no badges, no footer.
-    expect(document.querySelector('.kanban-card__desc')).toBeNull();
-    expect(document.querySelector('.kanban-badge')).toBeNull();
-    expect(document.querySelector('.kanban-card__footer')).toBeNull();
-  });
-
-  it('renders due date, priority, tags, collaborators and the description when present', () => {
+  it('renders due date and tags but never the description', () => {
     render(
       <KanbanCard
         {...props({
           resolved: resolved(
-            { description: '细化交互', dueDate: '2026-08-12', priorityId: 'p1', tagIds: ['t1'], collaboratorIds: ['u1'] },
-            {
-              priority: { id: 'p1', name: '高', color: 'danger', position: 0, createdAt: 'x', updatedAt: 'x' },
-              tags: [{ id: 't1', name: '设计', color: 'info', createdAt: 'x', updatedAt: 'x' }],
-              collaborators: [{ id: 'u1', name: '小林', createdAt: 'x', updatedAt: 'x' }]
-            }
+            { description: '细化交互', dueDate: '2026-08-12', tagIds: ['t1'] },
+            { tags: [{ id: 't1', name: '设计', color: 'info', createdAt: 'x', updatedAt: 'x' }] }
           )
         })}
       />
     );
-    expect(screen.getByText('细化交互')).toBeInTheDocument();
     expect(screen.getByText('今天到期')).toBeInTheDocument();
-    expect(screen.getByText('高')).toBeInTheDocument();
     expect(screen.getByText('设计')).toBeInTheDocument();
-    expect(screen.getByLabelText('协作人：小林')).toBeInTheDocument();
+    expect(screen.queryByText('细化交互')).not.toBeInTheDocument();
   });
 
-  it('flattens a rich text description rather than leaking its markup', () => {
-    // Descriptions are stored as a Delta envelope. A clamped preview reads badly
-    // as rendered markup, and flattening keeps innerHTML out of the card.
-    const content = JSON.stringify({
-      v: 1,
-      ops: [{ insert: '标题行' }, { insert: '\n', attributes: { header: 1 } }, { insert: '正文\n' }]
-    });
-    render(<KanbanCard {...props({ resolved: resolved({ description: content }) })} />);
-    const desc = document.querySelector('.kanban-card__desc')!;
-    expect(desc.textContent).toBe('标题行\n正文');
-    expect(desc.innerHTML).not.toContain('<h1');
-    expect(desc.innerHTML).not.toContain('ops');
+  it('marks a past due date as overdue unless the task is done', () => {
+    const { rerender } = render(<KanbanCard {...props({ resolved: resolved({ dueDate: '2026-08-10' }) })} />);
+    expect(document.querySelector('.kanban-card__date--overdue')).not.toBeNull();
+    expect(screen.getByText('已逾期')).toBeInTheDocument();
+
+    rerender(<KanbanCard {...props({ done: true, resolved: resolved({ dueDate: '2026-08-10' }) })} />);
+    expect(document.querySelector('.kanban-card__date--overdue')).toBeNull();
+    expect(document.querySelector('.kanban-card--done')).not.toBeNull();
   });
 
   it('counts attached files without reading them, and leaves images uncounted', () => {
@@ -117,19 +98,12 @@ describe('KanbanCard', () => {
     });
     const { rerender } = render(<KanbanCard {...props({ resolved: resolved({ description: content }) })} />);
     expect(screen.getByLabelText('1 个附件')).toHaveTextContent('1');
-    // The image's file name is not prose and must stay out of the description.
-    expect(document.querySelector('.kanban-card__desc')!.textContent).toBe('报告');
 
-    // An image on its own leaves the card with no paperclip at all.
     const imageOnly = JSON.stringify({
       v: 1,
       ops: [{ insert: { image: `attachment:${image}` }, attributes: { alt: '图.png' } }, { insert: '\n' }]
     });
     rerender(<KanbanCard {...props({ resolved: resolved({ description: imageOnly }) })} />);
-    expect(document.querySelector('.kanban-card__clip')).toBeNull();
-    expect(document.querySelector('.kanban-card__desc')).toBeNull();
-
-    rerender(<KanbanCard {...props({ resolved: resolved({ description: '只有文字' }) })} />);
     expect(document.querySelector('.kanban-card__clip')).toBeNull();
   });
 
@@ -139,10 +113,5 @@ describe('KanbanCard', () => {
     render(<KanbanCard {...props({ onOpen })} />);
     await user.click(screen.getByRole('button', { name: '写设计稿' }));
     expect(onOpen).toHaveBeenCalledOnce();
-  });
-
-  it('does not render a task-card three-dot menu', () => {
-    render(<KanbanCard {...props()} />);
-    expect(screen.queryByRole('button', { name: '任务操作：写设计稿' })).not.toBeInTheDocument();
   });
 });

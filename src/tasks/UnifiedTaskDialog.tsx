@@ -9,18 +9,19 @@ import type { RepositoryError } from '../data/nowly-repository';
 import { t } from '../i18n';
 import { KanbanMultiSelect } from '../kanban/KanbanMultiSelect';
 import { quadrantLabel } from '../matrix/matrix-model';
+import { priorityColors } from './task-projections';
 import { useTaskWorkspace } from './TaskWorkspaceContext';
 import { TaskStepsField, type TaskStepItem } from './TaskStepsField';
 import {
+  defaultTaskPriority,
   taskPriorityOrder,
   type Task,
   type TaskDraft,
-  type TaskPriority,
-  type TaskView
+  type TaskPriority
 } from './task-model';
 
 type Mode =
-  | { type: 'create'; originView: TaskView; dueDate: string | null; laneId?: string | null }
+  | { type: 'create'; dueDate: string | null; laneId?: string | null; priority?: TaskPriority }
   | { type: 'edit'; task: Task };
 
 type Props = {
@@ -34,12 +35,10 @@ type Props = {
 type Form = {
   title: string;
   description: string;
-  priority: TaskPriority | '';
+  priority: TaskPriority;
   dueDate: string;
-  completed: boolean;
   laneId: string;
   tagIds: string[];
-  collaboratorIds: string[];
   steps: TaskStepItem[];
   stepInput: string;
 };
@@ -58,28 +57,23 @@ export function UnifiedTaskDialog({ mode, restoreFocusRef, onClose, onSaved, onD
       return {
         title: mode.task.title,
         description: mode.task.description,
-        priority: mode.task.priority ?? '',
+        priority: mode.task.priority,
         dueDate: mode.task.dueDate ?? '',
-        completed: mode.task.completed,
         laneId: mode.task.laneId,
         tagIds: mode.task.tagIds,
-        collaboratorIds: mode.task.collaboratorIds,
         steps: (mode.task.steps ?? []).map((step) => ({
           key: step.id, id: step.id, title: step.title, completed: step.completed
         })),
         stepInput: ''
       };
     }
-    const priority = mode.originView === 'matrix' ? 'important_urgent' : '';
     return {
       title: '',
       description: '',
-      priority,
+      priority: mode.priority ?? defaultTaskPriority,
       dueDate: mode.dueDate ?? '',
-      completed: false,
       laneId: mode.laneId ?? snapshot.defaultLaneId,
       tagIds: [],
-      collaboratorIds: [],
       steps: [],
       stepInput: ''
     };
@@ -95,13 +89,6 @@ export function UnifiedTaskDialog({ mode, restoreFocusRef, onClose, onSaved, onD
   const dirty = JSON.stringify(initial) !== JSON.stringify(form);
   useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
   const activeTags = snapshot.tags.filter((tag) => !tag.archivedAt || form.tagIds.includes(tag.id));
-  const activeCollaborators = snapshot.collaborators.filter(
-    (person) => !person.archivedAt || form.collaboratorIds.includes(person.id)
-  );
-  const priorityOptions = [
-    { value: '', label: t('kanbanTask.noPriority') },
-    ...taskPriorityOrder.map((priority) => ({ value: priority, label: quadrantLabel(priority) }))
-  ];
   const laneOptions = snapshot.lanes.map((lane) => ({ value: lane.id, label: lane.name }));
 
   const update = <K extends keyof Form>(key: K, value: Form[K]) => {
@@ -121,12 +108,12 @@ export function UnifiedTaskDialog({ mode, restoreFocusRef, onClose, onSaved, onD
     return {
       title: form.title.trim(),
       description: form.description,
-      priority: form.priority || null,
+      priority: form.priority,
       dueDate: form.dueDate || null,
-      completed: form.completed,
+      // Completion follows the lane: only the completion lane holds done tasks.
+      completed: form.laneId === snapshot.completionLaneId,
       laneId: form.laneId,
       tagIds: form.tagIds,
-      collaboratorIds: form.collaboratorIds,
       steps: [
         ...form.steps.map(({ id, title, completed }) => ({ id, title: title.trim(), completed })),
         // Text typed but not yet added is kept as the last step rather than lost.
@@ -145,7 +132,7 @@ export function UnifiedTaskDialog({ mode, restoreFocusRef, onClose, onSaved, onD
     setFieldError(null);
     try {
       const saved = mode.type === 'create'
-        ? await workspace.createTask(mode.originView, draft())
+        ? await workspace.createTask(draft())
         : await workspace.updateTask(mode.task.id, draft());
       await onSaved?.(saved);
       onClose();
@@ -215,6 +202,25 @@ export function UnifiedTaskDialog({ mode, restoreFocusRef, onClose, onSaved, onD
             }} />
           {fieldError?.field === 'title' ? <span className="field-error">{fieldError.message}</span> : null}
         </div>
+        <fieldset className="quadrant-picker" disabled={busy}>
+          <legend className="quadrant-picker__legend">{t('taskModal.quadrant')}</legend>
+          <div className="quadrant-picker__grid">
+            {taskPriorityOrder.map((priority) => (
+              <label key={priority} className="quadrant-picker__option">
+                <input type="radio" className="quadrant-picker__input" name="unified-task-quadrant" value={priority}
+                  checked={form.priority === priority} onChange={() => update('priority', priority)} />
+                <span className="quadrant-picker__dot" style={{ background: priorityColors[priority] }} aria-hidden="true" />
+                {quadrantLabel(priority)}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <div className="task-form__row">
+          <Select id="unified-task-lane" label={t('taskModal.lane')} options={laneOptions} value={form.laneId}
+            disabled={busy} onChange={(value) => update('laneId', value)} />
+          <DatePicker id="unified-task-due-date" label={t('taskModal.dueDate')} value={form.dueDate}
+            disabled={busy} open={dateOpen} onOpenChange={setDateOpen} onChange={(value) => update('dueDate', value)} />
+        </div>
         <div className="good-field">
           <label id="unified-task-description-label">{t('kanbanTask.description')}</label>
           <RichEditor id="unified-task-description" labelledBy="unified-task-description-label"
@@ -225,25 +231,10 @@ export function UnifiedTaskDialog({ mode, restoreFocusRef, onClose, onSaved, onD
           error={fieldError?.field === 'steps' ? fieldError.message : undefined}
           onStepsChange={(steps) => update('steps', steps)}
           onInputChange={(value) => update('stepInput', value)} />
-        <Select id="unified-task-priority" label={t('taskModal.quadrant')} options={priorityOptions}
-          value={form.priority} disabled={busy} onChange={(value) => update('priority', value as TaskPriority | '')} />
-        <DatePicker id="unified-task-due-date" label={t('taskModal.dueDate')} value={form.dueDate}
-          disabled={busy} open={dateOpen} onOpenChange={setDateOpen} onChange={(value) => update('dueDate', value)} />
-        <Select id="unified-task-lane" label={t('taskModal.lane')} options={laneOptions} value={form.laneId}
-          disabled={busy} onChange={(value) => update('laneId', value)} />
-        <label className="form-check form-check-custom form-check-solid">
-          <input className="form-check-input" type="checkbox" checked={form.completed} disabled={busy}
-            aria-label={t('taskModal.completed')} onChange={(event) => update('completed', event.target.checked)} />
-          <span className="form-check-label">{t('taskModal.completed')}</span>
-        </label>
         <KanbanMultiSelect legend={t('kanbanTask.tags')}
           options={activeTags.map((tag) => ({ id: tag.id, label: tag.name }))} selected={form.tagIds} disabled={busy}
           emptyHint={t('kanbanTask.tagsEmpty')}
           onToggle={(id, checked) => update('tagIds', toggle(form.tagIds, id, checked))} />
-        <KanbanMultiSelect legend={t('kanbanTask.collaborators')}
-          options={activeCollaborators.map((person) => ({ id: person.id, label: person.name }))}
-          selected={form.collaboratorIds} disabled={busy} emptyHint={t('kanbanTask.collaboratorsEmpty')}
-          onToggle={(id, checked) => update('collaboratorIds', toggle(form.collaboratorIds, id, checked))} />
       </form>
     </Dialog>
     {confirm === 'discard' ? (

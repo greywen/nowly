@@ -53,8 +53,6 @@ function task(
     laneId: 'todo',
     boardPosition,
     tagIds: [],
-    collaboratorIds: [],
-    views: ['matrix'],
     steps: [],
     createdAt: '2026-09-01T00:00:00Z',
     updatedAt: '2026-09-01T00:00:00Z'

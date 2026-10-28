@@ -25,9 +25,6 @@ export function TaskSettingsDialog({
       createTag={workspace.createTag}
       updateTag={workspace.updateTag}
       deleteTag={workspace.deleteTag}
-      createCollaborator={workspace.createCollaborator}
-      updateCollaborator={workspace.updateCollaborator}
-      deleteCollaborator={workspace.deleteCollaborator}
       recentColors={recentColors}
       onRememberCustomColor={onRememberCustomColor}
     />

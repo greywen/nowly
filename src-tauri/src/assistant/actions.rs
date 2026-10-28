@@ -254,12 +254,7 @@ pub fn perform(db: &Connection, action: &Action) -> Result<Change, CommandError>
             if let Some(value) = &draft.due_date {
                 date(value)?;
             }
-            let origin = if draft.priority.is_some() {
-                "matrix"
-            } else {
-                "kanban"
-            };
-            let task = task_workspace::create(db, origin, draft)?;
+            let task = task_workspace::create(db, draft)?;
             Ok(Change {
                 key: format!("tasks:{}", task.id),
                 kind: "createTask".into(),
@@ -284,7 +279,6 @@ pub fn perform(db: &Connection, action: &Action) -> Result<Change, CommandError>
             if let Some(value) = &draft.due_date {
                 date(value)?;
             }
-            draft.views = None;
             draft.steps = None;
             let after = task_workspace::update(db, id, draft)?;
             Ok(Change {
@@ -385,17 +379,17 @@ pub fn query(db: &Connection, q: &Query, p: &Permissions) -> Result<QueryResult,
                     && q.completed.is_none_or(|v| t.completed == v)
                     && q.priority
                         .as_ref()
-                        .is_none_or(|v| t.priority.as_ref() == Some(v))
+                        .is_none_or(|v| &t.priority == v)
                     && q.lane_id.as_ref().is_none_or(|v| &t.lane_id == v)
                     && q.due_before
                         .as_ref()
                         .is_none_or(|v| t.due_date.as_ref().is_some_and(|d| d <= v))
             }) {
                 records.push(Record{key:format!("tasks:{}",t.id),domain:"tasks".into(),title:t.title.clone(),source:"本地任务".into(),read_only:false,
-                    data:json!({"id":t.id,"priority":t.priority,"dueDate":t.due_date,"completed":t.completed,"laneId":t.lane_id,"views":t.views})});
+                    data:json!({"id":t.id,"priority":t.priority,"dueDate":t.due_date,"completed":t.completed,"laneId":t.lane_id})});
             }
             metadata = json!({"lanes":workspace.lanes.iter().map(|l|json!({"id":l.id,"name":l.name})).collect::<Vec<_>>(),
-                "defaultLaneId":workspace.default_lane_id,"completionLaneId":workspace.completion_lane_id,"linkingEnabled":workspace.linking_enabled});
+                "defaultLaneId":workspace.default_lane_id,"completionLaneId":workspace.completion_lane_id});
         }
         _ => return Err(invalid("只支持日历和任务查询。")),
     }

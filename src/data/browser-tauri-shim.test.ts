@@ -398,8 +398,8 @@ describe('browser screenshot history fallback', () => {
   });
 });
 
-describe('browser Tauri task linking compatibility', () => {
-  it('durably repairs legacy false linking and coordinates every eligible view', async () => {
+describe('browser Tauri task storage compatibility', () => {
+  it('drops legacy view and collaborator fields and files unsorted tasks under the default quadrant', async () => {
     localStorage.setItem(storageKey, JSON.stringify({
       events: [],
       subscriptions: [],
@@ -409,90 +409,33 @@ describe('browser Tauri task linking compatibility', () => {
         id: 'task-1',
         title: '发布 Nowly',
         description: '',
-        priority: 'important_urgent',
+        priority: null,
         dueDate: '2026-09-15',
         completed: false,
         laneId: 'kanban-lane-todo',
         boardPosition: 0,
         tagIds: [],
-        collaboratorIds: [],
+        collaboratorIds: ['person-1'],
         views: ['kanban'],
         createdAt: '2026-09-15T00:00:00.000Z',
         updatedAt: '2026-09-15T00:00:00.000Z'
       }],
       notes: [],
-      settings: { taskViewLinkingEnabled: false },
+      settings: {},
       moduleLayout: [],
       focusSessions: [],
       extensions: [],
-      kanban: { lanes: [], cards: [], priorities: [], tags: [], collaborators: [] }
+      kanban: { lanes: [], cards: [], priorities: [], tags: [] }
     }));
 
     installBrowserTauriBackend();
 
-    const stored = JSON.parse(localStorage.getItem(storageKey) ?? '{}');
-    expect(stored.settings.taskViewLinkingEnabled).toBe(true);
-    expect(stored.tasks[0].views).toEqual(['kanban', 'matrix']);
-
-    const disabled = await invoke()('set_task_view_linking', { enabled: false }) as {
-      linkingEnabled: boolean;
-      tasks: Array<{ views: string[] }>;
+    const snapshot = await invoke()('get_task_workspace_snapshot') as {
+      tasks: Array<Record<string, unknown>>;
     };
-    expect(disabled.linkingEnabled).toBe(true);
-    expect(disabled.tasks[0].views).toEqual(['kanban', 'matrix']);
-
-    const membershipAttempt = await invoke()('set_task_view_memberships', {
-      id: 'task-1',
-      views: ['kanban']
-    }) as { views: string[] };
-    expect(membershipAttempt.views).toEqual(['kanban', 'matrix']);
-  });
-});
-
-describe('browser task steps', () => {
-  const draft = {
-    title: '发布', description: '', priority: null, dueDate: null, completed: false,
-    laneId: 'kanban-lane-todo', tagIds: [], collaboratorIds: []
-  };
-  type Stored = { id: string; steps: Array<{ id: string; title: string; completed: boolean }> };
-
-  it('assigns ids on create, keeps owned ids on update and keeps steps a draft omits', async () => {
-    installBrowserTauriBackend();
-    const created = await invoke()('create_task', {
-      originView: 'kanban',
-      draft: { ...draft, steps: [{ id: 'client', title: '  起草  ', completed: false }, { id: null, title: '评审', completed: true }] }
-    }) as Stored;
-    expect(created.steps.map(({ title, completed }) => ({ title, completed })))
-      .toEqual([{ title: '起草', completed: false }, { title: '评审', completed: true }]);
-    expect(created.steps[0].id).not.toBe('client');
-    const [first, second] = created.steps;
-    const updated = await invoke()('update_task', {
-      id: created.id,
-      draft: { ...draft, steps: [second, { id: null, title: '上线', completed: false }] }
-    }) as Stored;
-    expect(updated.steps[0]).toEqual(second);
-    expect(updated.steps.map((step) => step.id)).not.toContain(first.id);
-    const kept = await invoke()('update_task', { id: created.id, draft: { ...draft, title: '改名' } }) as Stored;
-    expect(kept.steps).toEqual(updated.steps);
-  });
-
-  it('fills steps for stored tasks that predate them and rejects a blank step without writing', async () => {
-    localStorage.setItem(storageKey, JSON.stringify({
-      events: [], subscriptions: [], oauthAccounts: [], externalEvents: [],
-      tasks: [{
-        id: 'old', title: '旧任务', description: '', priority: null, dueDate: null, completed: false,
-        laneId: 'kanban-lane-todo', boardPosition: 0, tagIds: [], collaboratorIds: [], views: ['kanban'],
-        createdAt: 'x', updatedAt: 'x'
-      }],
-      notes: [], settings: {}, moduleLayout: [], focusSessions: [], extensions: [],
-      kanban: { lanes: [], cards: [], priorities: [], tags: [], collaborators: [] }
-    }));
-    installBrowserTauriBackend();
-    const workspace = await invoke()('get_task_workspace_snapshot') as { tasks: Stored[] };
-    expect(workspace.tasks.find((task) => task.id === 'old')?.steps).toEqual([]);
-    const before = localStorage.getItem(storageKey);
-    await expect(invoke()('update_task', { id: 'old', draft: { ...draft, steps: [{ id: null, title: '  ', completed: false }] } }))
-      .rejects.toMatchObject({ code: 'validation_error', field: 'steps', message: '请输入步骤内容。' });
-    expect(localStorage.getItem(storageKey)).toBe(before);
+    expect(snapshot.tasks[0].priority).toBe('not_important_not_urgent');
+    expect(snapshot.tasks[0]).not.toHaveProperty('views');
+    expect(snapshot.tasks[0]).not.toHaveProperty('collaboratorIds');
+    expect(snapshot).not.toHaveProperty('collaborators');
   });
 });

@@ -21,12 +21,22 @@ export function useWorkspaceTasks() {
 
   const createTask = useCallback(async (draft: MatrixTaskDraft) => {
     const saved = await workspace.createTask(
-      'matrix',
       matrixDraftToWorkspace(draft, undefined, workspace.workspace.data)
     );
-    const projected = taskToMatrixTask(saved, workspace.workspace.data.tags);
-    if (!projected) throw new Error(t('taskWorkspace.createdNotVisible'));
-    return projected;
+    return taskToMatrixTask(saved, workspace.workspace.data.tags);
+  }, [workspace]);
+
+  const quickAdd = useCallback((quadrant: Quadrant, title: string) => {
+    const { defaultLaneId } = workspace.workspace.data;
+    return workspace.createTask({
+      title,
+      description: '',
+      priority: quadrant,
+      dueDate: null,
+      completed: false,
+      laneId: defaultLaneId,
+      tagIds: []
+    });
   }, [workspace]);
 
   const updateTask = useCallback(async (task: MatrixTask, draft: MatrixTaskDraft) => {
@@ -35,9 +45,7 @@ export function useWorkspaceTasks() {
       task.id,
       matrixDraftToWorkspace(draft, current, workspace.workspace.data)
     );
-    const projected = taskToMatrixTask(saved, workspace.workspace.data.tags);
-    if (!projected) throw new Error(t('taskWorkspace.updatedNotVisible'));
-    return projected;
+    return taskToMatrixTask(saved, workspace.workspace.data.tags);
   }, [workspace]);
 
   const deleteTask = useCallback(async (task: MatrixTask) => {
@@ -81,6 +89,7 @@ export function useWorkspaceTasks() {
     tasks,
     retryTasks: workspace.retry,
     createTask,
+    quickAdd,
     updateTask,
     deleteTask,
     setTaskCompleted,

@@ -192,7 +192,8 @@ function AppContent() {
         dragError={tasksFeature.dragError}
         pendingTaskIds={tasksFeature.pendingTaskIds}
         onRetry={() => void tasksFeature.retryTasks()}
-        onCreateTask={() => openModalInForeground({ type:'task-create', dueDate:null, trigger:null })}
+        onCreateTask={(trigger) => openModalInForeground({ type:'task-create', dueDate:null, trigger })}
+        onQuickAdd={tasksFeature.quickAdd}
         onOpenSettings={() => openModalInForeground({ type:'task-settings', trigger:null })}
         onOpenTask={(task, trigger) => openModalInForeground({ type:'task-edit', task, trigger })}
         onToggleTask={(task, completed) => void tasksFeature.setTaskCompleted(task, completed)}

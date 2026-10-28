@@ -73,8 +73,17 @@ The ordinary window, wallpaper, tray, quick panel and fullscreen focus serve dif
   resuming after sleep produces one missed-alarm summary, not individual replay.
   Removing the Time module does not disable alarms. Fully exiting Nowly does not
   leave a Windows scheduled alarm behind.
-- **Kanban board** — customizable lanes, cards, and fields for lightweight
-  project tracking.
+- **Kanban board** — the board and the matrix show the same tasks: every task
+  has a lane and a quadrant, and a change in one view shows up in the other.
+  Click **+ Add task** at the end of a lane or quadrant, type a title and press
+  Enter; the input stays open for the next task, and Esc closes it. Tasks added
+  in a lane start in **Neither urgent nor important**, tasks added in a quadrant
+  go to the default lane, and tasks added to the completion lane are done. Cards
+  show the quadrant dot and title, plus due date, steps, attachments and tags
+  when set. The **⋯** menu next to a lane name renames and recolors the lane,
+  adds a lane to its right, or deletes it. At least one lane remains; before a
+  lane is deleted, Nowly says which lane its tasks move to. Use **Manage tags**
+  in the toolbar for tags and **New task** for the full task dialog.
 - **Task steps** — in the task dialog of the board or the matrix, add a checklist
   below the description: press Enter or **Add**, click a step to rename it, and
   drag its handle (or focus the handle and press the Up and Down arrow keys) to
@@ -184,7 +193,7 @@ Configure visibility and the order within each group under **Settings → Notifi
 
 ### Quick create
 
-Choose Event, Matrix task, or Note in the **Quick create** group. The menu collapses and the matching create dialog opens just below the Bar, without opening the main window. The dialog has the same fields as in the app; matrix tasks default to **Important and urgent** and the default lane.
+Choose Event, Matrix task, or Note in the **Quick create** group. The menu collapses and the matching create dialog opens just below the Bar, without opening the main window. The dialog has the same fields as in the app; new tasks default to **Neither urgent nor important** and the default lane.
 
 - Saving closes the dialog and refreshes the calendar, matrix, or notes in the main window. If saving fails, the dialog stays open and shows the error.
 - Cancel, the close button, **Esc**, or **Alt+F4** closes the dialog, asking first when there are unsaved changes. Clicking outside the dialog or switching apps does not close it.

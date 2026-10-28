@@ -6,8 +6,6 @@ export type TaskPriority =
   | 'not_important_urgent'
   | 'not_important_not_urgent';
 
-export type TaskView = 'kanban' | 'matrix';
-
 export type TaskStep = {
   id: string;
   title: string;
@@ -25,14 +23,12 @@ export type Task = {
   id: string;
   title: string;
   description: string;
-  priority: TaskPriority | null;
+  priority: TaskPriority;
   dueDate: string | null;
   completed: boolean;
   laneId: string;
   boardPosition: number;
   tagIds: string[];
-  collaboratorIds: string[];
-  views: TaskView[];
   steps: TaskStep[];
   createdAt: string;
   updatedAt: string;
@@ -41,13 +37,11 @@ export type Task = {
 export type TaskDraft = {
   title: string;
   description: string;
-  priority: TaskPriority | null;
+  priority: TaskPriority;
   dueDate: string | null;
   completed: boolean;
   laneId: string;
   tagIds: string[];
-  collaboratorIds: string[];
-  views?: TaskView[];
   // Omitted keeps the stored steps; a list replaces them in order.
   steps?: TaskStepDraft[];
 };
@@ -74,24 +68,12 @@ export type TaskTag = {
 
 export type TaskTagDraft = Pick<TaskTag, 'name' | 'color'>;
 
-export type TaskCollaborator = {
-  id: string;
-  name: string;
-  archivedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type TaskCollaboratorDraft = Pick<TaskCollaborator, 'name'>;
-
 export type TaskViewPreferences = Record<string, unknown>;
 
 export type TaskWorkspaceSnapshot = {
   tasks: Task[];
   lanes: TaskLane[];
   tags: TaskTag[];
-  collaborators: TaskCollaborator[];
-  linkingEnabled: boolean;
   defaultLaneId: string;
   completionLaneId: string;
   viewPreferences: TaskViewPreferences;
@@ -104,6 +86,8 @@ export const taskPriorityOrder: TaskPriority[] = [
   'not_important_not_urgent'
 ];
 
+export const defaultTaskPriority: TaskPriority = 'not_important_not_urgent';
+
 export function isTaskPriority(value: unknown): value is TaskPriority {
   return typeof value === 'string' && taskPriorityOrder.includes(value as TaskPriority);
 }
@@ -113,8 +97,6 @@ export function emptyTaskWorkspace(): TaskWorkspaceSnapshot {
     tasks: [],
     lanes: [],
     tags: [],
-    collaborators: [],
-    linkingEnabled: true,
     defaultLaneId: 'kanban-lane-todo',
     completionLaneId: 'kanban-lane-done',
     viewPreferences: {}
@@ -132,10 +114,7 @@ export function sortTaskWorkspace(snapshot: TaskWorkspaceSnapshot): TaskWorkspac
       a.id.localeCompare(b.id)
   );
   const tags = [...snapshot.tags].sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
-  const collaborators = [...snapshot.collaborators].sort(
-    (a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id)
-  );
-  return { ...snapshot, tasks, lanes, tags, collaborators };
+  return { ...snapshot, tasks, lanes, tags };
 }
 
 export function stepProgress(steps: readonly Pick<TaskStep, 'completed'>[] | undefined) {
@@ -143,10 +122,19 @@ export function stepProgress(steps: readonly Pick<TaskStep, 'completed'>[] | und
   return { done: list.filter((step) => step.completed).length, total: list.length };
 }
 
-// Snapshots from older builds, the website showcase and test doubles have no steps.
+// Snapshots from older builds, the website showcase and test doubles may lack
+// steps or a quadrant.
 export function normalizeTaskWorkspace(snapshot: TaskWorkspaceSnapshot): TaskWorkspaceSnapshot {
   return {
     ...snapshot,
-    tasks: snapshot.tasks.map((task) => (Array.isArray(task.steps) ? task : { ...task, steps: [] }))
+    tasks: snapshot.tasks.map((task) =>
+      Array.isArray(task.steps) && isTaskPriority(task.priority)
+        ? task
+        : {
+            ...task,
+            steps: Array.isArray(task.steps) ? task.steps : [],
+            priority: isTaskPriority(task.priority) ? task.priority : defaultTaskPriority
+          }
+    )
   };
 }

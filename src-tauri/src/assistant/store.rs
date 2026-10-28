@@ -16,8 +16,6 @@ const TABLES: &[&str] = &[
     "tasks",
     "event_exceptions",
     "task_tag_links",
-    "task_collaborator_links",
-    "task_view_memberships",
     "task_steps",
 ];
 const SNAPSHOT_TABLES: &[&str] = &[
@@ -25,11 +23,8 @@ const SNAPSHOT_TABLES: &[&str] = &[
     "tasks",
     "event_exceptions",
     "task_tag_links",
-    "task_collaborator_links",
-    "task_view_memberships",
     "task_lanes",
     "task_tags",
-    "task_collaborators",
     "settings",
     "task_steps",
 ];
@@ -38,18 +33,14 @@ const WATCHED: &[&str] = &[
     "tasks",
     "event_exceptions",
     "task_tag_links",
-    "task_collaborator_links",
-    "task_view_memberships",
     "task_lanes",
     "task_tags",
-    "task_collaborators",
     "settings",
     "task_steps",
 ];
 // `settings` is rewritten wholesale by unrelated UI actions (picking a colour
 // touches `recent_colors`), so only the keys a plan actually depends on count.
 const WATCHED_SETTINGS: &[&str] = &[
-    "task_view_linking_enabled",
     "default_task_lane_id",
     "completion_task_lane_id",
 ];
@@ -269,7 +260,6 @@ fn affected(snapshot: &Snapshot, patches: &[Patch]) -> Snapshot {
                 "linked_event_id",
                 "linked_task_id",
                 "tag_id",
-                "collaborator_id",
             ] {
                 if let Some(Value::String(id)) = row.get(field) {
                     ids.insert(id.clone());
@@ -293,14 +283,14 @@ fn affected(snapshot: &Snapshot, patches: &[Patch]) -> Snapshot {
             }
         }
     }
-    for table in ["task_tag_links", "task_collaborator_links"] {
+    for table in ["task_tag_links"] {
         for row in snapshot[table].values() {
             if row
                 .get("task_id")
                 .and_then(Value::as_str)
                 .is_some_and(|id| ids.contains(id))
             {
-                for field in ["tag_id", "collaborator_id"] {
+                for field in ["tag_id"] {
                     if let Some(Value::String(id)) = row.get(field) {
                         ids.insert(id.clone());
                     }

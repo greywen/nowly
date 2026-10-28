@@ -65,7 +65,21 @@ const MIGRATIONS: &[(i64, Migration)] = &[
     (35, crate::stickers::migrate),
     (36, migration_36_note_content_titles),
     (37, migration_37_task_steps),
+    (38, migration_38_simplify_tasks),
 ];
+
+// Every task now shows in both views and always has a quadrant; collaborators
+// are gone. Old membership/collaborator data is dropped, not migrated.
+fn migration_38_simplify_tasks(transaction: &Transaction<'_>) -> Result<()> {
+    transaction.execute_batch(
+        "DROP TABLE IF EXISTS task_collaborator_links;
+         DROP TABLE IF EXISTS task_collaborators;
+         DROP TABLE IF EXISTS task_view_memberships;
+         DELETE FROM settings WHERE key='task_view_linking_enabled';
+         UPDATE tasks SET priority='not_important_not_urgent' WHERE priority IS NULL;",
+    )?;
+    crate::assistant::store::install_triggers(transaction)
+}
 
 // A task's ordered checklist. Rows cascade with their task, and the assistant
 // tracks the table, so its revision triggers are reinstalled after creating it.
@@ -124,13 +138,13 @@ fn migration_34_resets_only_alarms_once() {
         statement.query_map([], |row| (0..columns).map(|index| row.get::<_,rusqlite::types::Value>(index)).collect::<Result<Vec<_>>>()).unwrap().collect::<Result<Vec<_>>>().unwrap()
     }).collect::<Vec<_>>();
     let before = snapshot(&connection);
-    migrate(&mut connection).unwrap();
+    tests::migrate_through(&mut connection, 37).unwrap();
     for table in ["alarms", "alarm_notices", "alarm_scheduler_state"] {
         assert_eq!(connection.query_row(&format!("SELECT count(*) FROM {table}"), [], |row| row.get::<_,i64>(0)).unwrap(), 0, "{table}");
     }
     assert_eq!(snapshot(&connection), before);
     connection.execute_batch("INSERT INTO alarms VALUES ('new','New',9,0,'{\"kind\":\"once\"}',1,'t','t','t');").unwrap();
-    migrate(&mut connection).unwrap();
+    tests::migrate_through(&mut connection, 37).unwrap();
     assert_eq!(connection.query_row("SELECT count(*) FROM alarms", [], |row| row.get::<_,i64>(0)).unwrap(), 1);
 }
 
@@ -1904,7 +1918,7 @@ mod tests {
         assert!(exists);
     }
 
-    fn migrate_through(connection: &mut Connection, max_version: i64) -> Result<()> {
+    pub(super) fn migrate_through(connection: &mut Connection, max_version: i64) -> Result<()> {
         connection.execute_batch(
             "CREATE TABLE IF NOT EXISTS schema_migrations (
                 version INTEGER PRIMARY KEY,
@@ -2187,10 +2201,7 @@ mod tests {
             "extensions",
             "task_lanes",
             "task_tags",
-            "task_collaborators",
             "task_tag_links",
-            "task_collaborator_links",
-            "task_view_memberships",
             "focus_sessions",
         ] {
             assert!(table_exists(&connection, table), "missing table {table}");
@@ -2606,7 +2617,7 @@ mod tests {
             }).collect::<Vec<_>>()
         };
         let before = snapshot(&connection);
-        migrate(&mut connection).unwrap();
+        migrate_through(&mut connection, 37).unwrap();
         let columns: Vec<String> = connection.prepare("PRAGMA table_info(notes)").unwrap()
             .query_map([], |row| row.get(1)).unwrap().collect::<Result<_>>().unwrap();
         assert!(!columns.iter().any(|column| column == "title"));
@@ -2627,7 +2638,7 @@ mod tests {
         assert_eq!(connection.query_row(
             "SELECT COUNT(*) FROM schema_migrations WHERE version=36", [], |row| row.get::<_, i64>(0)
         ).unwrap(), 1);
-        migrate(&mut connection).unwrap();
+        migrate_through(&mut connection, 37).unwrap();
         assert_eq!(snapshot(&connection), before);
         assert_eq!(connection.query_row(
             "SELECT COUNT(*) FROM schema_migrations WHERE version=36", [], |row| row.get::<_, i64>(0)
@@ -2727,7 +2738,7 @@ mod tests {
     fn migration_18_conserves_task_counts_and_maps_priorities() {
         let mut connection = Connection::open_in_memory().unwrap();
         seed_pre_18(&mut connection);
-        migrate(&mut connection).unwrap();
+        migrate_through(&mut connection, 37).unwrap();
 
         // 2 matrix + 2 kanban = 4 unified tasks, none lost.
         let total: i64 = connection
@@ -2817,7 +2828,7 @@ mod tests {
     fn migration_18_coordinates_initial_view_memberships() {
         let mut connection = Connection::open_in_memory().unwrap();
         seed_pre_18(&mut connection);
-        migrate(&mut connection).unwrap();
+        migrate_through(&mut connection, 37).unwrap();
 
         let views = |id: &str| -> Vec<String> {
             connection
@@ -2857,7 +2868,7 @@ mod tests {
             )
             .unwrap();
 
-        migrate(&mut connection).unwrap();
+        migrate_through(&mut connection, 37).unwrap();
 
         // The legacy calendar membership is gone; kanban/matrix survive.
         let views: Vec<String> = connection
@@ -2877,7 +2888,7 @@ mod tests {
         );
         assert!(rejected.is_err());
 
-        // Rebuilding the table must not silently drop its index...
+        // Rebuilding the table must not silently drop its index.
         let has_index: bool = connection
             .query_row(
                 "SELECT EXISTS(SELECT 1 FROM sqlite_master
@@ -2890,58 +2901,13 @@ mod tests {
             has_index,
             "idx_task_view_memberships must survive the rebuild"
         );
-
-        // ...nor the assistant revision triggers attached to it. Change
-        // tracking for this table would break silently otherwise.
-        let triggers: Vec<String> = connection
-            .prepare(
-                "SELECT name FROM sqlite_master
-                 WHERE type='trigger' AND tbl_name='task_view_memberships' ORDER BY name",
-            )
-            .unwrap()
-            .query_map([], |row| row.get(0))
-            .unwrap()
-            .collect::<Result<Vec<String>, _>>()
-            .unwrap();
-        assert_eq!(
-            triggers,
-            vec![
-                "assistant_task_view_memberships_DELETE",
-                "assistant_task_view_memberships_INSERT",
-                "assistant_task_view_memberships_UPDATE",
-            ]
-        );
-
-        // A real write still bumps the assistant revision clock through the
-        // reinstalled triggers.
-        let before: i64 = connection
-            .query_row(
-                "SELECT revision FROM assistant_clock WHERE id=1",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
-        connection
-            .execute(
-                "DELETE FROM task_view_memberships WHERE task_id='t1' AND view='matrix'",
-                [],
-            )
-            .unwrap();
-        let after: i64 = connection
-            .query_row(
-                "SELECT revision FROM assistant_clock WHERE id=1",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
-        assert!(after > before, "trigger must bump the revision clock");
     }
 
     #[test]
     fn migration_18_seeds_linking_and_lane_settings() {
         let mut connection = Connection::open_in_memory().unwrap();
         seed_pre_18(&mut connection);
-        migrate(&mut connection).unwrap();
+        migrate_through(&mut connection, 37).unwrap();
 
         let value = |key: &str| -> String {
             connection
@@ -2953,6 +2919,48 @@ mod tests {
         assert_eq!(value("task_view_linking_enabled"), "true");
         assert_eq!(value("default_task_lane_id"), "\"kanban-lane-todo\"");
         assert_eq!(value("completion_task_lane_id"), "\"kanban-lane-done\"");
+    }
+
+    #[test]
+    fn migration_38_drops_collaborators_and_views_and_fills_quadrants() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        migrate_through(&mut connection, 37).unwrap();
+        connection
+            .execute_batch(
+                "INSERT INTO tasks(id,title,description,priority,due_date,completed,lane_id,board_position,created_at,updated_at)
+                   VALUES ('t1','无象限','',NULL,NULL,0,'kanban-lane-todo',0,'t','t'),
+                          ('t2','有象限','','important_urgent',NULL,0,'kanban-lane-todo',1,'t','t');",
+            )
+            .unwrap();
+        migrate(&mut connection).unwrap();
+
+        for table in ["task_collaborators", "task_collaborator_links", "task_view_memberships"] {
+            assert!(!table_exists(&connection, table), "{table} should be dropped");
+        }
+        let linking: bool = connection
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM settings WHERE key='task_view_linking_enabled')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(!linking);
+        let priorities: Vec<String> = connection
+            .prepare("SELECT priority FROM tasks ORDER BY id")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(priorities, ["not_important_not_urgent", "important_urgent"]);
+        let before: i64 = connection
+            .query_row("SELECT revision FROM assistant_clock WHERE id=1", [], |row| row.get(0))
+            .unwrap();
+        connection.execute("UPDATE tasks SET title='改' WHERE id='t1'", []).unwrap();
+        let after: i64 = connection
+            .query_row("SELECT revision FROM assistant_clock WHERE id=1", [], |row| row.get(0))
+            .unwrap();
+        assert!(after > before);
     }
 
     #[test]

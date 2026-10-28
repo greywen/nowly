@@ -24,15 +24,11 @@ test.beforeEach(async ({ page }) => {
     ];
     let tasks: any[] = [{
       id:'t1', title:'发布 Nowly', description:'', priority:'important_urgent', dueDate:'2026-07-23',
-      completed:false, laneId:'lane-todo', boardPosition:0, tagIds:[], collaboratorIds:[],
-      linkedEventId:null, views:['kanban','matrix'], createdAt:now, updatedAt:now
+      completed:false, laneId:'lane-todo', boardPosition:0, tagIds:[], steps:[],
+      linkedEventId:null, createdAt:now, updatedAt:now
     }];
-    const coordinateViews = (task: any) => ({
-      ...task,
-      views:['kanban', ...(task.priority ? ['matrix'] : [])]
-    });
     const snapshot = () => ({
-      tasks, lanes, tags:[], collaborators:[], linkingEnabled:true,
+      tasks, lanes, tags:[],
       defaultLaneId:'lane-todo', completionLaneId:'lane-done', viewPreferences:{}
     });
     const settings = {
@@ -51,10 +47,10 @@ test.beforeEach(async ({ page }) => {
         if (command === 'get_app_settings') return settings;
         if (command === 'create_task') {
           const laneId = args.draft.laneId ?? 'lane-todo';
-          let task = coordinateViews({
-            id:`t${sequence++}`, description:'', priority:null, dueDate:null, completed:false,
+          let task = ({
+            id:`t${sequence++}`, description:'', priority:'not_important_not_urgent', dueDate:null, completed:false,
             laneId, boardPosition:tasks.filter((item) => item.laneId === laneId).length,
-            tagIds:[], collaboratorIds:[], linkedEventId:null, ...args.draft,
+            tagIds:[], steps:[], linkedEventId:null, ...args.draft,
             createdAt:now, updatedAt:now
           });
           if (task.linkedEventId) {
@@ -70,7 +66,7 @@ test.beforeEach(async ({ page }) => {
           events = events.map((event) => event.linkedTaskId === args.id ? { ...event, linkedTaskId:null, updatedAt:now } : event);
           tasks = tasks.map((task) => task.id !== args.id && task.linkedEventId === args.draft.linkedEventId
             ? { ...task, linkedEventId:null, updatedAt:now } : task);
-          const updated = coordinateViews({ ...previous, ...args.draft, updatedAt:now });
+          const updated = ({ ...previous, ...args.draft, updatedAt:now });
           tasks = tasks.map((task) => task.id === args.id ? updated : task);
           if (updated.linkedEventId) {
             events = events.map((event) => event.id === updated.linkedEventId ? { ...event, linkedTaskId:updated.id, updatedAt:now } : event);
@@ -100,13 +96,13 @@ test.beforeEach(async ({ page }) => {
         }
         if (command === 'move_task_to_priority') {
           const task = tasks.find((item) => item.id === args.id);
-          const updated = coordinateViews({ ...task, priority:args.priority, updatedAt:now });
+          const updated = ({ ...task, priority:args.priority, updatedAt:now });
           tasks = tasks.map((item) => item.id === args.id ? updated : item);
           return updated;
         }
         if (command === 'move_task_to_date') {
           const task = tasks.find((item) => item.id === args.id);
-          const updated = coordinateViews({ ...task, dueDate:args.dueDate, updatedAt:now });
+          const updated = ({ ...task, dueDate:args.dueDate, updatedAt:now });
           tasks = tasks.map((item) => item.id === args.id ? updated : item);
           return updated;
         }
@@ -131,16 +127,14 @@ test('creates from date detail, moves quadrant, links, and deletes without delet
   await page.getByRole('button', { name:'新建任务' }).click();
   await expect(page.getByRole('button', { name:'截止日期' })).toContainText('23 日');
   await page.getByLabel('任务标题').fill('发布任务');
-  await page.getByRole('combobox', { name:'所属象限' }).click();
-  await page.getByRole('option', { name:'重要且紧急', exact:true }).click();
+  await page.getByRole('dialog').getByText('重要且紧急', { exact:true }).click();
   await page.getByRole('combobox', { name:'关联日程' }).click();
   await page.getByRole('option', { name:'设计评审' }).click();
   await page.getByRole('button', { name:'保存任务' }).click();
   await page.getByRole('button', { name:'关闭日期详情' }).click();
 
   await page.getByRole('button', { name:'编辑任务：发布任务' }).click();
-  await page.getByRole('combobox', { name:'所属象限' }).click();
-  await page.getByRole('option', { name:'重要不紧急', exact:true }).click();
+  await page.getByRole('dialog').getByText('重要不紧急', { exact:true }).click();
   await page.getByRole('button', { name:'保存任务' }).click();
   const quadrant = page.getByRole('region', { name:'重要不紧急', exact:true });
   await expect(quadrant.getByRole('button', { name:'编辑任务：发布任务' })).toBeVisible();

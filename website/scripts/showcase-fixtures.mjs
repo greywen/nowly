@@ -26,7 +26,7 @@ export function createShowcaseFixture(sceneId, language) {
     ['Outline release checklist', 'Prepare review materials', 'Confirm weekly milestones', 'Organize reading notes', 'Refine product prototype', 'Write design rationale', 'Verify key workflows', 'Plan learning sessions', 'Summarize decisions', 'Complete research digest', 'Archive project resources', 'Collect new ideas']
   );
   const priorities = ['important_urgent', 'important_not_urgent', 'not_important_urgent', 'not_important_not_urgent'];
-  const tasks = taskTitles.map((title, index) => ({ id: `task-${index}`, title, description: text('明确完成标准，记录关键结论，并安排下一步可执行的行动。', 'Define completion criteria, capture the key decisions and schedule a concrete next action.'), priority: priorities[index % 4], dueDate: `2026-10-${String(15 + index).padStart(2, '0')}`, completed: index >= 8, laneId: lanes[Math.floor(index / 4)].id, boardPosition: index % 4, tagIds: [tags[index % 3].id], collaboratorIds: [], views: ['kanban', 'matrix'], createdAt: stamp, updatedAt: stamp }));
+  const tasks = taskTitles.map((title, index) => ({ id: `task-${index}`, title, description: text('明确完成标准，记录关键结论，并安排下一步可执行的行动。', 'Define completion criteria, capture the key decisions and schedule a concrete next action.'), priority: priorities[index % 4], dueDate: `2026-10-${String(15 + index).padStart(2, '0')}`, completed: index >= 8, laneId: lanes[Math.floor(index / 4)].id, boardPosition: index % 4, tagIds: [tags[index % 3].id], steps: [], createdAt: stamp, updatedAt: stamp }));
   const noteRows = text([
     ['本周的三件重要小事', '先完成项目评审，再整理阅读笔记，最后给周末留出空白。每天只选择一件最重要的事，做完后再处理零散任务。'],
     ['项目讨论记录', '目标：让第一次使用更清晰。\n结论：精简入口，保留明确反馈。\n下一步：验证原型并记录观察结果，整理成可供团队复用的检查清单。'],
@@ -64,7 +64,7 @@ export function createShowcaseFixture(sceneId, language) {
   const active = sceneId === 'focus';
   return {
     language, sceneId, layout: getSceneLayout(sceneId), events, categories, notes, stickerBoard,
-    taskWorkspace: { tasks, lanes, tags, collaborators: [], linkingEnabled: true, defaultLaneId: 'todo', completionLaneId: 'done', viewPreferences: {} },
+    taskWorkspace: { tasks, lanes, tags, defaultLaneId: 'todo', completionLaneId: 'done', viewPreferences: {} },
     settings: { wallpaperEnabled: false, launchAtLogin: false, targetMonitorId: null, density: 'balanced', weekStart: 'monday', dateFormat: 'localized', showWeekends: true, iconStyle: 'duotone', hideTopbarInWallpaper: true, quickPanelEnabled: false, quickPanelShortcut: 'Ctrl+Space', screenshotShortcut: 'Ctrl+Alt+A', screenshotHistoryShortcut: 'Ctrl+Alt+H', recentColors: [] },
     timeSettings: { displayContent: active ? 'focus' : 'clocks', focusPreferences: { defaultMinutes: 25 }, appearance: { mode: 'digital', layout: 'stacked', hourCycle: 'h23', showSeconds: false, showLabel: true, showDate: language === 'zh', showDifference: language === 'zh', fontMode: 'auto', fontSize: 96 }, clocks: [
       { id: 'shanghai', label: text('上海', 'Shanghai'), timeZone: 'Asia/Shanghai' },

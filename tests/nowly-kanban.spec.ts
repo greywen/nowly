@@ -21,10 +21,7 @@ test.beforeEach(async ({ page }) => {
     let workspaceTasks: any[] = [];
     let priorities: any[] = [];
     let tags: any[] = [];
-    let collaborators: any[] = [];
-    let linkingEnabled = true;
     const cardTags: Record<string, string[]> = {};
-    const cardCollaborators: Record<string, string[]> = {};
 
     const settings = {
       wallpaperEnabled: false, launchAtLogin: false, targetMonitorId: null, density: 'balanced',
@@ -46,8 +43,7 @@ test.beforeEach(async ({ page }) => {
 
     const buildCard = (card: any) => ({
       ...card,
-      tagIds: cardTags[card.id] ?? [],
-      collaboratorIds: cardCollaborators[card.id] ?? []
+      tagIds: cardTags[card.id] ?? []
     });
 
     Object.defineProperty(window, '__TAURI_INTERNALS__', { value: {
@@ -73,8 +69,6 @@ test.beforeEach(async ({ page }) => {
               tasks: workspaceTasks,
               lanes: [...lanes].sort((a, b) => a.position - b.position),
               tags: tags.map((tag) => ({ ...tag, archivedAt: null })),
-              collaborators: collaborators.map((person) => ({ ...person, archivedAt: null })),
-              linkingEnabled,
               defaultLaneId: 'lane-todo',
               completionLaneId: 'lane-done',
               viewPreferences: {}
@@ -84,14 +78,11 @@ test.beforeEach(async ({ page }) => {
             const laneId = draft.laneId ?? 'lane-todo';
             const task = {
               id: nextId('task'), title: draft.title, description: draft.description ?? '',
-              priority: draft.priority ?? null, dueDate: draft.dueDate ?? null,
+              priority: draft.priority ?? 'not_important_not_urgent', dueDate: draft.dueDate ?? null,
               completed: draft.completed ?? false, laneId,
               boardPosition: workspaceTasks.filter((item) => item.laneId === laneId).length,
-              tagIds: draft.tagIds ?? [], collaboratorIds: draft.collaboratorIds ?? [],
+              tagIds: draft.tagIds ?? [], steps: [],
               linkedEventId: draft.linkedEventId ?? null,
-              views: linkingEnabled
-                ? ['kanban', ...(draft.priority ? ['matrix'] : [])]
-                : (draft.views ?? [args.originView ?? 'kanban']),
               createdAt: now, updatedAt: now
             };
             workspaceTasks.push(task);
@@ -103,9 +94,6 @@ test.beforeEach(async ({ page }) => {
             const draft = args.draft;
             const updated = {
               ...current, ...draft,
-              views: linkingEnabled
-                ? ['kanban', ...(draft.priority ? ['matrix'] : [])]
-                : (draft.views ?? current.views),
               updatedAt: now
             };
             workspaceTasks = workspaceTasks.map((item) => item.id === args.id ? updated : item);
@@ -141,16 +129,6 @@ test.beforeEach(async ({ page }) => {
               .forEach((item, index) => { item.boardPosition = index; });
             return updated;
           }
-          case 'set_task_view_linking':
-            linkingEnabled = args.enabled;
-            if (linkingEnabled) workspaceTasks = workspaceTasks.map((task) => ({
-              ...task,
-              views: ['kanban', ...(task.priority ? ['matrix'] : [])]
-            }));
-            return {
-              tasks: workspaceTasks, lanes, tags, collaborators, linkingEnabled,
-              defaultLaneId: 'lane-todo', completionLaneId: 'lane-done', viewPreferences: {}
-            };
           case 'create_task_lane': {
             const lane = { id: nextId('lane'), ...args.draft, position: lanes.length, createdAt: now, updatedAt: now };
             lanes.push(lane);
@@ -169,7 +147,7 @@ test.beforeEach(async ({ page }) => {
             lanes = lanes.filter((lane) => lane.id !== args.id);
             lanes.sort((a, b) => a.position - b.position).forEach((lane, index) => { lane.position = index; });
             return {
-              tasks: workspaceTasks, lanes, tags, collaborators, linkingEnabled,
+              tasks: workspaceTasks, lanes, tags,
               defaultLaneId: replacementLaneId, completionLaneId: 'lane-done', viewPreferences: {}
             };
           }
@@ -193,28 +171,13 @@ test.beforeEach(async ({ page }) => {
             tags = tags.filter((item) => item.id !== args.id);
             workspaceTasks = workspaceTasks.map((task) => ({ ...task, tagIds: task.tagIds.filter((id: string) => id !== args.id) }));
             return null;
-          case 'create_task_collaborator': {
-            const person = { id: nextId('person'), ...args.draft, archivedAt: null, createdAt: now, updatedAt: now };
-            collaborators.push(person);
-            return person;
-          }
-          case 'update_task_collaborator': {
-            const person = collaborators.find((item) => item.id === args.id);
-            Object.assign(person, args.draft, { updatedAt: now });
-            return person;
-          }
-          case 'delete_task_collaborator':
-            collaborators = collaborators.filter((item) => item.id !== args.id);
-            workspaceTasks = workspaceTasks.map((task) => ({ ...task, collaboratorIds: task.collaboratorIds.filter((id: string) => id !== args.id) }));
-            return null;
 
           case 'get_kanban_snapshot':
             return {
               lanes: [...lanes].sort((a, b) => a.position - b.position),
               cards: cards.map(buildCard),
               priorities: [...priorities].sort((a, b) => a.position - b.position),
-              tags,
-              collaborators
+              tags
             };
 
           case 'create_kanban_lane': {
@@ -251,7 +214,6 @@ test.beforeEach(async ({ page }) => {
             };
             cards.push(card);
             cardTags[card.id] = args.draft.tagIds ?? [];
-            cardCollaborators[card.id] = args.draft.collaboratorIds ?? [];
             return buildCard(card);
           }
           case 'update_kanban_card': {
@@ -262,7 +224,6 @@ test.beforeEach(async ({ page }) => {
               updatedAt: now
             });
             cardTags[card.id] = args.draft.tagIds ?? [];
-            cardCollaborators[card.id] = args.draft.collaboratorIds ?? [];
             return buildCard(card);
           }
           case 'delete_kanban_card': {
@@ -325,23 +286,6 @@ test.beforeEach(async ({ page }) => {
             return null;
           }
 
-          case 'create_kanban_collaborator': {
-            const person = { id: nextId('person'), name: args.draft.name, createdAt: now, updatedAt: now };
-            collaborators.push(person);
-            return person;
-          }
-          case 'update_kanban_collaborator': {
-            const person = collaborators.find((item) => item.id === args.id);
-            Object.assign(person, args.draft, { updatedAt: now });
-            return person;
-          }
-          case 'delete_kanban_collaborator': {
-            collaborators = collaborators.filter((item) => item.id !== args.id);
-            Object.keys(cardCollaborators).forEach((cardId) => {
-              cardCollaborators[cardId] = cardCollaborators[cardId].filter((id) => id !== args.id);
-            });
-            return null;
-          }
 
           default:
             throw new Error(`Unexpected command: ${command}`);
@@ -372,68 +316,69 @@ test('adds the kanban module, showing the three default lanes', async ({ page })
   await expect(page.getByRole('region', { name: '泳道：已完成' })).toBeVisible();
 });
 
-test('creates a task in a lane and shows only the fields that have values', async ({ page }) => {
-  await addKanbanModule(page);
-  await expect(page.getByRole('button', { name: '按优先级筛选' })).toHaveCount(0);
-  const todo = page.getByRole('region', { name: '泳道：待处理' });
-  await todo.getByRole('button', { name: '在待处理新增任务' }).click();
+async function addInline(lane: import('@playwright/test').Locator, laneName: string, title: string) {
+  await lane.getByRole('button', { name: `在${laneName}添加任务` }).click();
+  const input = lane.getByRole('textbox', { name: `在${laneName}添加任务` });
+  await input.fill(title);
+  await input.press('Enter');
+  await expect(lane.getByRole('article', { name: `任务：${title}` })).toBeVisible();
+  return input;
+}
 
-  await expect(page.getByRole('dialog', { name: '新建任务' })).toBeVisible();
-  await page.getByRole('combobox', { name: '所属象限' }).click();
-  await expect(page.getByRole('option')).toHaveText([
-    '无优先级',
-    '重要且紧急',
-    '重要不紧急',
-    '不重要但紧急',
-    '不重要不紧急'
-  ]);
-  await page.getByRole('option', { name: '无优先级', exact: true }).click();
-  await page.getByLabel('任务标题').fill('撰写发布说明');
-  await page.getByRole('button', { name: '保存任务' }).click();
+test('adds tasks inline under the default quadrant and keeps the input open', async ({ page }) => {
+  await addKanbanModule(page);
+  const todo = page.getByRole('region', { name: '泳道：待处理' });
+  const input = await addInline(todo, '待处理', '撰写发布说明');
+  await expect(input).toBeFocused();
+  await expect(input).toHaveValue('');
+  await input.fill('整理截图');
+  await input.press('Enter');
+  await expect(todo.getByRole('article', { name: '任务：整理截图' })).toBeVisible();
+  await input.press('Escape');
+  await expect(todo.getByRole('textbox')).toHaveCount(0);
 
   const card = todo.getByRole('article', { name: '任务：撰写发布说明' });
-  await expect(card).toBeVisible();
-  // Empty optional fields render nothing at all.
-  await expect(card.locator('.kanban-card__desc')).toHaveCount(0);
-  await expect(card.locator('.kanban-badge')).toHaveCount(0);
+  // A bare card shows the quadrant dot and title only.
+  await expect(card.getByRole('img', { name: '不重要不紧急' })).toBeVisible();
   await expect(card.locator('.kanban-card__meta')).toHaveCount(0);
   const workspace = await page.evaluate(async () =>
     (window as any).__TAURI_INTERNALS__.invoke('get_task_workspace_snapshot')
-  ) as { tasks: Array<{ title: string; views: string[] }> };
-  expect(workspace.tasks.find((task) => task.title === '撰写发布说明')?.views).toEqual(['kanban']);
+  ) as { tasks: Array<{ title: string; priority: string; completed: boolean }> };
+  expect(workspace.tasks.find((task) => task.title === '撰写发布说明')).toMatchObject({
+    priority: 'not_important_not_urgent', completed: false
+  });
 });
 
-test('manages global fields from task settings and applies them to a card', async ({ page }) => {
+test('manages tags from the toolbar and applies them in the task dialog', async ({ page }) => {
   await addKanbanModule(page);
 
-  await page.getByRole('button', { name: '看板设置' }).click();
-  await expect(page.getByRole('tab', { name: '标签(0)' })).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByRole('tab', { name: /优先级/ })).toHaveCount(0);
-  await expect(page.getByRole('tab', { name: /视图联动/ })).toHaveCount(0);
+  await page.getByRole('button', { name: '管理标签' }).click();
+  await expect(page.getByRole('tab')).toHaveCount(0);
   await page.getByLabel('新增标签').fill('性能');
   await page.getByRole('button', { name: '添加标签' }).click();
   await expect(page.getByRole('list', { name: '标签列表' })).toContainText('性能');
   await page.getByRole('button', { name: '关闭' }).click();
 
-  const todo = page.getByRole('region', { name: '泳道：待处理' });
-  await todo.getByRole('button', { name: '在待处理新增任务' }).click();
-  await page.getByLabel('任务标题').fill('调优性能');
-  await page.getByRole('checkbox', { name: '性能' }).check();
-  await page.getByRole('button', { name: '保存任务' }).click();
+  await page.getByRole('button', { name: '新建任务' }).click();
+  const dialog = page.getByRole('dialog', { name: '新建任务' });
+  await expect(dialog.getByRole('radio', { name: '不重要不紧急' })).toBeChecked();
+  await expect(dialog.getByRole('checkbox', { name: '已完成' })).toHaveCount(0);
+  await dialog.getByLabel('任务标题').fill('调优性能');
+  await dialog.getByText('重要且紧急', { exact: true }).click();
+  await expect(dialog.getByRole('radio', { name: '重要且紧急' })).toBeChecked();
+  await dialog.getByRole('checkbox', { name: '性能' }).check();
+  await dialog.getByRole('button', { name: '保存任务' }).click();
 
-  const card = todo.getByRole('article', { name: '任务：调优性能' });
+  const card = page.getByRole('region', { name: '泳道：待处理' }).getByRole('article', { name: '任务：调优性能' });
   await expect(card.locator('.kanban-tag')).toContainText('性能');
+  await expect(card.getByRole('img', { name: '重要且紧急' })).toBeVisible();
 });
 
 test('moves a card to an adjacent lane by dragging it', async ({ page }) => {
   await addKanbanModule(page);
   const todo = page.getByRole('region', { name: '泳道：待处理' });
-  await todo.getByRole('button', { name: '在待处理新增任务' }).click();
-  await page.getByLabel('任务标题').fill('迁移数据');
-  await page.getByRole('button', { name: '保存任务' }).click();
-
+  await addInline(todo, '待处理', '迁移数据');
   const card = todo.getByRole('article', { name: '任务：迁移数据' });
-  await expect(card).toBeVisible();
 
   // Cards move by native HTML5 drag-and-drop. The drag payload lives in
   // component state (dataTransfer is unreliable in the webview), so dispatching
@@ -449,16 +394,24 @@ test('moves a card to an adjacent lane by dragging it', async ({ page }) => {
   await expect(todo.getByRole('article', { name: '任务：迁移数据' })).toHaveCount(0);
 });
 
-test('deleting a lane confirms the task count and moves tasks to a replacement lane', async ({ page }) => {
+test('creates a lane to the right from the lane menu', async ({ page }) => {
+  await addKanbanModule(page);
+  await page.getByRole('button', { name: '待处理泳道操作' }).click();
+  await page.getByRole('menuitem', { name: '在右侧新建泳道' }).click();
+  await page.getByLabel('泳道名称').fill('等待反馈');
+  await page.getByRole('button', { name: '保存泳道' }).click();
+  await expect(page.locator('.kanban-lane__name')).toHaveText(['待处理', '等待反馈', '进行中', '已完成']);
+});
+
+test('deleting a lane says where its tasks go and moves them there', async ({ page }) => {
   await addKanbanModule(page);
   const todo = page.getByRole('region', { name: '泳道：待处理' });
-  await todo.getByRole('button', { name: '在待处理新增任务' }).click();
-  await page.getByLabel('任务标题').fill('临时任务');
-  await page.getByRole('button', { name: '保存任务' }).click();
+  await addInline(todo, '待处理', '临时任务');
+  await todo.getByRole('textbox').press('Escape');
 
-  await todo.getByRole('button', { name: '待处理', exact: true }).click();
-  await page.getByRole('button', { name: '删除泳道' }).click();
-  await expect(page.getByRole('dialog', { name: /永久删除泳道“待处理”/ })).toContainText('1 张任务');
+  await page.getByRole('button', { name: '待处理泳道操作' }).click();
+  await page.getByRole('menuitem', { name: '删除泳道' }).click();
+  await expect(page.getByRole('dialog', { name: /永久删除泳道“待处理”/ })).toContainText('1 张任务会移到“进行中”');
   await page.getByRole('button', { name: '永久删除' }).click();
 
   await expect(page.getByRole('region', { name: '泳道：待处理' })).toHaveCount(0);

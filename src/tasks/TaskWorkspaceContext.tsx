@@ -15,12 +15,11 @@ import {
   normalizeTaskWorkspace,
   sortTaskWorkspace,
   type Task,
-  type TaskCollaboratorDraft,
   type TaskDraft,
+  type TaskLane,
   type TaskLaneDraft,
   type TaskPriority,
   type TaskTagDraft,
-  type TaskView,
   type TaskViewPreferences,
   type TaskWorkspaceSnapshot
 } from './task-model';
@@ -43,16 +42,14 @@ type TaskWorkspaceContextValue = {
   retry(): Promise<void>;
   refresh(): Promise<void>;
   dismissOperationError(): void;
-  createTask(originView: TaskView, draft: TaskDraft): Promise<Task>;
+  createTask(draft: TaskDraft): Promise<Task>;
   updateTask(id: string, draft: TaskDraft): Promise<Task>;
   deleteTask(id: string): Promise<void>;
   setTaskCompleted(id: string, completed: boolean): Promise<Task>;
   moveTaskToLane(id: string, laneId: string, targetIndex: number): Promise<Task>;
-  moveTaskToPriority(id: string, priority: TaskPriority | null): Promise<Task>;
+  moveTaskToPriority(id: string, priority: TaskPriority): Promise<Task>;
   moveTaskToDate(id: string, dueDate: string | null): Promise<Task>;
-  setTaskViewMemberships(id: string, views: TaskView[]): Promise<Task>;
-  setTaskViewLinking(enabled: boolean): Promise<TaskWorkspaceSnapshot>;
-  createLane(draft: TaskLaneDraft): Promise<void>;
+  createLane(draft: TaskLaneDraft): Promise<TaskLane>;
   updateLane(id: string, draft: TaskLaneDraft): Promise<void>;
   deleteLane(id: string, replacementLaneId?: string | null): Promise<void>;
   reorderLanes(orderedIds: string[]): Promise<void>;
@@ -62,10 +59,6 @@ type TaskWorkspaceContextValue = {
   updateTag(id: string, draft: TaskTagDraft): Promise<void>;
   archiveTag(id: string, archived: boolean): Promise<void>;
   deleteTag(id: string): Promise<void>;
-  createCollaborator(draft: TaskCollaboratorDraft): Promise<void>;
-  updateCollaborator(id: string, draft: TaskCollaboratorDraft): Promise<void>;
-  archiveCollaborator(id: string, archived: boolean): Promise<void>;
-  deleteCollaborator(id: string): Promise<void>;
   setViewPreferences(preferences: TaskViewPreferences): Promise<void>;
 };
 
@@ -166,16 +159,16 @@ export function TaskWorkspaceProvider({ children }: { children: ReactNode }) {
     }
   }, [applySnapshot, replaceTask, setPending]);
 
-  const createTask = useCallback((originView: TaskView, draft: TaskDraft) => {
+  const createTask = useCallback((draft: TaskDraft) => {
     if (repository.createWorkspaceTask) {
-      return taskWrite(null, () => repository.createWorkspaceTask!(originView, draft));
+      return taskWrite(null, () => repository.createWorkspaceTask!(draft));
     }
     return taskWrite(null, async () => {
       const matrixDraft = {
         title: draft.title,
-        quadrant: draft.priority ?? 'important_urgent' as const,
+        quadrant: draft.priority,
         dueAt: draft.dueDate,
-        priority: draft.priority ? legacyPriority(draft.priority) : 2 as const,
+        priority: legacyPriority(draft.priority),
         completed: draft.completed,
         note: draft.description
       };
@@ -184,8 +177,7 @@ export function TaskWorkspaceProvider({ children }: { children: ReactNode }) {
         lanes: dataRef.current.lanes,
         cards: [],
         priorities: [],
-        tags: dataRef.current.tags.map(({ archivedAt: _archivedAt, ...tag }) => tag),
-        collaborators: dataRef.current.collaborators.map(({ archivedAt: _archivedAt, ...person }) => person)
+        tags: dataRef.current.tags.map(({ archivedAt: _archivedAt, ...tag }) => tag)
       });
       return projected.tasks[0];
     });
@@ -199,25 +191,22 @@ export function TaskWorkspaceProvider({ children }: { children: ReactNode }) {
       const current = dataRef.current.tasks.find((task) => task.id === id);
       const matrixDraft = {
         title: draft.title,
-        quadrant: draft.priority ?? current?.priority ?? 'important_urgent',
+        quadrant: draft.priority,
         dueAt: draft.dueDate,
-        priority: draft.priority ? legacyPriority(draft.priority) : 2 as const,
+        priority: legacyPriority(draft.priority),
         completed: draft.completed,
         note: draft.description
       };
       const updated = await repository.updateTask(id, matrixDraft);
-      return matrixDraftToWorkspace(matrixDraft, current, dataRef.current).priority
-        ? {
-            ...(current ?? workspaceFromLegacy([updated], { lanes: [], cards: [], priorities: [], tags: [], collaborators: [] }).tasks[0]),
+      return {
+            ...(current ?? workspaceFromLegacy([updated], { lanes: [], cards: [], priorities: [], tags: [] }).tasks[0]),
             ...matrixDraftToWorkspace(matrixDraft, current, dataRef.current),
             id,
             createdAt: current?.createdAt ?? updated.createdAt,
             updatedAt: updated.updatedAt,
             boardPosition: current?.boardPosition ?? 0,
-            views: current?.views ?? ['kanban', 'matrix'],
             steps: current?.steps ?? []
-          }
-        : missing('legacy update projection');
+          };
     });
   }, [repository, taskWrite]);
 
@@ -245,7 +234,7 @@ export function TaskWorkspaceProvider({ children }: { children: ReactNode }) {
     return taskWrite(id, async () => {
       const saved = await repository.setTaskCompleted(id, completed);
       const current = dataRef.current.tasks.find((task) => task.id === id);
-      if (!current) return workspaceFromLegacy([saved], { lanes: [], cards: [], priorities: [], tags: [], collaborators: [] }).tasks[0];
+      if (!current) return workspaceFromLegacy([saved], { lanes: [], cards: [], priorities: [], tags: [] }).tasks[0];
       return {
         ...current,
         completed: saved.completed,
@@ -274,7 +263,7 @@ export function TaskWorkspaceProvider({ children }: { children: ReactNode }) {
     return taskWrite(id, () => write(id, laneId, targetIndex), previous);
   }, [patchSnapshot, repository, taskWrite]);
 
-  const moveTaskToPriority = useCallback((id: string, priority: TaskPriority | null) => {
+  const moveTaskToPriority = useCallback((id: string, priority: TaskPriority) => {
     const write = repository.moveTaskToPriority ?? (() => missing('moveTaskToPriority'));
     return taskWrite(id, () => write(id, priority));
   }, [repository, taskWrite]);
@@ -282,11 +271,6 @@ export function TaskWorkspaceProvider({ children }: { children: ReactNode }) {
   const moveTaskToDate = useCallback((id: string, dueDate: string | null) => {
     const write = repository.moveTaskToDate ?? (() => missing('moveTaskToDate'));
     return taskWrite(id, () => write(id, dueDate));
-  }, [repository, taskWrite]);
-
-  const setTaskViewMemberships = useCallback((id: string, views: TaskView[]) => {
-    const write = repository.setTaskViewMemberships ?? (() => missing('setTaskViewMemberships'));
-    return taskWrite(id, () => write(id, views));
   }, [repository, taskWrite]);
 
   const snapshotWrite = useCallback(async (operation: () => Promise<TaskWorkspaceSnapshot>) => {
@@ -324,9 +308,13 @@ export function TaskWorkspaceProvider({ children }: { children: ReactNode }) {
     moveTaskToLane,
     moveTaskToPriority,
     moveTaskToDate,
-    setTaskViewMemberships,
-    setTaskViewLinking: (enabled) => snapshotWrite(() => (repository.setTaskViewLinking ?? (() => missing('setTaskViewLinking')))(enabled)),
-    createLane: (draft) => reloadAfter(() => (repository.createTaskLane ?? (() => missing('createTaskLane')))(draft)),
+    createLane: async (draft) => {
+      let created: TaskLane | undefined;
+      await reloadAfter(async () => {
+        created = await (repository.createTaskLane ?? (() => missing('createTaskLane')))(draft);
+      });
+      return created!;
+    },
     updateLane: (id, draft) => reloadAfter(() => (repository.updateTaskLane ?? (() => missing('updateTaskLane')))(id, draft)),
     deleteLane: (id, replacementLaneId = null) => snapshotWrite(() => (repository.deleteTaskLane ?? (() => missing('deleteTaskLane')))(id, replacementLaneId)).then(() => undefined),
     reorderLanes: (orderedIds) => reloadAfter(() => (repository.reorderTaskLanes ?? (() => missing('reorderTaskLanes')))(orderedIds)),
@@ -336,15 +324,11 @@ export function TaskWorkspaceProvider({ children }: { children: ReactNode }) {
     updateTag: (id, draft) => reloadAfter(() => (repository.updateTaskTag ?? (() => missing('updateTaskTag')))(id, draft)),
     archiveTag: (id, archived) => reloadAfter(() => (repository.archiveTaskTag ?? (() => missing('archiveTaskTag')))(id, archived)),
     deleteTag: (id) => reloadAfter(() => (repository.deleteTaskTag ?? (() => missing('deleteTaskTag')))(id)),
-    createCollaborator: (draft) => reloadAfter(() => (repository.createTaskCollaborator ?? (() => missing('createTaskCollaborator')))(draft)),
-    updateCollaborator: (id, draft) => reloadAfter(() => (repository.updateTaskCollaborator ?? (() => missing('updateTaskCollaborator')))(id, draft)),
-    archiveCollaborator: (id, archived) => reloadAfter(() => (repository.archiveTaskCollaborator ?? (() => missing('archiveTaskCollaborator')))(id, archived)),
-    deleteCollaborator: (id) => reloadAfter(() => (repository.deleteTaskCollaborator ?? (() => missing('deleteTaskCollaborator')))(id)),
     setViewPreferences: (preferences) => snapshotWrite(() => (repository.setTaskViewPreferences ?? (() => missing('setTaskViewPreferences')))(preferences)).then(() => undefined)
   }), [
     workspace, pendingTaskIds, operationError, retry, refresh, createTask, updateTask, deleteTask,
     setTaskCompleted, moveTaskToLane, moveTaskToPriority, moveTaskToDate,
-    setTaskViewMemberships, snapshotWrite, reloadAfter, repository
+    snapshotWrite, reloadAfter, repository
   ]);
 
   return <TaskWorkspaceContext.Provider value={value}>{children}</TaskWorkspaceContext.Provider>;

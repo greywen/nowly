@@ -31,7 +31,7 @@ When the model asks to query records, the host validates the category and filter
 | Permission | Fields returned to the model |
 |---|---|
 | Local calendar | Record key, domain, title, local source label, read-only flag; ID/target occurrence identity, start/end, all-day flag, reminder offsets, series ID |
-| Local tasks | Record key, domain, title, local source label, read-only flag; ID, priority, due date, completion, lane ID and view membership; lane IDs/names, default/completion lanes and view-linking setting |
+| Local tasks | Record key, domain, title, local source label, read-only flag; ID, priority, due date, completion and lane ID; lane IDs/names and default/completion lanes |
 | External calendar (read-only to AI) | Record key, domain, title, subscription/source name, read-only flag; cached event ID, start/end, all-day flag and source's last successful sync timestamp |
 
 **Google Calendar events are included when external-calendar permission is enabled**, as are cached Microsoft and ICS events. This is one shared permission, not a per-provider/per-account selector. Local-calendar permission alone does not include external events. The AI queries the local external-event cache, not Google or Microsoft directly; external synchronization is a separate network path. A cached Google event may therefore be sent to a different, user-configured AI provider.

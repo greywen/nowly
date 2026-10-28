@@ -21,12 +21,12 @@ function repository(overrides: Partial<NowlyRepository> = {}): NowlyRepository {
     getSettings:vi.fn(), updateSettings:vi.fn(), listMonitors:vi.fn(),
     listModuleLayout:vi.fn().mockResolvedValue([]), saveModuleLayout:vi.fn().mockImplementation((l)=>Promise.resolve(l)),
     createFocusSession:vi.fn().mockImplementation((session)=>Promise.resolve(session)), listFocusSessions:vi.fn().mockResolvedValue([]), getFocusStatistics:vi.fn().mockResolvedValue({totalFocusedSeconds:0,completedCount:0,interruptedCount:0,completionRate:0,points:[]}),
-    getKanbanSnapshot:vi.fn().mockResolvedValue({ lanes:[], cards:[], priorities:[], tags:[], collaborators:[] }),
+    getKanbanSnapshot:vi.fn().mockResolvedValue({ lanes:[], cards:[], priorities:[], tags:[] }),
     createKanbanLane:vi.fn(), updateKanbanLane:vi.fn(), deleteKanbanLane:vi.fn(), reorderKanbanLanes:vi.fn(),
     createKanbanCard:vi.fn(), updateKanbanCard:vi.fn(), deleteKanbanCard:vi.fn(), moveKanbanCard:vi.fn(),
     createKanbanPriority:vi.fn(), updateKanbanPriority:vi.fn(), deleteKanbanPriority:vi.fn(), reorderKanbanPriorities:vi.fn(),
     createKanbanTag:vi.fn(), updateKanbanTag:vi.fn(), deleteKanbanTag:vi.fn(),
-    createKanbanCollaborator:vi.fn(), updateKanbanCollaborator:vi.fn(), deleteKanbanCollaborator:vi.fn(), listCategories:vi.fn().mockResolvedValue([]), createCategory:vi.fn(), updateCategory:vi.fn(), deleteCategory:vi.fn(), listCalendarSubscriptions:vi.fn().mockResolvedValue([]), createCalendarSubscription:vi.fn(), updateCalendarSubscription:vi.fn(), deleteCalendarSubscription:vi.fn(), refreshCalendarSubscription:vi.fn(), startOAuthLogin:vi.fn(), listOAuthAccounts:vi.fn().mockResolvedValue([]), disconnectOAuthAccount:vi.fn(), listRemoteCalendars:vi.fn().mockResolvedValue([]), subscribeRemoteCalendar:vi.fn(), updateSubscriptionDisplay:vi.fn(), listExternalEventsInRange:vi.fn().mockResolvedValue([]), ...overrides
+    listCategories:vi.fn().mockResolvedValue([]), createCategory:vi.fn(), updateCategory:vi.fn(), deleteCategory:vi.fn(), listCalendarSubscriptions:vi.fn().mockResolvedValue([]), createCalendarSubscription:vi.fn(), updateCalendarSubscription:vi.fn(), deleteCalendarSubscription:vi.fn(), refreshCalendarSubscription:vi.fn(), startOAuthLogin:vi.fn(), listOAuthAccounts:vi.fn().mockResolvedValue([]), disconnectOAuthAccount:vi.fn(), listRemoteCalendars:vi.fn().mockResolvedValue([]), subscribeRemoteCalendar:vi.fn(), updateSubscriptionDisplay:vi.fn(), listExternalEventsInRange:vi.fn().mockResolvedValue([]), ...overrides
   };
 }
 function wrapper(value: NowlyRepository) { return ({children}:{children:ReactNode}) => <RepositoryProvider repository={value}>{children}</RepositoryProvider>; }

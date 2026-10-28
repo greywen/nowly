@@ -153,7 +153,6 @@ fn actual_linked_patch_requires_both_domain_permissions() {
     let event_id = e.changes[0].after["id"].as_str().unwrap();
     let task = crate::task_workspace::create(
         &db,
-        "kanban",
         serde_json::from_value(json!({
             "title":"linked task","laneId":"kanban-lane-todo","linkedEventId":event_id
         }))
@@ -198,7 +197,6 @@ fn undo_checks_changed_lane_settings_and_new_lane_members() {
     let db = db();
     let task = crate::task_workspace::create(
         &db,
-        "kanban",
         serde_json::from_value(json!({
             "title":"to delete","laneId":"kanban-lane-todo"
         }))
@@ -209,7 +207,6 @@ fn undo_checks_changed_lane_settings_and_new_lane_members() {
     store::execute(&db, &p.id, &permissions()).unwrap();
     crate::task_workspace::create(
         &db,
-        "kanban",
         serde_json::from_value(json!({"title":"new last task","laneId":"kanban-lane-todo"}))
             .unwrap(),
     )
@@ -244,20 +241,14 @@ fn idempotent_receipt_survives_permission_revocation() {
 }
 
 #[test]
-fn clearing_priority_when_linking_disabled_prunes_membership() {
+fn clearing_priority_files_task_under_default_quadrant() {
     let db = db();
     let task = crate::task_workspace::create(
         &db,
-        "matrix",
         serde_json::from_value(json!({
             "title":"unclassify","laneId":"kanban-lane-todo","priority":"important_urgent"
         }))
         .unwrap(),
-    )
-    .unwrap();
-    db.execute(
-        "UPDATE settings SET value='false' WHERE key='task_view_linking_enabled'",
-        [],
     )
     .unwrap();
     let p = prepare(
@@ -267,11 +258,7 @@ fn clearing_priority_when_linking_disabled_prunes_membership() {
             patch: json!({"priority":null}),
         }],
     );
-    assert!(p.changes[0].after["priority"].is_null());
-    assert!(!p.changes[0].after["views"]
-        .as_array()
-        .unwrap()
-        .contains(&json!("matrix")));
+    assert_eq!(p.changes[0].after["priority"], json!("not_important_not_urgent"));
 }
 
 #[test]
@@ -529,7 +516,6 @@ fn unrelated_settings_writes_do_not_invalidate_a_pending_plan() {
 fn task_with_steps(db: &Connection, title: &str) -> crate::models::Task {
     crate::task_workspace::create(
         db,
-        "kanban",
         serde_json::from_value(json!({
             "title": title, "laneId": "kanban-lane-todo",
             "steps": [{"title": "one"}, {"title": "two", "completed": true}]

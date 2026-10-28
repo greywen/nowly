@@ -129,8 +129,8 @@ test.beforeEach(async ({ page }) => {
           if (command === 'list_focus_sessions') return [];
           if (command === 'get_task_workspace_snapshot') {
             return {
-              tasks: [], lanes: [], tags: [], collaborators: [],
-              linkingEnabled: true, defaultLaneId: null, completionLaneId: null,
+              tasks: [], lanes: [], tags: [],
+              defaultLaneId: null, completionLaneId: null,
               viewPreferences: {}
             };
           }

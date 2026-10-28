@@ -1,9 +1,10 @@
-import { Plus } from '../components/icons';
 import { colorStyle } from '../lib/color';
 import type { DragEvent } from 'react';
 import { cardsInLane, type KanbanCard as KanbanCardModel, type KanbanLane as KanbanLaneModel, type KanbanSnapshot } from './kanban-model';
 import { resolveCard } from './kanban-view';
 import { KanbanCard } from './KanbanCard';
+import { ActionMenu } from '../components/ActionMenu';
+import { InlineTaskAdd } from '../tasks/InlineTaskAdd';
 import { t } from '../i18n';
 
 type KanbanLaneProps = {
@@ -11,9 +12,13 @@ type KanbanLaneProps = {
   snapshot: KanbanSnapshot;
   todayIso: string;
   isDropTarget: boolean;
-  onAddCard: () => void;
-  onEditLane: () => void;
-  onOpenCard: (cardId: string) => void;
+  isCompletionLane: boolean;
+  onAddTask: (title: string) => Promise<unknown>;
+  onEditLane: (trigger: HTMLElement | null) => void;
+  onAddLaneRight: (trigger: HTMLElement | null) => void;
+  // Omitted for the last lane, which the backend refuses to delete.
+  onDeleteLane?: (trigger: HTMLElement | null) => void;
+  onOpenCard: (cardId: string, trigger: HTMLElement) => void;
   onLaneDragStart: (event: DragEvent<HTMLElement>) => void;
   onLaneDragEnd: () => void;
   onLaneDragOver: (event: DragEvent<HTMLElement>) => void;
@@ -21,20 +26,23 @@ type KanbanLaneProps = {
   onCardDragStart: (event: DragEvent<HTMLElement>, cardId: string) => void;
   onCardDragEnd: () => void;
   // Optional predicate deciding which cards are visible under the active board
-  // filters. Defaults to showing everything.
+  // filter. Defaults to showing everything.
   matchesFilter?: (card: KanbanCardModel) => boolean;
 };
 
-// One fluid lane that shares board width: a draggable header carrying colour, an editable name
-// button and a card count, an add-card button, and the vertical list of task
-// cards. The lane is also a drop target for cards.
+// One fluid lane that shares board width: a draggable header with colour, name,
+// card count and a "⋯" menu for lane commands, the card list, and an inline
+// "add task" row at the end. The lane is also a drop target for cards.
 export function KanbanLane({
   lane,
   snapshot,
   todayIso,
   isDropTarget,
-  onAddCard,
+  isCompletionLane,
+  onAddTask,
   onEditLane,
+  onAddLaneRight,
+  onDeleteLane,
   onOpenCard,
   onLaneDragStart,
   onLaneDragEnd,
@@ -62,26 +70,25 @@ export function KanbanLane({
         onDragEnd={onLaneDragEnd}
       >
         <span className="kanban-lane__dot" style={colorStyle(lane.color)} aria-hidden="true" />
-        <button type="button" className="kanban-lane__name" onClick={onEditLane}>
-          {lane.name}
-        </button>
+        <h3 className="kanban-lane__name">{lane.name}</h3>
         <span className="kanban-lane__count" aria-label={t('kanbanLane.count', { name: lane.name, count: visibleCards.length })}>
           {visibleCards.length}
         </span>
         <div className="kanban-lane__actions">
-          <button
-            type="button"
-            className="good-icon-button"
-            aria-label={t('kanbanLane.addTask', { name: lane.name })}
-            onClick={onAddCard}
-          >
-            <Plus aria-hidden="true" />
-          </button>
+          <ActionMenu
+            label={t('kanbanLane.menu', { name: lane.name })}
+            items={[
+              { id: 'edit', label: t('kanbanLane.edit'), onSelect: onEditLane },
+              { id: 'add-right', label: t('kanbanLane.addRight'), onSelect: onAddLaneRight },
+              ...(onDeleteLane
+                ? [{ id: 'delete', label: t('kanbanLane.delete'), tone: 'danger' as const, onSelect: onDeleteLane }]
+                : [])
+            ]}
+          />
         </div>
       </header>
 
       <div className="kanban-lane__cards" data-testid="kanban-lane-cards">
-        {visibleCards.length === 0 ? <p className="kanban-lane__empty">{t('kanbanLane.empty')}</p> : null}
         {visibleCards.map((card) => {
           // Map the visible position back to the card's real index within the
           // full lane so drops land correctly even while a filter is active.
@@ -99,13 +106,15 @@ export function KanbanLane({
               <KanbanCard
                 resolved={resolveCard(card, snapshot)}
                 todayIso={todayIso}
-                onOpen={() => onOpenCard(card.id)}
+                done={isCompletionLane}
+                onOpen={() => onOpenCard(card.id, document.activeElement as HTMLElement)}
                 onDragStart={(event) => onCardDragStart(event, card.id)}
                 onDragEnd={onCardDragEnd}
               />
             </div>
           );
         })}
+        <InlineTaskAdd label={t('kanbanLane.addTask', { name: lane.name })} onCreate={onAddTask} />
       </div>
     </section>
   );

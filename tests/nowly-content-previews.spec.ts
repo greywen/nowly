@@ -51,13 +51,11 @@ function seed({ imageId, fileId, png, view }: SeedArgs) {
 
   const workspace = {
     tasks: [
-      { id: 't1', title: '整理发布说明', description: rich, priority: 'important_urgent', dueDate: '2026-07-23', completed: false, laneId: 'lane-todo', boardPosition: 0, tagIds: ['tag-1'], collaboratorIds: ['who-1'], views: ['kanban'], createdAt: now, updatedAt: now },
-      { id: 't2', title: '无描述的任务', description: '', priority: null, dueDate: null, completed: false, laneId: 'lane-todo', boardPosition: 1, tagIds: [], collaboratorIds: [], views: ['kanban'], createdAt: now, updatedAt: now }
+      { id: 't1', title: '整理发布说明', description: rich, priority: 'important_urgent', dueDate: '2026-07-23', completed: false, laneId: 'lane-todo', boardPosition: 0, tagIds: ['tag-1'], steps: [], createdAt: now, updatedAt: now },
+      { id: 't2', title: '无描述的任务', description: '', priority: 'not_important_not_urgent', dueDate: null, completed: false, laneId: 'lane-todo', boardPosition: 1, tagIds: [], steps: [], createdAt: now, updatedAt: now }
     ],
     lanes,
-    tags: [{ id: 'tag-1', name: '设计', color: '#4F55DA', archivedAt: null, createdAt: now, updatedAt: now }],
-    collaborators: [{ id: 'who-1', name: '小林', archivedAt: null, createdAt: now, updatedAt: now }],
-    linkingEnabled: true,
+    tags: [{ id: 'tag-1', name: '设计', color: '#4F55DA', archivedAt: null, createdAt: now, updatedAt: now }],
     defaultLaneId: 'lane-todo',
     completionLaneId: 'lane-doing',
     viewPreferences: {}
@@ -121,31 +119,17 @@ async function boot(page: Page, view: 'list' | 'board') {
   await page.goto('/');
 }
 
-test('a kanban card shows its description and an attachment count', async ({ page }) => {
+test('a kanban card shows an attachment count but not its description', async ({ page }) => {
   await boot(page, 'list');
   const card = page.getByRole('article', { name: '任务：整理发布说明' });
   await expect(card).toBeVisible();
 
-  // Flattened, not rendered: a clamped preview reads badly as markup, and this
-  // keeps innerHTML out of the card. The image contributes nothing to the text —
-  // its alt is a file name, which is noise here.
-  await expect(card.locator('.kanban-card__desc')).toHaveText('季度回顾的要点：设计稿已定稿，待评审。 附件清单');
+  // Cards stay scannable: the description lives in the task dialog only.
+  await expect(card).not.toContainText('季度回顾的要点');
   // Files only. An inline image is content, not an attachment.
   await expect(card.getByLabel('1 个附件')).toHaveText('1');
 
-  const style = await card.locator('.kanban-card__desc').evaluate((node) => {
-    const s = getComputedStyle(node);
-    return { fontSize: s.fontSize, color: s.color, clamp: s.webkitLineClamp };
-  });
-  // design.md Caption (0.85rem at the 13px root) and text-muted, matching the
-  // due-date row so the card's meta text stays one scale.
-  expect(style.fontSize).toBe('11.05px');
-  expect(style.color).toBe('rgb(150, 142, 126)');
-  expect(style.clamp).toBe('2');
-
-  // A card with no description renders no description region at all.
   const bare = page.getByRole('article', { name: '任务：无描述的任务' });
-  await expect(bare.locator('.kanban-card__desc')).toHaveCount(0);
   await expect(bare.locator('.kanban-card__clip')).toHaveCount(0);
 });
 

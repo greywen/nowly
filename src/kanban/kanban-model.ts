@@ -44,10 +44,9 @@ export type KanbanCard = {
   title: string;
   description: string | null;
   dueDate: string | null;
-  priorityId: string | null;
+  priorityId: string;
   position: number;
   tagIds: string[];
-  collaboratorIds: string[];
   steps?: TaskStep[];
   createdAt: string;
   updatedAt: string;
@@ -58,9 +57,8 @@ export type KanbanCardDraft = {
   title: string;
   description: string | null;
   dueDate: string | null;
-  priorityId: string | null;
+  priorityId: string;
   tagIds: string[];
-  collaboratorIds: string[];
 };
 
 export type KanbanPriority = {
@@ -90,23 +88,11 @@ export type KanbanTagDraft = {
   color: KanbanColor;
 };
 
-export type KanbanCollaborator = {
-  id: string;
-  name: string;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type KanbanCollaboratorDraft = {
-  name: string;
-};
-
 export type KanbanSnapshot = {
   lanes: KanbanLane[];
   cards: KanbanCard[];
   priorities: KanbanPriority[];
   tags: KanbanTag[];
-  collaborators: KanbanCollaborator[];
 };
 
 // Sort a snapshot so lanes and the cards within each lane follow their stored

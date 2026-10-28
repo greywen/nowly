@@ -24,7 +24,7 @@ describe('translation fallback', () => {
 
   it('localizes task operation and status errors', () => {
     setLanguage('en');
-    for (const key of ['taskWorkspace.moveFailed', 'taskWorkspace.completionFailed', 'taskWorkspace.createdNotVisible', 'taskWorkspace.updatedNotVisible', 'kanbanWidget.moveFailed', 'kanbanWidget.reorderFailed', 'statusIsland.readError']) {
+    for (const key of ['taskWorkspace.moveFailed', 'taskWorkspace.completionFailed', 'kanbanWidget.moveFailed', 'kanbanWidget.reorderFailed', 'statusIsland.readError']) {
       expect(translate(key)).not.toBe(key);
       expect(translate(key)).not.toMatch(/[\u4e00-\u9fff]/);
     }

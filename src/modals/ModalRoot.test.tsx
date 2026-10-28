@@ -17,8 +17,6 @@ const workspace: TaskWorkspaceSnapshot = {
   tasks: [],
   lanes: [{ id: 'lane-a', name: '待处理', color: '#4FC9DA', position: 0, createdAt: 'x', updatedAt: 'x' }],
   tags: [],
-  collaborators: [],
-  linkingEnabled: true,
   defaultLaneId: 'lane-a',
   completionLaneId: 'lane-a',
   viewPreferences: {}

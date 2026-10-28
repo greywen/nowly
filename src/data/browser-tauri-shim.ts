@@ -55,7 +55,6 @@ type Store = {
     cards: Dict[];
     priorities: Dict[];
     tags: Dict[];
-    collaborators: Dict[];
   };
 };
 
@@ -97,7 +96,7 @@ function emptyStore(): Store {
     settings: { ...defaultSettings },
     moduleLayout: [],
     focusSessions: [],
-    kanban: { lanes: [], cards: [], priorities: [], tags: [], collaborators: [] }
+    kanban: { lanes: [], cards: [], priorities: [], tags: [] }
   };
 }
 
@@ -178,12 +177,17 @@ function ensureTaskWorkspace(store: Store) {
     ];
   }
   store.tasks = store.tasks.map((task, index) => {
-    if ('laneId' in task && 'boardPosition' in task && 'views' in task) {
-      return Array.isArray(task.steps) ? task : { ...task, steps: [] };
+    if ('laneId' in task && 'boardPosition' in task) {
+      const { views: _views, collaboratorIds: _collaborators, ...rest } = task;
+      return {
+        ...rest,
+        priority: browserTaskPriorities.includes(task.priority as string) ? task.priority : 'not_important_not_urgent',
+        steps: Array.isArray(task.steps) ? task.steps : []
+      };
     }
     const priority = typeof task.quadrant === 'string' && browserTaskPriorities.includes(task.quadrant)
       ? task.quadrant
-      : null;
+      : 'not_important_not_urgent';
     const dueDate = typeof task.dueAt === 'string' ? task.dueAt : null;
     const completed = task.completed === true;
     return {
@@ -196,8 +200,6 @@ function ensureTaskWorkspace(store: Store) {
       laneId: completed ? 'kanban-lane-done' : 'kanban-lane-todo',
       boardPosition: index,
       tagIds: [],
-      collaboratorIds: [],
-      views: ['kanban', ...(priority ? ['matrix'] : [])],
       steps: [],
       createdAt: task.createdAt ?? nowIso(),
       updatedAt: task.updatedAt ?? nowIso()
@@ -369,19 +371,10 @@ export function installBrowserTauriBackend() {
     tasks: store.tasks,
     lanes: store.kanban.lanes,
     tags: store.kanban.tags.map((tag) => ({ archivedAt: null, ...tag })),
-    collaborators: store.kanban.collaborators.map((person) => ({ archivedAt: null, ...person })),
-    linkingEnabled: true,
     defaultLaneId: (store.settings.defaultTaskLaneId as string) ?? 'kanban-lane-todo',
     completionLaneId: (store.settings.completionTaskLaneId as string) ?? 'kanban-lane-done',
     viewPreferences: (store.settings.taskViewPreferences as Dict) ?? {}
   });
-
-  const coordinateViews = (task: Dict) => {
-    task.views = [
-      'kanban',
-      ...(task.priority ? ['matrix'] : [])
-    ];
-  };
 
   const persist = () => {
     try {
@@ -391,8 +384,6 @@ export function installBrowserTauriBackend() {
     }
   };
 
-  store.settings.taskViewLinkingEnabled = true;
-  store.tasks.forEach(coordinateViews);
   persist();
 
   const handlers: Record<string, (args: Dict) => unknown> = {
@@ -687,20 +678,17 @@ export function installBrowserTauriBackend() {
       const task: Dict = {
         id: id('t'),
         description: '',
-        priority: null,
         dueDate: null,
         completed: false,
         laneId,
         boardPosition: store.tasks.filter((item) => item.laneId === laneId).length,
         tagIds: [],
-        collaboratorIds: [],
-        views: ['kanban'],
         createdAt: nowIso(),
         updatedAt: nowIso(),
         ...draft,
+        priority: (draft.priority as string | null) ?? 'not_important_not_urgent',
         steps: normalizedSteps
       };
-      coordinateViews(task);
       store.tasks.push(task);
       persist();
       return task;
@@ -711,8 +699,8 @@ export function installBrowserTauriBackend() {
       let updated: Dict | undefined;
       store.tasks = store.tasks.map((task) => {
         if (task.id !== a.id) return task;
-        updated = { ...task, ...(a.draft as Dict), steps, updatedAt: nowIso() };
-        coordinateViews(updated);
+        const draft = a.draft as Dict;
+        updated = { ...task, ...draft, priority: (draft.priority as string | null) ?? 'not_important_not_urgent', steps, updatedAt: nowIso() };
         return updated;
       });
       persist();
@@ -759,8 +747,7 @@ export function installBrowserTauriBackend() {
       let updated: Dict | undefined;
       store.tasks = store.tasks.map((task) => {
         if (task.id !== a.id) return task;
-        updated = { ...task, priority: a.priority, updatedAt: nowIso() };
-        coordinateViews(updated);
+        updated = { ...task, priority: a.priority ?? 'not_important_not_urgent', updatedAt: nowIso() };
         return updated;
       });
       persist();
@@ -771,28 +758,10 @@ export function installBrowserTauriBackend() {
       store.tasks = store.tasks.map((task) => {
         if (task.id !== a.id) return task;
         updated = { ...task, dueDate: a.dueDate, updatedAt: nowIso() };
-        coordinateViews(updated);
         return updated;
       });
       persist();
       return updated;
-    },
-    set_task_view_memberships: (a) => {
-      let updated: Dict | undefined;
-      store.tasks = store.tasks.map((task) => {
-        if (task.id !== a.id) return task;
-        updated = { ...task, updatedAt: nowIso() };
-        coordinateViews(updated);
-        return updated;
-      });
-      persist();
-      return updated;
-    },
-    set_task_view_linking: () => {
-      store.settings.taskViewLinkingEnabled = true;
-      store.tasks.forEach(coordinateViews);
-      persist();
-      return taskWorkspaceSnapshot();
     },
     create_task_lane: (a) => {
       const lane = {
@@ -889,38 +858,6 @@ export function installBrowserTauriBackend() {
       store.tasks = store.tasks.map((task) => ({
         ...task,
         tagIds: Array.isArray(task.tagIds) ? (task.tagIds as string[]).filter((tagId) => tagId !== a.id) : []
-      }));
-      persist();
-    },
-    create_task_collaborator: (a) => {
-      const person = { id: id('person'), archivedAt: null, createdAt: nowIso(), updatedAt: nowIso(), ...(a.draft as Dict) };
-      store.kanban.collaborators.push(person);
-      persist();
-      return person;
-    },
-    update_task_collaborator: (a) => {
-      let updated: Dict | undefined;
-      store.kanban.collaborators = store.kanban.collaborators.map((person) =>
-        person.id === a.id ? (updated = { ...person, ...(a.draft as Dict), updatedAt: nowIso() }) : person
-      );
-      persist();
-      return updated;
-    },
-    archive_task_collaborator: (a) => {
-      let updated: Dict | undefined;
-      store.kanban.collaborators = store.kanban.collaborators.map((person) =>
-        person.id === a.id ? (updated = { ...person, archivedAt: a.archived ? nowIso() : null, updatedAt: nowIso() }) : person
-      );
-      persist();
-      return updated;
-    },
-    delete_task_collaborator: (a) => {
-      store.kanban.collaborators = store.kanban.collaborators.filter((person) => person.id !== a.id);
-      store.tasks = store.tasks.map((task) => ({
-        ...task,
-        collaboratorIds: Array.isArray(task.collaboratorIds)
-          ? (task.collaboratorIds as string[]).filter((personId) => personId !== a.id)
-          : []
       }));
       persist();
     },
@@ -1280,30 +1217,6 @@ export function installBrowserTauriBackend() {
       store.kanban.cards = store.kanban.cards.map((c) => ({
         ...c,
         tagIds: Array.isArray(c.tagIds) ? (c.tagIds as string[]).filter((t) => t !== a.id) : c.tagIds
-      }));
-      persist();
-    },
-    create_kanban_collaborator: (a) => {
-      const collaborator = { id: id('collab'), createdAt: nowIso(), updatedAt: nowIso(), ...(a.draft as Dict) };
-      store.kanban.collaborators.push(collaborator);
-      persist();
-      return collaborator;
-    },
-    update_kanban_collaborator: (a) => {
-      let updated: Dict | undefined;
-      store.kanban.collaborators = store.kanban.collaborators.map((c) =>
-        c.id === a.id ? (updated = { ...c, ...(a.draft as Dict), updatedAt: nowIso() }) : c
-      );
-      persist();
-      return updated;
-    },
-    delete_kanban_collaborator: (a) => {
-      store.kanban.collaborators = store.kanban.collaborators.filter((c) => c.id !== a.id);
-      store.kanban.cards = store.kanban.cards.map((c) => ({
-        ...c,
-        collaboratorIds: Array.isArray(c.collaboratorIds)
-          ? (c.collaboratorIds as string[]).filter((id) => id !== a.id)
-          : c.collaboratorIds
       }));
       persist();
     },

@@ -4,21 +4,11 @@ import type { HexColor } from '../lib/color';
 import { type RefObject, useId, useMemo, useState } from 'react';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Dialog } from '../components/Dialog';
-import { TabPanel, Tabs, type TabItem } from '../components/Tabs';
 import { colorStyle, isPresetColor } from '../lib/color';
-import { collaboratorUsage, tagUsage } from './kanban-view';
+import { tagUsage } from './kanban-view';
 import { DEFAULT_KANBAN_COLOR, kanbanColorPresets } from './kanban-model';
 import { t } from '../i18n';
-import type {
-  KanbanCollaborator,
-  KanbanCollaboratorDraft,
-  KanbanColor,
-  KanbanSnapshot,
-  KanbanTag,
-  KanbanTagDraft
-} from './kanban-model';
-
-type FieldTab = 'tags' | 'collaborators';
+import type { KanbanColor, KanbanSnapshot, KanbanTagDraft } from './kanban-model';
 
 type KanbanFieldManagerDialogProps = {
   snapshot: KanbanSnapshot;
@@ -27,9 +17,6 @@ type KanbanFieldManagerDialogProps = {
   createTag(draft: KanbanTagDraft): Promise<unknown>;
   updateTag(id: string, draft: KanbanTagDraft): Promise<unknown>;
   deleteTag(id: string): Promise<unknown>;
-  createCollaborator(draft: KanbanCollaboratorDraft): Promise<unknown>;
-  updateCollaborator(id: string, draft: KanbanCollaboratorDraft): Promise<unknown>;
-  deleteCollaborator(id: string): Promise<unknown>;
   recentColors?: HexColor[];
   onRememberCustomColor?: (color: HexColor) => Promise<void> | void;
 };
@@ -41,7 +28,6 @@ function errorMessage(error: unknown) {
 }
 
 type ColoredItem = { id: string; name: string; color: KanbanColor };
-type PlainItem = { id: string; name: string };
 
 export function KanbanFieldManagerDialog({
   snapshot,
@@ -50,22 +36,16 @@ export function KanbanFieldManagerDialog({
   createTag,
   updateTag,
   deleteTag,
-  createCollaborator,
-  updateCollaborator,
-  deleteCollaborator,
   recentColors = [],
   onRememberCustomColor
 }: KanbanFieldManagerDialogProps) {
   const titleId = useId();
-  const [tab, setTab] = useState<FieldTab>('tags');
   const [name, setName] = useState('');
   const [color, setColor] = useState<KanbanColor>(DEFAULT_KANBAN_COLOR);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<{ id: string; name: string; usage: number } | null>(null);
-
-  const hasColor = tab !== 'collaborators';
 
   function resetForm() {
     setName('');
@@ -74,15 +54,10 @@ export function KanbanFieldManagerDialog({
     setFormError('');
   }
 
-  function switchTab(next: FieldTab) {
-    setTab(next);
-    resetForm();
-  }
-
-  function beginEdit(item: ColoredItem | PlainItem) {
+  function beginEdit(item: ColoredItem) {
     setEditingId(item.id);
     setName(item.name);
-    if ('color' in item) setColor(item.color);
+    setColor(item.color);
     setFormError('');
   }
 
@@ -95,14 +70,9 @@ export function KanbanFieldManagerDialog({
     setBusy(true);
     setFormError('');
     try {
-      if (tab === 'tags') {
-        if (editingId) await updateTag(editingId, { name: trimmed, color });
-        else await createTag({ name: trimmed, color });
-      } else {
-        if (editingId) await updateCollaborator(editingId, { name: trimmed });
-        else await createCollaborator({ name: trimmed });
-      }
-      if (tab !== 'collaborators' && onRememberCustomColor && !isPresetColor(color, kanbanColorPresets())) await onRememberCustomColor(color);
+      if (editingId) await updateTag(editingId, { name: trimmed, color });
+      else await createTag({ name: trimmed, color });
+      if (onRememberCustomColor && !isPresetColor(color, kanbanColorPresets())) await onRememberCustomColor(color);
       resetForm();
     } catch (error) {
       setFormError(errorMessage(error));
@@ -116,8 +86,7 @@ export function KanbanFieldManagerDialog({
     setBusy(true);
     setFormError('');
     try {
-      if (tab === 'tags') await deleteTag(confirmDelete.id);
-      else await deleteCollaborator(confirmDelete.id);
+      await deleteTag(confirmDelete.id);
       if (editingId === confirmDelete.id) resetForm();
       setConfirmDelete(null);
     } catch (error) {
@@ -128,37 +97,16 @@ export function KanbanFieldManagerDialog({
     }
   }
 
-  const rows = useMemo(() => {
-    if (tab === 'tags') {
-      return snapshot.tags.map((item) => ({
-        id: item.id,
-        name: item.name,
-        color: item.color,
-        usage: tagUsage(snapshot, item.id)
-      }));
-    }
-    return snapshot.collaborators.map((item) => ({
+  const rows = useMemo(
+    () => snapshot.tags.map((item) => ({
       id: item.id,
       name: item.name,
-      color: undefined,
-      usage: collaboratorUsage(snapshot, item.id)
-    }));
-  }, [snapshot, tab]);
-
-  const tabLabels: Record<FieldTab, string> = {
-    tags: t('kanbanField.tags'),
-    collaborators: t('kanbanField.collaborators')
-  };
-
-  const tabs: TabItem<FieldTab>[] = [
-    { id: 'tags', label: tabLabels.tags, count: snapshot.tags.length },
-    { id: 'collaborators', label: tabLabels.collaborators, count: snapshot.collaborators.length }
-  ];
-
-  const deleteImpact = (usage: number) =>
-    tab === 'tags'
-      ? t('kanbanField.deleteTagImpact', { count: usage })
-      : t('kanbanField.deleteCollaboratorImpact', { count: usage });
+      color: item.color,
+      usage: tagUsage(snapshot, item.id)
+    })),
+    [snapshot]
+  );
+  const label = t('kanbanField.tags');
 
   return (
     <>
@@ -176,14 +124,7 @@ export function KanbanFieldManagerDialog({
         }
       >
         <div className="kanban-field">
-          <Tabs
-            idPrefix="kanban-field"
-            label={t('kanbanField.fieldType')}
-            items={tabs}
-            value={tab}
-            onChange={switchTab}
-          />
-          <TabPanel idPrefix="kanban-field" tabId={tab} active className="kanban-field__panel">
+          <div className="kanban-field__panel">
             <form
                 className="kanban-field__form"
                 onSubmit={(event) => {
@@ -192,7 +133,7 @@ export function KanbanFieldManagerDialog({
                 }}
               >
                 <div className="good-field">
-                  <label htmlFor="kanban-field-name">{editingId ? t('kanbanField.edit', { label: tabLabels[tab] }) : t('kanbanField.add', { label: tabLabels[tab] })}</label>
+                  <label htmlFor="kanban-field-name">{editingId ? t('kanbanField.edit', { label }) : t('kanbanField.add', { label })}</label>
                   <input
                     id="kanban-field-name"
                     className="good-input"
@@ -202,9 +143,7 @@ export function KanbanFieldManagerDialog({
                     onChange={(event) => setName(event.target.value)}
                   />
                 </div>
-                {hasColor ? (
-                  <ColorPicker legend={t('kanbanField.color')} name="kanban-field-color" value={color} presets={kanbanColorPresets()} recentColors={recentColors} disabled={busy} onChange={setColor} onRememberColor={onRememberCustomColor} />
-                ) : null}
+                <ColorPicker legend={t('kanbanField.color')} name="kanban-field-color" value={color} presets={kanbanColorPresets()} recentColors={recentColors} disabled={busy} onChange={setColor} onRememberColor={onRememberCustomColor} />
                 {formError ? <div role="alert" className="dialog-error">{formError}</div> : null}
                 <div className="kanban-field__form-actions">
                   {editingId ? (
@@ -213,27 +152,23 @@ export function KanbanFieldManagerDialog({
                     </button>
                   ) : null}
                   <button type="submit" className="good-button good-button--primary" disabled={busy}>
-                    {editingId ? t('kanbanField.saveEdit') : t('kanbanField.addAction', { label: tabLabels[tab] })}
+                    {editingId ? t('kanbanField.saveEdit') : t('kanbanField.addAction', { label })}
                   </button>
                 </div>
             </form>
 
-            <ul className="kanban-field__list" aria-label={t('kanbanField.list', { label: tabLabels[tab] })}>
+            <ul className="kanban-field__list" aria-label={t('kanbanField.list', { label })}>
                 {rows.length === 0 ? (
-                  <li className="kanban-field__empty">{t('kanbanField.empty', { label: tabLabels[tab] })}</li>
+                  <li className="kanban-field__empty">{t('kanbanField.empty', { label })}</li>
                 ) : (
-                  rows.map((row, index) => (
+                  rows.map((row) => (
                     <li key={row.id} className="kanban-field__row">
-                      {row.color ? (
-                        <span className="kanban-badge" style={colorStyle(row.color)} aria-hidden="true">
-                          {row.name}
-                        </span>
-                      ) : (
-                        <span className="kanban-field__name">{row.name}</span>
-                      )}
+                      <span className="kanban-badge" style={colorStyle(row.color)} aria-hidden="true">
+                        {row.name}
+                      </span>
                       <span className="kanban-field__usage">{t('kanbanField.usage', { count: row.usage })}</span>
                         <span className="kanban-field__tools">
-                          <button type="button" className="good-icon-button" aria-label={t('kanbanField.editItem', { name: row.name })} disabled={busy} onClick={() => beginEdit(row.color ? { id: row.id, name: row.name, color: row.color } : { id: row.id, name: row.name })}>
+                          <button type="button" className="good-icon-button" aria-label={t('kanbanField.editItem', { name: row.name })} disabled={busy} onClick={() => beginEdit(row)}>
                             <Pencil aria-hidden="true" />
                           </button>
                           <button type="button" className="good-icon-button" aria-label={t('kanbanField.deleteItem', { name: row.name })} disabled={busy} onClick={() => setConfirmDelete({ id: row.id, name: row.name, usage: row.usage })}>
@@ -244,14 +179,14 @@ export function KanbanFieldManagerDialog({
                   ))
                 )}
             </ul>
-          </TabPanel>
+          </div>
         </div>
       </Dialog>
 
       {confirmDelete ? (
         <ConfirmDialog
           title={t('kanbanField.deleteTitle', { name: confirmDelete.name })}
-          description={deleteImpact(confirmDelete.usage)}
+          description={t('kanbanField.deleteTagImpact', { count: confirmDelete.usage })}
           tone="danger"
           confirmLabel={t('common.delete')}
           busyLabel={t('common.deleting')}

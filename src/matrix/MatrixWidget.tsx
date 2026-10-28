@@ -4,6 +4,7 @@ import type { MatrixTask, MatrixTaskTag, Quadrant } from './matrix-model';
 import { quadrantLabel, quadrantOrder } from './matrix-model';
 import { FilterSelect, type FilterOption } from '../components/FilterSelect';
 import { TaskRow } from './TaskRow';
+import { InlineTaskAdd } from '../tasks/InlineTaskAdd';
 import { t } from '../i18n';
 
 const quadrantClass: Record<Quadrant, string> = {
@@ -23,7 +24,9 @@ type MatrixWidgetProps = {
   dragError?: string | null;
   pendingTaskIds: Set<string>;
   onRetry: () => void;
-  onCreateTask: () => void;
+  onCreateTask: (trigger: HTMLElement) => void;
+  // Creates a task with just a title in the given quadrant.
+  onQuickAdd?: (quadrant: Quadrant, title: string) => Promise<unknown>;
   onOpenSettings?: () => void;
   onOpenTask: (task: MatrixTask, trigger: HTMLElement) => void;
   onToggleTask: (task: MatrixTask, completed: boolean) => void;
@@ -42,6 +45,7 @@ export function MatrixWidget({
   pendingTaskIds,
   onRetry,
   onCreateTask,
+  onQuickAdd,
   onOpenSettings,
   onOpenTask,
   onToggleTask,
@@ -131,11 +135,11 @@ export function MatrixWidget({
         )}
         <div className="toolbar-actions">
           {onOpenSettings ? (
-            <button type="button" className="btn btn-icon" aria-label={t('taskSettings.title')} onClick={onOpenSettings}>
+            <button type="button" className="btn btn-icon" aria-label={t('kanbanWidget.manageTags')} title={t('kanbanWidget.manageTags')} onClick={onOpenSettings}>
               <Settings aria-hidden="true" />
             </button>
           ) : null}
-          <button type="button" className="btn btn-icon" aria-label={t('matrix.newTask')} onClick={onCreateTask}>
+          <button type="button" className="btn btn-icon btn-primary" aria-label={t('matrix.newTask')} title={t('matrix.newTask')} onClick={(event) => onCreateTask(event.currentTarget)}>
             <Plus aria-hidden="true" />
           </button>
         </div>
@@ -187,7 +191,7 @@ export function MatrixWidget({
                   </span>
                 </div>
                 <div data-testid="quadrant-scroll" className="quadrant-tasks">
-                  {status === 'ready' && quadrantTasks.length === 0 ? <p className="empty-copy">{t('matrix.empty')}</p> : null}
+                  {status === 'ready' && quadrantTasks.length === 0 && !onQuickAdd ? <p className="empty-copy">{t('matrix.empty')}</p> : null}
                   {quadrantTasks.map((task) => (
                     <TaskRow
                       key={task.id}
@@ -200,6 +204,12 @@ export function MatrixWidget({
                       onDragEnd={onTaskDragEnd}
                     />
                   ))}
+                  {onQuickAdd && status !== 'loading' ? (
+                    <InlineTaskAdd
+                      label={t('matrix.addTo', { label: quadrantLabel(quadrant) })}
+                      onCreate={(title) => onQuickAdd(quadrant, title)}
+                    />
+                  ) : null}
                 </div>
               </section>
             );

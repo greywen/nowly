@@ -3,10 +3,13 @@ import { type DragEvent, useMemo, useRef, useState } from 'react';
 import { laneCardCount } from './kanban-view';
 import { KanbanLane } from './KanbanLane';
 import { KanbanLaneDialog } from './KanbanLaneDialog';
+import type { KanbanLaneDraft } from './kanban-model';
 import { useWorkspaceKanban } from '../tasks/useWorkspaceKanban';
 import { useTaskWorkspace } from '../tasks/TaskWorkspaceContext';
 import { UnifiedTaskDialog } from '../tasks/UnifiedTaskDialog';
 import { TaskSettingsDialog } from '../tasks/TaskSettingsDialog';
+import { defaultTaskPriority } from '../tasks/task-model';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import { FilterSelect, type FilterOption } from '../components/FilterSelect';
 import { t } from '../i18n';
 
@@ -18,9 +21,11 @@ type Drag =
   | null;
 
 type DialogState =
-  | { type: 'lane-create' }
+  // `afterLaneId` places the new lane to the right of that lane.
+  | { type: 'lane-create'; afterLaneId: string | null }
   | { type: 'lane-edit'; laneId: string }
-  | { type: 'card-create'; laneId: string }
+  | { type: 'lane-delete'; laneId: string }
+  | { type: 'card-create' }
   | { type: 'card-edit'; cardId: string }
   | { type: 'fields' }
   | null;
@@ -31,6 +36,12 @@ type KanbanWidgetProps = {
   onRememberCustomColor?: (color: string) => Promise<void> | void;
 };
 
+function messageFrom(error: unknown) {
+  return typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string'
+    ? error.message
+    : t('common.opFailed');
+}
+
 export function KanbanWidget({
   todayIso,
   recentColors = [],
@@ -40,15 +51,17 @@ export function KanbanWidget({
   const workspace = useTaskWorkspace();
   const { snapshot, dragError } = kanban;
   const data = snapshot.data;
+  const { defaultLaneId, completionLaneId } = workspace.workspace.data;
   const [dialog, setDialog] = useState<DialogState>(null);
   const [drag, setDrag] = useState<Drag>(null);
   const [dropLaneId, setDropLaneId] = useState<string | null>(null);
   const [filterTag, setFilterTag] = useState('');
-  const [filterCollaborator, setFilterCollaborator] = useState('');
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
   const restoreFocusRef = useRef<HTMLElement | null>(null);
 
-  // Only offer filter values that exist on the current board, and reset a
-  // selection to "show all" once it no longer matches anything.
+  // Only offer tags that exist on the current board, and reset a selection to
+  // "show all" once it no longer matches anything.
   const showAll = t('filter.showAll');
   const tagOptions = useMemo<FilterOption[]>(
     () => [
@@ -57,33 +70,53 @@ export function KanbanWidget({
     ],
     [data.tags, showAll]
   );
-  const collaboratorOptions = useMemo<FilterOption[]>(
-    () => [
-      { value: '', label: showAll },
-      ...data.collaborators.map((person) => ({ value: person.id, label: person.name }))
-    ],
-    [data.collaborators, showAll]
-  );
-
   const effectiveTag = data.tags.some((tag) => tag.id === filterTag) ? filterTag : '';
-  const effectiveCollaborator = data.collaborators.some((p) => p.id === filterCollaborator) ? filterCollaborator : '';
 
-  function matchesFilter(card: { priorityId: string | null; tagIds: string[]; collaboratorIds: string[] }): boolean {
-    if (effectiveTag && !card.tagIds.includes(effectiveTag)) return false;
-    if (effectiveCollaborator && !card.collaboratorIds.includes(effectiveCollaborator)) return false;
-    return true;
+  function matchesFilter(card: { tagIds: string[] }): boolean {
+    return !effectiveTag || card.tagIds.includes(effectiveTag);
   }
 
   const status = snapshot.status;
   const errorMessage = status === 'error' ? snapshot.message : undefined;
 
-  function rememberTrigger(event: { currentTarget: HTMLElement }) {
-    restoreFocusRef.current = event.currentTarget;
+  function openDialog(next: DialogState, trigger: HTMLElement | null) {
+    restoreFocusRef.current = trigger;
+    setDialog(next);
   }
 
-  // ----- card moves -----------------------------------------------------------
-  function moveCardWithinOrAcross(cardId: string, laneId: string, targetIndex: number) {
-    void kanban.moveCard(cardId, laneId, targetIndex);
+  function addTask(laneId: string, title: string) {
+    return workspace.createTask({
+      title,
+      description: '',
+      priority: defaultTaskPriority,
+      dueDate: null,
+      completed: laneId === completionLaneId,
+      laneId,
+      tagIds: []
+    });
+  }
+
+  async function createLane(draft: KanbanLaneDraft, afterLaneId: string | null) {
+    const lane = await kanban.createLane(draft);
+    if (!afterLaneId || !lane) return;
+    const order = data.lanes.map((item) => item.id).filter((id) => id !== lane.id);
+    const index = order.indexOf(afterLaneId);
+    if (index < 0 || index === order.length - 1) return;
+    order.splice(index + 1, 0, lane.id);
+    await kanban.reorderLanes(order);
+  }
+
+  async function deleteLane(laneId: string) {
+    setDeleteBusy(true);
+    setDeleteError('');
+    try {
+      await kanban.deleteLane(laneId);
+      setDialog(null);
+    } catch (error) {
+      setDeleteError(messageFrom(error));
+    } finally {
+      setDeleteBusy(false);
+    }
   }
 
   // ----- drag and drop --------------------------------------------------------
@@ -113,7 +146,7 @@ export function KanbanWidget({
 
   function onCardDropInLane(laneId: string, index: number) {
     if (drag?.kind !== 'card') return;
-    moveCardWithinOrAcross(drag.cardId, laneId, index);
+    void kanban.moveCard(drag.cardId, laneId, index);
     onDragEnd();
   }
 
@@ -135,60 +168,50 @@ export function KanbanWidget({
   // ----- dialog resolution ----------------------------------------------------
   const editingLane =
     dialog?.type === 'lane-edit' ? data.lanes.find((lane) => lane.id === dialog.laneId) ?? null : null;
-  const creatingCardLane =
-    dialog?.type === 'card-create' ? data.lanes.find((lane) => lane.id === dialog.laneId) ?? null : null;
-  const editingCard =
-    dialog?.type === 'card-edit' ? data.cards.find((card) => card.id === dialog.cardId) ?? null : null;
+  const deletingLane =
+    dialog?.type === 'lane-delete' ? data.lanes.find((lane) => lane.id === dialog.laneId) ?? null : null;
+  const editingTask =
+    dialog?.type === 'card-edit' ? workspace.workspace.data.tasks.find((task) => task.id === dialog.cardId) ?? null : null;
+  const createLaneId = data.lanes.some((lane) => lane.id === defaultLaneId) ? defaultLaneId : data.lanes[0]?.id ?? null;
 
   function closeDialog() {
     setDialog(null);
+    setDeleteError('');
   }
 
   return (
     <div className="widget-content kanban-widget">
       <div className="card-header">
-        {data.tags.length > 0 || data.collaborators.length > 0 ? (
-          <nav className="filter-bar" aria-label={t('kanbanWidget.boardMenu')}>
-            {data.tags.length > 0 ? (
-              <FilterSelect
-                label={t('kanbanWidget.filterTag')}
-                ariaLabel={t('kanbanWidget.filterByTag')}
-                options={tagOptions}
-                value={effectiveTag}
-                onChange={setFilterTag}
-              />
-            ) : null}
-            {data.collaborators.length > 0 ? (
-              <FilterSelect
-                label={t('kanbanWidget.filterCollaborator')}
-                ariaLabel={t('kanbanWidget.filterByCollaborator')}
-                options={collaboratorOptions}
-                value={effectiveCollaborator}
-                onChange={setFilterCollaborator}
-              />
-            ) : null}
+        {data.tags.length > 0 ? (
+          <nav className="filter-bar" aria-label={t('kanbanWidget.filterLabel')}>
+            <FilterSelect
+              label={t('kanbanWidget.filterTag')}
+              ariaLabel={t('kanbanWidget.filterByTag')}
+              options={tagOptions}
+              value={effectiveTag}
+              onChange={setFilterTag}
+            />
           </nav>
-        ) : null}
+        ) : (
+          <span />
+        )}
         <div className="toolbar-actions">
           <button
             type="button"
             className="btn btn-icon"
-            aria-label={t('kanbanWidget.boardMenu')}
-            onClick={(event) => {
-              rememberTrigger(event);
-              setDialog({ type: 'fields' });
-            }}
+            aria-label={t('kanbanWidget.manageTags')}
+            title={t('kanbanWidget.manageTags')}
+            onClick={(event) => openDialog({ type: 'fields' }, event.currentTarget)}
           >
             <Settings aria-hidden="true" />
           </button>
           <button
             type="button"
             className="btn btn-icon btn-primary"
-            aria-label={t('kanbanWidget.addLane')}
-            onClick={(event) => {
-              rememberTrigger(event);
-              setDialog({ type: 'lane-create' });
-            }}
+            aria-label={t('kanbanWidget.newTask')}
+            title={t('kanbanWidget.newTask')}
+            disabled={!createLaneId}
+            onClick={(event) => openDialog({ type: 'card-create' }, event.currentTarget)}
           >
             <Plus aria-hidden="true" />
           </button>
@@ -217,6 +240,13 @@ export function KanbanWidget({
         {status !== 'loading' && data.lanes.length === 0 ? (
           <div className="empty-state">
             <p>{t('kanbanWidget.empty')}</p>
+            <button
+              type="button"
+              className="good-button good-button--primary"
+              onClick={(event) => openDialog({ type: 'lane-create', afterLaneId: null }, event.currentTarget)}
+            >
+              {t('kanbanWidget.addLane')}
+            </button>
           </div>
         ) : (
           <div className="kanban-scroll" data-testid="kanban-scroll">
@@ -228,9 +258,14 @@ export function KanbanWidget({
                   snapshot={data}
                   todayIso={todayIso}
                   isDropTarget={drag?.kind === 'card' && dropLaneId === lane.id}
-                  onAddCard={() => setDialog({ type: 'card-create', laneId: lane.id })}
-                  onEditLane={() => setDialog({ type: 'lane-edit', laneId: lane.id })}
-                  onOpenCard={(cardId) => setDialog({ type: 'card-edit', cardId })}
+                  isCompletionLane={lane.id === completionLaneId}
+                  onAddTask={(title) => addTask(lane.id, title)}
+                  onEditLane={(trigger) => openDialog({ type: 'lane-edit', laneId: lane.id }, trigger)}
+                  onAddLaneRight={(trigger) => openDialog({ type: 'lane-create', afterLaneId: lane.id }, trigger)}
+                  onDeleteLane={data.lanes.length > 1
+                    ? (trigger) => openDialog({ type: 'lane-delete', laneId: lane.id }, trigger)
+                    : undefined}
+                  onOpenCard={(cardId, trigger) => openDialog({ type: 'card-edit', cardId }, trigger)}
                   onLaneDragStart={(event) => onLaneDragStart(event, lane.id)}
                   onLaneDragEnd={onDragEnd}
                   onLaneDragOver={(event) => {
@@ -257,38 +292,54 @@ export function KanbanWidget({
           mode={{ type: 'create' }}
           restoreFocusRef={restoreFocusRef}
           onClose={closeDialog}
-          onCreate={kanban.createLane}
+          onCreate={(draft) => createLane(draft, dialog.afterLaneId)}
           onUpdate={(lane, draft) => kanban.updateLane(lane.id, draft)}
-          onDelete={(lane) => kanban.deleteLane(lane.id)}
           recentColors={recentColors}
           onRememberCustomColor={onRememberCustomColor}
         />
       ) : null}
-      {dialog?.type === 'lane-edit' && editingLane ? (
+      {editingLane ? (
         <KanbanLaneDialog
-          mode={{ type: 'edit', lane: editingLane, cardCount: laneCardCount(data, editingLane.id) }}
+          mode={{ type: 'edit', lane: editingLane }}
           restoreFocusRef={restoreFocusRef}
           onClose={closeDialog}
-          onCreate={kanban.createLane}
+          onCreate={(draft) => createLane(draft, null)}
           onUpdate={(lane, draft) => kanban.updateLane(lane.id, draft)}
-          onDelete={(lane) => kanban.deleteLane(lane.id)}
           recentColors={recentColors}
           onRememberCustomColor={onRememberCustomColor}
         />
       ) : null}
-      {dialog?.type === 'card-create' && creatingCardLane ? (
+      {deletingLane ? (
+        <ConfirmDialog
+          title={t('kanbanLaneDialog.deleteTitle', { name: deletingLane.name })}
+          description={
+            laneCardCount(data, deletingLane.id) > 0
+              ? t('kanbanLaneDialog.deleteWithCards', {
+                count: laneCardCount(data, deletingLane.id),
+                target: data.lanes.find((lane) => lane.id !== deletingLane.id)?.name ?? ''
+              })
+              : t('kanbanLaneDialog.deleteEmpty')
+          }
+          tone="danger"
+          confirmLabel={t('common.permanentDelete')}
+          busyLabel={t('common.deleting')}
+          busy={deleteBusy}
+          errorMessage={deleteError}
+          restoreFocusRef={restoreFocusRef}
+          onCancel={closeDialog}
+          onConfirm={() => void deleteLane(deletingLane.id)}
+        />
+      ) : null}
+      {dialog?.type === 'card-create' && createLaneId ? (
         <UnifiedTaskDialog
-          mode={{ type: 'create', originView: 'kanban', dueDate: null, laneId: creatingCardLane.id }}
+          mode={{ type: 'create', dueDate: null, laneId: createLaneId }}
           restoreFocusRef={restoreFocusRef}
           onClose={closeDialog}
         />
       ) : null}
-      {dialog?.type === 'card-edit' && editingCard ? (
+      {editingTask ? (
         <UnifiedTaskDialog
-          mode={{
-            type: 'edit',
-            task: workspace.workspace.data.tasks.find((task) => task.id === editingCard.id)!
-          }}
+          mode={{ type: 'edit', task: editingTask }}
           restoreFocusRef={restoreFocusRef}
           onClose={closeDialog}
         />

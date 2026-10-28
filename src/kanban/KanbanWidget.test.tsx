@@ -21,8 +21,8 @@ function lane(id: string, name: string, position: number): TaskLane {
 
 function task(id: string, laneId: string, boardPosition: number, overrides: Partial<Task> = {}): Task {
   return {
-    id, title: id, description: '', priority: null, dueDate: null, completed: false,
-    laneId, boardPosition, tagIds: [], collaboratorIds: [], views: ['kanban'], steps: [],
+    id, title: id, description: '', priority: 'not_important_not_urgent', dueDate: null, completed: false,
+    laneId, boardPosition, tagIds: [], steps: [],
     createdAt: 'x', updatedAt: 'x', ...overrides
   };
 }
@@ -35,8 +35,6 @@ const snapshot: TaskWorkspaceSnapshot = {
     task('c3', 'lane-b', 0, { title: '评审' })
   ],
   tags: [],
-  collaborators: [],
-  linkingEnabled: true,
   defaultLaneId: 'lane-a',
   completionLaneId: 'lane-c',
   viewPreferences: {}
@@ -58,14 +56,14 @@ function repository(overrides: Partial<NowlyRepository> = {}): NowlyRepository {
     getSettings: vi.fn(), updateSettings: vi.fn(), listMonitors: vi.fn(),
     listModuleLayout: vi.fn().mockResolvedValue([]), saveModuleLayout: vi.fn(),
     createFocusSession:vi.fn().mockImplementation((session)=>Promise.resolve(session)), listFocusSessions:vi.fn().mockResolvedValue([]), getFocusStatistics:vi.fn().mockResolvedValue({totalFocusedSeconds:0,completedCount:0,interruptedCount:0,completionRate:0,points:[]}),
-    getKanbanSnapshot: vi.fn().mockResolvedValue({ lanes: [], cards: [], priorities: [], tags: [], collaborators: [] }),
+    getKanbanSnapshot: vi.fn().mockResolvedValue({ lanes: [], cards: [], priorities: [], tags: [] }),
     createKanbanLane: vi.fn(), updateKanbanLane: vi.fn(), deleteKanbanLane: vi.fn().mockResolvedValue(undefined),
     reorderKanbanLanes: vi.fn().mockResolvedValue([]),
     createKanbanCard: vi.fn(), updateKanbanCard: vi.fn(), deleteKanbanCard: vi.fn().mockResolvedValue(undefined),
     moveKanbanCard: vi.fn().mockResolvedValue(undefined),
     createKanbanPriority: vi.fn(), updateKanbanPriority: vi.fn(), deleteKanbanPriority: vi.fn(), reorderKanbanPriorities: vi.fn(),
     createKanbanTag: vi.fn(), updateKanbanTag: vi.fn(), deleteKanbanTag: vi.fn(),
-    createKanbanCollaborator: vi.fn(), updateKanbanCollaborator: vi.fn(), deleteKanbanCollaborator: vi.fn(), listCategories: vi.fn().mockResolvedValue([]), createCategory: vi.fn(), updateCategory: vi.fn(), deleteCategory: vi.fn(), listCalendarSubscriptions: vi.fn().mockResolvedValue([]), createCalendarSubscription: vi.fn(), updateCalendarSubscription: vi.fn(), deleteCalendarSubscription: vi.fn(), refreshCalendarSubscription: vi.fn(), startOAuthLogin: vi.fn(), listOAuthAccounts: vi.fn().mockResolvedValue([]), disconnectOAuthAccount: vi.fn(), listRemoteCalendars: vi.fn().mockResolvedValue([]), subscribeRemoteCalendar: vi.fn(), updateSubscriptionDisplay: vi.fn(), listExternalEventsInRange: vi.fn().mockResolvedValue([]),
+    listCategories: vi.fn().mockResolvedValue([]), createCategory: vi.fn(), updateCategory: vi.fn(), deleteCategory: vi.fn(), listCalendarSubscriptions: vi.fn().mockResolvedValue([]), createCalendarSubscription: vi.fn(), updateCalendarSubscription: vi.fn(), deleteCalendarSubscription: vi.fn(), refreshCalendarSubscription: vi.fn(), startOAuthLogin: vi.fn(), listOAuthAccounts: vi.fn().mockResolvedValue([]), disconnectOAuthAccount: vi.fn(), listRemoteCalendars: vi.fn().mockResolvedValue([]), subscribeRemoteCalendar: vi.fn(), updateSubscriptionDisplay: vi.fn(), listExternalEventsInRange: vi.fn().mockResolvedValue([]),
     // The board reads the unified task workspace. Mocking this rather than the
     // legacy pair keeps the fixture on the same path production takes, and gives
     // exact control over lanes — `workspaceFromLegacy` substitutes three default
@@ -96,8 +94,8 @@ describe('KanbanWidget', () => {
       })
     }));
     await screen.findByRole('region', { name: '泳道：待处理' });
-    await user.click(screen.getByRole('button', { name: '待处理' }));
-    await user.click(screen.getByRole('button', { name: '删除泳道' }));
+    await user.click(screen.getByRole('button', { name: '待处理泳道操作' }));
+    await user.click(screen.getByRole('menuitem', { name: '删除泳道' }));
     await user.click(screen.getByRole('button', { name: '永久删除' }));
     expect(await screen.findByText('至少保留一个泳道。')).toBeInTheDocument();
     expect(container.querySelector('.module-message')).toBeNull();
@@ -105,8 +103,8 @@ describe('KanbanWidget', () => {
     const confirmation = screen.getByRole('button', { name: '永久删除' }).closest('[role="dialog"]') as HTMLElement;
     await user.click(within(confirmation).getByRole('button', { name: '取消' }));
     expect(container.querySelector('.module-message')).toBeNull();
-    expect(screen.getByTestId('matrix-error')).toBeEmptyDOMElement();
   });
+
   it('dismisses move errors with an icon-only close button', async () => {
     const user = userEvent.setup();
     renderWidget(repository({
@@ -122,102 +120,142 @@ describe('KanbanWidget', () => {
     const close = within(alert).getByRole('button', { name: '关闭拖放错误' });
     expect(close.textContent).toBe('');
     expect(close.querySelector('svg')).not.toBeNull();
-    expect(close).toHaveClass('module-message__close');
     await user.click(close);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
-  it('shows the header with add-lane and a settings button that opens task settings', async () => {
+
+  it('uses the toolbar + for a new task in the default lane and the gear for tags', async () => {
     const user = userEvent.setup();
     renderWidget(repository());
-    expect(await screen.findByRole('button', { name: '添加泳道' })).toBeInTheDocument();
-    // The settings gear opens the field dialog directly; there is no intermediate menu.
-    await user.click(screen.getByRole('button', { name: '看板设置' }));
-    expect(screen.queryByRole('menuitem')).not.toBeInTheDocument();
-    expect(screen.getByRole('dialog', { name: '任务设置' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: '标签(0)' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.queryByRole('tab', { name: /视图联动/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole('tab', { name: /优先级/ })).not.toBeInTheDocument();
+    await screen.findByRole('region', { name: '泳道：待处理' });
+    expect(screen.queryByRole('button', { name: '添加泳道' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '新建任务' }));
+    expect(screen.getByRole('dialog', { name: '新建任务' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: '看板泳道' })).toHaveTextContent('待处理');
+    expect(screen.getByRole('radio', { name: '不重要不紧急' })).toBeChecked();
+    await user.click(screen.getByRole('button', { name: '取消' }));
+
+    await user.click(screen.getByRole('button', { name: '管理标签' }));
+    expect(screen.getByRole('dialog', { name: '管理标签' })).toBeInTheDocument();
+    expect(screen.queryByRole('tab')).not.toBeInTheDocument();
   });
 
-  it('renders each lane with an accessible add-card button and a single scroll viewport', async () => {
+  it('renders an inline add row in each lane and a single scroll viewport', async () => {
     renderWidget(repository());
     expect(await screen.findByRole('region', { name: '泳道：待处理' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '在待处理新增任务' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '在进行中新增任务' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '在待处理添加任务' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '在进行中添加任务' })).toBeInTheDocument();
     expect(screen.getAllByTestId('kanban-scroll')).toHaveLength(1);
   });
 
-  it('preselects the current lane when adding a task from a lane', async () => {
+  it('adds tasks inline to that lane under the default quadrant and keeps the input open', async () => {
     const user = userEvent.setup();
-    renderWidget(repository());
+    const createWorkspaceTask = vi.fn().mockImplementation((draft) =>
+      Promise.resolve(task(`new-${draft.title}`, draft.laneId, 9, draft))
+    );
+    renderWidget(repository({ createWorkspaceTask }));
     await screen.findByRole('region', { name: '泳道：进行中' });
-    await user.click(screen.getByRole('button', { name: '在进行中新增任务' }));
-    // The unified dialog carries one title for every origin and states the lane in
-    // a field, where it stays editable, rather than baking it into the heading.
-    expect(screen.getByRole('dialog', { name: '新建任务' })).toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: '看板泳道' })).toHaveTextContent('进行中');
-    await user.click(screen.getByRole('combobox', { name: '所属象限' }));
-    expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual([
-      '无优先级',
-      '重要且紧急',
-      '重要不紧急',
-      '不重要但紧急',
-      '不重要不紧急'
-    ]);
+    await user.click(screen.getByRole('button', { name: '在进行中添加任务' }));
+    const input = screen.getByRole('textbox', { name: '在进行中添加任务' });
+    await user.type(input, '买咖啡豆{Enter}');
+    expect(createWorkspaceTask).toHaveBeenCalledWith(expect.objectContaining({
+      title: '买咖啡豆', laneId: 'lane-b', priority: 'not_important_not_urgent', completed: false
+    }));
+    expect(input).toHaveValue('');
+    expect(input).toHaveFocus();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('textbox', { name: '在进行中添加任务' })).not.toBeInTheDocument();
   });
 
-  it('does not offer a priority filter on the board', async () => {
-    renderWidget(repository());
-    await screen.findByRole('region', { name: '泳道：待处理' });
-    expect(screen.queryByRole('combobox', { name: '按优先级筛选' })).not.toBeInTheDocument();
+  it('marks tasks added inline to the completion lane as completed', async () => {
+    const user = userEvent.setup();
+    const createWorkspaceTask = vi.fn().mockImplementation((draft) =>
+      Promise.resolve(task('new', draft.laneId, 0, draft))
+    );
+    renderWidget(repository({ createWorkspaceTask }));
+    await screen.findByRole('region', { name: '泳道：已完成' });
+    await user.click(screen.getByRole('button', { name: '在已完成添加任务' }));
+    await user.type(screen.getByRole('textbox', { name: '在已完成添加任务' }), '归档{Enter}');
+    expect(createWorkspaceTask).toHaveBeenCalledWith(expect.objectContaining({ laneId: 'lane-c', completed: true }));
   });
 
-  it('opens the lane editor by clicking the lane name', async () => {
+  it('renames a lane from its menu, without a delete action in the editor', async () => {
     const user = userEvent.setup();
     renderWidget(repository());
     await screen.findByRole('region', { name: '泳道：待处理' });
-    await user.click(screen.getByRole('button', { name: '待处理' }));
-    expect(screen.getByRole('button', { name: '删除泳道' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '待处理' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '待处理泳道操作' }));
+    await user.click(screen.getByRole('menuitem', { name: '重命名与颜色' }));
+    expect(screen.getByRole('dialog', { name: '编辑泳道' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '删除泳道' })).not.toBeInTheDocument();
   });
 
-  it('does not render a lane action menu', async () => {
-    renderWidget(repository());
+  it('creates a lane to the right of the chosen lane', async () => {
+    const user = userEvent.setup();
+    const createTaskLane = vi.fn().mockResolvedValue(lane('lane-new', '等待', 3));
+    const reorderTaskLanes = vi.fn().mockResolvedValue(undefined);
+    renderWidget(repository({ createTaskLane, reorderTaskLanes }));
     await screen.findByRole('region', { name: '泳道：待处理' });
-    expect(screen.queryByRole('button', { name: '泳道操作：待处理' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '待处理泳道操作' }));
+    await user.click(screen.getByRole('menuitem', { name: '在右侧新建泳道' }));
+    await user.type(screen.getByLabelText('泳道名称'), '等待');
+    await user.click(screen.getByRole('button', { name: '保存泳道' }));
+    expect(createTaskLane).toHaveBeenCalledWith(expect.objectContaining({ name: '等待' }));
+    expect(reorderTaskLanes).toHaveBeenCalledWith(['lane-a', 'lane-new', 'lane-b', 'lane-c']);
   });
 
-  it('does not render the removed task-card action menu', async () => {
-    renderWidget(repository());
-    await screen.findByRole('region', { name: '泳道：待处理' });
-    expect(screen.queryByRole('button', { name: '任务操作：写文档' })).not.toBeInTheDocument();
-  });
-
-  it('confirms lane deletion showing the card count and cascades', async () => {
+  it('confirms lane deletion showing the card count and moves cards to a surviving lane', async () => {
     const user = userEvent.setup();
     const repo = repository();
     renderWidget(repo);
     await screen.findByRole('region', { name: '泳道：待处理' });
-    await user.click(screen.getByRole('button', { name: '待处理' }));
-    await user.click(screen.getByRole('button', { name: '删除泳道' }));
-    expect(screen.getByText(/该泳道包含 2 张任务/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '待处理泳道操作' }));
+    await user.click(screen.getByRole('menuitem', { name: '删除泳道' }));
+    expect(screen.getByText('删除后，该泳道的 2 张任务会移到“进行中”。')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '永久删除' }));
-    // Cards move to the first surviving lane rather than being orphaned.
     expect(repo.deleteTaskLane).toHaveBeenCalledWith('lane-a', 'lane-b');
   });
 
-  it('shows an empty state when there are no lanes', async () => {
+  it('offers no delete action when only one lane is left', async () => {
+    const user = userEvent.setup();
+    renderWidget(repository({
+      getTaskWorkspaceSnapshot: vi.fn().mockResolvedValue({ ...snapshot, lanes: [lane('lane-a', '待处理', 0)], tasks: [] })
+    }));
+    await user.click(await screen.findByRole('button', { name: '待处理泳道操作' }));
+    expect(screen.getByRole('menuitem', { name: '重命名与颜色' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: '删除泳道' })).not.toBeInTheDocument();
+  });
+
+  it('offers a create-lane button in the empty state', async () => {
+    const user = userEvent.setup();
     renderWidget(repository({
       getTaskWorkspaceSnapshot: vi.fn().mockResolvedValue(emptySnapshot)
     }));
     expect(await screen.findByText(/还没有泳道/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '新建任务' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: '新建泳道' }));
+    expect(screen.getByRole('dialog', { name: '新建泳道' })).toBeInTheDocument();
   });
 
-  it('does not render optional field regions for a bare card', async () => {
+  it('filters by tag only', async () => {
+    renderWidget(repository({
+      getTaskWorkspaceSnapshot: vi.fn().mockResolvedValue({
+        ...snapshot,
+        tags: [{ id: 't1', name: '工作', color: '#4FC9DA', archivedAt: null, createdAt: 'x', updatedAt: 'x' }]
+      })
+    }));
+    await screen.findByRole('region', { name: '泳道：待处理' });
+    expect(screen.getByRole('button', { name: '按标签筛选' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '按成员筛选' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '按优先级筛选' })).not.toBeInTheDocument();
+  });
+
+  it('does not render a meta line for a bare card', async () => {
     renderWidget(repository());
     const laneRegion = await screen.findByRole('region', { name: '泳道：待处理' });
     const bare = within(laneRegion).getByLabelText('任务：写文档');
-    // No priority / tag badges and no due/collaborator meta on a bare card.
-    expect(bare.querySelector('.kanban-card__badges')).toBeNull();
     expect(bare.querySelector('.kanban-card__meta')).toBeNull();
+    expect(within(bare).getByRole('img', { name: '不重要不紧急' })).toBeInTheDocument();
   });
 });

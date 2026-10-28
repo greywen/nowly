@@ -71,8 +71,8 @@ test('edits steps in the shared task dialog and shows the count on the row and t
   await expect(reopened.getByRole('checkbox', { name: '标记步骤为未完成：起草' })).toBeChecked();
 });
 
-test('saves a step still in the input when creating from a kanban lane', async ({ page }) => {
-  await page.getByRole('region', { name: '泳道：待处理' }).getByRole('button', { name: '在待处理新增任务' }).click();
+test('saves a step still in the input when creating from the kanban toolbar', async ({ page }) => {
+  await page.getByRole('button', { name: '新建任务', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '新建任务' });
   await dialog.getByLabel('任务标题').fill('整理周报');
   await dialog.getByRole('textbox', { name: '新步骤' }).fill('收集数据');

@@ -1263,13 +1263,6 @@ mod tests {
                 [id],
             )
             .unwrap();
-        connection
-            .execute(
-                "INSERT INTO task_view_memberships(task_id,view,position,created_at)
-                 VALUES (?1,'kanban',NULL,'2026-07-23T08:00:00Z')",
-                [id],
-            )
-            .unwrap();
     }
 
     fn event_link(connection: &Connection, id: &str) -> Option<String> {

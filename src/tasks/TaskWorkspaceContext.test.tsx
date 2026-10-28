@@ -9,7 +9,7 @@ import type { Task, TaskWorkspaceSnapshot } from './task-model';
 function task(id: string): Task {
   return {
     id, title: id, description: '', priority: 'important_urgent', dueDate: null, completed: false,
-    laneId: 'lane-a', boardPosition: 0, tagIds: [], collaboratorIds: [], views: ['kanban', 'matrix'], steps: [],
+    laneId: 'lane-a', boardPosition: 0, tagIds: [], steps: [],
     createdAt: 'x', updatedAt: 'x'
   };
 }
@@ -19,8 +19,6 @@ function snapshot(tasks: Task[]): TaskWorkspaceSnapshot {
     tasks,
     lanes: [{ id: 'lane-a', name: '待处理', color: '#4FC9DA', position: 0, createdAt: 'x', updatedAt: 'x' }],
     tags: [],
-    collaborators: [],
-    linkingEnabled: true,
     defaultLaneId: 'lane-a',
     completionLaneId: 'lane-a',
     viewPreferences: {}
