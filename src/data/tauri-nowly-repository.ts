@@ -73,11 +73,9 @@ export const tauriNowlyRepository: NowlyRepository = {
   moveTaskToDate: (id, dueDate) => invalidating(invoke('move_task_to_date', { id, dueDate })),
   createTaskLane: (draft) => invoke('create_task_lane', { draft }),
   updateTaskLane: (id, draft) => invoke('update_task_lane', { id, draft }),
-  deleteTaskLane: (id, replacementLaneId = null) =>
-    invoke('delete_task_lane', { id, replacementLaneId }),
+  deleteTaskLane: (id) => invoke('delete_task_lane', { id }),
   reorderTaskLanes: (orderedIds) => invoke('reorder_task_lanes', { orderedIds }),
   setDefaultTaskLane: (id) => invoke('set_default_task_lane', { id }),
-  setCompletionTaskLane: (id) => invoke('set_completion_task_lane', { id }),
   createTaskTag: (draft) => invoke('create_task_tag', { draft }),
   updateTaskTag: (id, draft) => invoke('update_task_tag', { id, draft }),
   archiveTaskTag: (id, archived) => invoke('archive_task_tag', { id, archived }),

@@ -22,7 +22,6 @@ const PRIORITIES: &[&str] = &[
 // Quadrant for tasks created without one (board quick add, assistant, etc.).
 pub const DEFAULT_PRIORITY: &str = "not_important_not_urgent";
 const DEFAULT_LANE_KEY: &str = "default_task_lane_id";
-const COMPLETION_LANE_KEY: &str = "completion_task_lane_id";
 const VIEW_PREFERENCES_KEY: &str = "task_view_preferences";
 
 fn timestamp() -> String {
@@ -75,16 +74,19 @@ fn write_setting<T: Serialize>(
     Ok(())
 }
 
-fn default_lane_id(connection: &Connection) -> Result<String, CommandError> {
-    read_setting(connection, DEFAULT_LANE_KEY, "kanban-lane-todo".to_owned())
-}
-
-fn completion_lane_id(connection: &Connection) -> Result<String, CommandError> {
-    read_setting(
-        connection,
-        COMPLETION_LANE_KEY,
-        "kanban-lane-done".to_owned(),
-    )
+// The saved default when that lane still exists, else the first lane; None
+// when the board has no lanes.
+fn default_lane_id(connection: &Connection) -> Result<Option<String>, CommandError> {
+    let saved: Option<String> = read_setting(connection, DEFAULT_LANE_KEY, None)?;
+    connection
+        .query_row(
+            "SELECT id FROM task_lanes
+             ORDER BY CASE WHEN id=?1 THEN 0 ELSE 1 END, position, id LIMIT 1",
+            [saved],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(CommandError::database)
 }
 
 fn view_preferences(connection: &Connection) -> Result<Value, CommandError> {
@@ -125,6 +127,7 @@ fn read_task_base(row: &Row<'_>) -> rusqlite::Result<Task> {
         priority: row.get(3)?,
         due_date: row.get(4)?,
         completed: row.get::<_, i64>(5)? == 1,
+        completed_at: row.get(11)?,
         lane_id: row.get(6)?,
         board_position: row.get(7)?,
         tag_ids: Vec::new(),
@@ -166,7 +169,7 @@ fn task_by_id(connection: &Connection, id: &str) -> Result<Option<Task>, Command
     let mut task = connection
         .query_row(
             "SELECT id,title,description,priority,due_date,completed,lane_id,board_position,
-                    linked_event_id,created_at,updated_at
+                    linked_event_id,created_at,updated_at,completed_at
              FROM tasks WHERE id=?1",
             [id],
             read_task_base,
@@ -183,7 +186,7 @@ fn list_tasks(connection: &Connection) -> Result<Vec<Task>, CommandError> {
     let mut tasks = connection
         .prepare(
             "SELECT id,title,description,priority,due_date,completed,lane_id,board_position,
-                    linked_event_id,created_at,updated_at
+                    linked_event_id,created_at,updated_at,completed_at
              FROM tasks ORDER BY lane_id,board_position,id",
         )
         .map_err(CommandError::database)?
@@ -229,7 +232,6 @@ pub fn snapshot(connection: &Connection) -> Result<TaskWorkspaceSnapshot, Comman
         lanes: list_lanes(connection)?,
         tags: list_tags(connection)?,
         default_lane_id: default_lane_id(connection)?,
-        completion_lane_id: completion_lane_id(connection)?,
         view_preferences: view_preferences(connection)?,
     })
 }
@@ -388,7 +390,11 @@ fn relink_event(
     Ok(())
 }
 
-fn next_position(connection: &Connection, lane_id: &str) -> Result<i64, CommandError> {
+// Tasks off the board keep position 0.
+fn next_position(connection: &Connection, lane_id: Option<&str>) -> Result<i64, CommandError> {
+    let Some(lane_id) = lane_id else {
+        return Ok(0);
+    };
     connection
         .query_row(
             "SELECT COALESCE(MAX(board_position)+1,0) FROM tasks WHERE lane_id=?1",
@@ -398,7 +404,10 @@ fn next_position(connection: &Connection, lane_id: &str) -> Result<i64, CommandE
         .map_err(CommandError::database)
 }
 
-fn renumber_lane(transaction: &Connection, lane_id: &str) -> Result<(), CommandError> {
+fn renumber_lane(transaction: &Connection, lane_id: Option<&str>) -> Result<(), CommandError> {
+    let Some(lane_id) = lane_id else {
+        return Ok(());
+    };
     let ids = transaction
         .prepare("SELECT id FROM tasks WHERE lane_id=?1 ORDER BY board_position,created_at,id")
         .map_err(CommandError::database)?
@@ -496,27 +505,24 @@ fn replace_task_steps(
 pub fn create(connection: &Connection, draft: TaskDraft) -> Result<Task, CommandError> {
     let draft = validate_draft(draft)?;
     let transaction = connection.domain_write().map_err(CommandError::database)?;
-    require_lane(&transaction, &draft.lane_id)?;
+    if let Some(lane_id) = draft.lane_id.as_deref() {
+        require_lane(&transaction, lane_id)?;
+    }
     require_ids(&transaction, "task_tags", "tagIds", &draft.tag_ids)?;
     if let Some(event_id) = draft.linked_event_id.as_deref() {
         require_event(&transaction, event_id)?;
     }
-    let completion_lane = completion_lane_id(&transaction)?;
-    let target_lane = if draft.completed {
-        completion_lane.clone()
-    } else {
-        draft.lane_id.clone()
-    };
-    require_lane(&transaction, &target_lane)?;
-    let completed = target_lane == completion_lane;
-    let position = next_position(&transaction, &target_lane)?;
+    // Completion belongs to the task (the matrix checkbox), not to a lane.
+    let target_lane = draft.lane_id.clone();
+    let completed = draft.completed;
+    let position = next_position(&transaction, target_lane.as_deref())?;
     let id = Uuid::new_v4().hyphenated().to_string();
     let now = timestamp();
     transaction
         .execute(
             "INSERT INTO tasks(id,title,description,priority,due_date,completed,lane_id,
-                               board_position,linked_event_id,created_at,updated_at)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,NULL,?9,?9)",
+                               board_position,linked_event_id,created_at,updated_at,completed_at)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,NULL,?9,?9,CASE WHEN ?6=1 THEN ?9 END)",
             params![
                 id,
                 draft.title,
@@ -558,21 +564,15 @@ pub fn update(connection: &Connection, id: &str, draft: TaskDraft) -> Result<Tas
     let transaction = connection.domain_write().map_err(CommandError::database)?;
     let existing =
         task_by_id(&transaction, id)?.ok_or_else(|| CommandError::not_found("未找到该任务。"))?;
-    require_lane(&transaction, &draft.lane_id)?;
-    let completion_lane = completion_lane_id(&transaction)?;
-    let target_lane = if draft.completed {
-        completion_lane.clone()
-    } else if draft.lane_id == completion_lane {
-        default_lane_id(&transaction)?
-    } else {
-        draft.lane_id.clone()
-    };
-    require_lane(&transaction, &target_lane)?;
-    let completed = target_lane == completion_lane;
+    if let Some(lane_id) = draft.lane_id.as_deref() {
+        require_lane(&transaction, lane_id)?;
+    }
+    let target_lane = draft.lane_id.clone();
+    let completed = draft.completed;
     let target_position = if target_lane == existing.lane_id {
         existing.board_position
     } else {
-        next_position(&transaction, &target_lane)?
+        next_position(&transaction, target_lane.as_deref())?
     };
     let now = timestamp();
     relink_event(
@@ -585,6 +585,7 @@ pub fn update(connection: &Connection, id: &str, draft: TaskDraft) -> Result<Tas
     transaction
         .execute(
             "UPDATE tasks SET title=?2,description=?3,priority=?4,due_date=?5,
+                    completed_at=CASE WHEN ?6=0 THEN NULL WHEN completed=1 THEN completed_at ELSE ?10 END,
                     completed=?6,lane_id=?7,board_position=?8,linked_event_id=?9,updated_at=?10
              WHERE id=?1",
             params![
@@ -602,8 +603,8 @@ pub fn update(connection: &Connection, id: &str, draft: TaskDraft) -> Result<Tas
         )
         .map_err(sql_write_error)?;
     if target_lane != existing.lane_id {
-        renumber_lane(&transaction, &existing.lane_id)?;
-        renumber_lane(&transaction, &target_lane)?;
+        renumber_lane(&transaction, existing.lane_id.as_deref())?;
+        renumber_lane(&transaction, target_lane.as_deref())?;
     }
     replace_task_links(&transaction, id, &draft.tag_ids)?;
     if let Some(steps) = draft.steps.as_deref() {
@@ -631,7 +632,7 @@ pub fn delete(connection: &Connection, id: &str) -> Result<(), CommandError> {
     transaction
         .execute("DELETE FROM tasks WHERE id=?1", [id])
         .map_err(sql_write_error)?;
-    renumber_lane(&transaction, &task.lane_id)?;
+    renumber_lane(&transaction, task.lane_id.as_deref())?;
     transaction.commit().map_err(sql_write_error)
 }
 
@@ -645,28 +646,29 @@ fn move_to_lane(
     require_lane(&transaction, target_lane_id)?;
     let task =
         task_by_id(&transaction, id)?.ok_or_else(|| CommandError::not_found("未找到该任务。"))?;
-    let mut ids = transaction
-        .prepare(
-            "SELECT id FROM tasks WHERE lane_id=?1 AND id<>?2
-             ORDER BY board_position,created_at,id",
-        )
-        .map_err(CommandError::database)?
-        .query_map(params![target_lane_id, id], |row| row.get::<_, String>(0))
-        .map_err(CommandError::database)?
-        .collect::<rusqlite::Result<Vec<_>>>()
-        .map_err(CommandError::database)?;
+    // The board only shows open cards, so the index counts open cards; the
+    // lane's completed tasks keep their relative order after them.
+    let lane_ids = |completed: i64| -> Result<Vec<String>, CommandError> {
+        transaction
+            .prepare(
+                "SELECT id FROM tasks WHERE lane_id=?1 AND id<>?2 AND completed=?3
+                 ORDER BY board_position,created_at,id",
+            )
+            .map_err(CommandError::database)?
+            .query_map(params![target_lane_id, id, completed], |row| row.get::<_, String>(0))
+            .map_err(CommandError::database)?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(CommandError::database)
+    };
+    let mut ids = lane_ids(0)?;
     ids.insert(target_index.min(ids.len()), id.to_owned());
-    let completion_lane = completion_lane_id(&transaction)?;
+    ids.extend(lane_ids(1)?);
     let now = timestamp();
+    // Dropping a card into a lane means it is in progress again.
     transaction
         .execute(
-            "UPDATE tasks SET lane_id=?2,completed=?3,updated_at=?4 WHERE id=?1",
-            params![
-                id,
-                target_lane_id,
-                i64::from(target_lane_id == completion_lane),
-                now
-            ],
+            "UPDATE tasks SET lane_id=?2,completed=0,completed_at=NULL,updated_at=?3 WHERE id=?1",
+            params![id, target_lane_id, now],
         )
         .map_err(sql_write_error)?;
     for (position, task_id) in ids.iter().enumerate() {
@@ -677,8 +679,8 @@ fn move_to_lane(
             )
             .map_err(sql_write_error)?;
     }
-    if task.lane_id != target_lane_id {
-        renumber_lane(&transaction, &task.lane_id)?;
+    if task.lane_id.as_deref() != Some(target_lane_id) {
+        renumber_lane(&transaction, task.lane_id.as_deref())?;
     }
     let moved =
         task_by_id(&transaction, id)?.ok_or_else(|| CommandError::not_found("未找到该任务。"))?;
@@ -691,21 +693,31 @@ fn set_completed_value(
     id: &str,
     completed: bool,
 ) -> Result<Task, CommandError> {
-    let lane = {
-        let transaction = connection.domain_write().map_err(CommandError::database)?;
-        if task_by_id(&transaction, id)?.is_none() {
-            return Err(CommandError::not_found("未找到该任务。"));
-        }
-        let lane = if completed {
-            completion_lane_id(&transaction)?
-        } else {
-            default_lane_id(&transaction)?
-        };
+    // The task keeps its lane so reopening returns it there, at the top.
+    let transaction = connection.domain_write().map_err(CommandError::database)?;
+    let existing =
+        task_by_id(&transaction, id)?.ok_or_else(|| CommandError::not_found("未找到该任务。"))?;
+    if existing.completed == completed {
         transaction.commit().map_err(sql_write_error)?;
-        lane
-    };
-    let index = next_position(connection, &lane)? as usize;
-    move_to_lane(connection, id, &lane, index)
+        return Ok(existing);
+    }
+    let now = timestamp();
+    transaction
+        .execute(
+            "UPDATE tasks SET completed=?2,completed_at=CASE WHEN ?2=1 THEN ?3 END,
+                    board_position=CASE WHEN ?2=0 AND lane_id IS NOT NULL THEN -1 ELSE board_position END,
+                    updated_at=?3
+             WHERE id=?1",
+            params![id, i64::from(completed), now],
+        )
+        .map_err(sql_write_error)?;
+    if !completed {
+        renumber_lane(&transaction, existing.lane_id.as_deref())?;
+    }
+    let task =
+        task_by_id(&transaction, id)?.ok_or_else(|| CommandError::not_found("未找到该任务。"))?;
+    transaction.commit().map_err(sql_write_error)?;
+    Ok(task)
 }
 
 fn update_priority(
@@ -815,67 +827,20 @@ fn update_lane_value(
     lane_by_id(connection, id)?.ok_or_else(|| CommandError::not_found("未找到该泳道。"))
 }
 
-fn delete_lane_value(
-    connection: &Connection,
-    id: &str,
-    replacement_lane_id: Option<String>,
-) -> Result<TaskWorkspaceSnapshot, CommandError> {
+// The lane's tasks leave the board (they stay in the matrix); any lane,
+// including the last one, can be deleted.
+fn delete_lane_value(connection: &Connection, id: &str) -> Result<TaskWorkspaceSnapshot, CommandError> {
     let transaction = connection.domain_write().map_err(CommandError::database)?;
     require_lane(&transaction, id)?;
-    if list_lanes(&transaction)?.len() <= 1 {
-        return Err(CommandError::validation("id", "至少保留一个泳道。"));
-    }
-    let default_lane = default_lane_id(&transaction)?;
-    let completion_lane = completion_lane_id(&transaction)?;
-    let task_count: i64 = transaction
-        .query_row("SELECT COUNT(*) FROM tasks WHERE lane_id=?1", [id], |row| {
-            row.get(0)
-        })
-        .map_err(CommandError::database)?;
-    let needs_replacement = task_count > 0 || id == default_lane || id == completion_lane;
-    let replacement = if needs_replacement {
-        let replacement = replacement_lane_id
-            .ok_or_else(|| CommandError::validation("replacementLaneId", "请先选择替代泳道。"))?;
-        if replacement == id {
-            return Err(CommandError::validation(
-                "replacementLaneId",
-                "替代泳道不能是当前泳道。",
-            ));
-        }
-        require_lane(&transaction, &replacement)?;
-        Some(replacement)
-    } else {
-        replacement_lane_id
-    };
-    if let Some(replacement) = replacement.as_deref() {
-        let offset = next_position(&transaction, replacement)?;
-        transaction
-            .execute(
-                "UPDATE tasks SET lane_id=?2,board_position=board_position+?3,updated_at=?4
-                 WHERE lane_id=?1",
-                params![id, replacement, offset, timestamp()],
-            )
-            .map_err(sql_write_error)?;
-        if id == default_lane {
-            write_setting(&transaction, DEFAULT_LANE_KEY, &replacement.to_owned())?;
-        }
-        if id == completion_lane {
-            write_setting(&transaction, COMPLETION_LANE_KEY, &replacement.to_owned())?;
-        }
-    }
+    transaction
+        .execute(
+            "UPDATE tasks SET lane_id=NULL,board_position=0,updated_at=?2 WHERE lane_id=?1",
+            params![id, timestamp()],
+        )
+        .map_err(sql_write_error)?;
     transaction
         .execute("DELETE FROM task_lanes WHERE id=?1", [id])
         .map_err(sql_write_error)?;
-    let new_completion = completion_lane_id(&transaction)?;
-    transaction
-        .execute(
-            "UPDATE tasks SET completed=CASE WHEN lane_id=?1 THEN 1 ELSE 0 END",
-            [new_completion],
-        )
-        .map_err(sql_write_error)?;
-    if let Some(replacement) = replacement.as_deref() {
-        renumber_lane(&transaction, replacement)?;
-    }
     transaction
         .execute(
             "WITH ordered AS (
@@ -923,14 +888,6 @@ fn set_lane_setting(
     let transaction = connection.domain_write().map_err(CommandError::database)?;
     require_lane(&transaction, id)?;
     write_setting(&transaction, key, &id.to_owned())?;
-    if key == COMPLETION_LANE_KEY {
-        transaction
-            .execute(
-                "UPDATE tasks SET completed=CASE WHEN lane_id=?1 THEN 1 ELSE 0 END,updated_at=?2",
-                params![id, timestamp()],
-            )
-            .map_err(sql_write_error)?;
-    }
     transaction.commit().map_err(sql_write_error)?;
     snapshot(connection)
 }
@@ -1132,10 +1089,9 @@ pub fn update_task_lane(
 pub fn delete_task_lane(
     db: State<'_, AppDb>,
     id: String,
-    replacement_lane_id: Option<String>,
 ) -> Result<TaskWorkspaceSnapshot, CommandError> {
     let mut connection = db.0.lock().map_err(CommandError::database)?;
-    let snapshot = delete_lane_value(&mut connection, &id, replacement_lane_id)?;
+    let snapshot = delete_lane_value(&mut connection, &id)?;
     drop(connection);
     crate::status_island::invalidate_registered()?;
     Ok(snapshot)
@@ -1157,18 +1113,6 @@ pub fn set_default_task_lane(
 ) -> Result<TaskWorkspaceSnapshot, CommandError> {
     let mut connection = db.0.lock().map_err(CommandError::database)?;
     set_lane_setting(&mut connection, DEFAULT_LANE_KEY, &id)
-}
-
-#[tauri::command]
-pub fn set_completion_task_lane(
-    db: State<'_, AppDb>,
-    id: String,
-) -> Result<TaskWorkspaceSnapshot, CommandError> {
-    let mut connection = db.0.lock().map_err(CommandError::database)?;
-    let snapshot = set_lane_setting(&mut connection, COMPLETION_LANE_KEY, &id)?;
-    drop(connection);
-    crate::status_island::invalidate_registered()?;
-    Ok(snapshot)
 }
 
 #[tauri::command]
@@ -1235,11 +1179,25 @@ mod tests {
     use crate::models::{TaskDraft, TaskStepDraft, TaskTagDraft};
     use rusqlite::Connection;
 
-    fn database() -> Connection {
+    fn bare_database() -> Connection {
         let mut connection = Connection::open_in_memory().unwrap();
         connection.execute_batch("PRAGMA foreign_keys=ON;").unwrap();
         migrate(&mut connection).unwrap();
         connection
+    }
+
+    fn database() -> Connection {
+        let connection = bare_database();
+        crate::db::seed_test_lanes(&connection);
+        connection
+    }
+
+    fn open_lane_order(connection: &Connection, lane: &str) -> Vec<String> {
+        let mut tasks: Vec<_> = snapshot(connection).unwrap().tasks.into_iter()
+            .filter(|task| task.lane_id.as_deref() == Some(lane) && !task.completed)
+            .collect();
+        tasks.sort_by_key(|task| task.board_position);
+        tasks.into_iter().map(|task| task.title).collect()
     }
 
     fn draft() -> TaskDraft {
@@ -1249,7 +1207,7 @@ mod tests {
             priority: Some("important_urgent".into()),
             due_date: Some("2026-08-26".into()),
             completed: false,
-            lane_id: "kanban-lane-todo".into(),
+            lane_id: Some("kanban-lane-todo".into()),
             tag_ids: Vec::new(),
             linked_event_id: None,
             steps: None,
@@ -1362,45 +1320,12 @@ mod tests {
     }
 
     #[test]
-    fn fresh_workspace_has_default_lanes() {
-        let connection = database();
+    fn fresh_workspace_has_no_lanes() {
+        let connection = bare_database();
         let workspace = snapshot(&connection).unwrap();
-        assert_eq!(workspace.default_lane_id, "kanban-lane-todo");
-        assert_eq!(workspace.completion_lane_id, "kanban-lane-done");
-        assert_eq!(workspace.lanes.len(), 3);
+        assert_eq!(workspace.default_lane_id, None);
+        assert!(workspace.lanes.is_empty());
         assert!(workspace.tasks.is_empty());
-    }
-
-    #[test]
-    fn deleting_last_lane_reports_minimum_and_preserves_workspace() {
-        for with_task in [false, true] {
-            let mut connection = database();
-            if with_task {
-                create(&mut connection, draft()).unwrap();
-            }
-            super::delete_lane_value(&connection, "kanban-lane-doing", None).unwrap();
-            super::delete_lane_value(
-                &connection,
-                "kanban-lane-done",
-                Some("kanban-lane-todo".into()),
-            )
-            .unwrap();
-            let before = serde_json::to_value(snapshot(&connection).unwrap()).unwrap();
-            let error = super::delete_lane_value(&connection, "kanban-lane-todo", None)
-                .unwrap_err();
-            assert_eq!(error.message, "至少保留一个泳道。");
-            assert_eq!(error.field.as_deref(), Some("id"));
-            assert_eq!(serde_json::to_value(snapshot(&connection).unwrap()).unwrap(), before);
-        }
-    }
-
-    #[test]
-    fn deleting_used_lane_without_replacement_keeps_specific_error() {
-        let connection = database();
-        let error = super::delete_lane_value(&connection, "kanban-lane-todo", None)
-            .unwrap_err();
-        assert_eq!(error.message, "请先选择替代泳道。");
-        assert_eq!(snapshot(&connection).unwrap().lanes.len(), 3);
     }
 
     #[test]
@@ -1431,16 +1356,88 @@ mod tests {
     }
 
     #[test]
-    fn completing_moves_to_the_completion_lane_and_back() {
+    fn completing_records_time_and_reopening_returns_to_the_lane_top() {
         let connection = database();
-        let task = create(&connection, draft()).unwrap();
-        let done = super::set_completed_value(&connection, &task.id, true).unwrap();
+        create(&connection, TaskDraft { title: "一".into(), ..draft() }).unwrap();
+        let first = create(&connection, TaskDraft { title: "二".into(), ..draft() }).unwrap();
+        let done = super::set_completed_value(&connection, &first.id, true).unwrap();
         assert!(done.completed);
-        assert_eq!(done.lane_id, "kanban-lane-done");
-        let reopened = super::set_completed_value(&connection, &task.id, false).unwrap();
+        assert!(done.completed_at.is_some());
+        assert_eq!(done.lane_id.as_deref(), Some("kanban-lane-todo"));
+        create(&connection, TaskDraft { title: "三".into(), ..draft() }).unwrap();
+        let again = super::set_completed_value(&connection, &first.id, true).unwrap();
+        assert_eq!(again.completed_at, done.completed_at);
+        let reopened = super::set_completed_value(&connection, &first.id, false).unwrap();
         assert!(!reopened.completed);
-        assert_eq!(reopened.lane_id, "kanban-lane-todo");
+        assert_eq!(reopened.completed_at, None);
+        assert_eq!(reopened.lane_id.as_deref(), Some("kanban-lane-todo"));
+        assert_eq!(open_lane_order(&connection, "kanban-lane-todo"), ["二", "一", "三"]);
     }
+
+    #[test]
+    fn moving_into_a_lane_reopens_and_counts_only_open_cards() {
+        let connection = database();
+        let a = create(&connection, TaskDraft { title: "A".into(), ..draft() }).unwrap();
+        let done = create(&connection, TaskDraft { title: "完成".into(), completed: true, ..draft() }).unwrap();
+        create(&connection, TaskDraft { title: "B".into(), ..draft() }).unwrap();
+        assert!(done.completed_at.is_some());
+        let off_board = create(&connection, TaskDraft { title: "C".into(), lane_id: None, ..draft() }).unwrap();
+        super::move_to_lane(&connection, &off_board.id, "kanban-lane-todo", 1).unwrap();
+        assert_eq!(open_lane_order(&connection, "kanban-lane-todo"), ["A", "C", "B"]);
+        let moved = super::move_to_lane(&connection, &done.id, "kanban-lane-doing", 0).unwrap();
+        assert!(!moved.completed);
+        assert_eq!(moved.completed_at, None);
+        assert_eq!(stored(&connection, &a.id).board_position, 0);
+    }
+
+    #[test]
+    fn editing_keeps_the_original_completion_time() {
+        let connection = database();
+        let task = create(&connection, TaskDraft { completed: true, ..draft() }).unwrap();
+        connection.execute("UPDATE tasks SET completed_at='earlier'", []).unwrap();
+        let edited = super::update(&connection, &task.id, TaskDraft { title: "改名".into(), completed: true, ..draft() }).unwrap();
+        assert_eq!(edited.completed_at.as_deref(), Some("earlier"));
+        let reopened = super::update(&connection, &task.id, TaskDraft { completed: false, ..draft() }).unwrap();
+        assert_eq!(reopened.completed_at, None);
+    }
+
+    #[test]
+    fn deleting_a_lane_sends_its_tasks_off_the_board() {
+        let connection = database();
+        let task = create(&connection, TaskDraft { completed: true, ..draft() }).unwrap();
+        let after = super::delete_lane_value(&connection, "kanban-lane-todo").unwrap();
+        let stored = after.tasks.iter().find(|t| t.id == task.id).unwrap();
+        assert_eq!(stored.lane_id, None);
+        assert!(stored.completed);
+        assert_eq!(after.default_lane_id.as_deref(), Some("kanban-lane-doing"));
+        super::delete_lane_value(&connection, "kanban-lane-doing").unwrap();
+        let last = super::delete_lane_value(&connection, "kanban-lane-done").unwrap();
+        assert!(last.lanes.is_empty());
+        assert_eq!(last.default_lane_id, None);
+        assert_eq!(last.tasks.len(), 1);
+    }
+    #[test]
+    fn tasks_without_a_lane_stay_off_the_board() {
+        let connection = database();
+        let on_board = create(&connection, draft()).unwrap();
+        let off_board = create(&connection, TaskDraft { lane_id: None, ..draft() }).unwrap();
+        assert_eq!(off_board.lane_id, None);
+        assert_eq!(off_board.board_position, 0);
+        let edited = super::update(&connection, &off_board.id, TaskDraft {
+            title: "改名".into(), lane_id: None, ..draft()
+        }).unwrap();
+        assert_eq!(edited.lane_id, None);
+        let placed = super::move_to_lane(&connection, &off_board.id, "kanban-lane-todo", 0).unwrap();
+        assert_eq!(placed.lane_id.as_deref(), Some("kanban-lane-todo"));
+        assert_eq!(placed.board_position, 0);
+        assert_eq!(stored(&connection, &on_board.id).board_position, 1);
+        let removed = super::update(&connection, &off_board.id, TaskDraft { lane_id: None, ..draft() }).unwrap();
+        assert_eq!(removed.lane_id, None);
+        assert_eq!(stored(&connection, &on_board.id).board_position, 0);
+        super::delete(&connection, &removed.id).unwrap();
+        assert_eq!(snapshot(&connection).unwrap().tasks.len(), 1);
+    }
+
     #[test]
     fn tag_names_are_case_insensitively_unique() {
         let mut connection = database();

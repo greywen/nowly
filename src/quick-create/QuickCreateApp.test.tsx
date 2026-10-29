@@ -32,7 +32,6 @@ const workspace: TaskWorkspaceSnapshot = {
   lanes: [{ id: 'lane-a', name: '待处理', color: '#4FC9DA', position: 0, createdAt: 'x', updatedAt: 'x' }],
   tags: [],
   defaultLaneId: 'lane-a',
-  completionLaneId: 'lane-a',
   viewPreferences: {}
 };
 
@@ -123,7 +122,7 @@ describe('QuickCreateApp', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('saves a task into the default lane and fourth quadrant and notifies the main window', async () => {
+  it('saves a task off the board in the fourth quadrant and notifies the main window', async () => {
     const user = userEvent.setup();
     pending = { id: 4, kind: 'task', maxHeight: 700 };
     const repository = renderApp();
@@ -131,7 +130,7 @@ describe('QuickCreateApp', () => {
     await user.click(screen.getByRole('button', { name: '保存任务' }));
     await waitFor(() => expect(tauri.emit).toHaveBeenCalledWith('nowly-records-changed', { kind: 'task' }));
     expect(repository.createWorkspaceTask).toHaveBeenCalledWith(expect.objectContaining({
-      title: '写周报', priority: 'not_important_not_urgent', laneId: 'lane-a'
+      title: '写周报', priority: 'not_important_not_urgent', laneId: null
     }));
     expect(tauri.invoke).toHaveBeenCalledWith('close_quick_create', { requestId: 4 });
   });

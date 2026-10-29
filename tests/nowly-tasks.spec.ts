@@ -29,7 +29,7 @@ test.beforeEach(async ({ page }) => {
     }];
     const snapshot = () => ({
       tasks, lanes, tags:[],
-      defaultLaneId:'lane-todo', completionLaneId:'lane-done', viewPreferences:{}
+      defaultLaneId:'lane-todo', viewPreferences:{}
     });
     const settings = {
       wallpaperEnabled:false, launchAtLogin:false, targetMonitorId:null, density:'balanced',
@@ -88,7 +88,6 @@ test.beforeEach(async ({ page }) => {
           const updated = {
             ...task,
             completed:args.completed,
-            laneId:args.completed ? 'lane-done' : 'lane-todo',
             updatedAt:now
           };
           tasks = tasks.map((task) => task.id === args.id ? updated : task);
@@ -155,7 +154,7 @@ test('rolls back failed completion and retries the original target', async ({ pa
   await expect(page.locator('.completion-message')).toContainText('完成状态保存失败');
   await page.getByRole('button', { name:'重试完成状态' }).click();
   await expect(page.getByRole('checkbox', { name:'标记任务为未完成：发布 Nowly' })).toBeChecked();
-  await expect(page.getByText(/已完成/)).toBeVisible();
+  await expect(page.locator('.task-row', { hasText: '发布 Nowly' }).getByText(/已完成/)).toBeVisible();
 });
 
 test('shows metadata inline and never as a hover or focus tooltip', async ({ page }) => {

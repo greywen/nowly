@@ -57,7 +57,6 @@ function seed({ imageId, fileId, png, view }: SeedArgs) {
     lanes,
     tags: [{ id: 'tag-1', name: '设计', color: '#4F55DA', archivedAt: null, createdAt: now, updatedAt: now }],
     defaultLaneId: 'lane-todo',
-    completionLaneId: 'lane-doing',
     viewPreferences: {}
   };
 

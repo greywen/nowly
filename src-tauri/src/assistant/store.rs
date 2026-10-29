@@ -40,10 +40,7 @@ const WATCHED: &[&str] = &[
 ];
 // `settings` is rewritten wholesale by unrelated UI actions (picking a colour
 // touches `recent_colors`), so only the keys a plan actually depends on count.
-const WATCHED_SETTINGS: &[&str] = &[
-    "default_task_lane_id",
-    "completion_task_lane_id",
-];
+const WATCHED_SETTINGS: &[&str] = &["default_task_lane_id"];
 const RETENTION_MS: i64 = 7 * 24 * 60 * 60 * 1000;
 
 pub fn now_ms() -> i64 {
@@ -448,7 +445,7 @@ pub fn prepare(
     let options = if actions[0].domain() == "tasks" {
         let workspace = crate::task_workspace::snapshot(&outer)?;
         serde_json::json!({"lanes":workspace.lanes.iter().map(|l|serde_json::json!({"id":l.id,"name":l.name})).collect::<Vec<_>>(),
-            "completionLaneId":workspace.completion_lane_id,"defaultLaneId":workspace.default_lane_id})
+            "defaultLaneId":workspace.default_lane_id})
     } else {
         serde_json::json!({})
     };

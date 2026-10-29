@@ -32,18 +32,23 @@ const clock = { id: 'local', timeZone: 'local', label: '本地' };
 const alarmDraft = { title: 'Break', hour: 9, minute: 7, repeat: { kind: 'weekly', weekdays: [1, 5] }, enabled: true };
 
 describe('browser task lane deletion', () => {
-  it('rejects deleting the last lane without changing persisted data', async () => {
+  it('starts without lanes', async () => {
     installBrowserTauriBackend();
-    const workspace = await invoke()('get_task_workspace_snapshot') as { lanes: { id: string }[] };
-    const [remaining, ...others] = workspace.lanes;
-    for (const lane of others) {
-      await invoke()('delete_task_lane', { id: lane.id, replacementLaneId: remaining.id });
-    }
-    const before = localStorage.getItem(storageKey);
-    await expect(invoke()('delete_task_lane', { id: remaining.id, replacementLaneId: null }))
-      .rejects.toMatchObject({ code: 'validation_error', field: 'id', message: '至少保留一个泳道。' });
-    expect(localStorage.getItem(storageKey)).toBe(before);
-    expect(await invoke()('get_task_workspace_snapshot')).toMatchObject({ lanes: [{ id: remaining.id }] });
+    expect(await invoke()('get_task_workspace_snapshot')).toMatchObject({ lanes: [], defaultLaneId: null });
+  });
+
+  it('deletes the last lane and keeps its tasks off the board', async () => {
+    installBrowserTauriBackend();
+    const lane = await invoke()('create_task_lane', { draft: { name: '进行中', color: '#4FC9DA' } }) as { id: string };
+    const created = await invoke()('create_task', {
+      draft: { title: '写文档', description: '', priority: 'important_urgent', dueDate: null, completed: false, laneId: lane.id, tagIds: [], steps: [] }
+    }) as { id: string };
+    const workspace = await invoke()('delete_task_lane', { id: lane.id }) as {
+      lanes: unknown[]; defaultLaneId: string | null; tasks: { id: string; laneId: string | null }[];
+    };
+    expect(workspace.lanes).toEqual([]);
+    expect(workspace.defaultLaneId).toBeNull();
+    expect(workspace.tasks).toEqual([expect.objectContaining({ id: created.id, laneId: null })]);
   });
 });
 

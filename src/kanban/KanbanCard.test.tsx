@@ -73,14 +73,17 @@ describe('KanbanCard', () => {
     expect(screen.queryByText('细化交互')).not.toBeInTheDocument();
   });
 
-  it('marks a past due date as overdue unless the task is done', () => {
-    const { rerender } = render(<KanbanCard {...props({ resolved: resolved({ dueDate: '2026-08-10' }) })} />);
+  it('marks a past due date as overdue', () => {
+    render(<KanbanCard {...props({ resolved: resolved({ dueDate: '2026-08-10' }) })} />);
     expect(document.querySelector('.kanban-card__date--overdue')).not.toBeNull();
     expect(screen.getByText('已逾期')).toBeInTheDocument();
+  });
 
-    rerender(<KanbanCard {...props({ done: true, resolved: resolved({ dueDate: '2026-08-10' }) })} />);
-    expect(document.querySelector('.kanban-card__date--overdue')).toBeNull();
-    expect(document.querySelector('.kanban-card--done')).not.toBeNull();
+  it('dims the card being dragged and exposes its task id for completion feedback', () => {
+    render(<KanbanCard {...props({ dragging: true, resolved: resolved({ dueDate: null }) })} />);
+    const card = document.querySelector('.kanban-card') as HTMLElement;
+    expect(card).toHaveClass('kanban-card--dragging');
+    expect(card.dataset.taskCard).toBeTruthy();
   });
 
   it('counts attached files without reading them, and leaves images uncounted', () => {

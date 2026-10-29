@@ -108,11 +108,12 @@ export function ModalRoot({
             : { type:'edit', task:workspace.workspace.data.tasks.find((task) => task.id === modal.task.id) ?? {
                 id:modal.task.id, title:modal.task.title, description:modal.task.note,
                 priority:modal.task.quadrant, dueDate:modal.task.dueAt, completed:modal.task.completed,
-                laneId:workspace.workspace.data.defaultLaneId, boardPosition:0, tagIds:[],
+                completedAt:null, laneId:null, boardPosition:0, tagIds:[],
                 steps:modal.task.steps ?? [],
                 createdAt:modal.task.createdAt, updatedAt:modal.task.updatedAt
               } }
         }
+        showLane={modal.type === 'workspace-task-edit'}
         restoreFocusRef={{ current:modal.trigger }}
         onClose={returnFromChild}
       />

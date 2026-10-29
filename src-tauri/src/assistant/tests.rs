@@ -6,6 +6,7 @@ fn db() -> Connection {
     let mut db = Connection::open_in_memory().unwrap();
     db.execute_batch("PRAGMA foreign_keys=ON").unwrap();
     crate::db::migrate(&mut db).unwrap();
+    crate::db::seed_test_lanes(&db);
     db
 }
 fn permissions() -> Permissions {
@@ -220,7 +221,7 @@ fn undo_checks_changed_lane_settings_and_new_lane_members() {
     );
     store::execute(&db, &p.id, &permissions()).unwrap();
     db.execute(
-        "UPDATE settings SET value='\"kanban-lane-todo\"' WHERE key='completion_task_lane_id'",
+        "UPDATE settings SET value='\"kanban-lane-done\"' WHERE key='default_task_lane_id'",
         [],
     )
     .unwrap();

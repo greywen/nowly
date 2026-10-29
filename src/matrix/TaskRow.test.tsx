@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { MatrixTask } from './matrix-model';
@@ -77,7 +77,7 @@ describe('TaskRow', () => {
 
   it('announces completed, pending, and cross-month states without relying on color', async () => {
     const user = userEvent.setup();
-    render(
+    const { container } = render(
       <TaskRow
         task={{ ...open, completed: true }}
         pending
@@ -86,12 +86,28 @@ describe('TaskRow', () => {
       />
     );
 
-    expect(screen.getByText(/已完成/)).toBeInTheDocument();
+    expect(within(container).getByText(/已完成/)).toBeInTheDocument();
     const checkbox = screen.getByRole('checkbox', { name: '标记任务为未完成：发布 Nowly' });
     expect(checkbox).toBeChecked();
     expect(checkbox).toBeDisabled();
     await user.tab();
     expect(screen.getByRole('button', { name: '编辑任务：发布 Nowly' })).toHaveFocus();
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+  });
+
+  it('shows the board lane of an open task as a labelled chip', () => {
+    const { container, rerender } = render(
+      <TaskRow
+        task={{ ...open, lane: { id: 'lane-a', name: '进行中', color: '#4FC9DA' } }}
+        pending={false}
+        onToggle={vi.fn()}
+        onOpen={vi.fn()}
+      />
+    );
+    expect(container.querySelector('.task-lane-chip')).not.toBeNull();
+    expect(screen.getByText('看板泳道：进行中')).toBeInTheDocument();
+
+    rerender(<TaskRow task={open} pending={false} onToggle={vi.fn()} onOpen={vi.fn()} />);
+    expect(container.querySelector('.task-lane-chip')).toBeNull();
   });
 });

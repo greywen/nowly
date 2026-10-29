@@ -61,10 +61,10 @@ pub struct TaskStepDraft {
     pub completed: bool,
 }
 
-// Unified task. Every task shows in both the kanban and the matrix: `lane_id`
-// places it on the board and `priority` (one of the four fixed quadrants) in
-// the matrix. `completed` mirrors "is in the completion lane". The calendar is
-// fully independent and never derives from tasks.
+// Unified task. Every task has a quadrant (`priority`) and shows in the
+// matrix; only tasks with a `lane_id` are on the kanban board, so tasks created
+// from the matrix stay off the board. `completed` is the matrix checkbox and is
+// independent of lanes. The calendar never derives from tasks.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Task {
@@ -74,7 +74,10 @@ pub struct Task {
     pub priority: String,
     pub due_date: Option<String>,
     pub completed: bool,
-    pub lane_id: String,
+    // When the task was last completed; None while it is open.
+    pub completed_at: Option<String>,
+    // Kept after completion so reopening returns the task to the same lane.
+    pub lane_id: Option<String>,
     pub board_position: i64,
     pub tag_ids: Vec<String>,
     pub linked_event_id: Option<String>,
@@ -149,7 +152,9 @@ pub struct TaskDraft {
     pub due_date: Option<String>,
     #[serde(default)]
     pub completed: bool,
-    pub lane_id: String,
+    // None keeps the task off the kanban board.
+    #[serde(default)]
+    pub lane_id: Option<String>,
     #[serde(default)]
     pub tag_ids: Vec<String>,
     #[serde(default)]
@@ -470,8 +475,8 @@ pub struct TaskWorkspaceSnapshot {
     pub tasks: Vec<Task>,
     pub lanes: Vec<TaskLane>,
     pub tags: Vec<TaskTag>,
-    pub default_lane_id: String,
-    pub completion_lane_id: String,
+    // None when the board has no lanes.
+    pub default_lane_id: Option<String>,
     pub view_preferences: serde_json::Value,
 }
 
@@ -709,7 +714,9 @@ mod tests {
         assert_eq!(draft.due_date.as_deref(), Some("2026-07-23"));
         assert_eq!(draft.linked_event_id.as_deref(), Some("e1"));
         assert_eq!(draft.priority.as_deref(), Some("important_urgent"));
-        assert_eq!(draft.lane_id, "kanban-lane-todo");
+        assert_eq!(draft.lane_id.as_deref(), Some("kanban-lane-todo"));
+        let off_board: TaskDraft = serde_json::from_value(serde_json::json!({ "title": "t" })).unwrap();
+        assert_eq!(off_board.lane_id, None);
         assert_eq!(draft.tag_ids, vec!["t1".to_string()]);
     }
 

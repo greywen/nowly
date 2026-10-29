@@ -26,7 +26,11 @@ export type Task = {
   priority: TaskPriority;
   dueDate: string | null;
   completed: boolean;
-  laneId: string;
+  // When the task was last completed; null while it is open.
+  completedAt: string | null;
+  // null keeps the task off the kanban board (tasks created from the matrix).
+  // A completed task keeps its lane so reopening returns it there.
+  laneId: string | null;
   boardPosition: number;
   tagIds: string[];
   steps: TaskStep[];
@@ -40,7 +44,7 @@ export type TaskDraft = {
   priority: TaskPriority;
   dueDate: string | null;
   completed: boolean;
-  laneId: string;
+  laneId: string | null;
   tagIds: string[];
   // Omitted keeps the stored steps; a list replaces them in order.
   steps?: TaskStepDraft[];
@@ -74,8 +78,8 @@ export type TaskWorkspaceSnapshot = {
   tasks: Task[];
   lanes: TaskLane[];
   tags: TaskTag[];
-  defaultLaneId: string;
-  completionLaneId: string;
+  // null until the user creates a lane.
+  defaultLaneId: string | null;
   viewPreferences: TaskViewPreferences;
 };
 
@@ -97,8 +101,7 @@ export function emptyTaskWorkspace(): TaskWorkspaceSnapshot {
     tasks: [],
     lanes: [],
     tags: [],
-    defaultLaneId: 'kanban-lane-todo',
-    completionLaneId: 'kanban-lane-done',
+    defaultLaneId: null,
     viewPreferences: {}
   };
 }
@@ -108,8 +111,8 @@ export function sortTaskWorkspace(snapshot: TaskWorkspaceSnapshot): TaskWorkspac
   const laneOrder = new Map(lanes.map((lane, index) => [lane.id, index]));
   const tasks = [...snapshot.tasks].sort(
     (a, b) =>
-      (laneOrder.get(a.laneId) ?? Number.MAX_SAFE_INTEGER) -
-        (laneOrder.get(b.laneId) ?? Number.MAX_SAFE_INTEGER) ||
+      (laneOrder.get(a.laneId ?? '') ?? Number.MAX_SAFE_INTEGER) -
+        (laneOrder.get(b.laneId ?? '') ?? Number.MAX_SAFE_INTEGER) ||
       a.boardPosition - b.boardPosition ||
       a.id.localeCompare(b.id)
   );
@@ -127,13 +130,15 @@ export function stepProgress(steps: readonly Pick<TaskStep, 'completed'>[] | und
 export function normalizeTaskWorkspace(snapshot: TaskWorkspaceSnapshot): TaskWorkspaceSnapshot {
   return {
     ...snapshot,
+    defaultLaneId: snapshot.defaultLaneId ?? null,
     tasks: snapshot.tasks.map((task) =>
-      Array.isArray(task.steps) && isTaskPriority(task.priority)
+      Array.isArray(task.steps) && isTaskPriority(task.priority) && task.completedAt !== undefined
         ? task
         : {
             ...task,
             steps: Array.isArray(task.steps) ? task.steps : [],
-            priority: isTaskPriority(task.priority) ? task.priority : defaultTaskPriority
+            priority: isTaskPriority(task.priority) ? task.priority : defaultTaskPriority,
+            completedAt: task.completedAt ?? null
           }
     )
   };

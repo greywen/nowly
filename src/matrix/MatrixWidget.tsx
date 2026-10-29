@@ -5,6 +5,7 @@ import { quadrantLabel, quadrantOrder } from './matrix-model';
 import { FilterSelect, type FilterOption } from '../components/FilterSelect';
 import { TaskRow } from './TaskRow';
 import { InlineTaskAdd } from '../tasks/InlineTaskAdd';
+import { useTaskDrag } from '../tasks/TaskDragContext';
 import { t } from '../i18n';
 
 const quadrantClass: Record<Quadrant, string> = {
@@ -57,6 +58,7 @@ export function MatrixWidget({
   // The task currently being dragged and the quadrant hovered as a drop target.
   // Kept in component state because the WebView's dataTransfer is unreliable for
   // structured payloads, mirroring the kanban board's approach.
+  const taskDrag = useTaskDrag();
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropQuadrant, setDropQuadrant] = useState<Quadrant | null>(null);
   // The active tag filter. `null` means "show every task"; otherwise only tasks
@@ -93,11 +95,14 @@ export function MatrixWidget({
       event.dataTransfer.setData('text/plain', task.id);
     }
     setDraggingId(task.id);
+    // Open tasks can also be dropped into a kanban lane.
+    if (!task.completed) taskDrag.startMatrixDrag(task.id);
   }
 
   function onTaskDragEnd() {
     setDraggingId(null);
     setDropQuadrant(null);
+    taskDrag.endMatrixDrag();
   }
 
   function onQuadrantDragOver(event: DragEvent<HTMLElement>, quadrant: Quadrant) {

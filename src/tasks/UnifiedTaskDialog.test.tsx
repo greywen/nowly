@@ -16,12 +16,12 @@ const workspace: TaskWorkspaceSnapshot = {
   ],
   tags: [],
   defaultLaneId: 'lane-a',
-  completionLaneId: 'lane-done',
   viewPreferences: {}
 };
 
 const created: Task = {
   id: 'task-1', title: '整理周报', description: '', priority: 'important_urgent', dueDate: null, completed: false,
+  completedAt: null,
   laneId: 'lane-a', boardPosition: 0, tagIds: [], steps: [],
   createdAt: 'x', updatedAt: 'x'
 };
@@ -161,16 +161,43 @@ describe('UnifiedTaskDialog', () => {
     })));
   });
 
-  it('derives completion from the chosen lane', async () => {
+  it('keeps completion unchanged when the lane changes', async () => {
     const user = userEvent.setup();
-    const updateWorkspaceTask = vi.fn().mockResolvedValue(created);
-    render(<UnifiedTaskDialog mode={{ type: 'edit', task: created }} onClose={vi.fn()} />,
-      { wrapper: wrapper({ getTaskWorkspaceSnapshot: vi.fn().mockResolvedValue({ ...workspace, tasks: [created] }), updateWorkspaceTask }) });
+    const done = { ...created, completed: true };
+    const updateWorkspaceTask = vi.fn().mockResolvedValue(done);
+    render(<UnifiedTaskDialog mode={{ type: 'edit', task: done }} onClose={vi.fn()} />,
+      { wrapper: wrapper({ getTaskWorkspaceSnapshot: vi.fn().mockResolvedValue({ ...workspace, tasks: [done] }), updateWorkspaceTask }) });
     await user.click(await screen.findByRole('combobox', { name: '看板泳道' }));
     await user.click(screen.getByRole('option', { name: '已完成' }));
     await user.click(screen.getByRole('button', { name: '保存任务' }));
     await waitFor(() => expect(updateWorkspaceTask).toHaveBeenCalledWith('task-1', expect.objectContaining({
       laneId: 'lane-done', completed: true
     })));
+  });
+
+  it('hides the lane for matrix tasks and keeps new ones off the board, open', async () => {
+    const user = userEvent.setup();
+    const createWorkspaceTask = vi.fn().mockResolvedValue(created);
+    render(<UnifiedTaskDialog mode={{ type: 'create', dueDate: null }} showLane={false} onClose={vi.fn()} />,
+      { wrapper: wrapper({ getTaskWorkspaceSnapshot: vi.fn().mockResolvedValue(workspace), createWorkspaceTask }) });
+    await user.type(await screen.findByLabelText('任务标题'), '写周报');
+    expect(screen.queryByRole('combobox', { name: '看板泳道' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '保存任务' }));
+    await waitFor(() => expect(createWorkspaceTask).toHaveBeenCalledWith(expect.objectContaining({
+      title: '写周报', laneId: null, completed: false
+    })));
+  });
+
+  it('hides the lane when editing a task that is off the board and keeps it off', async () => {
+    const user = userEvent.setup();
+    const updateWorkspaceTask = vi.fn().mockResolvedValue(created);
+    const offBoard = { ...created, laneId: null };
+    render(<UnifiedTaskDialog mode={{ type: 'edit', task: offBoard }} onClose={vi.fn()} />,
+      { wrapper: wrapper({ getTaskWorkspaceSnapshot: vi.fn().mockResolvedValue(workspace), updateWorkspaceTask }) });
+    const title = await screen.findByLabelText('任务标题');
+    expect(screen.queryByRole('combobox', { name: '看板泳道' })).not.toBeInTheDocument();
+    await user.type(title, '!');
+    await user.click(screen.getByRole('button', { name: '保存任务' }));
+    await waitFor(() => expect(updateWorkspaceTask).toHaveBeenCalledWith(offBoard.id, expect.objectContaining({ laneId: null })));
   });
 });

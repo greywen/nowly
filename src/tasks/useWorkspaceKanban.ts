@@ -36,6 +36,19 @@ export function useWorkspaceKanban() {
     }
   }, [workspace]);
 
+  const completeCard = useCallback(async (id: string) => {
+    setDragError(null);
+    try {
+      await workspace.setTaskCompleted(id, true);
+    } catch (error) {
+      setDragError(
+        typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string'
+          ? error.message
+          : t('taskWorkspace.completionFailed')
+      );
+    }
+  }, [workspace]);
+
   const reorderLanes = useCallback(async (orderedIds: string[]) => {
     setDragError(null);
     try {
@@ -59,13 +72,10 @@ export function useWorkspaceKanban() {
     },
     createLane: (draft: KanbanLaneDraft) => workspace.createLane(draft),
     updateLane: (id: string, draft: KanbanLaneDraft) => workspace.updateLane(id, draft),
-    deleteLane: (id: string) => {
-      // Cards in a deleted lane move to the first survivor rather than being
-      // orphaned, which would hide them from the board entirely.
-      const fallback = workspace.workspace.data.lanes.find((lane) => lane.id !== id)?.id ?? null;
-      return workspace.deleteLane(id, fallback);
-    },
+    // The lane's tasks leave the board and stay in the matrix.
+    deleteLane: (id: string) => workspace.deleteLane(id),
     reorderLanes,
-    moveCard
+    moveCard,
+    completeCard
   };
 }

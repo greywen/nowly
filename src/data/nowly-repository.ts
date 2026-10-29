@@ -190,10 +190,10 @@ export type NowlyRepository = {
   moveTaskToDate?(id: string, dueDate: string | null): Promise<WorkspaceTask>;
   createTaskLane?(draft: TaskLaneDraft): Promise<TaskLane>;
   updateTaskLane?(id: string, draft: TaskLaneDraft): Promise<TaskLane>;
-  deleteTaskLane?(id: string, replacementLaneId?: string | null): Promise<TaskWorkspaceSnapshot>;
+  // The lane's tasks stay in the matrix with no lane.
+  deleteTaskLane?(id: string): Promise<TaskWorkspaceSnapshot>;
   reorderTaskLanes?(orderedIds: string[]): Promise<TaskLane[]>;
   setDefaultTaskLane?(id: string): Promise<TaskWorkspaceSnapshot>;
-  setCompletionTaskLane?(id: string): Promise<TaskWorkspaceSnapshot>;
   createTaskTag?(draft: TaskTagDraft): Promise<TaskTag>;
   updateTaskTag?(id: string, draft: TaskTagDraft): Promise<TaskTag>;
   archiveTaskTag?(id: string, archived: boolean): Promise<TaskTag>;

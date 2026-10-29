@@ -1,24 +1,42 @@
 import { Plus, Settings, X } from '../components/icons';
-import { type DragEvent, useMemo, useRef, useState } from 'react';
+import { type DragEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { laneCardCount } from './kanban-view';
 import { KanbanLane } from './KanbanLane';
 import { KanbanLaneDialog } from './KanbanLaneDialog';
+import { KanbanDoneButton } from './KanbanDoneButton';
+import { KanbanDoneDropZone } from './KanbanDoneDropZone';
+import { boardDoneEntries } from './kanban-done';
 import type { KanbanLaneDraft } from './kanban-model';
 import { useWorkspaceKanban } from '../tasks/useWorkspaceKanban';
 import { useTaskWorkspace } from '../tasks/TaskWorkspaceContext';
+import { useTaskDrag } from '../tasks/TaskDragContext';
 import { UnifiedTaskDialog } from '../tasks/UnifiedTaskDialog';
 import { TaskSettingsDialog } from '../tasks/TaskSettingsDialog';
 import { defaultTaskPriority } from '../tasks/task-model';
+import { priorityColors } from '../tasks/task-projections';
+import { celebrateTaskCompletion, prefersReducedMotion } from '../tasks/completion-celebration';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { FilterSelect, type FilterOption } from '../components/FilterSelect';
 import { t } from '../i18n';
 
 // Drag payloads carried in component state (dataTransfer is unreliable in the
 // WebView for structured data, and we keep everything static per the design).
+// Matrix tasks dragged onto the board arrive through TaskDragContext instead.
 type Drag =
   | { kind: 'card'; cardId: string }
   | { kind: 'lane'; laneId: string }
   | null;
+
+type DropTarget =
+  | { kind: 'lane'; laneId: string; visibleIndex: number }
+  | { kind: 'done' }
+  | null;
+
+function sameTarget(a: DropTarget, b: DropTarget) {
+  if (a === null || b === null) return a === b;
+  if (a.kind === 'done' || b.kind === 'done') return a.kind === b.kind;
+  return a.laneId === b.laneId && a.visibleIndex === b.visibleIndex;
+}
 
 type DialogState =
   // `afterLaneId` places the new lane to the right of that lane.
@@ -51,10 +69,13 @@ export function KanbanWidget({
   const workspace = useTaskWorkspace();
   const { snapshot, dragError } = kanban;
   const data = snapshot.data;
-  const { defaultLaneId, completionLaneId } = workspace.workspace.data;
+  const { defaultLaneId } = workspace.workspace.data;
   const [dialog, setDialog] = useState<DialogState>(null);
+  const taskDrag = useTaskDrag();
   const [drag, setDrag] = useState<Drag>(null);
-  const [dropLaneId, setDropLaneId] = useState<string | null>(null);
+  const [dropTarget, setDropTargetState] = useState<DropTarget>(null);
+  const [zoneConfirmation, setZoneConfirmation] = useState<{ title: string; solid: boolean } | null>(null);
+  const zoneTimerRef = useRef(0);
   const [filterTag, setFilterTag] = useState('');
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState('');
@@ -90,7 +111,7 @@ export function KanbanWidget({
       description: '',
       priority: defaultTaskPriority,
       dueDate: null,
-      completed: laneId === completionLaneId,
+      completed: false,
       laneId,
       tagIds: []
     });
@@ -120,34 +141,92 @@ export function KanbanWidget({
   }
 
   // ----- drag and drop --------------------------------------------------------
-  function onCardDragStart(event: DragEvent<HTMLElement>, cardId: string) {
+  // A board card or an open matrix task can be dropped into a lane.
+  const draggingTaskId = drag?.kind === 'card' ? drag.cardId : drag ? null : taskDrag.matrixTaskId;
+  const doneEntries = useMemo(() => boardDoneEntries(workspace.workspace.data), [workspace.workspace.data]);
+  const hasLanes = status !== 'loading' && data.lanes.length > 0;
+
+  useEffect(() => () => window.clearTimeout(zoneTimerRef.current), []);
+
+  function setDropTarget(next: DropTarget) {
+    setDropTargetState((current) => sameTarget(current, next) ? current : next);
+  }
+
+  function setDataTransfer(event: DragEvent<HTMLElement>, id: string) {
+    if (!event.dataTransfer) return;
     event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('text/plain', cardId);
+    event.dataTransfer.setData('text/plain', id);
+  }
+
+  function onCardDragStart(event: DragEvent<HTMLElement>, cardId: string) {
+    setDataTransfer(event, cardId);
     setDrag({ kind: 'card', cardId });
   }
 
   function onLaneDragStart(event: DragEvent<HTMLElement>, laneId: string) {
-    event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('text/plain', laneId);
+    setDataTransfer(event, laneId);
     setDrag({ kind: 'lane', laneId });
   }
 
+  // The dragged node may be unmounted by the drop's re-render and never fire
+  // `dragend`, so drops clean up through here as well.
   function onDragEnd() {
     setDrag(null);
-    setDropLaneId(null);
+    setDropTarget(null);
+    taskDrag.endMatrixDrag();
   }
 
-  function onLaneDragOver(event: DragEvent<HTMLElement>, laneId: string) {
-    if (!drag) return;
+  function onLaneDragOver(event: DragEvent<HTMLElement>, laneId: string, visibleIndex: number) {
+    if (drag?.kind === 'lane') {
+      event.preventDefault();
+      return;
+    }
+    if (!draggingTaskId) return;
     event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
-    if (drag.kind === 'card') setDropLaneId(laneId);
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    setDropTarget({ kind: 'lane', laneId, visibleIndex });
   }
 
-  function onCardDropInLane(laneId: string, index: number) {
-    if (drag?.kind !== 'card') return;
-    void kanban.moveCard(drag.cardId, laneId, index);
+  function onLaneDrop(event: DragEvent<HTMLElement>, laneId: string, index: number) {
+    event.preventDefault();
+    if (drag?.kind === 'lane') {
+      onLaneDropReorder(laneId);
+      return;
+    }
+    if (draggingTaskId) void kanban.moveCard(draggingTaskId, laneId, index);
     onDragEnd();
+  }
+
+  function onBodyDragOver(event: DragEvent<HTMLElement>) {
+    const target = event.target as Element;
+    if (!target.closest?.('.kanban-lane, .kanban-done-drop')) setDropTarget(null);
+  }
+
+  function onDoneDragOver(event: DragEvent<HTMLElement>) {
+    if (drag?.kind !== 'card') return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    setDropTarget({ kind: 'done' });
+  }
+
+  function onDoneDrop(event: DragEvent<HTMLElement>) {
+    event.preventDefault();
+    const cardId = drag?.kind === 'card' ? drag.cardId : null;
+    onDragEnd();
+    const task = cardId ? workspace.workspace.data.tasks.find((item) => item.id === cardId) : undefined;
+    if (!task) return;
+    // Keep the zone up while the stamp plays (or the reduced-motion message shows).
+    const solid = prefersReducedMotion();
+    window.clearTimeout(zoneTimerRef.current);
+    setZoneConfirmation({ title: task.title, solid });
+    zoneTimerRef.current = window.setTimeout(() => setZoneConfirmation(null), solid ? 700 : 260);
+    celebrateTaskCompletion({
+      title: task.title,
+      color: priorityColors[task.priority],
+      dropPoint: { x: event.clientX, y: event.clientY },
+      announcement: t('kanbanDone.dropped', { title: task.title })
+    });
+    void kanban.completeCard(task.id);
   }
 
   function onLaneDropReorder(targetLaneId: string) {
@@ -196,6 +275,14 @@ export function KanbanWidget({
           <span />
         )}
         <div className="toolbar-actions">
+          {hasLanes ? (
+            <KanbanDoneButton
+              entries={doneEntries}
+              now={new Date()}
+              pendingTaskIds={workspace.pendingTaskIds}
+              onReopen={(taskId) => void workspace.setTaskCompleted(taskId, false).catch(() => undefined)}
+            />
+          ) : null}
           <button
             type="button"
             className="btn btn-icon"
@@ -218,7 +305,7 @@ export function KanbanWidget({
         </div>
       </div>
 
-      <div className="panel-body kanban-body">
+      <div className="panel-body kanban-body" onDragOver={draggingTaskId ? onBodyDragOver : undefined}>
         {status === 'error' ? (
           <div className="module-message" role="alert">
             <span>{errorMessage ?? t('kanbanWidget.errorLoad')}</span>
@@ -250,41 +337,45 @@ export function KanbanWidget({
           </div>
         ) : (
           <div className="kanban-scroll" data-testid="kanban-scroll">
-            <div className="kanban-lanes">
-              {data.lanes.map((lane) => (
-                <KanbanLane
-                  key={lane.id}
-                  lane={lane}
-                  snapshot={data}
-                  todayIso={todayIso}
-                  isDropTarget={drag?.kind === 'card' && dropLaneId === lane.id}
-                  isCompletionLane={lane.id === completionLaneId}
-                  onAddTask={(title) => addTask(lane.id, title)}
-                  onEditLane={(trigger) => openDialog({ type: 'lane-edit', laneId: lane.id }, trigger)}
-                  onAddLaneRight={(trigger) => openDialog({ type: 'lane-create', afterLaneId: lane.id }, trigger)}
-                  onDeleteLane={data.lanes.length > 1
-                    ? (trigger) => openDialog({ type: 'lane-delete', laneId: lane.id }, trigger)
-                    : undefined}
-                  onOpenCard={(cardId, trigger) => openDialog({ type: 'card-edit', cardId }, trigger)}
-                  onLaneDragStart={(event) => onLaneDragStart(event, lane.id)}
-                  onLaneDragEnd={onDragEnd}
-                  onLaneDragOver={(event) => {
-                    onLaneDragOver(event, lane.id);
-                    if (drag?.kind === 'lane') event.preventDefault();
-                  }}
-                  onLaneDrop={(event, cardIndex) => {
-                    event.preventDefault();
-                    if (drag?.kind === 'lane') onLaneDropReorder(lane.id);
-                    else onCardDropInLane(lane.id, cardIndex);
-                  }}
-                  onCardDragStart={onCardDragStart}
-                  onCardDragEnd={onDragEnd}
-                  matchesFilter={matchesFilter}
-                />
-              ))}
+            <div className={`kanban-lanes${draggingTaskId ? ' kanban-lanes--receiving' : ''}`}>
+              {data.lanes.map((lane) => {
+                const target = dropTarget?.kind === 'lane' && dropTarget.laneId === lane.id ? dropTarget : null;
+                return (
+                  <KanbanLane
+                    key={lane.id}
+                    lane={lane}
+                    snapshot={data}
+                    todayIso={todayIso}
+                    isDropTarget={target !== null}
+                    draggingTaskId={draggingTaskId}
+                    dropIndex={target?.visibleIndex ?? null}
+                    onAddTask={(title) => addTask(lane.id, title)}
+                    onEditLane={(trigger) => openDialog({ type: 'lane-edit', laneId: lane.id }, trigger)}
+                    onAddLaneRight={(trigger) => openDialog({ type: 'lane-create', afterLaneId: lane.id }, trigger)}
+                    onDeleteLane={(trigger) => openDialog({ type: 'lane-delete', laneId: lane.id }, trigger)}
+                    onOpenCard={(cardId, trigger) => openDialog({ type: 'card-edit', cardId }, trigger)}
+                    onLaneDragStart={(event) => onLaneDragStart(event, lane.id)}
+                    onLaneDragEnd={onDragEnd}
+                    onLaneDragOver={(event, visibleIndex) => onLaneDragOver(event, lane.id, visibleIndex)}
+                    onLaneDrop={(event, index) => onLaneDrop(event, lane.id, index)}
+                    onCardDragStart={onCardDragStart}
+                    onCardDragEnd={onDragEnd}
+                    matchesFilter={matchesFilter}
+                  />
+                );
+              })}
             </div>
           </div>
         )}
+        {hasLanes && (drag?.kind === 'card' || zoneConfirmation) ? (
+          <KanbanDoneDropZone
+            active={dropTarget?.kind === 'done'}
+            confirmation={zoneConfirmation}
+            onDragOver={onDoneDragOver}
+            onDragLeave={() => setDropTarget(null)}
+            onDrop={onDoneDrop}
+          />
+        ) : null}
       </div>
 
       {dialog?.type === 'lane-create' ? (
@@ -314,10 +405,7 @@ export function KanbanWidget({
           title={t('kanbanLaneDialog.deleteTitle', { name: deletingLane.name })}
           description={
             laneCardCount(data, deletingLane.id) > 0
-              ? t('kanbanLaneDialog.deleteWithCards', {
-                count: laneCardCount(data, deletingLane.id),
-                target: data.lanes.find((lane) => lane.id !== deletingLane.id)?.name ?? ''
-              })
+              ? t('kanbanLaneDialog.deleteWithCards', { count: laneCardCount(data, deletingLane.id) })
               : t('kanbanLaneDialog.deleteEmpty')
           }
           tone="danger"

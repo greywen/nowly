@@ -245,10 +245,7 @@ pub fn perform(db: &Connection, action: &Action) -> Result<Change, CommandError>
         Action::CreateTask { draft } => {
             let workspace = task_workspace::snapshot(db)?;
             let defaults = json!({"title":"","description":"","priority":null,"dueDate":null,"completed":false,"laneId":workspace.default_lane_id});
-            let mut merged = merge(defaults, draft, TASK_FIELDS)?;
-            if draft.get("laneId").is_some() && draft.get("completed").is_none() {
-                merged["completed"] = (merged["laneId"] == workspace.completion_lane_id).into();
-            }
+            let merged = merge(defaults, draft, TASK_FIELDS)?;
             let draft: TaskDraft =
                 serde_json::from_value(merged).map_err(|_| invalid("任务字段类型无效。"))?;
             if let Some(value) = &draft.due_date {
@@ -270,10 +267,7 @@ pub fn perform(db: &Connection, action: &Action) -> Result<Change, CommandError>
                 .iter()
                 .find(|t| &t.id == id)
                 .ok_or_else(|| invalid("任务不存在，请重新查询。"))?;
-            let mut merged = merge(value(task)?, patch, TASK_FIELDS)?;
-            if patch.get("laneId").is_some() && patch.get("completed").is_none() {
-                merged["completed"] = (merged["laneId"] == workspace.completion_lane_id).into();
-            }
+            let merged = merge(value(task)?, patch, TASK_FIELDS)?;
             let mut draft: TaskDraft =
                 serde_json::from_value(merged).map_err(|_| invalid("任务字段类型无效。"))?;
             if let Some(value) = &draft.due_date {
@@ -380,7 +374,7 @@ pub fn query(db: &Connection, q: &Query, p: &Permissions) -> Result<QueryResult,
                     && q.priority
                         .as_ref()
                         .is_none_or(|v| &t.priority == v)
-                    && q.lane_id.as_ref().is_none_or(|v| &t.lane_id == v)
+                    && q.lane_id.as_ref().is_none_or(|v| t.lane_id.as_ref() == Some(v))
                     && q.due_before
                         .as_ref()
                         .is_none_or(|v| t.due_date.as_ref().is_some_and(|d| d <= v))
@@ -389,7 +383,7 @@ pub fn query(db: &Connection, q: &Query, p: &Permissions) -> Result<QueryResult,
                     data:json!({"id":t.id,"priority":t.priority,"dueDate":t.due_date,"completed":t.completed,"laneId":t.lane_id})});
             }
             metadata = json!({"lanes":workspace.lanes.iter().map(|l|json!({"id":l.id,"name":l.name})).collect::<Vec<_>>(),
-                "defaultLaneId":workspace.default_lane_id,"completionLaneId":workspace.completion_lane_id});
+                "defaultLaneId":workspace.default_lane_id});
         }
         _ => return Err(invalid("只支持日历和任务查询。")),
     }

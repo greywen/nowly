@@ -167,22 +167,16 @@ function shimSteps(value: unknown, current: unknown): Dict[] {
   });
 }
 
+// Lanes are user-created only, like the native store: nothing is seeded.
 function ensureTaskWorkspace(store: Store) {
-  if (store.kanban.lanes.length === 0) {
-    const stamp = nowIso();
-    store.kanban.lanes = [
-      { id: 'kanban-lane-todo', name: '待处理', color: '#4FC9DA', position: 0, createdAt: stamp, updatedAt: stamp },
-      { id: 'kanban-lane-doing', name: '进行中', color: '#E8C444', position: 1, createdAt: stamp, updatedAt: stamp },
-      { id: 'kanban-lane-done', name: '已完成', color: '#B8D935', position: 2, createdAt: stamp, updatedAt: stamp }
-    ];
-  }
-  store.tasks = store.tasks.map((task, index) => {
+  store.tasks = store.tasks.map((task) => {
     if ('laneId' in task && 'boardPosition' in task) {
       const { views: _views, collaboratorIds: _collaborators, ...rest } = task;
       return {
         ...rest,
         priority: browserTaskPriorities.includes(task.priority as string) ? task.priority : 'not_important_not_urgent',
-        steps: Array.isArray(task.steps) ? task.steps : []
+        steps: Array.isArray(task.steps) ? task.steps : [],
+        completedAt: task.completed === true ? (typeof task.completedAt === 'string' ? task.completedAt : task.updatedAt ?? nowIso()) : null
       };
     }
     const priority = typeof task.quadrant === 'string' && browserTaskPriorities.includes(task.quadrant)
@@ -197,8 +191,9 @@ function ensureTaskWorkspace(store: Store) {
       priority,
       dueDate,
       completed,
-      laneId: completed ? 'kanban-lane-done' : 'kanban-lane-todo',
-      boardPosition: index,
+      completedAt: completed ? task.updatedAt ?? nowIso() : null,
+      laneId: null,
+      boardPosition: 0,
       tagIds: [],
       steps: [],
       createdAt: task.createdAt ?? nowIso(),
@@ -371,8 +366,10 @@ export function installBrowserTauriBackend() {
     tasks: store.tasks,
     lanes: store.kanban.lanes,
     tags: store.kanban.tags.map((tag) => ({ archivedAt: null, ...tag })),
-    defaultLaneId: (store.settings.defaultTaskLaneId as string) ?? 'kanban-lane-todo',
-    completionLaneId: (store.settings.completionTaskLaneId as string) ?? 'kanban-lane-done',
+    // Like the native store: the saved lane while it exists, else the first lane.
+    defaultLaneId: store.kanban.lanes.some((lane) => lane.id === store.settings.defaultTaskLaneId)
+      ? store.settings.defaultTaskLaneId as string
+      : [...store.kanban.lanes].sort((a, b) => Number(a.position) - Number(b.position))[0]?.id as string ?? null,
     viewPreferences: (store.settings.taskViewPreferences as Dict) ?? {}
   });
 
@@ -674,18 +671,20 @@ export function installBrowserTauriBackend() {
     create_task: (a) => {
       const { steps, ...draft } = a.draft as Dict;
       const normalizedSteps = shimSteps(steps, []);
-      const laneId = (draft.laneId as string) ?? 'kanban-lane-todo';
+      // Like the backend, a task without a lane stays off the kanban board.
+      const laneId = (draft.laneId as string | null | undefined) ?? null;
       const task: Dict = {
         id: id('t'),
         description: '',
         dueDate: null,
         completed: false,
-        laneId,
-        boardPosition: store.tasks.filter((item) => item.laneId === laneId).length,
         tagIds: [],
         createdAt: nowIso(),
         updatedAt: nowIso(),
         ...draft,
+        completedAt: draft.completed === true ? nowIso() : null,
+        laneId,
+        boardPosition: laneId === null ? 0 : store.tasks.filter((item) => item.laneId === laneId).length,
         priority: (draft.priority as string | null) ?? 'not_important_not_urgent',
         steps: normalizedSteps
       };
@@ -700,7 +699,8 @@ export function installBrowserTauriBackend() {
       store.tasks = store.tasks.map((task) => {
         if (task.id !== a.id) return task;
         const draft = a.draft as Dict;
-        updated = { ...task, ...draft, priority: (draft.priority as string | null) ?? 'not_important_not_urgent', steps, updatedAt: nowIso() };
+        const completedAt = draft.completed !== true ? null : task.completed === true ? task.completedAt ?? nowIso() : nowIso();
+        updated = { ...task, ...draft, priority: (draft.priority as string | null) ?? 'not_important_not_urgent', steps, completedAt, updatedAt: nowIso() };
         return updated;
       });
       persist();
@@ -711,31 +711,38 @@ export function installBrowserTauriBackend() {
       persist();
     },
     set_task_completed: (a) => {
-      let updated: Dict | undefined;
-      const targetLane = a.completed
-        ? ((store.settings.completionTaskLaneId as string) ?? 'kanban-lane-done')
-        : ((store.settings.defaultTaskLaneId as string) ?? 'kanban-lane-todo');
-      store.tasks = store.tasks.map((task) =>
-        task.id === a.id
-          ? (updated = { ...task, completed: a.completed, laneId: targetLane, updatedAt: nowIso() })
-          : task
-      );
+      const current = store.tasks.find((task) => task.id === a.id);
+      if (!current || current.completed === a.completed) return current;
+      // The task keeps its lane; reopening puts it back at the top of that lane.
+      const updated: Dict = a.completed
+        ? { ...current, completed: true, completedAt: nowIso(), updatedAt: nowIso() }
+        : { ...current, completed: false, completedAt: null, boardPosition: current.laneId ? -1 : current.boardPosition, updatedAt: nowIso() };
+      store.tasks = store.tasks.map((task) => task.id === a.id ? updated : task);
+      if (!a.completed && updated.laneId) {
+        const lane = store.tasks.filter((task) => task.laneId === updated.laneId)
+          .sort((left, right) => Number(left.boardPosition) - Number(right.boardPosition));
+        const positions = new Map(lane.map((task, index) => [task.id, index]));
+        store.tasks = store.tasks.map((task) => positions.has(task.id) ? { ...task, boardPosition: positions.get(task.id) } : task);
+      }
       persist();
-      return updated;
+      return store.tasks.find((task) => task.id === a.id);
     },
     move_task_to_lane: (a) => {
       const moving = store.tasks.find((task) => task.id === a.id);
       if (!moving) return undefined;
       const laneId = a.laneId as string;
-      const completionLane = (store.settings.completionTaskLaneId as string) ?? 'kanban-lane-done';
-      const target = store.tasks.filter((task) => task.id !== a.id && task.laneId === laneId)
+      // The index counts open cards only; completed cards stay after them. Moving
+      // a task into a lane reopens it.
+      const inLane = store.tasks.filter((task) => task.id !== a.id && task.laneId === laneId)
         .sort((left, right) => Number(left.boardPosition) - Number(right.boardPosition));
-      target.splice(Number(a.targetIndex), 0, moving);
+      const open = inLane.filter((task) => task.completed !== true);
+      open.splice(Math.max(0, Math.min(Number(a.targetIndex), open.length)), 0, moving);
+      const target = [...open, ...inLane.filter((task) => task.completed === true)];
       const positions = new Map(target.map((task, index) => [task.id, index]));
       let updated: Dict | undefined;
       store.tasks = store.tasks.map((task) => {
         if (task.id === a.id) {
-          updated = { ...task, laneId, completed: laneId === completionLane, boardPosition: positions.get(task.id) ?? 0, updatedAt: nowIso() };
+          updated = { ...task, laneId, completed: false, completedAt: null, boardPosition: positions.get(task.id) ?? 0, updatedAt: nowIso() };
           return updated;
         }
         return positions.has(task.id) ? { ...task, boardPosition: positions.get(task.id) } : task;
@@ -784,25 +791,14 @@ export function installBrowserTauriBackend() {
       return updated;
     },
     delete_task_lane: (a) => {
-      if (store.kanban.lanes.length === 1 && store.kanban.lanes[0].id === a.id) {
-        throw { code: 'validation_error', field: 'id', message: '至少保留一个泳道。' };
-      }
-      const replacement = a.replacementLaneId as string | null;
+      // The lane's tasks leave the board and stay in the matrix; any lane,
+      // including the last one, can be deleted.
       const removedId = a.id as string;
-      if (replacement) {
-        const start = store.tasks.filter((task) => task.laneId === replacement).length;
-        let offset = 0;
-        store.tasks = store.tasks.map((task) => task.laneId === removedId
-          ? { ...task, laneId: replacement, boardPosition: start + offset++, updatedAt: nowIso() }
-          : task);
-      } else {
-        store.tasks = store.tasks.filter((task) => task.laneId !== removedId);
-      }
+      store.tasks = store.tasks.map((task) => task.laneId === removedId
+        ? { ...task, laneId: null, boardPosition: 0, updatedAt: nowIso() }
+        : task);
       store.kanban.lanes = store.kanban.lanes.filter((lane) => lane.id !== removedId);
-      if (store.settings.defaultTaskLaneId === removedId) store.settings.defaultTaskLaneId = replacement;
-      if (store.settings.completionTaskLaneId === removedId) store.settings.completionTaskLaneId = replacement;
-      const completionLane = (store.settings.completionTaskLaneId as string) ?? 'kanban-lane-done';
-      store.tasks = store.tasks.map((task) => ({ ...task, completed: task.laneId === completionLane }));
+      if (store.settings.defaultTaskLaneId === removedId) delete store.settings.defaultTaskLaneId;
       persist();
       return taskWorkspaceSnapshot();
     },
@@ -818,16 +814,6 @@ export function installBrowserTauriBackend() {
     },
     set_default_task_lane: (a) => {
       store.settings.defaultTaskLaneId = a.id;
-      persist();
-      return taskWorkspaceSnapshot();
-    },
-    set_completion_task_lane: (a) => {
-      store.settings.completionTaskLaneId = a.id;
-      store.tasks = store.tasks.map((task) => ({
-        ...task,
-        completed: task.laneId === a.id,
-        updatedAt: nowIso()
-      }));
       persist();
       return taskWorkspaceSnapshot();
     },

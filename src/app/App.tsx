@@ -15,6 +15,7 @@ import { enterForegroundMode, enterWallpaperMode } from '../lib/window-mode';
 import { MatrixWidget } from '../matrix/MatrixWidget';
 import { KanbanWidget } from '../kanban/KanbanWidget';
 import { TaskWorkspaceProvider, useTaskWorkspace } from '../tasks/TaskWorkspaceContext';
+import { TaskDragProvider } from '../tasks/TaskDragContext';
 import { IconStyleProvider } from '../components/icons';
 import { useWorkspaceTasks } from '../tasks/useWorkspaceTasks';
 import { ModalRoot } from '../modals/ModalRoot';
@@ -399,7 +400,9 @@ function AppContent() {
 export function App() {
   return (
     <TaskWorkspaceProvider>
-      <AppContent />
+      <TaskDragProvider>
+        <AppContent />
+      </TaskDragProvider>
     </TaskWorkspaceProvider>
   );
 }

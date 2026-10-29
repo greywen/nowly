@@ -637,7 +637,6 @@ fn main() {
             task_workspace::delete_task_lane,
             task_workspace::reorder_task_lanes,
             task_workspace::set_default_task_lane,
-            task_workspace::set_completion_task_lane,
             task_workspace::create_task_tag,
             task_workspace::update_task_tag,
             task_workspace::archive_task_tag,

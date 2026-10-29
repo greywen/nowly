@@ -130,8 +130,7 @@ test.beforeEach(async ({ page }) => {
           if (command === 'get_task_workspace_snapshot') {
             return {
               tasks: [], lanes: [], tags: [],
-              defaultLaneId: null, completionLaneId: null,
-              viewPreferences: {}
+              defaultLaneId: null, viewPreferences: {}
             };
           }
           if (command === 'get_app_settings') return settings;

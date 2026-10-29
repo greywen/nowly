@@ -36,7 +36,7 @@ const secondReminderEvent = {
 
 const urgentTask = {
   id: 'task-1', title: '发布检查', description: '', priority: 'important_urgent' as const,
-  dueDate: '2026-09-12', completed: false, laneId: 'todo', boardPosition: 0,
+  dueDate: '2026-09-12', completed: false, completedAt: null, laneId: 'todo', boardPosition: 0,
   tagIds: [], steps: [], createdAt: 'x', updatedAt: '2026-09-01T00:00:00Z'
 };
 

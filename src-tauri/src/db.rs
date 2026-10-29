@@ -66,7 +66,131 @@ const MIGRATIONS: &[(i64, Migration)] = &[
     (36, migration_36_note_content_titles),
     (37, migration_37_task_steps),
     (38, migration_38_simplify_tasks),
+    (39, migration_39_completion_without_lane),
+    (40, migration_40_optional_task_lane),
+    (41, migration_41_reset_tasks_for_free_lanes),
 ];
+
+// Rebuilding `tasks` drops the old table; with foreign keys on, that would
+// cascade into steps, tag links and linked events. These migrations run with
+// foreign keys off and are checked with `foreign_key_check` before commit.
+const FOREIGN_KEYS_OFF_MIGRATIONS: &[i64] = &[40];
+
+fn apply_migration(connection: &mut Connection, version: i64, apply: Migration) -> Result<()> {
+    let foreign_keys_off = FOREIGN_KEYS_OFF_MIGRATIONS.contains(&version);
+    let enforced: bool = connection.query_row("PRAGMA foreign_keys", [], |row| row.get(0))?;
+    if foreign_keys_off && enforced {
+        connection.execute_batch("PRAGMA foreign_keys = OFF;")?;
+    }
+    let result = (|| {
+        let transaction = connection.transaction()?;
+        apply(&transaction)?;
+        if foreign_keys_off {
+            let violations: i64 = transaction.query_row(
+                "SELECT COUNT(*) FROM pragma_foreign_key_check",
+                [],
+                |row| row.get(0),
+            )?;
+            if violations != 0 {
+                return Err(rusqlite::Error::SqliteFailure(
+                    rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_CONSTRAINT_FOREIGNKEY),
+                    Some(format!("migration {version} left {violations} foreign key violations")),
+                ));
+            }
+        }
+        transaction.execute(
+            "INSERT INTO schema_migrations(version, applied_at)
+             VALUES (?1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+            [version],
+        )?;
+        transaction.commit()
+    })();
+    if foreign_keys_off && enforced {
+        connection.execute_batch("PRAGMA foreign_keys = ON;")?;
+    }
+    result
+}
+
+// A task may now be off the kanban board: tasks created from the matrix have
+// no lane. SQLite cannot relax NOT NULL in place, so the table is rebuilt with
+// identical columns; children keep referencing `tasks` by name.
+fn migration_40_optional_task_lane(transaction: &Transaction<'_>) -> Result<()> {
+    transaction.execute_batch(
+        "CREATE TABLE tasks_v40 (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            priority TEXT CHECK (priority IN
+              ('important_urgent','important_not_urgent','not_important_urgent','not_important_not_urgent')),
+            due_date TEXT,
+            completed INTEGER NOT NULL CHECK (completed IN (0,1)),
+            lane_id TEXT REFERENCES task_lanes(id),
+            board_position INTEGER NOT NULL,
+            linked_event_id TEXT REFERENCES events(id) ON DELETE SET NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+         );
+         INSERT INTO tasks_v40(id,title,description,priority,due_date,completed,lane_id,
+                               board_position,linked_event_id,created_at,updated_at)
+            SELECT id,title,description,priority,due_date,completed,lane_id,
+                   board_position,linked_event_id,created_at,updated_at FROM tasks;
+         DROP TABLE tasks;
+         ALTER TABLE tasks_v40 RENAME TO tasks;
+         CREATE INDEX idx_tasks_lane ON tasks(lane_id, board_position);
+         CREATE INDEX idx_tasks_priority ON tasks(priority, completed);
+         CREATE INDEX idx_tasks_due ON tasks(due_date, completed);
+         CREATE INDEX idx_tasks_updated ON tasks(updated_at);
+         CREATE UNIQUE INDEX idx_tasks_linked_event
+            ON tasks(linked_event_id) WHERE linked_event_id IS NOT NULL;",
+    )?;
+    crate::assistant::store::install_triggers(transaction)
+}
+
+// Lanes are now entirely user-made and only show progress; completion is a
+// system state with its own timestamp. Old boards mixed both meanings, so all
+// task data is cleared (an agreed, irreversible reset) and nothing is seeded:
+// a new board starts with no lanes.
+fn migration_41_reset_tasks_for_free_lanes(transaction: &Transaction<'_>) -> Result<()> {
+    transaction.execute_batch(
+        "UPDATE events SET linked_task_id=NULL WHERE linked_task_id IS NOT NULL;
+         DELETE FROM task_steps;
+         DELETE FROM task_tag_links;
+         DELETE FROM tasks;
+         DELETE FROM task_tags;
+         DELETE FROM task_lanes;
+         DELETE FROM settings WHERE key IN ('default_task_lane_id','task_view_preferences');
+         ALTER TABLE tasks ADD COLUMN completed_at TEXT;",
+    )?;
+    crate::assistant::store::install_triggers(transaction)
+}
+
+/// Lanes the pre-41 schema seeded; tests that exercise lane behaviour add them.
+#[cfg(test)]
+pub fn seed_test_lanes(connection: &Connection) {
+    connection
+        .execute_batch(
+            "INSERT INTO task_lanes(id,name,color,position,created_at,updated_at) VALUES
+               ('kanban-lane-todo','待处理','#4FC9DA',0,'t','t'),
+               ('kanban-lane-doing','进行中','#E8C444',1,'t','t'),
+               ('kanban-lane-done','已完成','#B8D935',2,'t','t');
+             INSERT INTO settings(key,value,updated_at)
+               VALUES ('default_task_lane_id','\"kanban-lane-todo\"','t');",
+        )
+        .unwrap();
+}
+
+// Completion is now the task's own flag (the matrix checkbox); no lane implies
+// it. When the default and completion lanes had collapsed into one lane, every
+// task was forced to completed, so those flags carry no information and reset.
+fn migration_39_completion_without_lane(transaction: &Transaction<'_>) -> Result<()> {
+    transaction.execute_batch(
+        "UPDATE tasks SET completed=0
+          WHERE EXISTS(SELECT 1 FROM settings d JOIN settings c ON d.value=c.value
+                        WHERE d.key='default_task_lane_id' AND c.key='completion_task_lane_id');
+         DELETE FROM settings WHERE key='completion_task_lane_id';",
+    )?;
+    crate::assistant::store::install_triggers(transaction)
+}
 
 // Every task now shows in both views and always has a quadrant; collaborators
 // are gone. Old membership/collaborator data is dropped, not migrated.
@@ -461,15 +585,7 @@ pub fn migrate(connection: &mut Connection) -> Result<()> {
         if applied {
             continue;
         }
-
-        let transaction = connection.transaction()?;
-        apply(&transaction)?;
-        transaction.execute(
-            "INSERT INTO schema_migrations(version, applied_at)
-             VALUES (?1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
-            [version],
-        )?;
-        transaction.commit()?;
+        apply_migration(connection, *version, *apply)?;
     }
     // Repair partially restored settings even after version 30 was recorded;
     // INSERT OR IGNORE never resets an existing menu's visibility or order.
@@ -1692,7 +1808,7 @@ mod tests {
             "INSERT OR IGNORE INTO events(id,title,start_at,end_at,all_day,category,color,note,created_at,updated_at)
                 VALUES('event:keep','Keep meeting','2026-10-13T10:00','2026-10-13T11:00',0,'','','','now','now');
              INSERT OR IGNORE INTO tasks(id,title,description,completed,lane_id,board_position,created_at,updated_at)
-                VALUES('task:keep','Keep task','',0,'kanban-lane-todo',0,'now','now');
+                VALUES('task:keep','Keep task','',0,NULL,0,'now','now');
              INSERT OR IGNORE INTO notes(id,content,color,pinned,style_variant,icon,created_at,updated_at)
                 VALUES('note:keep','content','#E8C444',0,0,'','now','now');",
         ).unwrap();
@@ -1937,14 +2053,7 @@ mod tests {
             if applied {
                 continue;
             }
-            let transaction = connection.transaction()?;
-            apply(&transaction)?;
-            transaction.execute(
-                "INSERT INTO schema_migrations(version, applied_at)
-                 VALUES (?1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
-                [version],
-            )?;
-            transaction.commit()?;
+            super::apply_migration(connection, *version, *apply)?;
         }
         Ok(())
     }
@@ -2655,8 +2764,8 @@ mod tests {
             "INSERT INTO tasks(id,title,description,completed,lane_id,board_position,created_at,updated_at)
                 VALUES('t1','任务','',0,'kanban-lane-todo',0,'c','u');",
         ).unwrap();
-        migrate(&mut connection).unwrap();
-        migrate(&mut connection).unwrap();
+        migrate_through(&mut connection, 37).unwrap();
+        migrate_through(&mut connection, 37).unwrap();
         assert!(table_exists(&connection, "task_steps"));
         let triggers: Vec<String> = connection.prepare(
             "SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name='task_steps' ORDER BY name",
@@ -2800,7 +2909,7 @@ mod tests {
     fn migration_18_derives_completion_from_completion_lane() {
         let mut connection = Connection::open_in_memory().unwrap();
         seed_pre_18(&mut connection);
-        migrate(&mut connection).unwrap();
+        migrate_through(&mut connection, 40).unwrap();
 
         // c1 sits in the done lane -> completed; c2 in todo -> not completed.
         let c1_completed: i64 = connection
@@ -2932,7 +3041,7 @@ mod tests {
                           ('t2','有象限','','important_urgent',NULL,0,'kanban-lane-todo',1,'t','t');",
             )
             .unwrap();
-        migrate(&mut connection).unwrap();
+        migrate_through(&mut connection, 38).unwrap();
 
         for table in ["task_collaborators", "task_collaborator_links", "task_view_memberships"] {
             assert!(!table_exists(&connection, table), "{table} should be dropped");
@@ -2963,6 +3072,142 @@ mod tests {
         assert!(after > before);
     }
 
+    fn completion_flags_after_39(collapsed: bool) -> (Vec<i64>, bool) {
+        let mut connection = Connection::open_in_memory().unwrap();
+        migrate_through(&mut connection, 38).unwrap();
+        connection
+            .execute_batch(
+                "INSERT INTO tasks(id,title,description,priority,due_date,completed,lane_id,board_position,created_at,updated_at)
+                   VALUES ('t1','一','','important_urgent',NULL,1,'kanban-lane-todo',0,'t','t'),
+                          ('t2','二','','important_urgent',NULL,0,'kanban-lane-todo',1,'t','t');",
+            )
+            .unwrap();
+        if collapsed {
+            connection
+                .execute(
+                    "UPDATE settings SET value='\"kanban-lane-todo\"' WHERE key='completion_task_lane_id'",
+                    [],
+                )
+                .unwrap();
+        }
+        migrate_through(&mut connection, 39).unwrap();
+        let flags = connection
+            .prepare("SELECT completed FROM tasks ORDER BY id")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        let setting: bool = connection
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM settings WHERE key='completion_task_lane_id')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        (flags, setting)
+    }
+
+    #[test]
+    fn migration_39_keeps_real_completion_and_drops_the_completion_lane() {
+        assert_eq!(completion_flags_after_39(false), (vec![1, 0], false));
+    }
+
+    #[test]
+    fn migration_39_resets_completion_forced_by_a_collapsed_lane() {
+        assert_eq!(completion_flags_after_39(true), (vec![0, 0], false));
+    }
+
+    #[test]
+    fn migration_40_makes_lane_optional_and_keeps_task_children() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        connection.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        migrate_through(&mut connection, 39).unwrap();
+        connection
+            .execute_batch(
+                "INSERT INTO events(id,title,start_at,end_at,all_day,category,color,linked_task_id,note,created_at,updated_at)
+                   VALUES ('e1','会','2026-01-01T09:00','2026-01-01T10:00',0,'work','#2563EB',NULL,'','t','t');
+                 INSERT INTO tasks(id,title,description,priority,due_date,completed,lane_id,board_position,linked_event_id,created_at,updated_at)
+                   VALUES ('t1','一','','important_urgent',NULL,1,'kanban-lane-doing',3,'e1','t','t');
+                 UPDATE events SET linked_task_id='t1' WHERE id='e1';
+                 INSERT INTO task_tags(id,name,color,archived_at,created_at,updated_at)
+                   VALUES ('g1','标签','#2563EB',NULL,'t','t');
+                 INSERT INTO task_tag_links(task_id,tag_id) VALUES ('t1','g1');
+                 INSERT INTO task_steps(id,task_id,title,completed,position,created_at,updated_at)
+                   VALUES ('s1','t1','步',0,0,'t','t');",
+            )
+            .unwrap();
+        migrate_through(&mut connection, 40).unwrap();
+        let enforced: bool = connection
+            .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
+            .unwrap();
+        assert!(enforced);
+        let row: (String, i64, i64, Option<String>) = connection
+            .query_row(
+                "SELECT lane_id,board_position,completed,linked_event_id FROM tasks WHERE id='t1'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!(row, ("kanban-lane-doing".into(), 3, 1, Some("e1".into())));
+        let count = |sql: &str| -> i64 { connection.query_row(sql, [], |row| row.get(0)).unwrap() };
+        assert_eq!(count("SELECT COUNT(*) FROM task_steps WHERE task_id='t1'"), 1);
+        assert_eq!(count("SELECT COUNT(*) FROM task_tag_links WHERE task_id='t1'"), 1);
+        assert_eq!(count("SELECT COUNT(*) FROM events WHERE linked_task_id='t1'"), 1);
+        connection
+            .execute(
+                "INSERT INTO tasks(id,title,description,priority,due_date,completed,lane_id,board_position,linked_event_id,created_at,updated_at)
+                 VALUES ('t2','二','','important_urgent',NULL,0,NULL,0,NULL,'t','t')",
+                [],
+            )
+            .unwrap();
+        connection.execute("DELETE FROM tasks WHERE id='t1'", []).unwrap();
+        assert_eq!(count("SELECT COUNT(*) FROM task_steps"), 0);
+        assert_eq!(count("SELECT COUNT(*) FROM events WHERE linked_task_id IS NOT NULL"), 0);
+        assert_eq!(count("SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND tbl_name='tasks'"), 3);
+    }
+
+    #[test]
+    fn migration_41_clears_task_data_keeps_events_and_adds_completion_time() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        connection.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        migrate_through(&mut connection, 40).unwrap();
+        connection
+            .execute_batch(
+                "INSERT INTO events(id,title,start_at,end_at,all_day,category,color,linked_task_id,note,created_at,updated_at)
+                   VALUES ('e1','会','2026-01-01T09:00','2026-01-01T10:00',0,'work','#2563EB',NULL,'','t','t');
+                 INSERT INTO tasks(id,title,description,priority,due_date,completed,lane_id,board_position,linked_event_id,created_at,updated_at)
+                   VALUES ('t1','一','','important_urgent',NULL,1,'kanban-lane-doing',0,'e1','t','t');
+                 UPDATE events SET linked_task_id='t1' WHERE id='e1';
+                 INSERT INTO task_tags(id,name,color,archived_at,created_at,updated_at)
+                   VALUES ('g1','标签','#2563EB',NULL,'t','t');
+                 INSERT INTO task_tag_links(task_id,tag_id) VALUES ('t1','g1');
+                 INSERT INTO task_steps(id,task_id,title,completed,position,created_at,updated_at)
+                   VALUES ('s1','t1','步',0,0,'t','t');",
+            )
+            .unwrap();
+        migrate(&mut connection).unwrap();
+        fn count(connection: &Connection, sql: &str) -> i64 { connection.query_row(sql, [], |row| row.get(0)).unwrap() }
+        for table in ["tasks", "task_steps", "task_tag_links", "task_tags", "task_lanes"] {
+            assert_eq!(count(&connection, &format!("SELECT COUNT(*) FROM {table}")), 0, "{table} should be empty");
+        }
+        assert_eq!(count(&connection, "SELECT COUNT(*) FROM settings WHERE key='default_task_lane_id'"), 0);
+        assert_eq!(count(&connection, "SELECT COUNT(*) FROM events WHERE id='e1' AND linked_task_id IS NULL"), 1);
+        assert_eq!(count(&connection, "SELECT COUNT(*) FROM pragma_table_info('tasks') WHERE name='completed_at'"), 1);
+        let before = count(&connection, "SELECT revision FROM assistant_clock WHERE id=1");
+        connection
+            .execute(
+                "INSERT INTO tasks(id,title,description,priority,due_date,completed,lane_id,board_position,linked_event_id,created_at,updated_at,completed_at)
+                 VALUES ('t2','二','','important_urgent',NULL,1,NULL,0,NULL,'t','t','t')",
+                [],
+            )
+            .unwrap();
+        assert!(count(&connection, "SELECT revision FROM assistant_clock WHERE id=1") > before);
+        // Running again must not clear tasks created after the upgrade.
+        migrate(&mut connection).unwrap();
+        assert_eq!(count(&connection, "SELECT COUNT(*) FROM tasks"), 1);
+    }
+
     #[test]
     fn migration_18_preserves_event_task_link_and_passes_fk_check() {
         let mut connection = Connection::open_in_memory().unwrap();
@@ -2978,7 +3223,7 @@ mod tests {
             )
             .unwrap();
 
-        migrate(&mut connection).unwrap();
+        migrate_through(&mut connection, 40).unwrap();
 
         // The task keeps its event link, and the events FK still targets `tasks`.
         let linked: Option<String> = connection

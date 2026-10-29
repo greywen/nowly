@@ -9,7 +9,12 @@ test.beforeEach(async ({ page }) => {
     if (!localStorage.getItem('nowly:browser-backend')) {
       localStorage.setItem('nowly:browser-backend', JSON.stringify({
         alarmFormatVersion: 1,
-        moduleLayout: [{ id: 'kanban', x: 0, y: 0, w: 6, h: 8 }, { id: 'matrix', x: 7, y: 0, w: 5, h: 8 }]
+        moduleLayout: [{ id: 'kanban', x: 0, y: 0, w: 6, h: 8 }, { id: 'matrix', x: 7, y: 0, w: 5, h: 8 }],
+        // The board has no default lanes, so the spec brings its own.
+        kanban: {
+          lanes: [{ id: 'lane-todo', name: '待处理', color: '#4FC9DA', position: 0, createdAt: 'x', updatedAt: 'x' }],
+          cards: [], priorities: [], tags: []
+        }
       }));
     }
   });
@@ -18,7 +23,8 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('edits steps in the shared task dialog and shows the count on the row and the card', async ({ page }) => {
-  await page.getByRole('button', { name: '新增任务', exact: true }).click();
+  // Created on the board, so it shows on the card and in the matrix.
+  await page.getByRole('button', { name: '新建任务', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '新建任务' });
   const titles = dialog.getByRole('button', { name: /^编辑步骤：/ });
   await dialog.getByLabel('任务标题').fill('发布 Nowly');
@@ -69,6 +75,19 @@ test('edits steps in the shared task dialog and shows the count on the row and t
   const reopened = page.getByRole('dialog', { name: '编辑任务' });
   await expect(reopened.getByRole('button', { name: /^编辑步骤：/ })).toHaveText(['上线', '起草']);
   await expect(reopened.getByRole('checkbox', { name: '标记步骤为未完成：起草' })).toBeChecked();
+});
+
+test('keeps tasks created in the matrix off the kanban board', async ({ page }) => {
+  await page.getByRole('button', { name: '新增任务', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: '新建任务' });
+  await expect(dialog.getByRole('combobox', { name: '看板泳道' })).toHaveCount(0);
+  await dialog.getByLabel('任务标题').fill('只在四象限');
+  await dialog.getByRole('button', { name: '保存任务' }).click();
+  await expect(page.locator('.task-row', { hasText: '只在四象限' })).toBeVisible();
+  await expect(page.getByRole('article', { name: '任务：只在四象限' })).toHaveCount(0);
+  await page.reload();
+  await expect(page.locator('.task-row', { hasText: '只在四象限' })).toBeVisible();
+  await expect(page.getByRole('article', { name: '任务：只在四象限' })).toHaveCount(0);
 });
 
 test('saves a step still in the input when creating from the kanban toolbar', async ({ page }) => {

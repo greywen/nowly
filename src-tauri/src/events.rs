@@ -1256,8 +1256,7 @@ mod tests {
                     id,title,description,priority,due_date,completed,lane_id,board_position,
                     linked_event_id,created_at,updated_at
                  ) VALUES (
-                    ?1,?1,'','important_urgent',NULL,0,'kanban-lane-todo',
-                    (SELECT COALESCE(MAX(board_position)+1,0) FROM tasks WHERE lane_id='kanban-lane-todo'),
+                    ?1,?1,'','important_urgent',NULL,0,NULL,0,
                     NULL,'2026-07-23T08:00:00Z','2026-07-23T08:00:00Z'
                  )",
                 [id],

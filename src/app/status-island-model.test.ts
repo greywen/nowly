@@ -50,6 +50,7 @@ function task(
     priority,
     dueDate,
     completed: false,
+    completedAt: null,
     laneId: 'todo',
     boardPosition,
     tagIds: [],

@@ -487,7 +487,7 @@ describe('AssistantDock execution boundary', () => {
     p.actions = [{ kind: 'updateTask', id: 'task', patch: { laneId: 'done', completed: false } }];
     p.changes = [{ key: 'tasks:task', kind: 'updateTask', title: '待办', before: { id: 'task', title: '待办', laneId: 'done', completed: true },
       after: { id: 'task', title: '待办', laneId: 'todo', completed: false, priority: null, dueDate: null, description: '' } }];
-    p.options = { lanes: [{ id: 'todo', name: '待处理' }, { id: 'done', name: '已完成列' }], defaultLaneId: 'todo', completionLaneId: 'done' };
+    p.options = { lanes: [{ id: 'todo', name: '待处理' }, { id: 'done', name: '已完成列' }], defaultLaneId: 'todo' };
     client.interpret.mockResolvedValue({ kind: 'plan', message: '', records: [], plan: p });
     render(<AssistantDock client={client} onRefresh={() => {}} />);
     await send();

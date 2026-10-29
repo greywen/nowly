@@ -23,18 +23,17 @@ export function useWorkspaceTasks() {
     const saved = await workspace.createTask(
       matrixDraftToWorkspace(draft, undefined, workspace.workspace.data)
     );
-    return taskToMatrixTask(saved, workspace.workspace.data.tags);
+    return taskToMatrixTask(saved, workspace.workspace.data.tags, workspace.workspace.data.lanes);
   }, [workspace]);
 
   const quickAdd = useCallback((quadrant: Quadrant, title: string) => {
-    const { defaultLaneId } = workspace.workspace.data;
     return workspace.createTask({
       title,
       description: '',
       priority: quadrant,
       dueDate: null,
       completed: false,
-      laneId: defaultLaneId,
+      laneId: null,
       tagIds: []
     });
   }, [workspace]);
@@ -45,7 +44,7 @@ export function useWorkspaceTasks() {
       task.id,
       matrixDraftToWorkspace(draft, current, workspace.workspace.data)
     );
-    return taskToMatrixTask(saved, workspace.workspace.data.tags);
+    return taskToMatrixTask(saved, workspace.workspace.data.tags, workspace.workspace.data.lanes);
   }, [workspace]);
 
   const deleteTask = useCallback(async (task: MatrixTask) => {

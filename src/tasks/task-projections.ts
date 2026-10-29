@@ -2,7 +2,7 @@ import type { KanbanCard, KanbanPriority, KanbanSnapshot } from '../kanban/kanba
 import type { MatrixTask, TaskDraft as MatrixTaskDraft, TaskPriority as LegacyTaskPriority } from '../matrix/matrix-model';
 import { DESIGN_COLORS, type HexColor } from '../lib/color';
 import { quadrantLabel } from '../matrix/matrix-model';
-import { defaultTaskPriority, type Task, type TaskDraft, type TaskPriority, type TaskTag, type TaskWorkspaceSnapshot } from './task-model';
+import { defaultTaskPriority, type Task, type TaskDraft, type TaskLane, type TaskPriority, type TaskTag, type TaskWorkspaceSnapshot } from './task-model';
 
 export const priorityColors: Record<TaskPriority, HexColor> = {
   important_urgent: DESIGN_COLORS.danger,
@@ -17,7 +17,8 @@ export function legacyPriority(priority: TaskPriority): LegacyTaskPriority {
   return 3;
 }
 
-export function taskToMatrixTask(task: Task, tags: TaskTag[] = []): MatrixTask {
+export function taskToMatrixTask(task: Task, tags: TaskTag[] = [], lanes: TaskLane[] = []): MatrixTask {
+  const lane = !task.completed && task.laneId ? lanes.find((item) => item.id === task.laneId) : undefined;
   const tagById = new Map(tags.map((tag) => [tag.id, tag]));
   const resolvedTags = task.tagIds
     .map((id) => tagById.get(id))
@@ -33,13 +34,14 @@ export function taskToMatrixTask(task: Task, tags: TaskTag[] = []): MatrixTask {
     note: task.description,
     tags: resolvedTags,
     steps: task.steps,
+    lane: lane ? { id: lane.id, name: lane.name, color: lane.color } : null,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt
   };
 }
 
 export function matrixTasksFromWorkspace(snapshot: TaskWorkspaceSnapshot): MatrixTask[] {
-  return snapshot.tasks.map((task) => taskToMatrixTask(task, snapshot.tags));
+  return snapshot.tasks.map((task) => taskToMatrixTask(task, snapshot.tags, snapshot.lanes));
 }
 
 export function matrixDraftToWorkspace(
@@ -53,7 +55,8 @@ export function matrixDraftToWorkspace(
     priority: draft.quadrant,
     dueDate: draft.dueAt,
     completed: draft.completed,
-    laneId: current?.laneId ?? (draft.completed ? snapshot.completionLaneId : snapshot.defaultLaneId),
+    // Tasks created from the matrix stay off the kanban board.
+    laneId: current ? current.laneId : null,
     tagIds: current?.tagIds ?? []
   };
 }
@@ -69,8 +72,11 @@ export function workspaceTaskFromMatrix(
     priority: task.quadrant,
     dueDate: task.dueAt,
     completed: task.completed,
-    laneId: task.completed ? snapshot.completionLaneId : snapshot.defaultLaneId,
-    boardPosition: snapshot.tasks.filter((item) => item.laneId === snapshot.defaultLaneId).length,
+    completedAt: task.completed ? task.updatedAt : null,
+    laneId: snapshot.defaultLaneId,
+    boardPosition: snapshot.defaultLaneId === null
+      ? 0
+      : snapshot.tasks.filter((item) => item.laneId === snapshot.defaultLaneId).length,
     tagIds: [],
     steps: task.steps ?? [],
     createdAt: task.createdAt,
@@ -78,7 +84,7 @@ export function workspaceTaskFromMatrix(
   };
 }
 
-export function workspaceTaskFromKanbanCard(card: KanbanCard, snapshot: TaskWorkspaceSnapshot): Task {
+export function workspaceTaskFromKanbanCard(card: KanbanCard): Task {
   const priority = card.priorityId && priorityColors[card.priorityId as TaskPriority]
     ? card.priorityId as TaskPriority
     : defaultTaskPriority;
@@ -88,7 +94,8 @@ export function workspaceTaskFromKanbanCard(card: KanbanCard, snapshot: TaskWork
     description: card.description ?? '',
     priority,
     dueDate: card.dueDate,
-    completed: card.laneId === snapshot.completionLaneId,
+    completed: card.completed ?? false,
+    completedAt: card.completed ? card.updatedAt : null,
     laneId: card.laneId,
     boardPosition: card.position,
     tagIds: card.tagIds,
@@ -99,25 +106,18 @@ export function workspaceTaskFromKanbanCard(card: KanbanCard, snapshot: TaskWork
 }
 
 export function workspaceFromLegacy(matrixTasks: MatrixTask[], kanban: KanbanSnapshot): TaskWorkspaceSnapshot {
-  const now = '';
-  const lanes = kanban.lanes.length ? kanban.lanes : [
-    { id: 'kanban-lane-todo', name: '待处理', color: DESIGN_COLORS.primary, position: 0, createdAt: now, updatedAt: now },
-    { id: 'kanban-lane-doing', name: '进行中', color: DESIGN_COLORS.warning, position: 1, createdAt: now, updatedAt: now },
-    { id: 'kanban-lane-done', name: '已完成', color: DESIGN_COLORS.success, position: 2, createdAt: now, updatedAt: now }
-  ];
+  // Matrix tasks stay off the board; lanes only exist once the user adds them.
   const seed: TaskWorkspaceSnapshot = {
     tasks: [],
-    lanes,
+    lanes: kanban.lanes,
     tags: kanban.tags.map((tag) => ({ ...tag, archivedAt: null })),
-    defaultLaneId: lanes.some((lane) => lane.id === 'kanban-lane-todo') ? 'kanban-lane-todo' : lanes[0].id,
-    completionLaneId: lanes.some((lane) => lane.id === 'kanban-lane-done') ? 'kanban-lane-done' : lanes[lanes.length - 1].id,
+    defaultLaneId: null,
     viewPreferences: {}
   };
   const matrix = matrixTasks.map((task) => workspaceTaskFromMatrix(task, seed));
   const matrixIds = new Set(matrix.map((task) => task.id));
   const cards = kanban.cards.map((card) => workspaceTaskFromKanbanCard(
-    matrixIds.has(card.id) ? { ...card, id: `legacy-kanban-${card.id}` } : card,
-    seed
+    matrixIds.has(card.id) ? { ...card, id: `legacy-kanban-${card.id}` } : card
   ));
   return { ...seed, tasks: [...matrix, ...cards] };
 }
@@ -134,7 +134,7 @@ export function fixedPriorities(): KanbanPriority[] {
     }));
 }
 
-export function taskToKanbanCard(task: Task): KanbanCard {
+export function taskToKanbanCard(task: Task & { laneId: string }): KanbanCard {
   return {
     id: task.id,
     laneId: task.laneId,
@@ -145,6 +145,7 @@ export function taskToKanbanCard(task: Task): KanbanCard {
     position: task.boardPosition,
     tagIds: task.tagIds,
     steps: task.steps,
+    completed: task.completed,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt
   };
@@ -153,7 +154,9 @@ export function taskToKanbanCard(task: Task): KanbanCard {
 export function kanbanSnapshotFromWorkspace(snapshot: TaskWorkspaceSnapshot): KanbanSnapshot {
   return {
     lanes: snapshot.lanes,
-    cards: snapshot.tasks.map(taskToKanbanCard),
+    cards: snapshot.tasks
+      .filter((task): task is Task & { laneId: string } => task.laneId !== null)
+      .map(taskToKanbanCard),
     priorities: fixedPriorities(),
     tags: snapshot.tags.map(({ archivedAt: _archivedAt, ...tag }) => tag)
   };

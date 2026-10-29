@@ -19,14 +19,14 @@ export function createShowcaseFixture(sceneId, language) {
     const category = categories[index % categories.length];
     return { id: `event-${index}`, title, startAt: `${date}T02:00:00Z`, endAt: `${date}T03:00:00Z`, allDay: false, category: category.id, color: category.color, note: text('带上整理好的问题，讨论目标、进展与下一步行动。', 'Review prepared questions, agree on the goal and record the next concrete actions.'), reminders: [], recurrence: null, occurrenceStartAt: null, startTz: null, endTz: null, rrule: null, seriesId: null, seriesStartAt: null, isOverridden: false, subscriptionId: null, createdAt: stamp, updatedAt: stamp };
   });
-  const lanes = [text('待处理', 'To do'), text('进行中', 'In progress'), text('已完成', 'Done')].map((name, position) => ({ id: ['todo', 'doing', 'done'][position], name, color: colors[position], position, createdAt: stamp, updatedAt: stamp }));
+  const lanes = [text('待处理', 'To do'), text('进行中', 'In progress'), text('待验收', 'In review')].map((name, position) => ({ id: ['todo', 'doing', 'review'][position], name, color: colors[position], position, createdAt: stamp, updatedAt: stamp }));
   const tags = [text('设计', 'Design'), text('研究', 'Research'), text('计划', 'Planning')].map((name, index) => ({ id: `tag-${index}`, name, color: colors[index], archivedAt: null, createdAt: stamp, updatedAt: stamp }));
   const taskTitles = text(
     ['梳理发布清单', '准备评审材料', '确认本周里程碑', '整理阅读笔记', '完善产品原型', '撰写设计说明', '验证关键流程', '制定学习计划', '汇总讨论结论', '完成调研摘要', '归档项目资料', '整理灵感清单'],
     ['Outline release checklist', 'Prepare review materials', 'Confirm weekly milestones', 'Organize reading notes', 'Refine product prototype', 'Write design rationale', 'Verify key workflows', 'Plan learning sessions', 'Summarize decisions', 'Complete research digest', 'Archive project resources', 'Collect new ideas']
   );
   const priorities = ['important_urgent', 'important_not_urgent', 'not_important_urgent', 'not_important_not_urgent'];
-  const tasks = taskTitles.map((title, index) => ({ id: `task-${index}`, title, description: text('明确完成标准，记录关键结论，并安排下一步可执行的行动。', 'Define completion criteria, capture the key decisions and schedule a concrete next action.'), priority: priorities[index % 4], dueDate: `2026-10-${String(15 + index).padStart(2, '0')}`, completed: index >= 8, laneId: lanes[Math.floor(index / 4)].id, boardPosition: index % 4, tagIds: [tags[index % 3].id], steps: [], createdAt: stamp, updatedAt: stamp }));
+  const tasks = taskTitles.map((title, index) => ({ id: `task-${index}`, title, description: text('明确完成标准，记录关键结论，并安排下一步可执行的行动。', 'Define completion criteria, capture the key decisions and schedule a concrete next action.'), priority: priorities[index % 4], dueDate: `2026-10-${String(15 + index).padStart(2, '0')}`, completed: index >= 10, completedAt: index >= 10 ? stamp : null, laneId: lanes[Math.floor(index / 4)].id, boardPosition: index % 4, tagIds: [tags[index % 3].id], steps: [], createdAt: stamp, updatedAt: stamp }));
   const noteRows = text([
     ['本周的三件重要小事', '先完成项目评审，再整理阅读笔记，最后给周末留出空白。每天只选择一件最重要的事，做完后再处理零散任务。'],
     ['项目讨论记录', '目标：让第一次使用更清晰。\n结论：精简入口，保留明确反馈。\n下一步：验证原型并记录观察结果，整理成可供团队复用的检查清单。'],
@@ -64,7 +64,7 @@ export function createShowcaseFixture(sceneId, language) {
   const active = sceneId === 'focus';
   return {
     language, sceneId, layout: getSceneLayout(sceneId), events, categories, notes, stickerBoard,
-    taskWorkspace: { tasks, lanes, tags, defaultLaneId: 'todo', completionLaneId: 'done', viewPreferences: {} },
+    taskWorkspace: { tasks, lanes, tags, defaultLaneId: 'todo', viewPreferences: {} },
     settings: { wallpaperEnabled: false, launchAtLogin: false, targetMonitorId: null, density: 'balanced', weekStart: 'monday', dateFormat: 'localized', showWeekends: true, iconStyle: 'duotone', hideTopbarInWallpaper: true, quickPanelEnabled: false, quickPanelShortcut: 'Ctrl+Space', screenshotShortcut: 'Ctrl+Alt+A', screenshotHistoryShortcut: 'Ctrl+Alt+H', recentColors: [] },
     timeSettings: { displayContent: active ? 'focus' : 'clocks', focusPreferences: { defaultMinutes: 25 }, appearance: { mode: 'digital', layout: 'stacked', hourCycle: 'h23', showSeconds: false, showLabel: true, showDate: language === 'zh', showDifference: language === 'zh', fontMode: 'auto', fontSize: 96 }, clocks: [
       { id: 'shanghai', label: text('上海', 'Shanghai'), timeZone: 'Asia/Shanghai' },

@@ -9,6 +9,7 @@ import type { Task, TaskWorkspaceSnapshot } from './task-model';
 function task(id: string): Task {
   return {
     id, title: id, description: '', priority: 'important_urgent', dueDate: null, completed: false,
+    completedAt: null,
     laneId: 'lane-a', boardPosition: 0, tagIds: [], steps: [],
     createdAt: 'x', updatedAt: 'x'
   };
@@ -20,7 +21,6 @@ function snapshot(tasks: Task[]): TaskWorkspaceSnapshot {
     lanes: [{ id: 'lane-a', name: '待处理', color: '#4FC9DA', position: 0, createdAt: 'x', updatedAt: 'x' }],
     tags: [],
     defaultLaneId: 'lane-a',
-    completionLaneId: 'lane-a',
     viewPreferences: {}
   };
 }

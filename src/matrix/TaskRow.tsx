@@ -1,8 +1,15 @@
 import type { DragEvent } from 'react';
 import { formatTaskMeta } from '../lib/task-draft';
+import { colorStyle } from '../lib/color';
 import type { MatrixTask } from './matrix-model';
 import { t } from '../i18n';
 import { TaskStepCount } from '../tasks/TaskStepCount';
+import { celebrateTaskCompletion } from '../tasks/completion-celebration';
+import { priorityColors } from '../tasks/task-projections';
+
+function boardCard(taskId: string): HTMLElement | null {
+  return document.querySelector<HTMLElement>(`[data-task-card="${CSS.escape(taskId)}"]`);
+}
 
 type TaskRowProps = {
   task: MatrixTask;
@@ -33,7 +40,20 @@ export function TaskRow({ task, today, pending, dragging = false, onToggle, onOp
           checked={task.completed}
           disabled={pending}
           aria-label={task.completed ? t('taskRow.markIncomplete', { title: task.title }) : t('taskRow.complete', { title: task.title })}
-          onChange={(event) => onToggle(task, event.target.checked)}
+          onChange={(event) => {
+            const completed = event.target.checked;
+            // Before the write, so a board card can still be measured.
+            if (completed) {
+              celebrateTaskCompletion({
+                title: task.title,
+                color: priorityColors[task.quadrant],
+                checkbox: event.currentTarget,
+                card: boardCard(task.id),
+                announcement: t('kanbanDone.dropped', { title: task.title })
+              });
+            }
+            onToggle(task, completed);
+          }}
         />
       </label>
       <div className="task-row__copy">
@@ -46,6 +66,17 @@ export function TaskRow({ task, today, pending, dragging = false, onToggle, onOp
           >
             {task.title}
           </button>
+          {task.lane && !task.completed ? (
+            <span
+              className="task-lane-chip"
+              style={colorStyle(task.lane.color)}
+              title={t('taskRow.lane', { name: task.lane.name })}
+            >
+              <span className="task-lane-chip__dot" aria-hidden="true" />
+              <span aria-hidden="true">{task.lane.name}</span>
+              <span className="visually-hidden">{t('taskRow.lane', { name: task.lane.name })}</span>
+            </span>
+          ) : null}
           {task.tags.length > 0 ? (
             <span className="task-row__tags">
               {task.tags.map((tag) => (

@@ -1,5 +1,5 @@
-// Kanban module domain types. Colors are stored as canonical HEX values; lanes
-// represent status, so cards have no independent completion flag.
+// Kanban module domain types. Colors are stored as canonical HEX values. Lanes
+// are free-form progress columns; completion is a separate task flag.
 import { DESIGN_COLORS, type ColorPreset, type HexColor } from '../lib/color';
 import { t } from '../i18n';
 import type { TaskStep } from '../tasks/task-model';
@@ -48,6 +48,8 @@ export type KanbanCard = {
   position: number;
   tagIds: string[];
   steps?: TaskStep[];
+  // Mirrors the matrix completion checkbox; completed cards leave their lane.
+  completed?: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -112,9 +114,10 @@ export function sortSnapshot(snapshot: KanbanSnapshot): KanbanSnapshot {
   return { ...snapshot, lanes, cards, priorities };
 }
 
-// Cards belonging to one lane in position order.
+// Open cards shown in one lane, in position order. Completed cards keep their
+// lane but leave the column for the board's done list.
 export function cardsInLane(cards: KanbanCard[], laneId: string): KanbanCard[] {
   return cards
-    .filter((card) => card.laneId === laneId)
+    .filter((card) => card.laneId === laneId && !card.completed)
     .sort((a, b) => a.position - b.position || a.id.localeCompare(b.id));
 }

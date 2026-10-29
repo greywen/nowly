@@ -51,10 +51,9 @@ type TaskWorkspaceContextValue = {
   moveTaskToDate(id: string, dueDate: string | null): Promise<Task>;
   createLane(draft: TaskLaneDraft): Promise<TaskLane>;
   updateLane(id: string, draft: TaskLaneDraft): Promise<void>;
-  deleteLane(id: string, replacementLaneId?: string | null): Promise<void>;
+  deleteLane(id: string): Promise<void>;
   reorderLanes(orderedIds: string[]): Promise<void>;
   setDefaultLane(id: string): Promise<void>;
-  setCompletionLane(id: string): Promise<void>;
   createTag(draft: TaskTagDraft): Promise<void>;
   updateTag(id: string, draft: TaskTagDraft): Promise<void>;
   archiveTag(id: string, archived: boolean): Promise<void>;
@@ -68,6 +67,14 @@ function messageFrom(error: unknown) {
   return typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string'
     ? error.message
     : t('matrix.readError');
+}
+
+function renumberLane(tasks: Task[], laneId: string): Task[] {
+  const order = tasks
+    .filter((task) => task.laneId === laneId)
+    .sort((a, b) => a.boardPosition - b.boardPosition || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+  const positions = new Map(order.map((task, index) => [task.id, index]));
+  return tasks.map((task) => positions.has(task.id) ? { ...task, boardPosition: positions.get(task.id)! } : task);
 }
 
 function missing(name: string): never {
@@ -229,7 +236,24 @@ export function TaskWorkspaceProvider({ children }: { children: ReactNode }) {
 
   const setTaskCompleted = useCallback((id: string, completed: boolean) => {
     if (repository.setWorkspaceTaskCompleted) {
-      return taskWrite(id, () => repository.setWorkspaceTaskCompleted!(id, completed));
+      // Optimistic so a card dropped on the board's done zone leaves its lane
+      // at once instead of snapping back until the write returns.
+      const previous = dataRef.current;
+      patchSnapshot((current) => {
+        const target = current.tasks.find((task) => task.id === id);
+        if (!target || target.completed === completed) return current;
+        const tasks = current.tasks.map((task) => task.id === id
+          ? {
+              ...task,
+              completed,
+              completedAt: completed ? new Date().toISOString() : null,
+              // Reopening returns the task to the top of its lane.
+              boardPosition: !completed && task.laneId ? -1 : task.boardPosition
+            }
+          : task);
+        return { ...current, tasks: !completed && target.laneId ? renumberLane(tasks, target.laneId) : tasks };
+      });
+      return taskWrite(id, () => repository.setWorkspaceTaskCompleted!(id, completed), previous);
     }
     return taskWrite(id, async () => {
       const saved = await repository.setTaskCompleted(id, completed);
@@ -238,25 +262,29 @@ export function TaskWorkspaceProvider({ children }: { children: ReactNode }) {
       return {
         ...current,
         completed: saved.completed,
-        laneId: saved.completed ? dataRef.current.completionLaneId : dataRef.current.defaultLaneId,
+        completedAt: saved.completed ? current.completedAt ?? saved.updatedAt : null,
         updatedAt: saved.updatedAt
       };
     });
-  }, [repository, taskWrite]);
+  }, [patchSnapshot, repository, taskWrite]);
 
   const moveTaskToLane = useCallback((id: string, laneId: string, targetIndex: number) => {
     const write = repository.moveTaskToLane ?? (() => missing('moveTaskToLane'));
     const previous = dataRef.current;
     const moving = previous.tasks.find((task) => task.id === id);
     if (moving) {
-      const others = previous.tasks.filter((task) => task.id !== id);
-      const target = others.filter((task) => task.laneId === laneId).sort((a, b) => a.boardPosition - b.boardPosition);
-      target.splice(Math.max(0, Math.min(targetIndex, target.length)), 0, { ...moving, laneId });
-      const positions = new Map(target.map((task, index) => [task.id, index]));
+      // `targetIndex` counts open cards; completed cards keep their lane after
+      // them. Moving a task into a lane reopens it, as the backend does.
+      const inLane = previous.tasks
+        .filter((task) => task.id !== id && task.laneId === laneId)
+        .sort((a, b) => a.boardPosition - b.boardPosition);
+      const open = inLane.filter((task) => !task.completed);
+      open.splice(Math.max(0, Math.min(targetIndex, open.length)), 0, moving);
+      const positions = new Map([...open, ...inLane.filter((task) => task.completed)].map((task, index) => [task.id, index]));
       patchSnapshot((current) => ({
         ...current,
         tasks: current.tasks.map((task) => task.id === id
-          ? { ...task, laneId, boardPosition: positions.get(task.id) ?? task.boardPosition }
+          ? { ...task, laneId, completed: false, completedAt: null, boardPosition: positions.get(task.id) ?? task.boardPosition }
           : task.laneId === laneId ? { ...task, boardPosition: positions.get(task.id) ?? task.boardPosition } : task)
       }));
     }
@@ -316,10 +344,9 @@ export function TaskWorkspaceProvider({ children }: { children: ReactNode }) {
       return created!;
     },
     updateLane: (id, draft) => reloadAfter(() => (repository.updateTaskLane ?? (() => missing('updateTaskLane')))(id, draft)),
-    deleteLane: (id, replacementLaneId = null) => snapshotWrite(() => (repository.deleteTaskLane ?? (() => missing('deleteTaskLane')))(id, replacementLaneId)).then(() => undefined),
+    deleteLane: (id) => snapshotWrite(() => (repository.deleteTaskLane ?? (() => missing('deleteTaskLane')))(id)).then(() => undefined),
     reorderLanes: (orderedIds) => reloadAfter(() => (repository.reorderTaskLanes ?? (() => missing('reorderTaskLanes')))(orderedIds)),
     setDefaultLane: (id) => snapshotWrite(() => (repository.setDefaultTaskLane ?? (() => missing('setDefaultTaskLane')))(id)).then(() => undefined),
-    setCompletionLane: (id) => snapshotWrite(() => (repository.setCompletionTaskLane ?? (() => missing('setCompletionTaskLane')))(id)).then(() => undefined),
     createTag: (draft) => reloadAfter(() => (repository.createTaskTag ?? (() => missing('createTaskTag')))(draft)),
     updateTag: (id, draft) => reloadAfter(() => (repository.updateTaskTag ?? (() => missing('updateTaskTag')))(id, draft)),
     archiveTag: (id, archived) => reloadAfter(() => (repository.archiveTaskTag ?? (() => missing('archiveTaskTag')))(id, archived)),

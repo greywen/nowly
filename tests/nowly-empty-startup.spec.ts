@@ -22,7 +22,7 @@ test('shows the persisted-data empty dashboard without page overflow or motion',
           // The app reads the shared task workspace, not just legacy list_tasks.
           if (command === 'get_task_workspace_snapshot') return {
             tasks: [], lanes: [], tags: [],
-            defaultLaneId: 'kanban-lane-todo', completionLaneId: 'kanban-lane-done', viewPreferences: {}
+            defaultLaneId: null, viewPreferences: {}
           };
           if (command === 'list_events_in_range' || command === 'list_tasks' || command === 'list_notes') return [];
           if (command === 'create_task' || command === 'update_task' || command === 'delete_task' || command === 'set_task_completed') {

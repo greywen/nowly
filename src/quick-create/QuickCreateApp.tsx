@@ -109,7 +109,7 @@ function QuickEventDialog({ onSaved, ...props }: DialogProps & {
 
 function QuickTaskDialog({ onSaved, ...props }: DialogProps & { onSaved(): void }) {
   const mode = useMemo(() => ({ type: 'create' as const, dueDate: null }), []);
-  return <UnifiedTaskDialog {...props} mode={mode} onSaved={onSaved} />;
+  return <UnifiedTaskDialog {...props} mode={mode} showLane={false} onSaved={onSaved} />;
 }
 
 function QuickNoteDialog({ onSaved, ...props }: DialogProps & {

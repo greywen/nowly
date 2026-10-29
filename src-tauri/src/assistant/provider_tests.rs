@@ -8,6 +8,7 @@ fn database() -> Mutex<Connection> {
     let mut db = Connection::open_in_memory().unwrap();
     db.execute_batch("PRAGMA foreign_keys=ON").unwrap();
     crate::db::migrate(&mut db).unwrap();
+    crate::db::seed_test_lanes(&db);
     Mutex::new(db)
 }
 fn config() -> Config {

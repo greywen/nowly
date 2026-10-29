@@ -18,7 +18,6 @@ const workspace: TaskWorkspaceSnapshot = {
   lanes: [{ id: 'lane-a', name: '待处理', color: '#4FC9DA', position: 0, createdAt: 'x', updatedAt: 'x' }],
   tags: [],
   defaultLaneId: 'lane-a',
-  completionLaneId: 'lane-a',
   viewPreferences: {}
 };
 
@@ -103,7 +102,8 @@ describe('ModalRoot', () => {
     expect(screen.getByRole('dialog', { name:/2026年7月23日/ })).toBeInTheDocument();
     expect(screen.getByRole('dialog', { name:'新建任务' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name:'截止日期' })).toHaveTextContent('2026 年 7 月 23 日');
-    expect(screen.getByRole('combobox', { name:'看板泳道' })).toHaveTextContent('待处理');
+    // The matrix does not use lanes; the task goes to the default lane silently.
+    expect(screen.queryByRole('combobox', { name:'看板泳道' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name:'取消' }));
     expect(onChangeModal).toHaveBeenLastCalledWith(expect.objectContaining({ type:'date', isoDate:'2026-07-23' }));
   });
@@ -119,8 +119,7 @@ describe('ModalRoot', () => {
 
     rerender(<ModalRoot {...base({ modal:{type:'task-edit',task:sampleTasks[0],trigger:null}, onClose })} />);
     expect(screen.getByRole('dialog', { name:'编辑任务' })).toBeInTheDocument();
-    // A matrix task carries no lane, so it maps onto the workspace default.
-    expect(screen.getByRole('combobox', { name:'看板泳道' })).toHaveTextContent('待处理');
+    expect(screen.queryByRole('combobox', { name:'看板泳道' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name:'取消' }));
     expect(onClose).toHaveBeenCalledOnce();
 

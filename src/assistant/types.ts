@@ -23,7 +23,7 @@ export type Plan = {
   id: string; status: 'pending' | 'cancelled' | 'expired' | 'committed' | 'undone';
   createdAt: number; expiresAt: number; revision: number;
   actions: Action[]; changes: Change[]; warnings: string[];
-  options: { lanes?: { id: string; name: string }[]; completionLaneId?: string; defaultLaneId?: string };
+  options: { lanes?: { id: string; name: string }[]; defaultLaneId?: string };
 };
 export type AssistantRecord = { key: string; domain: 'calendar' | 'tasks'; title: string; source: string; readOnly: boolean; data: Fields };
 export type Reply = { kind: 'plan' | 'results' | 'clarify'; message: string; records: AssistantRecord[]; plan: Plan | null };

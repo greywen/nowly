@@ -26,6 +26,9 @@ type Mode =
 
 type Props = {
   mode: Mode;
+  // The matrix does not use lanes, so it hides the lane field; new tasks then
+  // stay off the kanban board and edits keep the task's lane.
+  showLane?: boolean;
   restoreFocusRef?: RefObject<HTMLElement | null>;
   onClose(): void;
   onSaved?(task: Task): void | Promise<void>;
@@ -37,7 +40,7 @@ type Form = {
   description: string;
   priority: TaskPriority;
   dueDate: string;
-  laneId: string;
+  laneId: string | null;
   tagIds: string[];
   steps: TaskStepItem[];
   stepInput: string;
@@ -49,7 +52,7 @@ function message(error: unknown) {
     : t('common.opFailed');
 }
 
-export function UnifiedTaskDialog({ mode, restoreFocusRef, onClose, onSaved, onDirtyChange }: Props) {
+export function UnifiedTaskDialog({ mode, showLane = true, restoreFocusRef, onClose, onSaved, onDirtyChange }: Props) {
   const workspace = useTaskWorkspace();
   const snapshot = workspace.workspace.data;
   const initial = useMemo<Form>(() => {
@@ -72,12 +75,14 @@ export function UnifiedTaskDialog({ mode, restoreFocusRef, onClose, onSaved, onD
       description: '',
       priority: mode.priority ?? defaultTaskPriority,
       dueDate: mode.dueDate ?? '',
-      laneId: mode.laneId ?? snapshot.defaultLaneId,
+      laneId: mode.laneId !== undefined ? mode.laneId : showLane ? snapshot.defaultLaneId : null,
       tagIds: [],
       steps: [],
       stepInput: ''
     };
-  }, [mode, snapshot.defaultLaneId]);
+  }, [mode, showLane, snapshot.defaultLaneId]);
+  // A task that is off the board has no lane to pick.
+  const laneVisible = showLane && initial.laneId !== null;
   const [form, setForm] = useState(initial);
   const [fieldError, setFieldError] = useState<{ field?: string; message: string } | null>(null);
   const [dialogError, setDialogError] = useState('');
@@ -110,8 +115,8 @@ export function UnifiedTaskDialog({ mode, restoreFocusRef, onClose, onSaved, onD
       description: form.description,
       priority: form.priority,
       dueDate: form.dueDate || null,
-      // Completion follows the lane: only the completion lane holds done tasks.
-      completed: form.laneId === snapshot.completionLaneId,
+      // Completion is toggled from the matrix checkbox; the dialog keeps it as is.
+      completed: mode.type === 'edit' ? mode.task.completed : false,
       laneId: form.laneId,
       tagIds: form.tagIds,
       steps: [
@@ -215,9 +220,11 @@ export function UnifiedTaskDialog({ mode, restoreFocusRef, onClose, onSaved, onD
             ))}
           </div>
         </fieldset>
-        <div className="task-form__row">
-          <Select id="unified-task-lane" label={t('taskModal.lane')} options={laneOptions} value={form.laneId}
-            disabled={busy} onChange={(value) => update('laneId', value)} />
+        <div className={laneVisible ? 'task-form__row' : undefined}>
+          {laneVisible && form.laneId !== null ? (
+            <Select id="unified-task-lane" label={t('taskModal.lane')} options={laneOptions} value={form.laneId}
+              disabled={busy} onChange={(value) => update('laneId', value)} />
+          ) : null}
           <DatePicker id="unified-task-due-date" label={t('taskModal.dueDate')} value={form.dueDate}
             disabled={busy} open={dateOpen} onOpenChange={setDateOpen} onChange={(value) => update('dueDate', value)} />
         </div>

@@ -10,7 +10,7 @@ import { stepProgress } from '../tasks/task-model';
 type KanbanCardProps = {
   resolved: ResolvedCard;
   todayIso: string;
-  done?: boolean;
+  dragging?: boolean;
   onOpen: () => void;
   onDragStart: (event: DragEvent<HTMLElement>) => void;
   onDragEnd: () => void;
@@ -22,7 +22,7 @@ type KanbanCardProps = {
 export function KanbanCard({
   resolved,
   todayIso,
-  done = false,
+  dragging = false,
   onOpen,
   onDragStart,
   onDragEnd
@@ -36,12 +36,13 @@ export function KanbanCard({
     : { fileIds: [] };
   const attachmentCount = fileIds.length;
   const hasSteps = stepProgress(card.steps).total > 0;
-  const overdue = Boolean(card.dueDate) && !done && isOverdue(card.dueDate!, todayIso);
+  const overdue = Boolean(card.dueDate) && isOverdue(card.dueDate!, todayIso);
   const hasMeta = Boolean(card.dueDate) || hasSteps || attachmentCount > 0 || tags.length > 0;
 
   return (
     <article
-      className={`kanban-card${done ? ' kanban-card--done' : ''}`}
+      className={`kanban-card${dragging ? ' kanban-card--dragging' : ''}`}
+      data-task-card={card.id}
       draggable
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}

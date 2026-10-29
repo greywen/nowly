@@ -108,7 +108,7 @@ export function PlanCard({ plan, actions, edits, selected, dirty, busy, blocked,
             <Select id={`priority-${index}`} label={t('assistant.indexedField', { label: t('assistant.field.priority'), index: index + 1 })} value={String(value.priority ?? '')} options={priorityOptions()} onChange={v => edit('priority', v || null)} />
             <Select id={`lane-${index}`} label={t('assistant.indexedField', { label: t('assistant.field.laneId'), index: index + 1 })} value={String(value.laneId ?? '')}
               options={(plan.options?.lanes ?? []).map(l => ({ value: l.id, label: l.name }))}
-              onChange={v => onEdit(index, { laneId: v, completed: v === plan.options.completionLaneId })} />
+              onChange={v => edit('laneId', v)} />
             <label className="form-check form-check-custom form-check-solid">
               <input className="form-check-input" type="checkbox" checked={Boolean(value.completed)} onChange={e => edit('completed', e.target.checked)} />
               <span className="form-check-label">{t('assistant.text86')}</span>

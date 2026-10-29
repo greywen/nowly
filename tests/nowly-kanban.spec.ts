@@ -14,9 +14,9 @@ test.beforeEach(async ({ page }) => {
 
     let lanes: any[] = [
       { id: 'lane-todo', name: '待处理', color: 'primary', position: 0, createdAt: now, updatedAt: now },
-      { id: 'lane-doing', name: '进行中', color: 'warning', position: 1, createdAt: now, updatedAt: now },
-      { id: 'lane-done', name: '已完成', color: 'success', position: 2, createdAt: now, updatedAt: now }
+      { id: 'lane-doing', name: '进行中', color: 'warning', position: 1, createdAt: now, updatedAt: now }
     ];
+    let defaultLaneId: string | null = 'lane-todo';
     let cards: any[] = [];
     let workspaceTasks: any[] = [];
     let priorities: any[] = [];
@@ -69,17 +69,16 @@ test.beforeEach(async ({ page }) => {
               tasks: workspaceTasks,
               lanes: [...lanes].sort((a, b) => a.position - b.position),
               tags: tags.map((tag) => ({ ...tag, archivedAt: null })),
-              defaultLaneId: 'lane-todo',
-              completionLaneId: 'lane-done',
+              defaultLaneId,
               viewPreferences: {}
             };
           case 'create_task': {
             const draft = args.draft;
-            const laneId = draft.laneId ?? 'lane-todo';
+            const laneId = draft.laneId ?? null;
             const task = {
               id: nextId('task'), title: draft.title, description: draft.description ?? '',
               priority: draft.priority ?? 'not_important_not_urgent', dueDate: draft.dueDate ?? null,
-              completed: draft.completed ?? false, laneId,
+              completed: draft.completed ?? false, completedAt: draft.completed ? new Date().toISOString() : null, laneId,
               boardPosition: workspaceTasks.filter((item) => item.laneId === laneId).length,
               tagIds: draft.tagIds ?? [], steps: [],
               linkedEventId: draft.linkedEventId ?? null,
@@ -103,23 +102,37 @@ test.beforeEach(async ({ page }) => {
             workspaceTasks = workspaceTasks.filter((item) => item.id !== args.id);
             return null;
           case 'set_task_completed': {
+            // Mirrors the backend: completion keeps the lane, and reopening puts
+            // the task at the top of that lane.
             const task = workspaceTasks.find((item) => item.id === args.id);
-            const updated = { ...task, completed: args.completed, laneId: args.completed ? 'lane-done' : 'lane-todo', updatedAt: now };
+            const updated = {
+              ...task, completed: args.completed, completedAt: args.completed ? new Date().toISOString() : null,
+              boardPosition: args.completed ? task.boardPosition : -1, updatedAt: now
+            };
             workspaceTasks = workspaceTasks.map((item) => item.id === args.id ? updated : item);
-            return updated;
+            if (!args.completed && updated.laneId) {
+              workspaceTasks.filter((item) => item.laneId === updated.laneId).sort((a, b) => a.boardPosition - b.boardPosition)
+                .forEach((item, index) => { item.boardPosition = index; });
+            }
+            return workspaceTasks.find((item) => item.id === args.id);
           }
           case 'move_task_to_lane': {
+            // The index counts open tasks; moving a task into a lane reopens it.
             const task = workspaceTasks.find((item) => item.id === args.id);
             const sourceLaneId = task.laneId;
-            const target = workspaceTasks
+            const others = workspaceTasks
               .filter((item) => item.id !== args.id && item.laneId === args.laneId)
               .sort((a, b) => a.boardPosition - b.boardPosition);
+            const target = [...others.filter((item) => !item.completed), ...others.filter((item) => item.completed)];
             target.splice(args.targetIndex, 0, task);
             const targetPositions = new Map(target.map((item, index) => [item.id, index]));
             let updated: any;
             workspaceTasks = workspaceTasks.map((item) => {
               if (item.id === args.id) {
-                updated = { ...item, laneId: args.laneId, completed: args.laneId === 'lane-done', boardPosition: targetPositions.get(item.id), updatedAt: now };
+                updated = {
+                  ...item, laneId: args.laneId, boardPosition: targetPositions.get(item.id),
+                  completed: false, completedAt: null, updatedAt: now
+                };
                 return updated;
               }
               if (item.laneId === args.laneId) return { ...item, boardPosition: targetPositions.get(item.id) };
@@ -140,15 +153,16 @@ test.beforeEach(async ({ page }) => {
             return lane;
           }
           case 'delete_task_lane': {
-            const replacementLaneId = args.replacementLaneId;
+            // The lane's tasks leave the board and stay in the matrix.
             workspaceTasks = workspaceTasks.map((task) => task.laneId === args.id
-              ? { ...task, laneId: replacementLaneId, completed: replacementLaneId === 'lane-done', updatedAt: now }
+              ? { ...task, laneId: null, boardPosition: 0, updatedAt: now }
               : task);
             lanes = lanes.filter((lane) => lane.id !== args.id);
             lanes.sort((a, b) => a.position - b.position).forEach((lane, index) => { lane.position = index; });
+            if (defaultLaneId === args.id) defaultLaneId = lanes[0]?.id ?? null;
             return {
-              tasks: workspaceTasks, lanes, tags,
-              defaultLaneId: replacementLaneId, completionLaneId: 'lane-done', viewPreferences: {}
+              tasks: workspaceTasks, lanes, tags: tags.map((tag) => ({ ...tag, archivedAt: null })),
+              defaultLaneId, viewPreferences: {}
             };
           }
           case 'reorder_task_lanes':
@@ -309,11 +323,12 @@ async function addKanbanModule(page: import('@playwright/test').Page) {
   await page.getByRole('button', { name: '完成编辑' }).click();
 }
 
-test('adds the kanban module, showing the three default lanes', async ({ page }) => {
+test('adds the kanban module with its lanes and a done entry outside them', async ({ page }) => {
   await addKanbanModule(page);
   await expect(page.getByRole('region', { name: '泳道：待处理' })).toBeVisible();
   await expect(page.getByRole('region', { name: '泳道：进行中' })).toBeVisible();
-  await expect(page.getByRole('region', { name: '泳道：已完成' })).toBeVisible();
+  await expect(page.locator('.kanban-lane')).toHaveCount(2);
+  await expect(page.getByRole('button', { name: '已完成：最近 7 天 0 件' })).toBeVisible();
 });
 
 async function addInline(lane: import('@playwright/test').Locator, laneName: string, title: string) {
@@ -400,10 +415,47 @@ test('creates a lane to the right from the lane menu', async ({ page }) => {
   await page.getByRole('menuitem', { name: '在右侧新建泳道' }).click();
   await page.getByLabel('泳道名称').fill('等待反馈');
   await page.getByRole('button', { name: '保存泳道' }).click();
-  await expect(page.locator('.kanban-lane__name')).toHaveText(['待处理', '等待反馈', '进行中', '已完成']);
+  await expect(page.locator('.kanban-lane__name')).toHaveText(['待处理', '等待反馈', '进行中']);
 });
 
-test('deleting a lane says where its tasks go and moves them there', async ({ page }) => {
+test('completes a card by dropping it on the done zone and reopens it from the done list', async ({ page }) => {
+  await addKanbanModule(page);
+  const doing = page.getByRole('region', { name: '泳道：进行中' });
+  const input = await addInline(doing, '进行中', '已有任务');
+  await input.fill('发布版本');
+  await input.press('Enter');
+  await expect(doing.getByRole('article', { name: '任务：发布版本' })).toBeVisible();
+  await input.press('Escape');
+  const card = doing.getByRole('article', { name: '任务：发布版本' });
+
+  await expect(page.getByTestId('kanban-done-drop')).toHaveCount(0);
+  const dataTransfer = await page.evaluateHandle(() => new DataTransfer());
+  await card.dispatchEvent('dragstart', { dataTransfer });
+  const zone = page.getByTestId('kanban-done-drop');
+  await expect(zone).toBeVisible();
+  await expect(zone).toContainText('拖到这里标记完成');
+  await zone.dispatchEvent('dragover', { dataTransfer });
+  await zone.dispatchEvent('drop', { dataTransfer });
+
+  await expect(doing.getByRole('article', { name: '任务：发布版本' })).toHaveCount(0);
+  const doneButton = page.getByRole('button', { name: '已完成：最近 7 天 1 件' });
+  await expect(doneButton).toBeVisible();
+  await expect(page.getByTestId('kanban-done-drop')).toHaveCount(0);
+
+  await doneButton.click();
+  const popup = page.getByRole('dialog', { name: '已完成' });
+  await expect(popup).toContainText('发布版本');
+  await expect(popup).toContainText('进行中 · 今天');
+  await popup.getByRole('checkbox', { name: '标记任务为未完成：发布版本' }).click();
+
+  await expect(doing.getByRole('article').first()).toHaveAccessibleName('任务：发布版本');
+  await expect(page.getByRole('button', { name: '已完成：最近 7 天 0 件' })).toBeVisible();
+  await expect(popup).toContainText('最近 7 天还没有完成的任务');
+  await page.keyboard.press('Escape');
+  await expect(popup).toHaveCount(0);
+});
+
+test('deleting a lane takes its tasks off the board, and the last lane can go too', async ({ page }) => {
   await addKanbanModule(page);
   const todo = page.getByRole('region', { name: '泳道：待处理' });
   await addInline(todo, '待处理', '临时任务');
@@ -411,11 +463,23 @@ test('deleting a lane says where its tasks go and moves them there', async ({ pa
 
   await page.getByRole('button', { name: '待处理泳道操作' }).click();
   await page.getByRole('menuitem', { name: '删除泳道' }).click();
-  await expect(page.getByRole('dialog', { name: /永久删除泳道“待处理”/ })).toContainText('1 张任务会移到“进行中”');
+  await expect(page.getByRole('dialog', { name: /永久删除泳道“待处理”/ }))
+    .toContainText('删除后，该泳道的 1 张任务会离开看板，仍保留在四象限中。');
   await page.getByRole('button', { name: '永久删除' }).click();
 
   await expect(page.getByRole('region', { name: '泳道：待处理' })).toHaveCount(0);
-  await expect(page.getByRole('region', { name: '泳道：进行中' }).getByRole('article', { name: '任务：临时任务' })).toBeVisible();
+  await expect(page.getByRole('article', { name: '任务：临时任务' })).toHaveCount(0);
+  const workspace = await page.evaluate(async () =>
+    (window as any).__TAURI_INTERNALS__.invoke('get_task_workspace_snapshot')
+  ) as { tasks: Array<{ title: string; laneId: string | null }> };
+  expect(workspace.tasks.find((task) => task.title === '临时任务')).toMatchObject({ laneId: null });
+
+  await page.getByRole('button', { name: '进行中泳道操作' }).click();
+  await page.getByRole('menuitem', { name: '删除泳道' }).click();
+  await page.getByRole('button', { name: '永久删除' }).click();
+  await expect(page.getByText(/还没有泳道/)).toBeVisible();
+  await expect(page.getByRole('button', { name: /^已完成/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '新建任务' })).toBeDisabled();
 });
 
 test('uses a single vertical scroll container so the board never scrolls horizontally', async ({ page }) => {
