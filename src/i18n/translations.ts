@@ -10,17 +10,19 @@ import { es } from './locales/es';
 import { ja } from './locales/ja';
 import { ko } from './locales/ko';
 import { zhHant } from './locales/zh-Hant';
+import { noteExportTranslations } from '../notes/export/translations';
 
 // Flat key -> string dictionaries per language. Keys use dot-namespaces by
 // feature for readability. Interpolation uses `{name}` placeholders resolved by
 // the `t()` helper.
 export const translations: Record<Language, Record<string, string>> = {
-  fr: { ...fr, ...nativeErrorTranslations.fr },
-  es: { ...es, ...nativeErrorTranslations.es },
-  ja: { ...ja, ...nativeErrorTranslations.ja },
-  ko: { ...ko, ...nativeErrorTranslations.ko },
-  'zh-Hant': { ...zhHant, ...nativeErrorTranslations['zh-Hant'] },
+  fr: { ...fr, ...nativeErrorTranslations.fr, ...noteExportTranslations.fr },
+  es: { ...es, ...nativeErrorTranslations.es, ...noteExportTranslations.es },
+  ja: { ...ja, ...nativeErrorTranslations.ja, ...noteExportTranslations.ja },
+  ko: { ...ko, ...nativeErrorTranslations.ko, ...noteExportTranslations.ko },
+  'zh-Hant': { ...zhHant, ...nativeErrorTranslations['zh-Hant'], ...noteExportTranslations['zh-Hant'] },
   zh: {
+    ...noteExportTranslations.zh,
     ...nativeErrorTranslations.zh,
     ...timeTranslations.zh,
     ...timeBarTranslations.zh,
@@ -1043,6 +1045,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'widget.focusTimer.desc': '番茄钟式专注计时，帮助保持节奏。'
   },
   en: {
+    ...noteExportTranslations.en,
     ...nativeErrorTranslations.en,
     ...timeTranslations.en,
     ...timeBarTranslations.en,

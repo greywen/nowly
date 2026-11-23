@@ -37,4 +37,10 @@ fn emit_oauth_credentials() {
 fn main() {
     emit_oauth_credentials();
     tauri_build::build();
+    // tauri-build links its Windows manifest only into binary targets.
+    // The isolated export example also needs Common Controls v6 (TaskDialog).
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
+        let resource = Path::new(&std::env::var("OUT_DIR").unwrap()).join("resource.lib");
+        println!("cargo:rustc-link-arg-examples={}", resource.display());
+    }
 }

@@ -15,4 +15,23 @@ describe('NotesManagerDialog', () => {
     await user.click(screen.getByRole('button', {name:'编辑便签：产品原则'}));
     expect(create).toHaveBeenCalled(); expect(edit).toHaveBeenCalledWith(note, expect.anything());
   });
+
+  it('selects individual notes, all and none without editing a note', async () => {
+    const user = userEvent.setup();
+    const edit = vi.fn();
+    render(<NotesManagerDialog notes={[note, {...note, id:'n2', content:'另一条'}]} onClose={vi.fn()} onCreate={vi.fn()} onEdit={edit} />);
+    await user.click(screen.getByRole('button', {name:'导出便签'}));
+    expect(screen.getByRole('button', {name:'导出所选便签'})).toBeDisabled();
+    await user.click(screen.getByRole('checkbox', {name:'选择便签：产品原则'}));
+    expect(screen.getByText('已选 1 / 2 条')).toBeInTheDocument();
+    const all = screen.getByRole('checkbox', {name:'全选便签'});
+    expect(all).toBePartiallyChecked();
+    await user.click(all);
+    expect(screen.getByText('已选 2 / 2 条')).toBeInTheDocument();
+    await user.click(all);
+    expect(screen.getByRole('button', {name:'导出所选便签'})).toBeDisabled();
+    expect(edit).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', {name:'退出导出'}));
+    expect(screen.getByRole('button', {name:'编辑便签：产品原则'})).toBeInTheDocument();
+  });
 });

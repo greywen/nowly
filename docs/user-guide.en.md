@@ -145,6 +145,15 @@ The ordinary window, wallpaper, tray, quick panel and fullscreen focus serve dif
 - **Exit Nowly** in the tray menu is the only action that terminates the
   process.
 
+### Export notes
+
+Open **View all notes → Export notes**, select individual notes or select all, and choose PDF or Markdown. The export button in an existing note's editor exports the current draft without saving changes to the note.
+
+- A single note without attachments produces a `.pdf` or `.md` file. Multiple notes or local attachments produce one ZIP, with a separate directory for each note and its `assets/` folder. Extract the archive and keep the document and assets together.
+- PDF supports searchable/selectable text, CJK characters, local images and pagination in the Windows desktop app. Markdown preserves headings, lists, tasks, tables, code and links; colors, font sizes and alignment are simplified. Formulas retain their TeX source.
+- External images and videos remain links; export does not download them. A missing local attachment fails the entire export so you can restore the file and retry. Notes remain unchanged.
+- Exports are limited to 256 MB; select fewer notes if needed. Cancelling the system Save As dialog writes nothing. Browser development mode supports Markdown/ZIP downloads only.
+
 ### Sticker canvas
 
 Add **Stickers** under **Edit layout → Add module**. If the grid is full, remove

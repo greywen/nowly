@@ -24,6 +24,7 @@ mod monitors;
 mod native_language;
 mod net;
 mod notes;
+mod note_export;
 mod oauth;
 mod oauth_config;
 mod quick_panel;
@@ -643,6 +644,8 @@ fn main() {
             task_workspace::delete_task_tag,
             task_workspace::set_task_view_preferences,
             notes::list_notes,
+            note_export::render_note_pdf,
+            note_export::save_note_export,
             monitors::list_monitors,
             notes::create_note,
             notes::update_note,
