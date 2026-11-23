@@ -1,4 +1,4 @@
-import type { DragEvent } from 'react';
+import { useRef, type DragEvent } from 'react';
 import { formatTaskMeta } from '../lib/task-draft';
 import { colorStyle } from '../lib/color';
 import type { MatrixTask } from './matrix-model';
@@ -9,6 +9,12 @@ import { priorityColors } from '../tasks/task-projections';
 
 function boardCard(taskId: string): HTMLElement | null {
   return document.querySelector<HTMLElement>(`[data-task-card="${CSS.escape(taskId)}"]`);
+}
+
+function isSeparateControl(target: EventTarget): boolean {
+  return target instanceof Element && Boolean(target.closest(
+    'label, input, select, textarea, a[href], button:not(.task-row__title), [contenteditable="true"]'
+  ));
 }
 
 type TaskRowProps = {
@@ -24,13 +30,35 @@ type TaskRowProps = {
 
 export function TaskRow({ task, today, pending, dragging = false, onToggle, onOpen, onDragStart, onDragEnd }: TaskRowProps) {
   const draggable = Boolean(onDragStart);
+  const titleRef = useRef<HTMLButtonElement>(null);
+  const suppressOpen = useRef(false);
+  const pressedControl = useRef(false);
 
   return (
     <div
       className={`task-row${task.completed ? ' task-row--completed' : ''}${dragging ? ' task-row--dragging' : ''}`}
       draggable={draggable}
       aria-grabbed={draggable ? dragging : undefined}
-      onDragStart={onDragStart ? (event) => onDragStart(event, task) : undefined}
+      onPointerDownCapture={(event) => {
+        suppressOpen.current = false;
+        pressedControl.current = isSeparateControl(event.target);
+      }}
+      onPointerCancel={() => { suppressOpen.current = true; }}
+      onClick={(event) => {
+        if (event.defaultPrevented || event.button !== 0 || dragging || suppressOpen.current
+          || pressedControl.current || isSeparateControl(event.target)) return;
+        if (titleRef.current) onOpen(task, titleRef.current);
+      }}
+      onDragStart={onDragStart ? (event) => {
+        if (pressedControl.current || isSeparateControl(event.target)) {
+          event.preventDefault();
+          return;
+        }
+        // Keep this set through dragend: a release click is still part of the
+        // drag. Only a new press or keyboard activation starts another gesture.
+        suppressOpen.current = true;
+        onDragStart(event, task);
+      } : undefined}
       onDragEnd={onDragEnd}
     >
       <label className="form-check form-check-custom form-check-solid task-row__check">
@@ -59,10 +87,16 @@ export function TaskRow({ task, today, pending, dragging = false, onToggle, onOp
       <div className="task-row__copy">
         <div className="task-row__headline">
           <button
+            ref={titleRef}
             type="button"
             className="task-row__title"
             aria-label={t('taskRow.edit', { title: task.title })}
-            onClick={(event) => onOpen(task, event.currentTarget)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                suppressOpen.current = false;
+                pressedControl.current = false;
+              }
+            }}
           >
             {task.title}
           </button>

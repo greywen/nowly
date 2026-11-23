@@ -710,10 +710,11 @@ body:has(.screen-status-island-root),
 .quadrant h3 { margin: 0; min-width: 0; color: var(--text-primary); font-size: 0.95rem; font-weight: 600; }
 .quadrant-count { min-width: 24px; padding: 2px 8px; border-radius: var(--radius-pill); color: var(--text-secondary); background: rgba(255, 255, 255, .72); font-size: 0.85rem; font-weight: 600; text-align: center; }
 .quadrant-tasks { min-width: 0; min-height: 0; flex: 1; overflow: auto; }
-.task-row { min-width: 0; padding: 8px; display: flex; align-items: center; gap: 12px; border-radius: var(--radius-sm); background: var(--bg-surface); cursor: grab; }
-.task-row[draggable="true"]:active { cursor: grabbing; }
-.task-row--dragging { opacity: .5; }
-.task-row__check, .task-row__title { cursor: auto; }
+.task-row { min-width: 0; padding: 8px; display: flex; align-items: center; gap: 12px; border-radius: var(--radius-sm); background: var(--bg-surface); cursor: pointer; }
+.task-row:hover { background: var(--bg-subtle); }
+.task-row--dragging { opacity: .5; cursor: grabbing; }
+.task-row__check { cursor: auto; }
+.task-row__title { cursor: inherit; }
 .task-row + .task-row,
 .task-row + .inline-add,
 .task-row + .inline-add__trigger { margin-top: 8px; }

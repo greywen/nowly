@@ -105,23 +105,32 @@ describe('MatrixWidget', () => {
     expect(screen.queryByRole('combobox', { name: '按优先级筛选' })).not.toBeInTheDocument();
   });
 
-  it('moves a task to another quadrant on drag and drop', () => {
+  it('moves a task to another quadrant without opening the editor on release', async () => {
+    const user = userEvent.setup();
     const move = vi.fn();
-    render(<MatrixWidget {...props({ onMoveTask: move })} />);
+    const open = vi.fn();
+    render(<MatrixWidget {...props({ onMoveTask: move, onOpenTask: open })} />);
 
-    const row = screen.getByRole('button', { name: '编辑任务：发布 v0.1' }).closest('.task-row') as HTMLElement;
+    const title = screen.getByRole('button', { name: '编辑任务：发布 v0.1' });
+    const row = title.closest('.task-row') as HTMLElement;
     const target = screen.getByRole('region', { name: '重要不紧急' });
 
     fireEvent.dragStart(row);
     fireEvent.dragOver(target);
     fireEvent.drop(target);
+    fireEvent.dragEnd(row);
+    fireEvent.click(title);
 
     expect(move).toHaveBeenCalledWith(sampleTasks[0], 'important_not_urgent');
+    expect(open).not.toHaveBeenCalled();
+    await user.click(row);
+    expect(open).toHaveBeenCalledExactlyOnceWith(sampleTasks[0], title);
   });
 
   it('does not move a task dropped on its own quadrant', () => {
     const move = vi.fn();
-    render(<MatrixWidget {...props({ onMoveTask: move })} />);
+    const open = vi.fn();
+    render(<MatrixWidget {...props({ onMoveTask: move, onOpenTask: open })} />);
 
     const row = screen.getByRole('button', { name: '编辑任务：发布 v0.1' }).closest('.task-row') as HTMLElement;
     const sameQuadrant = screen.getByRole('region', { name: '重要且紧急' });
@@ -129,8 +138,11 @@ describe('MatrixWidget', () => {
     fireEvent.dragStart(row);
     fireEvent.dragOver(sameQuadrant);
     fireEvent.drop(sameQuadrant);
+    fireEvent.dragEnd(row);
+    fireEvent.click(screen.getByRole('button', { name: '编辑任务：发布 v0.1' }));
 
     expect(move).not.toHaveBeenCalled();
+    expect(open).not.toHaveBeenCalled();
   });
 
   it('surfaces a drag error with a dismiss control', async () => {
