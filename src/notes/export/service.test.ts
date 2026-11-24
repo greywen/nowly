@@ -18,21 +18,23 @@ describe('note export packaging', () => {
   });
 
   it('exports a single standalone Markdown file', async () => {
-    const result = await buildNoteExport([note], 'markdown', {});
+    const result = await buildNoteExport([note], {});
     expect(result.name).toBe('中文标题.md');
     expect(strFromU8(result.bytes)).toContain('# 中文标题');
   });
 
   it('packages a batch in distinct directories even when titles match', async () => {
-    const result = await buildNoteExport([note, { ...note, id: 'b' }], 'markdown', {});
-    expect(result.name).toMatch(/\.zip$/);
+    const onProgress = vi.fn();
+    const result = await buildNoteExport([note, { ...note, id: 'b' }], {}, { onProgress });
+    expect(result.name).toBe('Nowly-Notes-markdown.zip');
     const files = unzipSync(result.bytes);
     expect(Object.keys(files).filter(path => path.endsWith('.md'))).toEqual(['001-中文标题/中文标题.md', '002-中文标题/中文标题.md']);
+    expect(onProgress.mock.calls).toEqual([[0, 2], [1, 2], [2, 2]]);
   });
 
   it('copies image bytes and uses portable relative URLs', async () => {
     const withImage = { ...note, content: `标题\n\n![图](attachment:${id})` };
-    const result = await buildNoteExport([withImage], 'markdown', {
+    const result = await buildNoteExport([withImage], {
       listAttachments: async () => [attachment],
       readAttachment: async () => new Uint8Array([1, 2, 3])
     });
@@ -46,7 +48,7 @@ describe('note export packaging', () => {
   });
 
   it('fails when attachments are missing instead of exporting broken content', async () => {
-    await expect(buildNoteExport([{ ...note, content: `![图](attachment:${id})` }], 'markdown', {
+    await expect(buildNoteExport([{ ...note, content: `![图](attachment:${id})` }], {
       listAttachments: async () => [],
       readAttachment: async () => new Uint8Array()
     })).rejects.toThrow('attachment');
@@ -56,7 +58,7 @@ describe('note export packaging', () => {
     for (const url of ['attachment:invalid', 'assets/not-in-the-archive.png', 'blob:https://example.com/stale', 'file:///C:/private/photo.png']) {
       for (const insert of ['文件', { image: url }]) {
         const content = JSON.stringify({ v: 1, ops: [{ insert, attributes: { link: url } }, { insert: '\n' }] });
-        await expect(buildNoteExport([{ ...note, content }], 'markdown', {})).rejects.toThrow('attachment');
+        await expect(buildNoteExport([{ ...note, content }], {})).rejects.toThrow('attachment');
       }
     }
   });
@@ -64,28 +66,17 @@ describe('note export packaging', () => {
   it('checks attachment size before reading and rejects truncated bytes', async () => {
     const withImage = { ...note, content: `![图](attachment:${id})` };
     const readAttachment = vi.fn(async () => new Uint8Array(2));
-    await expect(buildNoteExport([withImage], 'markdown', {
+    await expect(buildNoteExport([withImage], {
       listAttachments: async () => [{ ...attachment, byteSize: 256 * 1024 * 1024 + 1 }],
       readAttachment
     })).rejects.toThrow('tooLarge');
     expect(readAttachment).not.toHaveBeenCalled();
-    await expect(buildNoteExport([withImage], 'markdown', {
+    await expect(buildNoteExport([withImage], {
       listAttachments: async () => [attachment], readAttachment
     })).rejects.toThrow('attachment');
   });
 
-  it('renders PDF from HTML, reports progress and packages individual PDFs', async () => {
-    const renderPdf = vi.fn(async (_html: string) => new TextEncoder().encode('%PDF-example'));
-    const progress = vi.fn();
-    const result = await buildNoteExport([note, { ...note, id: 'b' }], 'pdf', {}, { renderPdf, onProgress: progress });
-    expect(renderPdf).toHaveBeenCalledTimes(2);
-    expect(renderPdf.mock.calls[0][0]).toContain('<h1>中文标题</h1>');
-    expect(progress).toHaveBeenLastCalledWith(2, 2);
-    expect(Object.keys(unzipSync(result.bytes)).filter(path => path.endsWith('.pdf'))).toHaveLength(2);
-  });
-
-  it('rejects empty selection and PDF without a renderer', async () => {
-    await expect(buildNoteExport([], 'markdown', {})).rejects.toThrow();
-    await expect(buildNoteExport([note], 'pdf', {})).rejects.toThrow();
+  it('rejects an empty selection', async () => {
+    await expect(buildNoteExport([], {})).rejects.toThrow('empty');
   });
 });

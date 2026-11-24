@@ -27,6 +27,36 @@ pub fn open_external(target: String) -> Result<(), CommandError> {
     open_target(&target)
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoreOpenResult {
+    opened_in_browser: bool,
+}
+
+#[tauri::command]
+pub async fn open_store_page() -> Result<StoreOpenResult, CommandError> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let product_id = crate::package::update_product_id().map_err(CommandError::system)?;
+        let website = crate::package_policy::store_url(Some(&product_id))
+            .ok_or_else(|| CommandError::system("invalid Store product ID"))?;
+        let target = format!("ms-windows-store://pdp/?ProductId={product_id}");
+        match open_target(&target) {
+            Ok(()) => Ok(StoreOpenResult {
+                opened_in_browser: false,
+            }),
+            Err(error) => {
+                eprintln!("Store activation failed; trying product website: {error:?}");
+                open_target(&website)?;
+                Ok(StoreOpenResult {
+                    opened_in_browser: true,
+                })
+            }
+        }
+    })
+    .await
+    .map_err(CommandError::system)?
+}
+
 #[cfg(windows)]
 pub(crate) fn open_target(target: &str) -> Result<(), CommandError> {
     use std::os::windows::ffi::OsStrExt;

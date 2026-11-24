@@ -295,12 +295,6 @@ pub fn fetch_ics(url: &str) -> Result<String, CommandError> {
     fetch_text(url, MAX_ICS_BYTES)
 }
 
-/// 拉取一个 https 的公开资源（用于软件更新检查，例如 GitHub Releases API）。
-/// 复用同一套 https-only / 拦内网 IP / 禁重定向 / 限大小 / 超时基线。
-pub fn fetch_public_text(url: &str) -> Result<String, CommandError> {
-    fetch_text(url, MAX_RELEASE_BYTES)
-}
-
 // The fixed set of hosts the OAuth calendar integration may talk to. Unlike the
 // module proxy (which enforces a per-module user allow-list), these API calls
 // carry an `Authorization: Bearer` token, so the destination must be pinned to

@@ -9,10 +9,6 @@ const EMPTY_IMAGE = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAA
 const embeddedImage = /^data:image\/(?:png|jpe?g|gif|webp|bmp);base64,[a-z0-9+/=\s]+$/i;
 const assetUrl = /^assets\/[^\\?#]+$/;
 
-export function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!);
-}
-
 function safeLink(url: string): string {
   if (assetUrl.test(url)) return url;
   try {
@@ -22,7 +18,7 @@ function safeLink(url: string): string {
 }
 
 /** No user-controlled remote resource is ever inserted into the live DOM. */
-export async function convertContent(content: string, mapUrl: (url: string) => string = url => url) {
+export function convertContent(content: string, mapUrl: (url: string) => string = url => url): string {
   const images: string[] = [];
   const formulas: Array<{ marker: string; source: string }> = [];
   const ops: DeltaOp[] = parseContent(content).map(op => {
@@ -87,8 +83,7 @@ export async function convertContent(content: string, mapUrl: (url: string) => s
   });
   // GFM expects a header row. Preserve all Quill cells, using the first row
   // as the exported header rather than silently flattening a table.
-  const markdownRoot = root.cloneNode(true) as HTMLElement;
-  markdownRoot.querySelectorAll('table tr:first-child td').forEach(cell => {
+  root.querySelectorAll('table tr:first-child td').forEach(cell => {
     const heading = document.createElement('th');
     heading.append(...Array.from(cell.childNodes));
     cell.replaceWith(heading);
@@ -111,42 +106,10 @@ export async function convertContent(content: string, mapUrl: (url: string) => s
     }
   });
   markdown.addRule('strike', { filter: ['s', 'del'], replacement: text => `~~${text}~~` });
-  let md = markdown.turndown(markdownRoot);
-  let body = root.innerHTML;
-  if (formulas.length) {
-    const { default: katex } = await import('katex');
-    for (const { marker, source } of formulas) {
-      body = body.split(marker).join(katex.renderToString(source, { output: 'mathml', throwOnError: false, trust: false }));
-      const inTable = Array.from(markdownRoot.querySelectorAll('th,td')).some(cell => cell.textContent?.includes(marker));
-      md = md.split(marker).join(`$${inTable ? source.replace(/\|/g, '\\|').replace(/\r?\n/g, ' ') : source}$`);
-    }
+  let md = markdown.turndown(root);
+  for (const { marker, source } of formulas) {
+    const inTable = Array.from(root.querySelectorAll('th,td')).some(cell => cell.textContent?.includes(marker));
+    md = md.split(marker).join(`$${inTable ? source.replace(/\|/g, '\\|').replace(/\r?\n/g, ' ') : source}$`);
   }
-  return { html: body, markdown: `${md.trim()}\n` };
-}
-
-/** Print-only document: user formatting is content, not application UI tokens. */
-export function printDocument(html: string, title: string, language: string): string {
-  return `<!doctype html><html lang="${escapeHtml(language)}"><head><meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
-<title>${escapeHtml(title)}</title><style>
-@page { size: A4; margin: 18mm; }
-html { font-size: 13px; }
-body { color: #211f1c; background: #fff; font-family: "Segoe UI", "Microsoft YaHei", "Yu Gothic UI", "Malgun Gothic", sans-serif; line-height: 1.6; overflow-wrap: anywhere; }
-p { margin: 0 0 12px; white-space: pre-wrap; }
-h1,h2,h3,h4 { break-after: avoid; line-height: 1.3; }
-img { max-width: 100%; max-height: 245mm; height: auto; object-fit: contain; break-inside: avoid; }
-table { border-collapse: collapse; width: 100%; table-layout: fixed; margin: 12px 0; }
-th,td { border: 1px solid #dad3c3; padding: 8px; text-align: start; vertical-align: top; overflow-wrap: anywhere; }
-thead { display: table-header-group; } tr { break-inside: avoid; }
-pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #f8f6f2; padding: 12px; }
-code,pre,.ql-font-mono { font-family: Consolas, monospace; }
-blockquote { border-left: 1px solid #dad3c3; padding-left: 16px; margin-left: 0; }
-a { color: #30a6b6; overflow-wrap: anywhere; }
-.ql-align-center { text-align: center; } .ql-align-right { text-align: right; } .ql-align-justify { text-align: justify; }
-.ql-direction-rtl { direction: rtl; }
-${Array.from({ length: 8 }, (_, i) => `.ql-indent-${i + 1} { padding-left: ${(i + 1) * 24}px; }`).join('\n')}
-li[data-list=checked],li[data-list=unchecked] { list-style: none; }
-li[data-list=checked]::before { content: "☑ "; } li[data-list=unchecked]::before { content: "☐ "; }
-.note-export-attachments { border-top: 1px solid #dad3c3; margin-top: 24px; }
-</style></head><body>${html}</body></html>`;
+  return `${md.trim()}\n`;
 }

@@ -93,6 +93,36 @@ enum Msg {
     Finished(u64, View),
 }
 
+impl Msg {
+    fn label(&self) -> String {
+        match self {
+            Self::Signal(signal) => format!("{signal:?}"),
+            Self::Apply(settings) => format!("Apply(enabled={}, key={})", settings.enabled, settings.hold_key),
+            Self::Dismiss => "Dismiss".into(),
+            Self::Unload => "Unload".into(),
+            Self::Pause(paused) => format!("Pause({paused})"),
+            Self::Partial(seq, _) => format!("Partial({seq})"),
+            Self::Transcript(seq, _) => format!("Transcript({seq})"),
+            Self::Finished(seq, view) => format!("Finished({seq}, {})", view.phase()),
+        }
+    }
+}
+
+impl View {
+    fn phase(&self) -> &'static str {
+        match self {
+            Self::Idle => "idle",
+            Self::Listening { .. } => "listening",
+            Self::Interpreting { .. } => "interpreting",
+            Self::Created { .. } => "created",
+            Self::Confirm { .. } => "confirm",
+            Self::Clarify { .. } => "clarify",
+            Self::Answer { .. } => "answer",
+            Self::Error { .. } => "error",
+        }
+    }
+}
+
 /// Managed state: the channel into the worker plus the last snapshot, for a
 /// Bar that reloads mid-session.
 pub struct Voice {
@@ -259,6 +289,19 @@ impl Worker {
     }
 
     fn handle(&mut self, msg: Msg) {
+        let started = Instant::now();
+        let label = msg.label();
+        if !matches!(msg, Msg::Partial(..)) {
+            trace!("worker <- {label}");
+        }
+        self.dispatch(msg);
+        let took = started.elapsed();
+        if took > Duration::from_millis(200) {
+            trace!("worker {label} took {} ms", took.as_millis());
+        }
+    }
+
+    fn dispatch(&mut self, msg: Msg) {
         match msg {
             Msg::Signal(signal) => self.signal(signal),
             Msg::Apply(settings) => self.apply(settings),
@@ -294,8 +337,8 @@ impl Worker {
                     View::Clarify { transcript, message } => Some((transcript.clone(), message.clone())),
                     _ => None,
                 };
-                if matches!(view, View::Created { .. }) {
-                    let _ = crate::status_island::invalidate_registered();
+                if let View::Created { plan, .. } = &view {
+                    let _ = crate::assistant::commands::notify_changed(&self.app, plan);
                 }
                 self.show(view);
             }
@@ -318,16 +361,22 @@ impl Worker {
     }
 
     fn rebind(&mut self) {
-        self.hook = None;
+        if self.hook.take().is_some() {
+            trace!("hook removed");
+        }
         if !matches!(std::mem::replace(&mut self.hold, Hold::None), Hold::None) {
             self.show(View::Idle);
         }
         if self.settings.enabled && !self.paused {
             let tx = self.tx.clone();
             match Hook::install(self.settings.spec(), move |signal| {
+                trace!("hook -> {signal:?}");
                 let _ = tx.send(Msg::Signal(signal));
             }) {
-                Ok(hook) => self.hook = Some(hook),
+                Ok(hook) => {
+                    trace!("hook installed for {}", self.settings.hold_key);
+                    self.hook = Some(hook);
+                }
                 Err(error) => eprintln!("failed to install voice hotkey: {error}"),
             }
         }
@@ -341,12 +390,20 @@ impl Worker {
 
     fn signal(&mut self, signal: Signal) {
         match signal {
-            Signal::Start if crate::screen_capture::is_active(&self.app) => {}
+            Signal::Start if crate::screen_capture::is_active(&self.app) => {
+                trace!("start ignored: a screenshot is in progress");
+            }
             Signal::Start => {
                 // Opening the device now keeps the first syllable; nothing
                 // visible changes until Prime, and a quick tap leaves any
                 // result or request in flight alone.
+                let opened = Instant::now();
                 let recording = Recording::start(self.settings.device.as_deref());
+                trace!(
+                    "microphone {} in {} ms",
+                    if recording.is_ok() { "opened" } else { "failed" },
+                    opened.elapsed().as_millis()
+                );
                 self.hold = Hold::Armed { recording };
                 self.preload();
             }
@@ -384,7 +441,10 @@ impl Worker {
     }
 
     fn listen(&mut self) {
-        let Hold::Armed { recording } = std::mem::replace(&mut self.hold, Hold::None) else { return };
+        let Hold::Armed { recording } = std::mem::replace(&mut self.hold, Hold::None) else {
+            trace!("listen ignored: not armed");
+            return;
+        };
         // A new hold replaces whatever the Bar was showing.
         self.cancel_work();
         self.last_used = Instant::now();
@@ -410,6 +470,7 @@ impl Worker {
         };
         match failure {
             Some((kind, message)) => {
+                trace!("listen failed: {kind:?} {message}");
                 self.clarify = None;
                 self.show(View::Error { kind, message, transcript: String::new() });
             }
@@ -428,7 +489,9 @@ impl Worker {
         };
         let failure = recording.failure();
         let duration = recording.duration_ms();
+        let closing = Instant::now();
         let samples = recording.finish();
+        trace!("recorded {duration} ms, microphone closed in {} ms", closing.elapsed().as_millis());
         if let Some(error) = failure {
             self.show(View::Error { kind: ErrorKind::Microphone, message: format!("麦克风中断：{error}"), transcript });
             return;

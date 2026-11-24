@@ -14,7 +14,7 @@ use std::{
     },
     time::{Duration, Instant},
 };
-use tauri::{AppHandle, Manager, State, WebviewWindow};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 
 #[derive(Default)]
 pub struct Requests(pub Mutex<RequestRegistry>);
@@ -239,9 +239,43 @@ pub fn assistant_cancel_plan(
     require_assistant_window(&window, AssistantWindowAccess::Runtime)?;
     store::cancel(&*db.0.lock().map_err(CommandError::database)?, &plan_id)
 }
+/// Shared with `src/quick-create/events.ts`: the main window reloads the
+/// named kind of record when it hears this.
+const RECORDS_CHANGED_EVENT: &str = "nowly-records-changed";
+
+/// The record kinds a plan touched, once each.
+fn changed_kinds(plan: &Plan) -> Vec<&'static str> {
+    let mut kinds = Vec::new();
+    for change in &plan.changes {
+        let kind = if change.kind.ends_with("Event") {
+            "event"
+        } else if change.kind.ends_with("Task") {
+            "task"
+        } else if change.kind.ends_with("Note") {
+            "note"
+        } else {
+            continue;
+        };
+        if !kinds.contains(&kind) {
+            kinds.push(kind);
+        }
+    }
+    kinds
+}
+
+/// Refreshes the Bar and the main window after a plan was committed or undone
+/// outside the main window.
+pub(crate) fn notify_changed(app: &AppHandle, plan: &Plan) -> Result<(), CommandError> {
+    for kind in changed_kinds(plan) {
+        app.emit(RECORDS_CHANGED_EVENT, serde_json::json!({ "kind": kind }))
+            .map_err(CommandError::system)?;
+    }
+    crate::status_island::invalidate_registered()
+}
 #[tauri::command]
 pub fn assistant_execute(
     window: WebviewWindow,
+    app: AppHandle,
     db: State<'_, AppDb>,
     plan_id: String,
 ) -> Result<Plan, CommandError> {
@@ -249,12 +283,13 @@ pub fn assistant_execute(
     let db = db.0.lock().map_err(CommandError::database)?;
     let plan = store::execute(&db, &plan_id, &provider::get_config(&db)?.permissions)?;
     drop(db);
-    crate::status_island::invalidate_registered()?;
+    notify_changed(&app, &plan)?;
     Ok(plan)
 }
 #[tauri::command]
 pub fn assistant_undo(
     window: WebviewWindow,
+    app: AppHandle,
     db: State<'_, AppDb>,
     plan_id: String,
 ) -> Result<Plan, CommandError> {
@@ -262,7 +297,7 @@ pub fn assistant_undo(
     let db = db.0.lock().map_err(CommandError::database)?;
     let plan = store::undo(&db, &plan_id, &provider::get_config(&db)?.permissions)?;
     drop(db);
-    crate::status_island::invalidate_registered()?;
+    notify_changed(&app, &plan)?;
     Ok(plan)
 }
 #[tauri::command]
@@ -339,5 +374,32 @@ mod tests {
             "status-island-details",
             AssistantWindowAccess::Runtime
         ));
+    }
+    #[test]
+    fn changed_kinds_name_each_touched_record_kind_once() {
+        let change = |kind: &str| Change {
+            key: String::new(),
+            kind: kind.into(),
+            title: String::new(),
+            before: serde_json::Value::Null,
+            after: serde_json::Value::Null,
+        };
+        let plan = Plan {
+            id: "p".into(),
+            status: "committed".into(),
+            created_at: 0,
+            expires_at: 0,
+            revision: 0,
+            actions: vec![],
+            changes: vec![
+                change("createEvent"),
+                change("deleteEvent"),
+                change("updateNote"),
+                change("createTask"),
+            ],
+            warnings: vec![],
+            options: serde_json::Value::Null,
+        };
+        assert_eq!(changed_kinds(&plan), vec!["event", "note", "task"]);
     }
 }

@@ -8,6 +8,17 @@ vi.mock('./native', () => ({ exportNotes: vi.fn() }));
 const note = { id:'n1', content:'标题', color:'#4F55DA' as const, pinned:false, styleVariant:0, icon:'' as const, createdAt:'x', updatedAt:'x' };
 
 describe('note export controls', () => {
+  it('offers only Markdown export without a format chooser', () => {
+    render(<NoteExportControls notes={[note]} />);
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '导出所选便签' })).toBeEnabled();
+  });
+
+  it('explains how to open images from a ZIP export', () => {
+    render(<NoteExportControls notes={[note]} />);
+    expect(screen.getByText(/完整解压 ZIP.*保留.*assets\//)).toBeInTheDocument();
+  });
+
   it('disables empty selection and submits only the selected snapshot', async () => {
     const user = userEvent.setup();
     vi.mocked(exportNotes).mockResolvedValue(true);
@@ -16,7 +27,7 @@ describe('note export controls', () => {
     rerender(<NoteExportControls notes={[note]} />);
     await user.click(screen.getByRole('button', { name: '导出所选便签' }));
     await screen.findByRole('status');
-    expect(exportNotes).toHaveBeenCalledWith([note], 'pdf', expect.anything(), expect.any(Function));
+    expect(exportNotes).toHaveBeenCalledWith([note], expect.anything(), expect.any(Function));
     expect(screen.getByRole('status')).toHaveTextContent('已导出');
   });
 

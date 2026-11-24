@@ -3,8 +3,6 @@ use crate::error::CommandError;
 use std::io::Write;
 use std::path::Path;
 
-#[path = "note_export/pdf.rs"]
-pub mod pdf;
 #[path = "note_export/save.rs"]
 mod save;
 
@@ -30,7 +28,6 @@ pub fn validate_export(name: &str, bytes: &[u8]) -> Result<(), CommandError> {
             .any(|c| c.is_control() || "<>:\"/\\|?*".contains(c));
     let content_valid = match Path::new(name).extension().and_then(|x| x.to_str()) {
         Some("md") => std::str::from_utf8(bytes).is_ok(),
-        Some("pdf") => bytes.starts_with(b"%PDF-"),
         Some("zip") => bytes.starts_with(b"PK\x03\x04"),
         _ => false,
     };
@@ -81,16 +78,6 @@ fn require_main(label: &str) -> Result<(), CommandError> {
 }
 
 #[tauri::command(async)]
-pub fn render_note_pdf(
-    app: tauri::AppHandle,
-    window: tauri::WebviewWindow,
-    html: String,
-) -> Result<tauri::ipc::Response, CommandError> {
-    require_main(window.label())?;
-    pdf::render(&app, &html).map(tauri::ipc::Response::new)
-}
-
-#[tauri::command(async)]
 pub fn save_note_export(
     window: tauri::WebviewWindow,
     request: tauri::ipc::Request<'_>,
@@ -131,14 +118,13 @@ mod tests {
     #[test]
     fn accepts_only_portable_document_names_and_matching_signatures() {
         assert!(validate_export("中文笔记.md", "中文".as_bytes()).is_ok());
-        assert!(validate_export("中文.pdf", b"%PDF-1.7\n").is_ok());
+        assert!(validate_export("中文.pdf", b"%PDF-1.7\n").is_err());
         assert!(validate_export("Notes.zip", b"PK\x03\x04").is_ok());
         for name in [
             "../x.md", "a\\b.md", "C:x.md", "note.exe", "CON.md", "x.md.", "x\n.md", "",
         ] {
             assert!(validate_export(name, b"text").is_err(), "{name}");
         }
-        assert!(validate_export("x.pdf", b"not pdf").is_err());
         assert!(validate_export("x.zip", b"not zip").is_err());
         assert!(validate_export("x.md", &[0xff]).is_err());
     }
@@ -146,7 +132,7 @@ mod tests {
     #[test]
     fn only_main_window_may_export() {
         assert!(require_main("main").is_ok());
-        for label in ["quick-create", "quick-panel-handle", "note-export-123", ""] {
+        for label in ["quick-create", "quick-panel-handle", ""] {
             assert!(require_main(label).is_err());
         }
     }

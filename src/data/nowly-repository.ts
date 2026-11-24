@@ -100,17 +100,14 @@ export type FocusStatistics = {
 
 export type MonitorInfo = { id:string; name:string; isPrimary:boolean; positionX:number; positionY:number; width:number; height:number; scaleFactor:number };
 
-// The result of a software update check against the public GitHub releases.
-// `latestVersion`, `releaseNotes`, and `publishedAt` are absent when GitHub
-// could not be reached; the dialog then just shows the current version.
-export type UpdateInfo = {
+export type AppVersionInfo = {
   currentVersion: string;
-  latestVersion: string | null;
-  updateAvailable: boolean;
-  releaseNotes: string | null;
-  releaseUrl: string;
-  publishedAt: string | null;
+  distribution: 'msix' | 'unpackaged' | 'browser';
 };
+export type UpdateInfo =
+  | { status: 'available'; updateAvailable: true }
+  | { status: 'upToDate' | 'unsupported'; updateAvailable: false };
+export type StoreOpenResult = { openedInBrowser: boolean };
 
 export type RepositoryError = {
   code: 'validation_error' | 'not_found' | 'conflict' | 'database_error' | 'system_error';
@@ -226,6 +223,8 @@ export type NowlyRepository = {
   // Check GitHub for a newer release. Optional so lightweight test doubles and
   // the browser dev shim need not implement it.
   checkForUpdate?(): Promise<UpdateInfo>;
+  getAppVersionInfo?(): Promise<AppVersionInfo>;
+  openStorePage?(): Promise<StoreOpenResult>;
   updateSettings(settings: AppSettings): Promise<AppSettings>;
   listMonitors(): Promise<MonitorInfo[]>;
   listModuleLayout(): Promise<ModuleLayoutEntry[]>;

@@ -951,17 +951,17 @@ export function installBrowserTauriBackend() {
     },
     collect_attachment_garbage: () => 0,
 
-    // Software update check. The browser dev shim has no Cargo version and
-    // should not hit the GitHub API on every page load, so it reports the
-    // injected build version with no update available.
-    check_for_update: () => ({
-      currentVersion: typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : '0.0.0',
-      latestVersion: null,
-      updateAvailable: false,
-      releaseNotes: null,
-      releaseUrl: 'https://github.com/greywen/nowly/releases',
-      publishedAt: null
+    get_app_version_info: () => ({
+      currentVersion: __APP_VERSION__,
+      distribution: 'browser',
     }),
+    check_for_update: () => ({ status: 'unsupported', updateAvailable: false }),
+    open_store_page: () => {
+      const opened = window.open('https://apps.microsoft.com/detail/9NZ6S35M4CL2', '_blank');
+      if (!opened) throw new Error('The browser blocked the Microsoft Store page.');
+      opened.opener = null;
+      return { openedInBrowser: true };
+    },
 
     // Settings & environment
     get_app_settings: () => store.settings,

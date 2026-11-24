@@ -48,7 +48,35 @@ pub fn store_product_id() -> Result<String, String> {
     if id.is_empty() || !id.bytes().all(|c| c.is_ascii_alphanumeric()) {
         return Err("invalid Store product ID".to_owned());
     }
+
     Ok(id.to_owned())
+}
+
+pub fn update_product_id() -> Result<String, String> {
+    if aumid()?.is_some() {
+        store_product_id()
+    } else {
+        Ok(crate::package_policy::STORE_PRODUCT_ID.to_owned())
+    }
+}
+
+#[cfg(windows)]
+pub struct WinrtApartment;
+
+#[cfg(windows)]
+impl WinrtApartment {
+    pub fn initialize() -> windows::core::Result<Self> {
+        use windows::Win32::System::WinRT::{RoInitialize, RO_INIT_MULTITHREADED};
+        unsafe { RoInitialize(RO_INIT_MULTITHREADED)? };
+        Ok(Self)
+    }
+}
+
+#[cfg(windows)]
+impl Drop for WinrtApartment {
+    fn drop(&mut self) {
+        unsafe { windows::Win32::System::WinRT::RoUninitialize() };
+    }
 }
 
 #[cfg(windows)]

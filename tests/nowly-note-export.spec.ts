@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
-import { readFile, mkdir, writeFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
+import { posix } from 'node:path';
 import { unzipSync, strFromU8 } from 'fflate';
 
 test.beforeEach(async ({ page }) => {
@@ -28,8 +29,6 @@ test('downloads selected notes in a portable ZIP and keeps the stored notes unch
   await expect(page.getByRole('button', { name: '导出所选便签' })).toBeDisabled();
   await page.getByRole('checkbox', { name: '选择便签：重复标题', exact: true }).nth(0).check();
   await page.getByRole('checkbox', { name: '选择便签：重复标题', exact: true }).nth(1).check();
-  await page.getByRole('combobox', { name: '导出格式' }).click();
-  await page.getByRole('option', { name: 'Markdown (.md)', exact: true }).click();
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: '导出所选便签' }).click();
   const download = await downloadPromise;
@@ -68,7 +67,7 @@ test('keeps the last note and export actions reachable in short and narrow windo
   await page.screenshot({path:info.outputPath('note-export-mobile.png')});
 });
 
-test('packages a local image and produces a real-renderer fixture for multilingual PDF QA', async ({ page }, info) => {
+test('exports a Markdown image link that resolves to the original bytes in the ZIP', async ({ page }) => {
   await page.getByRole('button',{name:'关闭',exact:true}).click();
   await page.getByRole('button',{name:'新增便签',exact:true}).click();
   await page.locator('#note-content').fill('附件测试\n图片正文');
@@ -79,40 +78,18 @@ test('packages a local image and produces a real-renderer fixture for multilingu
   await page.getByRole('button',{name:'查看全部便签'}).click();
   await page.getByRole('button',{name:/编辑便签：.*附件测试/}).click();
   await page.getByRole('button',{name:'导出便签',exact:true}).click();
-  await page.getByRole('combobox',{name:'导出格式'}).click();
-  await page.getByRole('option',{name:'Markdown (.md)',exact:true}).click();
+  await expect(page.getByText(/完整解压 ZIP.*保留.*assets\//)).toBeVisible();
   const downloading = page.waitForEvent('download');
   await page.getByRole('button',{name:'导出所选便签'}).click();
   const file = await downloading;
   const files = unzipSync(await readFile((await file.path())!));
-  const image = Object.entries(files).find(([name])=>name.endsWith('.png'))!;
-  expect(Buffer.from(image[1])).toEqual(png);
-  const md = strFromU8(Object.entries(files).find(([name])=>name.endsWith('.md'))![1]);
-  expect(md).toContain('assets/');
+  const markdownPaths = Object.keys(files).filter(name => name.endsWith('.md'));
+  expect(markdownPaths).toHaveLength(1);
+  const [markdownPath] = markdownPaths;
+  const md = strFromU8(files[markdownPath]);
+  const imageLink = /!\[中文 图片\.png\]\((assets\/[^)\s]+)\)/.exec(md);
+  expect(imageLink, md).not.toBeNull();
+  const image = files[posix.join(posix.dirname(markdownPath), decodeURIComponent(imageLink![1]))];
+  expect(image).toEqual(new Uint8Array(png));
   expect(md).not.toMatch(/attachment:|blob:/);
-
-  const html = await page.evaluate(async () => {
-    const {convertContent, printDocument} = await import('/src/notes/export/content.ts');
-    const canvas = document.createElement('canvas'); canvas.width=600; canvas.height=180;
-    const ctx=canvas.getContext('2d')!;
-    ctx.fillStyle='#ddf8fc';ctx.fillRect(0,0,600,180);
-    ctx.fillStyle='#211f1c';ctx.font='30px Microsoft YaHei';ctx.fillText('图片与文字均完整保留',40,100);
-    const ops: unknown[] = [
-      {insert:'中文导出验收 · 日本語 · 한국어'}, {insert:'\n',attributes:{header:1}},
-      {insert:'重点内容',attributes:{bold:true,color:'#4f55da'}},{insert:' 与普通正文\n'},
-      {insert:'已完成事项'},{insert:'\n',attributes:{list:'checked'}},
-      {insert:'待办事项'},{insert:'\n',attributes:{list:'unchecked'}},
-      {insert:'项目'},{insert:'\n',attributes:{table:'r1'}},{insert:'状态'},{insert:'\n',attributes:{table:'r1'}},
-      {insert:'PDF 与 Markdown'},{insert:'\n',attributes:{table:'r2'}},{insert:'包含附件'},{insert:'\n',attributes:{table:'r2'}},
-      {insert:'const answer = 42;'}, {insert:'\n',attributes:{'code-block':'plain'}},
-      {insert:{formula:'E=mc^2'}},{insert:'\n'},
-      {insert:{image:canvas.toDataURL('image/png')},attributes:{alt:'测试图片',width:'500'}},{insert:'\n'},
-      ...Array.from({length:100},(_,index)=>({insert:`第 ${index+1} 行：这是用于检查长文分页的中文内容，文字必须可以搜索和复制。\n`}))
-    ];
-    const converted=await convertContent(JSON.stringify({v:1,ops}));
-    return printDocument(converted.html,'中文导出验收','zh-CN');
-  });
-  await mkdir('.superpowers/notes-export', {recursive:true});
-  await writeFile('.superpowers/notes-export/fixture.html', html);
-  await page.screenshot({path:info.outputPath('note-export-desktop.png')});
 });

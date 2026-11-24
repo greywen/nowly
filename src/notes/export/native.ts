@@ -1,14 +1,11 @@
 import type { Note } from '../notes-model';
-import type { ExportSource, NoteExportFormat } from './service';
+import type { ExportSource } from './service';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 
-export async function exportNotes(notes: readonly Note[], format: NoteExportFormat, source: ExportSource, progress: (done: number, total: number) => void): Promise<boolean> {
+export async function exportNotes(notes: readonly Note[], source: ExportSource, progress: (done: number, total: number) => void): Promise<boolean> {
   const { buildNoteExport } = await import('./service');
   const desktop = isTauri();
-  const artifact = await buildNoteExport(notes, format, source, {
-    onProgress: progress,
-    renderPdf: desktop ? async html => new Uint8Array(await invoke<ArrayBuffer>('render_note_pdf', { html })) : undefined
-  });
+  const artifact = await buildNoteExport(notes, source, { onProgress: progress });
   if (desktop) return invoke<boolean>('save_note_export', artifact.bytes, {
     headers: { 'x-export-name': encodeURIComponent(artifact.name) }
   });

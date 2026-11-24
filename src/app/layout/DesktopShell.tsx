@@ -6,7 +6,7 @@ import {
   type WidgetDefinition,
   type WidgetId
 } from '../../widgets/widget-registry';
-import type { UpdateInfo } from '../../data/nowly-repository';
+import type { UpdateCheckState } from '../../settings/useUpdateCheck';
 import { useModuleLayout } from '../../widgets/useModuleLayout';
 import { TemplatePickerDialog } from '../../widgets/TemplatePickerDialog';
 import { AboutDialog } from '../../settings/AboutDialog';
@@ -34,9 +34,7 @@ type DesktopShellProps = {
   hideTopbarInWallpaper?: boolean;
   hideModuleBackgroundInWallpaper?: boolean;
   overlay?: ReactNode;
-  // The launch-time update check result. When it reports a newer release the
-  // logo button shows a red dot, and the About dialog surfaces the changelog.
-  update?: UpdateInfo | null;
+  update?: UpdateCheckState;
 };
 
 // Render today's accumulated focus time as a compact, human-friendly label for

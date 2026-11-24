@@ -1574,12 +1574,14 @@ body:has(.screen-status-island-root),
 .about-dialog__actions { width: 100%; display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 .about-info { display: grid; gap: 24px; }
 .about-version { display: grid; gap: 12px; padding: 20px; border-radius: var(--radius-default); background: var(--bg-subtle); }
-.about-version__row { display: flex; align-items: center; gap: 12px; }
+.about-version__row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+.about-version__message { margin: 0; color: var(--text-secondary); font-size: 0.85rem; font-weight: 500; line-height: 1.5; overflow-wrap: anywhere; }
+.about-version__message--error { color: var(--color-danger-active); }
 .about-version__label { color: var(--text-tertiary); font-size: 0.85rem; font-weight: 500; line-height: 1.5; }
 .about-version__value { color: var(--text-primary); font-size: 1.075rem; font-weight: 600; line-height: 1.5; font-variant-numeric: tabular-nums; }
 .about-version__badge { padding: 4px 12px; border-radius: var(--radius-pill); background: var(--color-danger-light); color: var(--color-danger-active); font-size: 0.85rem; font-weight: 600; line-height: 1.5; }
 .about-version__latest { padding: 4px 12px; border-radius: var(--radius-pill); background: var(--color-success-light); color: #6f8617; font-size: 0.85rem; font-weight: 600; line-height: 1.5; }
-.about-version__download { align-self: start; display: inline-flex; align-items: center; gap: 8px; }
+.about-version__download { align-self: start; display: inline-flex; align-items: center; gap: var(--space-2); height: auto; min-height: 40px; white-space: normal; }
 .about-version__download svg { width: 18px; height: 18px; }
 .about-changelog { display: grid; gap: 8px; }
 .about-changelog__title { margin: 0; color: var(--text-primary); font-size: 0.95rem; font-weight: 600; line-height: 1.5; }

@@ -155,6 +155,10 @@ fn main() {
     set_app_user_model_id();
 
     tauri::Builder::default()
+        // tao otherwise registers keyboard Raw Input while a Nowly window has
+        // focus, and Windows then stops calling the hold-to-talk keyboard hook
+        // (tauri-apps/wry#1761). Nowly does not use device events.
+        .device_event_filter(tauri::DeviceEventFilter::Always)
         .plugin(native_language::plugin())
         .manage(assistant::commands::Requests::default())
         .manage(screen_capture::ActiveCapture::default())
@@ -660,7 +664,6 @@ fn main() {
             task_workspace::delete_task_tag,
             task_workspace::set_task_view_preferences,
             notes::list_notes,
-            note_export::render_note_pdf,
             note_export::save_note_export,
             monitors::list_monitors,
             notes::create_note,
@@ -680,6 +683,8 @@ fn main() {
             commands::update_app_settings,
             feedback::open_external,
             update::check_for_update,
+            update::get_app_version_info,
+            feedback::open_store_page,
             layout::list_module_layout,
             layout::save_module_layout,
             focus::create_focus_session,

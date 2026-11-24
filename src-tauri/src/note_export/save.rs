@@ -36,7 +36,6 @@ unsafe fn dialog(name: &str, owner: isize) -> windows::core::Result<Option<PathB
     let dialog: IFileSaveDialog = CoCreateInstance(&FileSaveDialog, None, CLSCTX_INPROC_SERVER)?;
     let extension = name.rsplit('.').next().unwrap_or("zip");
     let label = HSTRING::from(match extension {
-        "pdf" => "PDF",
         "md" => "Markdown",
         _ => "ZIP",
     });

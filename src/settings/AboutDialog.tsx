@@ -1,26 +1,22 @@
 import { Download, Mail, X } from '../components/icons';
 import { useId } from 'react';
 import { Dialog } from '../components/Dialog';
-import type { UpdateInfo } from '../data/nowly-repository';
-import { FEEDBACK_EMAIL, FEEDBACK_REPO_URL, openExternal } from '../lib/feedback';
+import type { UpdateCheckState } from './useUpdateCheck';
+import { FEEDBACK_EMAIL, openExternal } from '../lib/feedback';
 import { t } from '../i18n';
 
 type Props = {
   onClose(): void;
-  // The launch-time update check result. Null while it is pending or when
-  // GitHub could not be reached; the dialog then falls back to the build
-  // version.
-  update?: UpdateInfo | null;
+  update?: UpdateCheckState;
 };
 
-// About / feedback entry. Shows the current software version (with an update
-// badge and a one-click open of the release page when a newer version exists),
-// and a contact email. The links open in the OS default handler.
 export function AboutDialog({ onClose, update }: Props) {
   const titleId = useId();
   const mailto = `mailto:${FEEDBACK_EMAIL}?subject=${encodeURIComponent(t('about.mailSubject'))}`;
-  const currentVersion = update?.currentVersion ?? __APP_VERSION__;
+  const currentVersion = update?.version?.currentVersion
+    ?? t(update?.status === 'error' ? 'about.versionError' : 'about.loadingVersion');
   const updateAvailable = update?.updateAvailable ?? false;
+  const status = update?.status ?? 'loading';
 
   return (
     <Dialog
@@ -48,20 +44,28 @@ export function AboutDialog({ onClose, update }: Props) {
             <span className="about-version__value">{currentVersion}</span>
             {updateAvailable ? (
               <span className="about-version__badge">{t('about.updateAvailable')}</span>
-            ) : (
-              <span className="about-version__latest">{t('about.upToDate')}</span>
-            )}
+            ) : null}
           </div>
-          {updateAvailable ? (
-            <button
-              type="button"
-              className="good-button good-button--primary about-version__download"
-              onClick={() => void openExternal(update?.releaseUrl ?? FEEDBACK_REPO_URL)}
-            >
-              <Download aria-hidden="true" />
-              {t('about.download')}
-            </button>
+          <p className="about-version__message" role="status">{t(status === 'upToDate' ? 'about.noUpdates'
+            : status === 'unsupported' ? 'about.storeManaged'
+              : status === 'error' ? 'about.checkError'
+                : status === 'available' ? 'about.updateAvailable' : 'about.checking')}</p>
+          {update?.error ? <p className="about-version__message about-version__message--error" role="alert">{update.error}</p> : null}
+          {status === 'error' ? (
+            <button type="button" className="good-button" onClick={() => void update?.retry()}>{t('about.retry')}</button>
           ) : null}
+          <button
+            type="button"
+            className="good-button good-button--primary about-version__download"
+            disabled={!update || update.opening}
+            onClick={() => void update?.openStore()}
+          >
+            <Download aria-hidden="true" />
+            {t(update?.opening ? 'about.openingStore' : updateAvailable ? 'about.storeUpdate' : 'about.storeView')}
+          </button>
+          {update?.version?.distribution === 'unpackaged' ? <p className="about-version__message">{t('about.storeSeparate')}</p> : null}
+          {update?.openError ? <p className="about-version__message about-version__message--error" role="alert">{t('about.openError')} {update.openError}</p> : null}
+          {update?.openedInBrowser ? <p className="about-version__message" role="status">{t('about.storeBrowser')}</p> : null}
         </section>
 
         <div className="feedback-channels">

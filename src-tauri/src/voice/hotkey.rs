@@ -183,6 +183,24 @@ impl Machine {
         Verdict { signal: Some(Signal::Start), ..Default::default() }
     }
 
+    /// Drops keys the system says are no longer down. Key-ups are lost while
+    /// the lock screen, a UAC prompt or an elevated window has the keyboard,
+    /// and a leftover key would stop the combo from ever matching again.
+    pub fn forget_released(&mut self, except: u16, is_down: impl Fn(u16) -> bool) {
+        if self.is_held() {
+            return;
+        }
+        // A key this hook swallowed never reaches the system's key state.
+        let hidden = self.spec.key.filter(|_| self.main_swallowed);
+        self.down.retain(|vk| *vk == except || Some(*vk) == hidden || is_down(*vk));
+        if self.phase == Phase::Blocked && !self.down.iter().any(|vk| self.spec.contains(*vk)) {
+            self.phase = Phase::Idle;
+        }
+        if self.mods_down() & (WIN | ALT) == 0 {
+            self.mask_armed = false;
+        }
+    }
+
     pub fn key_down(&mut self, vk: u16, now: u64) -> Verdict {
         let repeat = !self.down.insert(vk);
         let is_main = self.spec.key == Some(vk);
@@ -286,7 +304,7 @@ mod native {
         Foundation::{LPARAM, LRESULT, WPARAM},
         System::Threading::GetCurrentThreadId,
         UI::Input::KeyboardAndMouse::{
-            SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS,
+            GetAsyncKeyState, SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS,
             KEYEVENTF_KEYUP, VIRTUAL_KEY,
         },
         UI::WindowsAndMessaging::{
@@ -349,6 +367,7 @@ mod native {
                             on_tick();
                         }
                     }
+                    trace!("hook thread exiting");
                     let _ = UnhookWindowsHookEx(hook);
                     STATE.with(|state| state.borrow_mut().take());
                 })
@@ -433,6 +452,11 @@ mod native {
                     let mut guard = cell.try_borrow_mut().ok()?;
                     let state = guard.as_mut()?;
                     let now = now(state);
+                    if down {
+                        state.machine.forget_released(vk, |key| {
+                            GetAsyncKeyState(i32::from(key)) as u16 & 0x8000 != 0
+                        });
+                    }
                     let verdict = if down { state.machine.key_down(vk, now) } else { state.machine.key_up(vk) };
                     if let Some(signal) = verdict.signal {
                         (state.sink)(signal);
@@ -531,6 +555,46 @@ mod tests {
         m.key_up(LWIN);
         m.key_down(LCTRL, 900);
         assert_eq!(m.key_down(LWIN, 900).signal, Some(Signal::Start));
+    }
+
+    #[test]
+    fn keys_released_out_of_sight_no_longer_block_the_combo() {
+        // Ctrl+Alt+Del: the key-ups happen on the secure desktop.
+        let mut m = Machine::new(HoldSpec::default());
+        m.key_down(LCTRL, 0);
+        m.key_down(LALT, 0);
+        m.forget_released(LCTRL, |_| false);
+        m.key_down(LCTRL, 1000);
+        m.forget_released(LWIN, |vk| vk == LCTRL);
+        assert_eq!(m.key_down(LWIN, 1000).signal, Some(Signal::Start));
+    }
+
+    #[test]
+    fn a_lost_release_does_not_leave_the_hook_blocked() {
+        let mut m = Machine::new(HoldSpec::default());
+        m.key_down(LCTRL, 0);
+        m.key_down(LWIN, 0);
+        m.key_down(RIGHT, 50);
+        // Every release was lost; the next key typed finds nothing held.
+        m.forget_released(V, |_| false);
+        m.key_down(V, 800);
+        m.key_up(V);
+        m.forget_released(LCTRL, |_| false);
+        m.key_down(LCTRL, 900);
+        m.forget_released(LWIN, |vk| vk == LCTRL);
+        assert_eq!(m.key_down(LWIN, 900).signal, Some(Signal::Start));
+    }
+
+    #[test]
+    fn a_hidden_main_key_survives_pruning() {
+        let mut m = Machine::new(spec("Ctrl+V"));
+        m.key_down(LCTRL, 0);
+        m.key_down(V, 0);
+        m.key_down(LALT, 10);
+        // V was swallowed, so the system reports it up while it is held.
+        m.forget_released(RIGHT, |vk| vk != V);
+        assert!(m.key_down(V, 40).swallow, "autorepeat stays hidden");
+        assert!(m.key_up(V).swallow);
     }
 
     #[test]
