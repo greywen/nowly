@@ -219,6 +219,17 @@ Choose Event, Matrix task, or Note in the **Quick create** group. The menu colla
 
 Under **Settings → Shortcuts → Quick create**, you can record global shortcuts for **New event**, **New matrix task**, and **New note**. They are **Not set** by default. Once set, press one in any app to open the matching dialog directly; use the clear button to unset it. All global shortcuts, including the screenshot and history shortcuts, must be different.
 
+### Voice input
+
+Hold the talk key and say what you need. When you release it, Nowly recognizes the speech on this device and hands the text to your configured model, which creates an event, a matrix task or a note. Examples: "project review at 3 pm today" or "note: send the report by Friday".
+
+- First configure the model and allow the matching data under **Settings → Model**. Then, in the **Voice input** group on the same page, turn on hold to talk and download the on-device recognition model (about 240 MB). Voice input is off by default.
+- The default key is **Ctrl+Win**. You can change it to two or more modifiers, modifiers plus one key, or a single F key, and choose the microphone and recognition language (automatic, Chinese or English).
+- While you hold the key, the Nowly Bar Logo turns into a microphone and the Bar widens to show live text, the input level and a timer. After release it shows "Understanding"; press stop to cancel.
+- New items appear on the Bar with **Undo** for 30 seconds. Changes and deletions wait for you to confirm on the Bar. When the model needs more detail, hold the key again to answer.
+- When the model is missing, the microphone is unavailable or no model service is configured, the Bar shows the reason and a button to open settings or the Windows microphone settings.
+- Windows does not pass key presses to Nowly while a window running as administrator is in front, so hold to talk does not work there.
+
 ### Screenshots and history
 
 Choose Screenshot or Screenshot history in the **Screenshots** group of the function menu. Global shortcuts default to **Ctrl+Alt+A** for screenshots and **Ctrl+Alt+H** for screenshot history. All five shortcuts under **Settings → Shortcuts** work the same way: click an input and press a key combination to record it; use its **×** clear button or press Backspace / Delete in the input to return to **Not set**. Changes take effect after **Save settings**. Clearing unregisters that global shortcut and stays unset when settings reopen or the app restarts; its function menu entry remains available. Set shortcuts must be different. Conflicts are reported without preventing app startup.
