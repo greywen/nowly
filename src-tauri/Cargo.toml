@@ -63,6 +63,11 @@ image = { version = "=0.25.10", default-features = false, features = ["png", "jp
 # Tauri's own protocols do keeps the separator from arriving as `%2F`.
 percent-encoding = "=2.3.2"
 rodio = { version = "0.21", default-features = false, features = ["playback", "wav"] }
+# Microphone capture for voice input; the same cpal that rodio already plays through.
+cpal = "0.16"
+# Local speech recognition (SenseVoice). The default `static` feature links the
+# prebuilt onnxruntime into the executable, so no DLL ships beside it.
+sherpa-onnx = "2.0.3"
 
 # Keep the pixel matching loops usable at display frame rates in the dev app.
 [profile.dev.package.nowly]

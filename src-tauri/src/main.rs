@@ -51,6 +51,7 @@ mod time;
 mod timezone;
 mod token_store;
 mod update;
+mod voice;
 mod wallpaper;
 mod window_lifecycle;
 mod write_scope;
