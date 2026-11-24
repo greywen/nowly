@@ -166,6 +166,7 @@ fn main() {
         .manage(screenshot_windows::ScreenshotWindows::default())
         .manage(screenshot_pins::ScreenshotPins::default())
         .manage(quick_create::QuickCreateState::default())
+        .manage(voice::commands::ModelDownload::default())
         .register_asynchronous_uri_scheme_protocol(
             screen_capture::FRAME_URI_SCHEME,
             |context, request, responder| {
@@ -227,7 +228,9 @@ fn main() {
             ) {
                 eprintln!("attachment garbage collection failed: {}", error.message);
             }
+            let voice_settings = voice::settings::read(&connection).unwrap_or_default();
             app.manage(AppDb(Mutex::new(connection)));
+            app.manage(voice::session::start(app.handle(), app_dir.clone(), voice_settings));
             if let Err(error) = screen_capture::history::setup(app.handle()) {
                 eprintln!("screenshot history recovery failed: {}", error.message);
             }
@@ -626,6 +629,15 @@ fn main() {
             assistant::commands::assistant_undo,
             assistant::commands::assistant_history,
             assistant::commands::assistant_status,
+            voice::commands::voice_state,
+            voice::commands::voice_dismiss,
+            voice::commands::voice_get_settings,
+            voice::commands::voice_save_settings,
+            voice::commands::voice_input_devices,
+            voice::commands::voice_model_status,
+            voice::commands::voice_model_download,
+            voice::commands::voice_model_cancel,
+            voice::commands::voice_model_delete,
             task_workspace::get_task_workspace_snapshot,
             task_workspace::create_task,
             task_workspace::update_task,
