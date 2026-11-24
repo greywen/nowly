@@ -1,7 +1,9 @@
 import { X } from '../components/icons';
 import type { IconStyle } from '../components/icon-style';
 import { useEffect, useState } from 'react';
+import { AssistantSettingsPanel } from '../assistant/AssistantSettingsPanel';
 import { BarMenuSettings } from './BarMenuSettings';
+import { VoiceSettingsPanel } from './VoiceSettingsPanel';
 import { SoundSettingsPanel } from './SoundSettingsPanel';
 import { normalizeSoundSettings } from './sound-settings';
 import { normalizeBarMenu } from '../app/bar-menu';
@@ -13,8 +15,10 @@ import { TabPanel, Tabs, type TabItem } from '../components/Tabs';
 import type { AppSettings, MonitorInfo } from '../data/nowly-repository';
 import { t, useTranslation, SUPPORTED_LANGUAGES, LOCALES, type Language } from '../i18n';
 
-type Props={settings:AppSettings;monitors?:MonitorInfo[];onClose():void;onSave(settings:AppSettings):Promise<AppSettings>};
-type SettingsTab='interface'|'desktop'|'notifications'|'sound'|'shortcuts';
+/** Where the Bar's voice errors land: the model connection or the 语音输入 group. */
+export type SettingsSection='model'|'voice';
+type Props={settings:AppSettings;monitors?:MonitorInfo[];section?:SettingsSection;sectionRequest?:number;onClose():void;onSave(settings:AppSettings):Promise<AppSettings>};
+type SettingsTab='interface'|'desktop'|'notifications'|'sound'|'shortcuts'|'model';
 type ShortcutField='screenshotShortcut'|'screenshotHistoryShortcut'|'quickCreateEventShortcut'|'quickCreateTaskShortcut'|'quickCreateNoteShortcut';
 const QUICK_CREATE_SHORTCUTS=[
  {field:'quickCreateEventShortcut',id:'settings-quick-create-event-shortcut',label:'settings.quickCreateEventShortcut'},
@@ -24,12 +28,13 @@ const QUICK_CREATE_SHORTCUTS=[
 const SHORTCUT_FIELDS:readonly ShortcutField[]=['screenshotShortcut','screenshotHistoryShortcut',...QUICK_CREATE_SHORTCUTS.map(item=>item.field)];
 function errorMessage(error:unknown){return typeof error==='object'&&error!==null&&'message'in error&&typeof error.message==='string'?error.message:t('settings.saveError')}
 
-export function SettingsDialog({settings,monitors=[],onClose,onSave}:Props){
+export function SettingsDialog({settings,monitors=[],section,sectionRequest,onClose,onSave}:Props){
  // Language switches in real time via the i18n store, independent of the save
  // button, so the whole UI updates the moment the user picks a language.
  const {language,setLanguage}=useTranslation();
  const [draft,setDraft]=useState(()=>({...settings, soundSettings: normalizeSoundSettings(settings.soundSettings), barMenu: normalizeBarMenu(settings.barMenu), notificationMode: settings.notificationMode ?? 'notification', quickPanelEnabled: true, quickPanelShortcut: settings.quickPanelShortcut ?? 'Ctrl+Space', screenshotShortcut: settings.screenshotShortcut ?? 'Ctrl+Alt+A', screenshotHistoryShortcut: settings.screenshotHistoryShortcut ?? 'Ctrl+Alt+H', quickCreateEventShortcut: settings.quickCreateEventShortcut ?? '', quickCreateTaskShortcut: settings.quickCreateTaskShortcut ?? '', quickCreateNoteShortcut: settings.quickCreateNoteShortcut ?? ''})); const [saving,setSaving]=useState(false); const [error,setError]=useState<string|null>(null);
- const [tab,setTab]=useState<SettingsTab>('interface');
+ const [tab,setTab]=useState<SettingsTab>(section?'model':'interface');
+ useEffect(()=>{if(section)setTab('model');},[section,sectionRequest]);
  // Resolve the monitor that should appear selected: the saved id when it still
  // matches a connected monitor, otherwise the primary (or first) one. Falling
  // back here rather than trusting the saved id blindly keeps the dropdown from
@@ -48,7 +53,7 @@ export function SettingsDialog({settings,monitors=[],onClose,onSave}:Props){
   const [screenshotShortcut,screenshotHistoryShortcut,quickCreateEventShortcut,quickCreateTaskShortcut,quickCreateNoteShortcut]=shortcuts as string[];
   setSaving(true);setError(null);try{await onSave({...draft,screenshotShortcut,screenshotHistoryShortcut,quickCreateEventShortcut,quickCreateTaskShortcut,quickCreateNoteShortcut,quickPanelEnabled:true});onClose();}catch(reason){setError(typeof reason==='object'&&reason!==null&&'field'in reason&&(SHORTCUT_FIELDS as readonly string[]).includes(String(reason.field))?t('settings.shortcutConflict'):errorMessage(reason));}finally{setSaving(false)}
  }
- const tabs:TabItem<SettingsTab>[]=[{id:'interface',label:t('settings.interface')},{id:'desktop',label:t('settings.desktopStartup')},{id:'notifications',label:t('settings.notifications')},{id:'sound',label:t('settings.sound')},{id:'shortcuts',label:t('settings.shortcuts')}];
+ const tabs:TabItem<SettingsTab>[]=[{id:'interface',label:t('settings.interface')},{id:'desktop',label:t('settings.desktopStartup')},{id:'notifications',label:t('settings.notifications')},{id:'sound',label:t('settings.sound')},{id:'shortcuts',label:t('settings.shortcuts')},{id:'model',label:t('settings.model')}];
  return <Dialog title={t('settings.title')} ariaLabelledBy="settings-title" onRequestClose={onClose} className="settings-dialog" headerActions={<button className="good-icon-button" aria-label={t('settings.close')} onClick={onClose}><X aria-hidden="true"/></button>} footer={<><button className="good-button" onClick={onClose}>{t('common.cancel')}</button><button className="good-button good-button--primary" disabled={saving} onClick={()=>void save()}>{saving?t('common.saving'):t('settings.saveSettings')}</button></>}>
   <div className="settings-form">
    <Tabs idPrefix="settings" label={t('settings.title')} items={tabs} value={tab} onChange={setTab}/>
@@ -91,6 +96,12 @@ export function SettingsDialog({settings,monitors=[],onClose,onSave}:Props){
       <p>{t('settings.quickCreateShortcutHint')}</p>
       {QUICK_CREATE_SHORTCUTS.map(({field,id,label})=><ShortcutRecorder key={field} id={id} label={t(label)} value={draft[field]} otherValues={others(field)} optional disabled={saving} onChange={value=>setDraft(current=>({...current,[field]:value}))}/>)}
      </fieldset>
+    </div>
+   </TabPanel>
+   <TabPanel idPrefix="settings" tabId="model" active={tab==='model'}>
+    <div className="settings-model">
+     <AssistantSettingsPanel/>
+     <VoiceSettingsPanel takenShortcuts={SHORTCUT_FIELDS.map(field=>draft[field]).filter(Boolean)} focusRequest={section==='voice'&&tab==='model'?sectionRequest??0:undefined}/>
     </div>
    </TabPanel>
    {error?<div className="dialog-error" role="alert">{error}</div>:null}

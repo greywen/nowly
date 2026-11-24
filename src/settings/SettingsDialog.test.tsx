@@ -14,14 +14,20 @@ const settings:AppSettings={wallpaperEnabled:false,launchAtLogin:false,targetMon
 describe('SettingsDialog',()=>{
   afterEach(() => vi.restoreAllMocks());
 
-  it('hides AI configuration and its Bar option without removing saved preferences', async () => {
+  it('keeps the AI Bar option hidden without removing saved preferences', async () => {
     const save = vi.fn(async value => value);
     render(<SettingsDialog settings={{ ...settings, barMenu: [...DEFAULT_BAR_MENU] }} onClose={vi.fn()} onSave={save}/>);
-    expect(screen.queryByRole('tab', { name: t('settings.model') })).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: t('settings.model') })).toBeVisible();
     fireEvent.click(screen.getByRole('tab', { name: 'Nowly Bar' }));
     expect(screen.queryByRole('checkbox', { name: t('barMenu.assistant') })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '保存设置' }));
     expect(save).toHaveBeenCalledWith(expect.objectContaining({ barMenu: DEFAULT_BAR_MENU }));
+  });
+
+  it('opens on the model tab with the voice input group when the Bar asks for it', async () => {
+    render(<SettingsDialog settings={settings} section="voice" sectionRequest={1} onClose={vi.fn()} onSave={vi.fn()}/>);
+    expect(screen.getByRole('tab', { name: t('settings.model') })).toHaveAttribute('aria-selected', 'true');
+    expect(await screen.findByText(t('settings.voiceUnavailable'))).toBeVisible();
   });
 
   it('groups wallpaper appearance and saves the independent background option', async () => {

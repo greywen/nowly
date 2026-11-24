@@ -635,6 +635,7 @@ fn main() {
             voice::commands::voice_open_microphone_privacy,
             voice::commands::voice_get_settings,
             voice::commands::voice_save_settings,
+            voice::commands::voice_recording_hold_key,
             voice::commands::voice_input_devices,
             voice::commands::voice_model_status,
             voice::commands::voice_model_download,

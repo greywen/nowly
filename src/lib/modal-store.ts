@@ -13,7 +13,7 @@ export type ModalState =
   | { type: 'note-create'; trigger: HTMLElement | null; parentManager?: boolean }
   | { type: 'note-edit'; note: Note; trigger: HTMLElement | null; parentManager?: boolean }
   | { type: 'notes-manager'; trigger: HTMLElement | null }
-  | { type: 'settings'; trigger: HTMLElement | null }
+  | { type: 'settings'; trigger: HTMLElement | null; section?: 'model' | 'voice'; request?: number }
   | { type: 'external-detail'; event: CalendarEvent; trigger: HTMLElement | null }
   | { type: 'calendar-settings'; trigger: HTMLElement | null }
   | { type: 'task-settings'; trigger: HTMLElement | null }

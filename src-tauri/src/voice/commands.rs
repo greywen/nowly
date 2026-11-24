@@ -92,6 +92,14 @@ pub fn voice_save_settings(
     Ok(saved)
 }
 
+/// Settings is recording a new hold key: the current one must not trigger.
+#[tauri::command]
+pub fn voice_recording_hold_key(window: WebviewWindow, voice: State<'_, Voice>, recording: bool) -> Result<(), CommandError> {
+    require(&window, false)?;
+    voice.pause(recording);
+    Ok(())
+}
+
 #[tauri::command]
 pub fn voice_input_devices(window: WebviewWindow) -> Result<Vec<String>, CommandError> {
     require(&window, false)?;

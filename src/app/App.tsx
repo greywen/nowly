@@ -234,6 +234,14 @@ function AppContent() {
     const removers: Array<() => void> = [];
     void listen<WindowMode>('window-mode-changed', (event) => setWindowMode(event.payload)).then(remove => removers.push(remove));
     void listen('open-settings', () => setModal({type:'settings',trigger:null})).then(remove => removers.push(remove));
+    // A voice error's way out on the Bar. An already open dialog keeps its draft
+    // and only switches to the requested group.
+    void listen<'model' | 'voice'>('voice-open-settings', event => setModal(current => ({
+      type: 'settings',
+      trigger: current?.type === 'settings' ? current.trigger : null,
+      section: event.payload,
+      request: Date.now()
+    }))).then(remove => removers.push(remove));
     void listen('request-overlay-cleanup', () => setModal(null)).then(remove => removers.push(remove));
     void listen('calendar-subscriptions-updated', () => { loadSubscriptions(); void refreshEvents(); }).then(remove => removers.push(remove));
     void listen<{ target: EventTarget; startAt: string }>('status-island-open-event', event => {

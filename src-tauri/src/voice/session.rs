@@ -87,6 +87,7 @@ enum Msg {
     Apply(VoiceSettings),
     Dismiss,
     Unload,
+    Pause(bool),
     Partial(u64, String),
     Transcript(u64, String),
     Finished(u64, View),
@@ -117,6 +118,12 @@ impl Voice {
     /// Frees the model before its files are deleted.
     pub fn unload(&self) {
         self.send(Msg::Unload);
+    }
+
+    /// Lifts the hook while settings records a new hold key, so pressing the
+    /// current one there does not start a recording.
+    pub fn pause(&self, paused: bool) {
+        self.send(Msg::Pause(paused));
     }
 
     pub fn snapshot(&self) -> Snapshot {
@@ -180,6 +187,7 @@ struct Worker {
     engine: Arc<Engine>,
     last_used: Instant,
     last_level: Instant,
+    paused: bool,
 }
 
 pub fn start(app: &AppHandle, app_dir: PathBuf, settings: VoiceSettings) -> Voice {
@@ -205,6 +213,7 @@ pub fn start(app: &AppHandle, app_dir: PathBuf, settings: VoiceSettings) -> Voic
         engine: Arc::default(),
         last_used: Instant::now(),
         last_level: Instant::now(),
+        paused: false,
     };
     if let Err(error) = std::thread::Builder::new().name("voice-session".into()).spawn(move || worker.run()) {
         eprintln!("failed to start voice input: {error}");
@@ -261,6 +270,12 @@ impl Worker {
                 }
             }
             Msg::Unload => self.engine.unload(),
+            Msg::Pause(paused) => {
+                if paused != self.paused {
+                    self.paused = paused;
+                    self.rebind();
+                }
+            }
             Msg::Partial(seq, text) => {
                 if seq == self.seq() && matches!(self.hold, Hold::Listening { .. }) && !text.is_empty() {
                     self.show(View::Listening { transcript: text });
@@ -297,12 +312,17 @@ impl Worker {
         if let Ok(mut snapshot) = self.snapshot.lock() {
             snapshot.hold_key = hold_key;
         }
-        if !rebind {
-            return;
+        if rebind {
+            self.rebind();
         }
+    }
+
+    fn rebind(&mut self) {
         self.hook = None;
-        self.hold = Hold::None;
-        if self.settings.enabled {
+        if !matches!(std::mem::replace(&mut self.hold, Hold::None), Hold::None) {
+            self.show(View::Idle);
+        }
+        if self.settings.enabled && !self.paused {
             let tx = self.tx.clone();
             match Hook::install(self.settings.spec(), move |signal| {
                 let _ = tx.send(Msg::Signal(signal));

@@ -1,0 +1,15 @@
+.settings-model { display: grid; gap: var(--space-4); min-width: 0; }
+.voice-settings { display: grid; gap: var(--space-4); min-width: 0; margin: 0; padding: var(--space-4); border: 1px solid var(--border-default); border-radius: var(--radius-default); outline: 0; }
+.voice-settings:focus-visible { border-color: var(--color-primary); box-shadow: var(--shadow-focus); }
+.voice-settings legend { padding: 0 var(--space-1); color: var(--text-strong); font-size: 0.95rem; font-weight: 600; }
+.voice-settings > .form-check { display: flex; }
+.voice-settings__note { margin: 0; color: var(--text-secondary); font-size: 0.85rem; line-height: 1.5; }
+.voice-settings .shortcut-recorder__hint { grid-column: 2; }
+.voice-settings__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: var(--space-4); }
+.voice-settings__model { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); min-width: 0; }
+.voice-settings__model-text { display: grid; gap: var(--space-1); min-width: 0; }
+.voice-settings__model-name { color: var(--text-secondary); font-size: 0.95rem; font-weight: 500; }
+.voice-settings__model .good-button { flex: none; }
+/* design.md §10 progress bar: 4px pill, no transition on the fill. */
+.voice-settings__progress { height: 4px; overflow: hidden; border-radius: var(--radius-pill); background: var(--bg-secondary); }
+.voice-settings__progress > span { display: block; height: 100%; border-radius: inherit; background: var(--color-primary); }
