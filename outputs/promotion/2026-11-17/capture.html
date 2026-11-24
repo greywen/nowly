@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nowly 宣传采集 · 演示数据</title>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module">
+    import { createShowcaseFixture, createFixtureBackend, CAPTURE_TIME } from '/website/scripts/showcase-fixtures.mjs';
+    const scene = new URLSearchParams(location.search).get('scene') || 'workspace';
+    const fixture = createShowcaseFixture(scene, 'zh');
+    fixture.logoBytes = [...new Uint8Array(await (await fetch('/logo.png')).arrayBuffer())];
+    const OriginalDate = Date;
+    const now = new OriginalDate(CAPTURE_TIME).getTime();
+    window.Date = class extends OriginalDate {
+      constructor(...args) { super(...(args.length ? args : [now])); }
+      static now() { return now; }
+    };
+    localStorage.setItem('nowly:onboarding-seen', 'true');
+    localStorage.setItem('nowly.language', 'zh');
+    localStorage.setItem('nowly:notes-view', 'board');
+    const backend = createFixtureBackend(fixture);
+    let callbackId = 0;
+    Object.defineProperty(window, '__TAURI_INTERNALS__', { value: {
+      invoke: (command, args) => backend(command, args),
+      transformCallback(callback, once = false) {
+        const id = ++callbackId;
+        window[`_${id}`] = payload => { if (once) delete window[`_${id}`]; callback(payload); };
+        return id;
+      },
+      unregisterCallback(id) { delete window[`_${id}`]; }
+    } });
+    Object.defineProperty(window, '__TAURI_EVENT_PLUGIN_INTERNALS__', { value: { unregisterListener() {} } });
+    await import('/src/main.tsx');
+  </script>
+</body>
+</html>

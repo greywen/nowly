@@ -1,0 +1,963 @@
+{
+  "version": 1,
+  "historyId": "f9c94eb4-a9b9-43a6-a6af-b5c31ba4808d",
+  "currentRevision": "ff92a758-d82f-44e6-80bf-2959739053e4",
+  "pendingChanges": false,
+  "files": {
+    "AGENTS.md": {
+      "hash": "268ff46777938da818baa92a718571785e9acf2cef2d3ffbacbb93483dcba37a",
+      "content": "C:\\Users\\greyw\\.cache\\hyperframes\\history\\f9c94eb4-a9b9-43a6-a6af-b5c31ba4808d\\blobs\\26\\268ff46777938da818baa92a718571785e9acf2cef2d3ffbacbb93483dcba37a"
+    },
+    "CLAUDE.md": {
+      "hash": "268ff46777938da818baa92a718571785e9acf2cef2d3ffbacbb93483dcba37a",
+      "content": "C:\\Users\\greyw\\.cache\\hyperframes\\history\\f9c94eb4-a9b9-43a6-a6af-b5c31ba4808d\\blobs\\26\\268ff46777938da818baa92a718571785e9acf2cef2d3ffbacbb93483dcba37a"
+    },
+    "SPEC.md": {
+      "hash": "2397363a1191c9710db6fc913e38e4a74b85a848d339d63501cdda24d5be17d1",
+      "content": "C:\\Users\\greyw\\.cache\\hyperframes\\history\\f9c94eb4-a9b9-43a6-a6af-b5c31ba4808d\\blobs\\23\\2397363a1191c9710db6fc913e38e4a74b85a848d339d63501cdda24d5be17d1"
+    },
+    "STORYLINES.md": {
+      "hash": "795a275ab9560410c06c3b99c00fdd84ed8237e1b53ece814dbd43d94607a525",
+      "content": "C:\\Users\\greyw\\.cache\\hyperframes\\history\\f9c94eb4-a9b9-43a6-a6af-b5c31ba4808d\\blobs\\79\\795a275ab9560410c06c3b99c00fdd84ed8237e1b53ece814dbd43d94607a525"
+    },
+    "assets/customize-layout.mp4": {
+      "hash": "de9bf4dae92c9b8f237e41b3fa5125a68455b12221b7c68eb5113199e30dc75d",
+      "content": "C:\\Users\\greyw\\.cache\\hyperframes\\history\\f9c94eb4-a9b9-43a6-a6af-b5c31ba4808d\\blobs\\de\\de9bf4dae92c9b8f237e41b3fa5125a68455b12221b7c68eb5113199e30dc75d"
+    },
+    "assets/landscape-end.png": {
+      "hash": "8fbeb7c4069f3f068d1f761393f10ff397ed452252394af774985e5f760fb057",
+      "content": "C:\\Users\\greyw\\.cache\\hyperframes\\history\\f9c94eb4-a9b9-43a6-a6af-b5c31ba4808d\\blobs\\8f\\8fbeb7c4069f3f068d1f761393f10ff397ed452252394af774985e5f760fb057"
+    },
+    "assets/landscape-focus.png": {
+      "hash": "9dfd2850dd19178df5d24117e6c70f74a0164ce36e4a3b602fce1b99332d2399",
+      "content": "C:\\Users\\greyw\\.cache\\hyperframes\\history\\f9c94eb4-a9b9-43a6-a6af-b5c31ba4808d\\blobs\\9d\\9dfd2850dd19178df5d24117e6c70f74a0164ce36e4a3b602fce1b99332d2399"
+    },
+    "assets/landscape-intro.png": {
+      "hash": "fbc3323f4624b8959f2dbc969730034c67d57a8cd8f3e8b2a461afb4e5867242",
+      "content": "C:\\Users\\greyw\\.cache\\hyperframes\\history\\f9c94eb4-a9b9-43a6-a6af-b5c31ba4808d\\blobs\\fb\\fbc3323f4624b8959f2dbc969730034c67d57a8cd8f3e8b2a461afb4e5867242"
+    },
+    "assets/landscape-tasks.png": {
+      "hash": "11ebfe22f7eb218029abafa5435d44facba1578445894ce7c43ec250039c34e8",
+      "content": "C:\\Users\\greyw\\.cache\\hyperframes\\history\\f9c94eb4-a9b9-43a6-a6af-b5c31ba4808d\\blobs\\11\\11ebfe22f7eb218029abafa5435d44facba1578445894ce7c43ec250039c34e8"
+    },
+    "assets/landscape-video.png": {
+      "hash": "977cc1f1a4bfc47538ddb847f5d2e2c53b7e44cb5cf236a0fd6825cde6b717b8",
+      "content": "C:\\Users\\greyw\\.cache\\hyperframes\\history\\f9c94eb4-a9b9-43a6-a6af-b5c31ba4808d\\blobs\\97\\977cc1f1a4bfc47538ddb847f5d2e2c53b7e44cb5cf236a0fd6825cde6b717b8"
+    },
+    "assets/portrait-end.png": {
+      "hash": "c6a4cc89b5441ed39507cdf43ef791888b26a6788fc24dd76cf218df4b4143a1",
+      "content": "C:\\Users\\greyw\\.cache\\hyperframes\\history\\f9c94eb4-a9b9-43a6-a6af-b5c31ba4808d\\blobs\\c6\\c6a4cc89b5441ed39507cdf43ef791888b26a6788fc24dd76cf218df4b4143a1"
+    },
+    "assets/portrait-focus.png": {
+      "hash": "2f773963e8272be4ffdbb3f65e0eb9aa81bfb5c7b1c709351cc7cb263d3cd75f",
+      "content": "C:\\Users\\greyw\\.cache\\hyperframes\\history\\f9c94eb4-a9b9-43a6-a6af-b5c31ba4808d\\blobs\\2f\\2f773963e8272be4ffdbb3f65e0eb9aa81bfb5c7b1c709351cc7cb263d3cd75f"
+    },
+    "assets/portrait-intro.png": {
+      "hash": "1efb9e48504043ab883fc63c10a6da49e8735387c0f48d15708fc71dc158710b",
+      "content": "C:\\Users\\greyw\\.cache\\hyperframes\\history\\f9c94eb4-a9b9-43a6-a6af-b5c31ba4808d\\blobs\\1e\\1efb9e48504043ab883fc63c10a6da49e8735387c0f48d15708fc71dc158710b"
+    },
+    "assets/portrait-tasks.png": {
+      "hash": "30155ab58745e0dee4c45ef7c4e5cbd82eea8dc360b1886feb4ca83525d6b27b",
+      "content": "C:\\Users\\greyw\\.cache\\hyperframes\\history\\f9c94eb4-a9b9-43a6-a6af-b5c31ba4808d\\blobs\\30\\30155ab58745e0dee4c45ef7c4e5cbd82eea8dc360b1886feb4ca83525d6b27b"
+    },
+    "assets/portrait-video.png": {
+      "hash": "926ea0fc1c7090b39369b709c18f0ea7c4f53b160d4748ea6c87419f90b35220",
+      "content": "C:\\Users\\greyw\\.cache\\hyperframes\\history\\f9c94eb4-a9b9-43a6-a6af-b5c31ba4808d\\blobs\\92\\926ea0fc1c7090b39369b709c18f0ea7c4f53b160d4748ea6c87419f90b35220"
+    },
+    "assets/screens/focus.jpg": {
+      "hash": "724947a4a62c58d72d557614db8763f56330c530f0251128e74a53a683346151",
+      "content": "C:\\Users\\greyw\\.cache\\hyperframes\\history\\f9c94eb4-a9b9-43a6-a6af-b5c31ba4808d\\blobs\\72\\724947a4a62c58d72d557614db8763f56330c530f0251128e74a53a683346151"
+    },
+    "assets/screens/notes.jpg": {
+      "hash": "f1ffb080919ef276b4949346167cce413b8aa31508f99eb0124f7bb94af89025",
+      "content": "C:\\Users\\greyw\\.cache\\hyperframes\\history\\f9c94eb4-a9b9-43a6-a6af-b5c31ba4808d\\blobs\\f1\\f1ffb080919ef276b4949346167cce413b8aa31508f99eb0124f7bb94af89025"
+    },
+    "assets/screens/project.jpg": {
+      "hash": "17ef81ba920ae33c66ccbe8b0d1e38090a06cf94efee92a5d512f92afbf8e454",
+      "content": "C:\\Users\\greyw\\.cache\\hyperframes\\history\\f9c94eb4-a9b9-43a6-a6af-b5c31ba4808d\\blobs\\17\\17ef81ba920ae33c66ccbe8b0d1e38090a06cf94efee92a5d512f92afbf8e454"
+    },
+    "assets/screens/study.jpg": {
+      "hash": "4c653c8f2cf8d751a468c7fb3a3f88493ff7e6419dee9deaba39539c9bf89b6c",
+      "content": "C:\\Users\\greyw\\.cache\\hyperframes\\history\\f9c94eb4-a9b9-43a6-a6af-b5c31ba4808d\\blobs\\4c\\4c653c8f2cf8d751a468c7fb3a3f88493ff7e6419dee9deaba39539c9bf89b6c"
+    },
+    "assets/screens/time.jpg": {
+      "hash": "da9807132ffa823388c9ba291d5ba9c298a8e76e91d0944beb63a555bae935eb",
+      "content": "C:\\Users\\greyw\\.cache\\hyperframes\\history\\f9c94eb4-a9b9-43a6-a6af-b5c31ba4808d\\blobs\\da\\da9807132ffa823388c9ba291d5ba9c298a8e76e91d0944beb63a555bae935eb"
+    },
+    "assets/screens/workspace.jpg": {
+      "hash": "b755d59b901c9517f516c975d2ec724447d5c7742ebd39c7bc55251314163862",
+      "content": "C:\\Users\\greyw\\.cache\\hyperframes\\history\\f9c94eb4-a9b9-43a6-a6af-b5c31ba4808d\\blobs\\b7\\b755d59b901c9517f516c975d2ec724447d5c7742ebd39c7bc55251314163862"
+    },
+    "compositions/lt-clean-bar.html": {
+      "hash": "ecee96413e02d03a9e0c4395e6be4c148300e0712601dd419db7dcfba62ae01f",
+      "content": "C:\\Users\\greyw\\.cache\\hyperframes\\history\\f9c94eb4-a9b9-43a6-a6af-b5c31ba4808d\\blobs\\ec\\ecee96413e02d03a9e0c4395e6be4c148300e0712601dd419db7dcfba62ae01f"
+    },
+    "hyperframes.json": {
+      "hash": "3adee0666d8881ad4c4eb44fae127d3489aa8f81b9a5ad4383147dd5cf256d40",
+      "content": "C:\\Users\\greyw\\.cache\\hyperframes\\history\\f9c94eb4-a9b9-43a6-a6af-b5c31ba4808d\\blobs\\3a\\3adee0666d8881ad4c4eb44fae127d3489aa8f81b9a5ad4383147dd5cf256d40"
+    },
+    "hyperframes.lock.json": {
+      "hash": "ff30bda3aa0c80cbe5f75f6d93f7f730759fa62ac39b4ecfb2c7b6874138b635",
+      "content": "C:\\Users\\greyw\\.cache\\hyperframes\\history\\f9c94eb4-a9b9-43a6-a6af-b5c31ba4808d\\blobs\\ff\\ff30bda3aa0c80cbe5f75f6d93f7f730759fa62ac39b4ecfb2c7b6874138b635"
+    },
+    "index.html": {
+      "hash": "ec4cc54bfc370b46260f61becc9ff5815a3c75becbc4da0d4fc38fe5d6246e2f",
+      "content": "C:\\Users\\greyw\\.cache\\hyperframes\\history\\f9c94eb4-a9b9-43a6-a6af-b5c31ba4808d\\blobs\\ec\\ec4cc54bfc370b46260f61becc9ff5815a3c75becbc4da0d4fc38fe5d6246e2f"
+    },
+    "meta.json": {
+      "hash": "646fcc727d3155432ea1ad287139832e410c320ea7f0133744cf453ab7a72b94",
+      "content": "C:\\Users\\greyw\\.cache\\hyperframes\\history\\f9c94eb4-a9b9-43a6-a6af-b5c31ba4808d\\blobs\\64\\646fcc727d3155432ea1ad287139832e410c320ea7f0133744cf453ab7a72b94"
+    },
+    "package.json": {
+      "hash": "482b426d21d3d6e3618fc143421035b21df9635a5a3bf9b850a852b4c4e9166e",
+      "content": "C:\\Users\\greyw\\.cache\\hyperframes\\history\\f9c94eb4-a9b9-43a6-a6af-b5c31ba4808d\\blobs\\48\\482b426d21d3d6e3618fc143421035b21df9635a5a3bf9b850a852b4c4e9166e"
+    }
+  },
+  "revisions": {
+    "ff92a758-d82f-44e6-80bf-2959739053e4": {
+      "actor": {
+        "kind": "outside",
+        "name": "Outside"
+      },
+      "label": "Changed outside the app",
+      "startedAt": 1794882031645,
+      "endedAt": 1794882031649,
+      "files": {
+        "compositions/portrait-captions.html": {
+          "before": "C:\\Users\\greyw\\.cache\\hyperframes\\history\\f9c94eb4-a9b9-43a6-a6af-b5c31ba4808d\\blobs\\92\\92cecb4d82f2b743aece9edb7e265199184bef33ddb49359e42598470e37fb36",
+          "after": null
+        },
+        "portrait.html": {
+          "before": "C:\\Users\\greyw\\.cache\\hyperframes\\history\\f9c94eb4-a9b9-43a6-a6af-b5c31ba4808d\\blobs\\34\\34e750c55e913eaa2d79fdfa9adf152834a39ca212de063434000da34c348458",
+          "after": null
+        }
+      }
+    }
+  },
+  "checks": {
+    "latest": {
+      "revision": "ff92a758-d82f-44e6-80bf-2959739053e4",
+      "id": "ddd33326-857b-4e74-98f0-0e41a27c5af7"
+    },
+    "revisions": {
+      "ff92a758-d82f-44e6-80bf-2959739053e4": [
+        {
+          "id": "ddd33326-857b-4e74-98f0-0e41a27c5af7",
+          "scope": "project",
+          "report": "D:\\Codes\\nowly\\outputs\\promotion\\2026-11-17\\video-source\\.hyperframes\\artifacts\\checks\\ddd33326-857b-4e74-98f0-0e41a27c5af7.json",
+          "metadata": {
+            "ok": true,
+            "browserSkipped": false,
+            "options": {
+              "samples": 9,
+              "atTransitions": false,
+              "maxIssues": 80,
+              "collapseStatic": true,
+              "tolerance": 2,
+              "timeout": 45000,
+              "cache": true,
+              "contrast": true,
+              "craft": true,
+              "strict": false,
+              "snapshots": false,
+              "safeZones": [
+                "tiktok",
+                "reels",
+                "shorts"
+              ],
+              "browserGpuMode": "auto",
+              "includeUnmounted": false
+            }
+          },
+          "createdAt": 1794882041606,
+          "contentHash": "4c80455c3642f8e018e5779ca042017b835f7ec8040995cdffb9ffd677a19a87",
+          "revision": "ff92a758-d82f-44e6-80bf-2959739053e4",
+          "inputFingerprint": "96fa807d3bad3a8018b6a275cb866404d7dc89f38f5f3b2fe0295269e4440188",
+          "inputScope": "local-project-files",
+          "attribution": "recorded-revision"
+        }
+      ]
+    },
+    "unversioned": [
+      {
+        "id": "b68a2322-e039-44e5-9d98-ff8c8f75f720",
+        "scope": "project",
+        "report": "D:\\Codes\\nowly\\outputs\\promotion\\2026-11-17\\video-source\\.hyperframes\\artifacts\\checks\\b68a2322-e039-44e5-9d98-ff8c8f75f720.json",
+        "metadata": {
+          "ok": false,
+          "browserSkipped": false,
+          "options": {
+            "samples": 9,
+            "atTransitions": false,
+            "maxIssues": 80,
+            "collapseStatic": true,
+            "tolerance": 2,
+            "timeout": 45000,
+            "cache": true,
+            "contrast": true,
+            "craft": true,
+            "strict": false,
+            "snapshots": false,
+            "safeZones": [
+              "tiktok",
+              "reels",
+              "shorts"
+            ],
+            "browserGpuMode": "auto",
+            "includeUnmounted": false
+          }
+        },
+        "createdAt": 1794881972228,
+        "contentHash": "e788d371a6fc7ea12031b9579a90c8fbe741387c5f0fbef026aa6ee6a072fde0",
+        "revision": null,
+        "inputFingerprint": "05c2120bb4bb1024f157209d1f9d9157db771623dce849481373a2625786e14f",
+        "inputScope": "local-project-files",
+        "attribution": "unversioned"
+      }
+    ]
+  },
+  "snapshots": {
+    "latest": {
+      "revision": "ff92a758-d82f-44e6-80bf-2959739053e4",
+      "id": "6ded3168-092d-4472-b5ce-baf7d02e569d-29"
+    },
+    "revisions": {
+      "ff92a758-d82f-44e6-80bf-2959739053e4": [
+        {
+          "scope": "full",
+          "id": "6ded3168-092d-4472-b5ce-baf7d02e569d-0",
+          "image": "D:\\Codes\\nowly\\outputs\\promotion\\2026-11-17\\review\\landscape\\beat-01-at-0.3s.png",
+          "time": 0.3,
+          "metadata": {
+            "width": 1920,
+            "height": 1080,
+            "zoomScale": 1,
+            "browserGpuMode": "auto",
+            "review": {
+              "role": "beat",
+              "label": "intro-image"
+            },
+            "warnings": [],
+            "partial": false
+          },
+          "createdAt": 1794882124815,
+          "contentHash": "1d235df84b14258ee745b43b2a5b3ba5468ef2f9f5545320441ed92b683f8799",
+          "revision": "ff92a758-d82f-44e6-80bf-2959739053e4",
+          "inputFingerprint": "96fa807d3bad3a8018b6a275cb866404d7dc89f38f5f3b2fe0295269e4440188",
+          "inputScope": "local-project-files",
+          "attribution": "recorded-revision"
+        },
+        {
+          "scope": "full",
+          "id": "6ded3168-092d-4472-b5ce-baf7d02e569d-1",
+          "image": "D:\\Codes\\nowly\\outputs\\promotion\\2026-11-17\\review\\landscape\\beat-02-at-2s.png",
+          "time": 2,
+          "metadata": {
+            "width": 1920,
+            "height": 1080,
+            "zoomScale": 1,
+            "browserGpuMode": "auto",
+            "review": {
+              "role": "beat",
+              "label": "intro-image mid"
+            },
+            "warnings": [],
+            "partial": false
+          },
+          "createdAt": 1794882124815,
+          "contentHash": "1d235df84b14258ee745b43b2a5b3ba5468ef2f9f5545320441ed92b683f8799",
+          "revision": "ff92a758-d82f-44e6-80bf-2959739053e4",
+          "inputFingerprint": "96fa807d3bad3a8018b6a275cb866404d7dc89f38f5f3b2fe0295269e4440188",
+          "inputScope": "local-project-files",
+          "attribution": "recorded-revision"
+        },
+        {
+          "scope": "full",
+          "id": "6ded3168-092d-4472-b5ce-baf7d02e569d-2",
+          "image": "D:\\Codes\\nowly\\outputs\\promotion\\2026-11-17\\review\\landscape\\beat-03-at-4.3s.png",
+          "time": 4.3,
+          "metadata": {
+            "width": 1920,
+            "height": 1080,
+            "zoomScale": 1,
+            "browserGpuMode": "auto",
+            "review": {
+              "role": "beat",
+              "label": "demo-ground + layout-proof"
+            },
+            "warnings": [],
+            "partial": false
+          },
+          "createdAt": 1794882124815,
+          "contentHash": "99014421126fdec2509162cdfc34cd4bc52d5998f9cad880ab9f26c13c149e73",
+          "revision": "ff92a758-d82f-44e6-80bf-2959739053e4",
+          "inputFingerprint": "96fa807d3bad3a8018b6a275cb866404d7dc89f38f5f3b2fe0295269e4440188",
+          "inputScope": "local-project-files",
+          "attribution": "recorded-revision"
+        },
+        {
+          "scope": "full",
+          "id": "6ded3168-092d-4472-b5ce-baf7d02e569d-3",
+          "image": "D:\\Codes\\nowly\\outputs\\promotion\\2026-11-17\\review\\landscape\\beat-04-at-12s.png",
+          "time": 12,
+          "metadata": {
+            "width": 1920,
+            "height": 1080,
+            "zoomScale": 1,
+            "browserGpuMode": "auto",
+            "review": {
+              "role": "beat",
+              "label": "demo-ground mid + layout-proof mid"
+            },
+            "warnings": [],
+            "partial": false
+          },
+          "createdAt": 1794882124815,
+          "contentHash": "057ed7b59f416cc319e79d549c046d430a2d1942010f418d4611869dad0cbd99",
+          "revision": "ff92a758-d82f-44e6-80bf-2959739053e4",
+          "inputFingerprint": "96fa807d3bad3a8018b6a275cb866404d7dc89f38f5f3b2fe0295269e4440188",
+          "inputScope": "local-project-files",
+          "attribution": "recorded-revision"
+        },
+        {
+          "scope": "full",
+          "id": "6ded3168-092d-4472-b5ce-baf7d02e569d-4",
+          "image": "D:\\Codes\\nowly\\outputs\\promotion\\2026-11-17\\review\\landscape\\beat-05-at-20.3s.png",
+          "time": 20.3,
+          "metadata": {
+            "width": 1920,
+            "height": 1080,
+            "zoomScale": 1,
+            "browserGpuMode": "auto",
+            "review": {
+              "role": "beat",
+              "label": "tasks-image"
+            },
+            "warnings": [],
+            "partial": false
+          },
+          "createdAt": 1794882124816,
+          "contentHash": "dc8b350cedcd398efbf200fe38f5bedabac09277d8c7a4b4c645a8227a082382",
+          "revision": "ff92a758-d82f-44e6-80bf-2959739053e4",
+          "inputFingerprint": "96fa807d3bad3a8018b6a275cb866404d7dc89f38f5f3b2fe0295269e4440188",
+          "inputScope": "local-project-files",
+          "attribution": "recorded-revision"
+        },
+        {
+          "scope": "full",
+          "id": "6ded3168-092d-4472-b5ce-baf7d02e569d-5",
+          "image": "D:\\Codes\\nowly\\outputs\\promotion\\2026-11-17\\review\\landscape\\beat-06-at-22.5s.png",
+          "time": 22.5,
+          "metadata": {
+            "width": 1920,
+            "height": 1080,
+            "zoomScale": 1,
+            "browserGpuMode": "auto",
+            "review": {
+              "role": "beat",
+              "label": "tasks-image mid"
+            },
+            "warnings": [],
+            "partial": false
+          },
+          "createdAt": 1794882124816,
+          "contentHash": "dc8b350cedcd398efbf200fe38f5bedabac09277d8c7a4b4c645a8227a082382",
+          "revision": "ff92a758-d82f-44e6-80bf-2959739053e4",
+          "inputFingerprint": "96fa807d3bad3a8018b6a275cb866404d7dc89f38f5f3b2fe0295269e4440188",
+          "inputScope": "local-project-files",
+          "attribution": "recorded-revision"
+        },
+        {
+          "scope": "full",
+          "id": "6ded3168-092d-4472-b5ce-baf7d02e569d-6",
+          "image": "D:\\Codes\\nowly\\outputs\\promotion\\2026-11-17\\review\\landscape\\beat-07-at-25.3s.png",
+          "time": 25.3,
+          "metadata": {
+            "width": 1920,
+            "height": 1080,
+            "zoomScale": 1,
+            "browserGpuMode": "auto",
+            "review": {
+              "role": "beat",
+              "label": "focus-image"
+            },
+            "warnings": [],
+            "partial": false
+          },
+          "createdAt": 1794882124816,
+          "contentHash": "29b55f46d463f45bdc8d6b4e9067387b2227dfe7d50d0490d17512b2f5dc4d0d",
+          "revision": "ff92a758-d82f-44e6-80bf-2959739053e4",
+          "inputFingerprint": "96fa807d3bad3a8018b6a275cb866404d7dc89f38f5f3b2fe0295269e4440188",
+          "inputScope": "local-project-files",
+          "attribution": "recorded-revision"
+        },
+        {
+          "scope": "full",
+          "id": "6ded3168-092d-4472-b5ce-baf7d02e569d-7",
+          "image": "D:\\Codes\\nowly\\outputs\\promotion\\2026-11-17\\review\\landscape\\beat-08-at-27.5s.png",
+          "time": 27.5,
+          "metadata": {
+            "width": 1920,
+            "height": 1080,
+            "zoomScale": 1,
+            "browserGpuMode": "auto",
+            "review": {
+              "role": "beat",
+              "label": "focus-image mid"
+            },
+            "warnings": [],
+            "partial": false
+          },
+          "createdAt": 1794882124816,
+          "contentHash": "29b55f46d463f45bdc8d6b4e9067387b2227dfe7d50d0490d17512b2f5dc4d0d",
+          "revision": "ff92a758-d82f-44e6-80bf-2959739053e4",
+          "inputFingerprint": "96fa807d3bad3a8018b6a275cb866404d7dc89f38f5f3b2fe0295269e4440188",
+          "inputScope": "local-project-files",
+          "attribution": "recorded-revision"
+        },
+        {
+          "scope": "full",
+          "id": "6ded3168-092d-4472-b5ce-baf7d02e569d-8",
+          "image": "D:\\Codes\\nowly\\outputs\\promotion\\2026-11-17\\review\\landscape\\beat-09-at-30.3s.png",
+          "time": 30.3,
+          "metadata": {
+            "width": 1920,
+            "height": 1080,
+            "zoomScale": 1,
+            "browserGpuMode": "auto",
+            "review": {
+              "role": "beat",
+              "label": "end-image"
+            },
+            "warnings": [],
+            "partial": false
+          },
+          "createdAt": 1794882124816,
+          "contentHash": "0403be0ee3a4d91fa9ff8621bf3be3697ba129423e3fba2348909c842998bdec",
+          "revision": "ff92a758-d82f-44e6-80bf-2959739053e4",
+          "inputFingerprint": "96fa807d3bad3a8018b6a275cb866404d7dc89f38f5f3b2fe0295269e4440188",
+          "inputScope": "local-project-files",
+          "attribution": "recorded-revision"
+        },
+        {
+          "scope": "full",
+          "id": "6ded3168-092d-4472-b5ce-baf7d02e569d-9",
+          "image": "D:\\Codes\\nowly\\outputs\\promotion\\2026-11-17\\review\\landscape\\beat-10-at-33s.png",
+          "time": 33,
+          "metadata": {
+            "width": 1920,
+            "height": 1080,
+            "zoomScale": 1,
+            "browserGpuMode": "auto",
+            "review": {
+              "role": "beat",
+              "label": "end-image mid"
+            },
+            "warnings": [],
+            "partial": false
+          },
+          "createdAt": 1794882124816,
+          "contentHash": "0403be0ee3a4d91fa9ff8621bf3be3697ba129423e3fba2348909c842998bdec",
+          "revision": "ff92a758-d82f-44e6-80bf-2959739053e4",
+          "inputFingerprint": "96fa807d3bad3a8018b6a275cb866404d7dc89f38f5f3b2fe0295269e4440188",
+          "inputScope": "local-project-files",
+          "attribution": "recorded-revision"
+        },
+        {
+          "scope": "full",
+          "id": "6ded3168-092d-4472-b5ce-baf7d02e569d-10",
+          "image": "D:\\Codes\\nowly\\outputs\\promotion\\2026-11-17\\review\\landscape\\seam-01-1-at-3.8s.png",
+          "time": 3.8,
+          "metadata": {
+            "width": 1920,
+            "height": 1080,
+            "zoomScale": 1,
+            "browserGpuMode": "auto",
+            "review": {
+              "role": "seam",
+              "label": "cut -0.2"
+            },
+            "warnings": [],
+            "partial": false
+          },
+          "createdAt": 1794882124817,
+          "contentHash": "1d235df84b14258ee745b43b2a5b3ba5468ef2f9f5545320441ed92b683f8799",
+          "revision": "ff92a758-d82f-44e6-80bf-2959739053e4",
+          "inputFingerprint": "96fa807d3bad3a8018b6a275cb866404d7dc89f38f5f3b2fe0295269e4440188",
+          "inputScope": "local-project-files",
+          "attribution": "recorded-revision"
+        },
+        {
+          "scope": "full",
+          "id": "6ded3168-092d-4472-b5ce-baf7d02e569d-11",
+          "image": "D:\\Codes\\nowly\\outputs\\promotion\\2026-11-17\\review\\landscape\\seam-01-2-at-3.9s.png",
+          "time": 3.9,
+          "metadata": {
+            "width": 1920,
+            "height": 1080,
+            "zoomScale": 1,
+            "browserGpuMode": "auto",
+            "review": {
+              "role": "seam",
+              "label": "-0.1"
+            },
+            "warnings": [],
+            "partial": false
+          },
+          "createdAt": 1794882124817,
+          "contentHash": "1d235df84b14258ee745b43b2a5b3ba5468ef2f9f5545320441ed92b683f8799",
+          "revision": "ff92a758-d82f-44e6-80bf-2959739053e4",
+          "inputFingerprint": "96fa807d3bad3a8018b6a275cb866404d7dc89f38f5f3b2fe0295269e4440188",
+          "inputScope": "local-project-files",
+          "attribution": "recorded-revision"
+        },
+        {
+          "scope": "full",
+          "id": "6ded3168-092d-4472-b5ce-baf7d02e569d-12",
+          "image": "D:\\Codes\\nowly\\outputs\\promotion\\2026-11-17\\review\\landscape\\seam-01-3-at-4s.png",
+          "time": 4,
+          "metadata": {
+            "width": 1920,
+            "height": 1080,
+            "zoomScale": 1,
+            "browserGpuMode": "auto",
+            "review": {
+              "role": "seam",
+              "label": "cut intro-image -> demo-ground"
+            },
+            "warnings": [],
+            "partial": false
+          },
+          "createdAt": 1794882124817,
+          "contentHash": "5b07431101061124b3c7c5b86aacd1d62d6b3c94b8906ce083d20db6678bcc31",
+          "revision": "ff92a758-d82f-44e6-80bf-2959739053e4",
+          "inputFingerprint": "96fa807d3bad3a8018b6a275cb866404d7dc89f38f5f3b2fe0295269e4440188",
+          "inputScope": "local-project-files",
+          "attribution": "recorded-revision"
+        },
+        {
+          "scope": "full",
+          "id": "6ded3168-092d-4472-b5ce-baf7d02e569d-13",
+          "image": "D:\\Codes\\nowly\\outputs\\promotion\\2026-11-17\\review\\landscape\\seam-01-4-at-4.1s.png",
+          "time": 4.1,
+          "metadata": {
+            "width": 1920,
+            "height": 1080,
+            "zoomScale": 1,
+            "browserGpuMode": "auto",
+            "review": {
+              "role": "seam",
+              "label": "+0.1"
+            },
+            "warnings": [],
+            "partial": false
+          },
+          "createdAt": 1794882124817,
+          "contentHash": "08d2eabe7bc3233a485504a4ec05747da96f36e01383461790a4f41577714059",
+          "revision": "ff92a758-d82f-44e6-80bf-2959739053e4",
+          "inputFingerprint": "96fa807d3bad3a8018b6a275cb866404d7dc89f38f5f3b2fe0295269e4440188",
+          "inputScope": "local-project-files",
+          "attribution": "recorded-revision"
+        },
+        {
+          "scope": "full",
+          "id": "6ded3168-092d-4472-b5ce-baf7d02e569d-14",
+          "image": "D:\\Codes\\nowly\\outputs\\promotion\\2026-11-17\\review\\landscape\\seam-01-5-at-4.2s.png",
+          "time": 4.2,
+          "metadata": {
+            "width": 1920,
+            "height": 1080,
+            "zoomScale": 1,
+            "browserGpuMode": "auto",
+            "review": {
+              "role": "seam",
+              "label": "+0.2"
+            },
+            "warnings": [],
+            "partial": false
+          },
+          "createdAt": 1794882124818,
+          "contentHash": "a76ba33fd412d5e21de69fa944e0f481cda4a150d436d7098751e280264b5cf8",
+          "revision": "ff92a758-d82f-44e6-80bf-2959739053e4",
+          "inputFingerprint": "96fa807d3bad3a8018b6a275cb866404d7dc89f38f5f3b2fe0295269e4440188",
+          "inputScope": "local-project-files",
+          "attribution": "recorded-revision"
+        },
+        {
+          "scope": "full",
+          "id": "6ded3168-092d-4472-b5ce-baf7d02e569d-15",
+          "image": "D:\\Codes\\nowly\\outputs\\promotion\\2026-11-17\\review\\landscape\\seam-02-1-at-19.8s.png",
+          "time": 19.8,
+          "metadata": {
+            "width": 1920,
+            "height": 1080,
+            "zoomScale": 1,
+            "browserGpuMode": "auto",
+            "review": {
+              "role": "seam",
+              "label": "cut -0.2"
+            },
+            "warnings": [],
+            "partial": false
+          },
+          "createdAt": 1794882124818,
+          "contentHash": "50647483e5b0635d22e7d47119b773bcef3e38c440d1658a9489a8250b79afc3",
+          "revision": "ff92a758-d82f-44e6-80bf-2959739053e4",
+          "inputFingerprint": "96fa807d3bad3a8018b6a275cb866404d7dc89f38f5f3b2fe0295269e4440188",
+          "inputScope": "local-project-files",
+          "attribution": "recorded-revision"
+        },
+        {
+          "scope": "full",
+          "id": "6ded3168-092d-4472-b5ce-baf7d02e569d-16",
+          "image": "D:\\Codes\\nowly\\outputs\\promotion\\2026-11-17\\review\\landscape\\seam-02-2-at-19.9s.png",
+          "time": 19.9,
+          "metadata": {
+            "width": 1920,
+            "height": 1080,
+            "zoomScale": 1,
+            "browserGpuMode": "auto",
+            "review": {
+              "role": "seam",
+              "label": "-0.1"
+            },
+            "warnings": [],
+            "partial": false
+          },
+          "createdAt": 1794882124818,
+          "contentHash": "fb0980baa70b07ac59443e0d67f34b7c046f679e3d0e54dadc9dba99ecf48a28",
+          "revision": "ff92a758-d82f-44e6-80bf-2959739053e4",
+          "inputFingerprint": "96fa807d3bad3a8018b6a275cb866404d7dc89f38f5f3b2fe0295269e4440188",
+          "inputScope": "local-project-files",
+          "attribution": "recorded-revision"
+        },
+        {
+          "scope": "full",
+          "id": "6ded3168-092d-4472-b5ce-baf7d02e569d-17",
+          "image": "D:\\Codes\\nowly\\outputs\\promotion\\2026-11-17\\review\\landscape\\seam-02-3-at-20s.png",
+          "time": 20,
+          "metadata": {
+            "width": 1920,
+            "height": 1080,
+            "zoomScale": 1,
+            "browserGpuMode": "auto",
+            "review": {
+              "role": "seam",
+              "label": "cut demo-ground -> tasks-image"
+            },
+            "warnings": [],
+            "partial": false
+          },
+          "createdAt": 1794882124819,
+          "contentHash": "dc8b350cedcd398efbf200fe38f5bedabac09277d8c7a4b4c645a8227a082382",
+          "revision": "ff92a758-d82f-44e6-80bf-2959739053e4",
+          "inputFingerprint": "96fa807d3bad3a8018b6a275cb866404d7dc89f38f5f3b2fe0295269e4440188",
+          "inputScope": "local-project-files",
+          "attribution": "recorded-revision"
+        },
+        {
+          "scope": "full",
+          "id": "6ded3168-092d-4472-b5ce-baf7d02e569d-18",
+          "image": "D:\\Codes\\nowly\\outputs\\promotion\\2026-11-17\\review\\landscape\\seam-02-4-at-20.1s.png",
+          "time": 20.1,
+          "metadata": {
+            "width": 1920,
+            "height": 1080,
+            "zoomScale": 1,
+            "browserGpuMode": "auto",
+            "review": {
+              "role": "seam",
+              "label": "+0.1"
+            },
+            "warnings": [],
+            "partial": false
+          },
+          "createdAt": 1794882124819,
+          "contentHash": "dc8b350cedcd398efbf200fe38f5bedabac09277d8c7a4b4c645a8227a082382",
+          "revision": "ff92a758-d82f-44e6-80bf-2959739053e4",
+          "inputFingerprint": "96fa807d3bad3a8018b6a275cb866404d7dc89f38f5f3b2fe0295269e4440188",
+          "inputScope": "local-project-files",
+          "attribution": "recorded-revision"
+        },
+        {
+          "scope": "full",
+          "id": "6ded3168-092d-4472-b5ce-baf7d02e569d-19",
+          "image": "D:\\Codes\\nowly\\outputs\\promotion\\2026-11-17\\review\\landscape\\seam-02-5-at-20.2s.png",
+          "time": 20.2,
+          "metadata": {
+            "width": 1920,
+            "height": 1080,
+            "zoomScale": 1,
+            "browserGpuMode": "auto",
+            "review": {
+              "role": "seam",
+              "label": "+0.2"
+            },
+            "warnings": [],
+            "partial": false
+          },
+          "createdAt": 1794882124820,
+          "contentHash": "dc8b350cedcd398efbf200fe38f5bedabac09277d8c7a4b4c645a8227a082382",
+          "revision": "ff92a758-d82f-44e6-80bf-2959739053e4",
+          "inputFingerprint": "96fa807d3bad3a8018b6a275cb866404d7dc89f38f5f3b2fe0295269e4440188",
+          "inputScope": "local-project-files",
+          "attribution": "recorded-revision"
+        },
+        {
+          "scope": "full",
+          "id": "6ded3168-092d-4472-b5ce-baf7d02e569d-20",
+          "image": "D:\\Codes\\nowly\\outputs\\promotion\\2026-11-17\\review\\landscape\\seam-03-1-at-24.8s.png",
+          "time": 24.8,
+          "metadata": {
+            "width": 1920,
+            "height": 1080,
+            "zoomScale": 1,
+            "browserGpuMode": "auto",
+            "review": {
+              "role": "seam",
+              "label": "cut -0.2"
+            },
+            "warnings": [],
+            "partial": false
+          },
+          "createdAt": 1794882124820,
+          "contentHash": "dc8b350cedcd398efbf200fe38f5bedabac09277d8c7a4b4c645a8227a082382",
+          "revision": "ff92a758-d82f-44e6-80bf-2959739053e4",
+          "inputFingerprint": "96fa807d3bad3a8018b6a275cb866404d7dc89f38f5f3b2fe0295269e4440188",
+          "inputScope": "local-project-files",
+          "attribution": "recorded-revision"
+        },
+        {
+          "scope": "full",
+          "id": "6ded3168-092d-4472-b5ce-baf7d02e569d-21",
+          "image": "D:\\Codes\\nowly\\outputs\\promotion\\2026-11-17\\review\\landscape\\seam-03-2-at-24.9s.png",
+          "time": 24.9,
+          "metadata": {
+            "width": 1920,
+            "height": 1080,
+            "zoomScale": 1,
+            "browserGpuMode": "auto",
+            "review": {
+              "role": "seam",
+              "label": "-0.1"
+            },
+            "warnings": [],
+            "partial": false
+          },
+          "createdAt": 1794882124820,
+          "contentHash": "dc8b350cedcd398efbf200fe38f5bedabac09277d8c7a4b4c645a8227a082382",
+          "revision": "ff92a758-d82f-44e6-80bf-2959739053e4",
+          "inputFingerprint": "96fa807d3bad3a8018b6a275cb866404d7dc89f38f5f3b2fe0295269e4440188",
+          "inputScope": "local-project-files",
+          "attribution": "recorded-revision"
+        },
+        {
+          "scope": "full",
+          "id": "6ded3168-092d-4472-b5ce-baf7d02e569d-22",
+          "image": "D:\\Codes\\nowly\\outputs\\promotion\\2026-11-17\\review\\landscape\\seam-03-3-at-25s.png",
+          "time": 25,
+          "metadata": {
+            "width": 1920,
+            "height": 1080,
+            "zoomScale": 1,
+            "browserGpuMode": "auto",
+            "review": {
+              "role": "seam",
+              "label": "cut tasks-image -> focus-image"
+            },
+            "warnings": [],
+            "partial": false
+          },
+          "createdAt": 1794882124821,
+          "contentHash": "29b55f46d463f45bdc8d6b4e9067387b2227dfe7d50d0490d17512b2f5dc4d0d",
+          "revision": "ff92a758-d82f-44e6-80bf-2959739053e4",
+          "inputFingerprint": "96fa807d3bad3a8018b6a275cb866404d7dc89f38f5f3b2fe0295269e4440188",
+          "inputScope": "local-project-files",
+          "attribution": "recorded-revision"
+        },
+        {
+          "scope": "full",
+          "id": "6ded3168-092d-4472-b5ce-baf7d02e569d-23",
+          "image": "D:\\Codes\\nowly\\outputs\\promotion\\2026-11-17\\review\\landscape\\seam-03-4-at-25.1s.png",
+          "time": 25.1,
+          "metadata": {
+            "width": 1920,
+            "height": 1080,
+            "zoomScale": 1,
+            "browserGpuMode": "auto",
+            "review": {
+              "role": "seam",
+              "label": "+0.1"
+            },
+            "warnings": [],
+            "partial": false
+          },
+          "createdAt": 1794882124821,
+          "contentHash": "29b55f46d463f45bdc8d6b4e9067387b2227dfe7d50d0490d17512b2f5dc4d0d",
+          "revision": "ff92a758-d82f-44e6-80bf-2959739053e4",
+          "inputFingerprint": "96fa807d3bad3a8018b6a275cb866404d7dc89f38f5f3b2fe0295269e4440188",
+          "inputScope": "local-project-files",
+          "attribution": "recorded-revision"
+        },
+        {
+          "scope": "full",
+          "id": "6ded3168-092d-4472-b5ce-baf7d02e569d-24",
+          "image": "D:\\Codes\\nowly\\outputs\\promotion\\2026-11-17\\review\\landscape\\seam-03-5-at-25.2s.png",
+          "time": 25.2,
+          "metadata": {
+            "width": 1920,
+            "height": 1080,
+            "zoomScale": 1,
+            "browserGpuMode": "auto",
+            "review": {
+              "role": "seam",
+              "label": "+0.2"
+            },
+            "warnings": [],
+            "partial": false
+          },
+          "createdAt": 1794882124822,
+          "contentHash": "29b55f46d463f45bdc8d6b4e9067387b2227dfe7d50d0490d17512b2f5dc4d0d",
+          "revision": "ff92a758-d82f-44e6-80bf-2959739053e4",
+          "inputFingerprint": "96fa807d3bad3a8018b6a275cb866404d7dc89f38f5f3b2fe0295269e4440188",
+          "inputScope": "local-project-files",
+          "attribution": "recorded-revision"
+        },
+        {
+          "scope": "full",
+          "id": "6ded3168-092d-4472-b5ce-baf7d02e569d-25",
+          "image": "D:\\Codes\\nowly\\outputs\\promotion\\2026-11-17\\review\\landscape\\seam-04-1-at-29.8s.png",
+          "time": 29.8,
+          "metadata": {
+            "width": 1920,
+            "height": 1080,
+            "zoomScale": 1,
+            "browserGpuMode": "auto",
+            "review": {
+              "role": "seam",
+              "label": "cut -0.2"
+            },
+            "warnings": [],
+            "partial": false
+          },
+          "createdAt": 1794882124822,
+          "contentHash": "29b55f46d463f45bdc8d6b4e9067387b2227dfe7d50d0490d17512b2f5dc4d0d",
+          "revision": "ff92a758-d82f-44e6-80bf-2959739053e4",
+          "inputFingerprint": "96fa807d3bad3a8018b6a275cb866404d7dc89f38f5f3b2fe0295269e4440188",
+          "inputScope": "local-project-files",
+          "attribution": "recorded-revision"
+        },
+        {
+          "scope": "full",
+          "id": "6ded3168-092d-4472-b5ce-baf7d02e569d-26",
+          "image": "D:\\Codes\\nowly\\outputs\\promotion\\2026-11-17\\review\\landscape\\seam-04-2-at-29.9s.png",
+          "time": 29.9,
+          "metadata": {
+            "width": 1920,
+            "height": 1080,
+            "zoomScale": 1,
+            "browserGpuMode": "auto",
+            "review": {
+              "role": "seam",
+              "label": "-0.1"
+            },
+            "warnings": [],
+            "partial": false
+          },
+          "createdAt": 1794882124823,
+          "contentHash": "29b55f46d463f45bdc8d6b4e9067387b2227dfe7d50d0490d17512b2f5dc4d0d",
+          "revision": "ff92a758-d82f-44e6-80bf-2959739053e4",
+          "inputFingerprint": "96fa807d3bad3a8018b6a275cb866404d7dc89f38f5f3b2fe0295269e4440188",
+          "inputScope": "local-project-files",
+          "attribution": "recorded-revision"
+        },
+        {
+          "scope": "full",
+          "id": "6ded3168-092d-4472-b5ce-baf7d02e569d-27",
+          "image": "D:\\Codes\\nowly\\outputs\\promotion\\2026-11-17\\review\\landscape\\seam-04-3-at-30s.png",
+          "time": 30,
+          "metadata": {
+            "width": 1920,
+            "height": 1080,
+            "zoomScale": 1,
+            "browserGpuMode": "auto",
+            "review": {
+              "role": "seam",
+              "label": "cut focus-image -> end-image"
+            },
+            "warnings": [],
+            "partial": false
+          },
+          "createdAt": 1794882124823,
+          "contentHash": "0403be0ee3a4d91fa9ff8621bf3be3697ba129423e3fba2348909c842998bdec",
+          "revision": "ff92a758-d82f-44e6-80bf-2959739053e4",
+          "inputFingerprint": "96fa807d3bad3a8018b6a275cb866404d7dc89f38f5f3b2fe0295269e4440188",
+          "inputScope": "local-project-files",
+          "attribution": "recorded-revision"
+        },
+        {
+          "scope": "full",
+          "id": "6ded3168-092d-4472-b5ce-baf7d02e569d-28",
+          "image": "D:\\Codes\\nowly\\outputs\\promotion\\2026-11-17\\review\\landscape\\seam-04-4-at-30.1s.png",
+          "time": 30.1,
+          "metadata": {
+            "width": 1920,
+            "height": 1080,
+            "zoomScale": 1,
+            "browserGpuMode": "auto",
+            "review": {
+              "role": "seam",
+              "label": "+0.1"
+            },
+            "warnings": [],
+            "partial": false
+          },
+          "createdAt": 1794882124824,
+          "contentHash": "0403be0ee3a4d91fa9ff8621bf3be3697ba129423e3fba2348909c842998bdec",
+          "revision": "ff92a758-d82f-44e6-80bf-2959739053e4",
+          "inputFingerprint": "96fa807d3bad3a8018b6a275cb866404d7dc89f38f5f3b2fe0295269e4440188",
+          "inputScope": "local-project-files",
+          "attribution": "recorded-revision"
+        },
+        {
+          "scope": "full",
+          "id": "6ded3168-092d-4472-b5ce-baf7d02e569d-29",
+          "image": "D:\\Codes\\nowly\\outputs\\promotion\\2026-11-17\\review\\landscape\\seam-04-5-at-30.2s.png",
+          "time": 30.2,
+          "metadata": {
+            "width": 1920,
+            "height": 1080,
+            "zoomScale": 1,
+            "browserGpuMode": "auto",
+            "review": {
+              "role": "seam",
+              "label": "+0.2"
+            },
+            "warnings": [],
+            "partial": false
+          },
+          "createdAt": 1794882124824,
+          "contentHash": "0403be0ee3a4d91fa9ff8621bf3be3697ba129423e3fba2348909c842998bdec",
+          "revision": "ff92a758-d82f-44e6-80bf-2959739053e4",
+          "inputFingerprint": "96fa807d3bad3a8018b6a275cb866404d7dc89f38f5f3b2fe0295269e4440188",
+          "inputScope": "local-project-files",
+          "attribution": "recorded-revision"
+        }
+      ]
+    },
+    "unversioned": []
+  },
+  "renders": {
+    "latest": {
+      "id": "6eb9361e-96d4-491e-9f97-b60880343aa3",
+      "completedAt": 1794882496327,
+      "output": "D:\\Codes\\nowly\\outputs\\promotion\\2026-11-17\\nowly-landscape.mp4",
+      "status": "completed",
+      "revision": "ff92a758-d82f-44e6-80bf-2959739053e4"
+    },
+    "retainedRevisions": [
+      "ff92a758-d82f-44e6-80bf-2959739053e4"
+    ]
+  },
+  "pendingArtifactCleanup": []
+}

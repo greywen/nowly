@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta name="hf-scene-parts" content="{&quot;shared&quot;:&quot;50abffa493a1ad31&quot;,&quot;scenes&quot;:{&quot;lt-clean-bar&quot;:&quot;5ab3c3ffe205b403&quot;}}">
+<script data-hf-media-codec-map>window.__HF_MEDIA_SOURCE_FACTS__={"/assets/customize-layout.mp4":{"width":1280,"height":720,"bitDepth":8,"bitrate":116063,"frameRate":24,"variableFrameRate":false,"codec":"h264"}};</script><script data-hf-gsap-fallback>
+(function(){
+  var cdnBase="/api/vendor/npm/gsap@3.15.0/dist/";
+  var loaded={};
+  function loadFallback(file){
+    if(loaded[file])return loaded[file];
+    return loaded[file]=new Promise(function(ok,fail){
+      var s=document.createElement("script");
+      s.src=cdnBase+file;s.hfGsapFallback=true;s.onload=ok;s.onerror=fail;
+      document.head.appendChild(s);
+    });
+  }
+  document.addEventListener("error",function(e){
+    var t=e.target;
+    if(!t||t.tagName!=="SCRIPT"||!t.src||t.hfGsapFallback)return;
+    var m=t.src.match(/gsap[^/]*\/dist\/(.+\.js)/);
+    if(m)loadFallback(m[1]).catch(function(){
+      reportError(new Error("GSAP could not load from "+t.src+" or "+cdnBase+m[1]+", so this preview's animations will not play."));
+    });
+  },true);
+})();
+</script>
+<meta name="hyperframes-gsap-base-url" content="/api/vendor/npm">
+<meta name="hyperframes-studio-preview"><script>(function(){var seen=window.__hfPreviewErrors=[],kinds=window.__hfPreviewErrorKinds=[],known={SyntaxError:1,TypeError:1,ReferenceError:1,RangeError:1},runtime="/api/runtime.js";
+addEventListener("error",function(e){seen.push(e.message||String(e));
+var name=e.error&&e.error.constructor&&e.error.constructor.name,path="";
+try{var url=e.filename&&new URL(e.filename,window.location.href);if(url&&url.origin===window.location.origin)path=url.pathname}catch(_){}
+kinds.push({name:known[name]===1?name:"other",origin:!path?"unknown":path===runtime?"runtime":path.indexOf("/api/projects/")===0?"project":"studio"})});})();</script>
+<script data-hyperframes-preview-runtime="1" src="/api/runtime.js"></script>
+<base href="/api/projects/video-source/preview/">
+<script type="importmap">{"imports":{"/":"/api/projects/video-source/preview/","/api/projects/video-source/preview/":"/api/projects/video-source/preview/"}}</script><style data-hf-scene-fonts="">@font-face{font-family:NowlySans;src:local("Microsoft YaHei")}</style><style data-hyperframes-text-rendering="true">html,body,*{text-rendering:geometricPrecision}</style><script data-hf-after-fonts-fallback="">document.addEventListener("DOMContentLoaded", function () {
+  if (window.__hfAfterFontsClaimed) return;
+  var T = "text/hf-after-fonts";
+  var all = [].slice.call(document.querySelectorAll('script[type="text/hf-after-fonts"], script[type="text/hf-after-fonts+module"]'));
+  if (!all.length) return;
+  console.warn("[hyperframes] the runtime has no web-font gate; composition scripts run without waiting for fonts");
+  var late = function (el) { return el.type !== T || el.matches('[defer][src], [defer][data-hf-inlined-src]'); };
+  var queue = all.filter(function (el) { return !late(el); }).concat(all.filter(late));
+  (function next() {
+    var el = queue.shift();
+    if (!el) return;
+    var s = document.createElement("script");
+    for (var i = 0; i < el.attributes.length; i++) s.setAttribute(el.attributes[i].name, el.attributes[i].value);
+    if (el.type === T) s.removeAttribute("type"); else s.type = "module";
+    s.async = el.hasAttribute("async");
+    s.text = el.text;
+    var waits = s.type !== "module" && s.hasAttribute("src") && !s.async && !s.noModule;
+    if (waits) { s.addEventListener("load", next); s.addEventListener("error", next); }
+    el.replaceWith(s);
+    if (!waits) next();
+  })();
+});
+//# sourceURL=hyperframes://after-fonts-fallback</script>
+<meta charset="UTF-8">
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+<style>*{margin:0;box-sizing:border-box}html,body{width:1920px;height:1080px;overflow:hidden;background:#F8F6F2}
+#root{position:relative;width:1920px;height:1080px}.film-frame{position:absolute;inset:0;width:1920px;height:1080px;object-fit:contain}
+#layout-proof{position:absolute;left:112px;top:264px;width:1696px;height:720px;object-fit:contain;z-index:2}
+#lt-clean-bar{z-index:3}</style><style data-hf-scene="lt-clean-bar">[data-composition-id="lt-clean-bar"] [data-hf-authored-id="root"]{position:absolute;inset:0;font-family:NowlySans;color:#211F1C}
+[data-composition-id="lt-clean-bar"] .copy{position:absolute;left:112px;top:64px;width:1696px}
+[data-composition-id="lt-clean-bar"] .copy h1{font-size:70px;font-weight:700;line-height:1.25}
+[data-composition-id="lt-clean-bar"] .copy p{font-size:36px;color:#716D66;margin-top:20px}
+[data-composition-id="lt-clean-bar"] .note{position:absolute;left:112px;top:1012px;font-size:28px;color:#716D66}
+[data-composition-id="lt-clean-bar"] .end{position:absolute;left:192px;top:610px;width:1536px;text-align:center}
+[data-composition-id="lt-clean-bar"] .end h1{font-size:100px;line-height:1.25}[data-composition-id="lt-clean-bar"] .end p{font-size:42px;margin-top:20px}
+[data-composition-id="lt-clean-bar"] .end small{display:block;font-size:32px;color:#716D66;margin-top:32px}</style>
+
+<meta name="hyperframes-project-signature" content="250d342825d1f90554329edf">
+</head>
+<body>
+<div data-hf-id="hf-nk1p" id="root" data-composition-id="main" data-start="0" data-duration="36" data-width="1920" data-height="1080" data-fps="30">
+<img data-hf-render-id="intro-image" data-hf-id="hf-6p0r" id="intro-image" class="clip film-frame" data-start="0" data-duration="4" data-track-index="0" data-hold="" src="assets/landscape-intro.png" alt="Nowly 中文工作区">
+<img loading="lazy" data-hf-preview-lazy data-hf-render-id="demo-ground" data-hf-id="hf-qv21" id="demo-ground" class="clip film-frame" data-start="4" data-duration="16" data-track-index="0" src="assets/landscape-video.png" alt="">
+<video data-hf-render-id="layout-proof" data-hf-id="hf-ecsd" id="layout-proof" class="clip" data-start="4" data-duration="16" data-media-start="4" data-track-index="1" muted playsinline src="assets/customize-layout.mp4" data-end="20" data-has-audio="false"></video>
+<img loading="lazy" data-hf-preview-lazy data-hf-render-id="tasks-image" data-hf-id="hf-6lvy" id="tasks-image" class="clip film-frame" data-start="20" data-duration="5" data-track-index="0" data-hold="" src="assets/landscape-tasks.png" alt="当前看板界面">
+<img loading="lazy" data-hf-preview-lazy data-hf-render-id="focus-image" data-hf-id="hf-q2n9" id="focus-image" class="clip film-frame" data-start="25" data-duration="5" data-track-index="0" data-hold="" src="assets/landscape-focus.png" alt="专注计时局部">
+<img loading="lazy" data-hf-preview-lazy data-hf-render-id="end-image" data-hf-id="hf-61e2" id="end-image" class="clip film-frame" data-start="30" data-duration="6" data-track-index="0" data-hold="" src="assets/landscape-end.png" alt="Nowly 标识">
+<div data-composition-file="compositions/lt-clean-bar.html" data-no-timeline="" data-hf-scene="lt-clean-bar" data-hf-id="hf-pd9m" id="lt-clean-bar" class="clip" data-composition-id="lt-clean-bar" data-start="0" data-duration="36" data-track-index="2" data-track-kind="captions" data-width="1920" data-height="1080"><div style="width:1920px;height:1080px" data-hf-inner-root="true" data-hf-authored-id="root" data-hf-id="hf-k4o8" data-width="1920" data-height="1080" data-no-timeline="">
+<div data-hf-id="hf-2ai1" id="hook-title" class="clip copy" data-start="0" data-duration="4"><h1 data-hf-id="hf-9fey">把今天，放在眼前</h1><p data-hf-id="hf-syv4">日程、任务、便签，放进同一个工作区</p></div>
+<div data-hf-id="hf-yiwk" id="demo-title" class="clip copy" data-start="4" data-duration="16"><h1 data-hf-id="hf-91y7">桌面，按自己的习惯摆</h1><p data-hf-id="hf-f0w0">调整位置和大小，再添加需要的模块</p></div>
+<div data-hf-id="hf-h0fe" id="task-title" class="clip copy" data-start="20" data-duration="5"><h1 data-hf-id="hf-2dta">先看清下一件事</h1><p data-hf-id="hf-mv3z">用看板整理进度，把任务放在眼前</p></div>
+<div data-hf-id="hf-c7q2" id="focus-title" class="clip copy" data-start="25" data-duration="5"><h1 data-hf-id="hf-5br4">给专注留一点空间</h1><p data-hf-id="hf-3487">从一段专注开始，一步一步完成今天</p></div>
+<div data-hf-id="hf-5745" id="demo-note" class="clip note" data-start="0" data-duration="30">演示界面与数据 · 布局录屏含英文界面 · 实际以安装版本为准</div>
+<div data-hf-id="hf-32jq" id="end-title" class="clip end" data-start="30" data-duration="6"><h1 data-hf-id="hf-f60p">Nowly</h1><p data-hf-id="hf-vii9">你的 Windows 个人工作桌面</p><small data-hf-id="hf-4ky5">从一个模块开始</small></div>
+</div></div>
+</div>
+
+<script type="text/hf-after-fonts">window.__timelines = window.__timelines || {};
+window.__timelines.main = gsap.timeline({ paused: true });</script></body></html>
