@@ -8,6 +8,9 @@ pub struct Permissions {
     pub calendar: bool,
     pub tasks: bool,
     pub external: bool,
+    // Configs saved before notes existed have no such key.
+    #[serde(default)]
+    pub notes: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -24,6 +27,9 @@ pub enum Action {
     CreateTask { draft: Value },
     UpdateTask { id: String, patch: Value },
     DeleteTask { id: String },
+    CreateNote { draft: Value },
+    UpdateNote { id: String, patch: Value },
+    DeleteNote { id: String },
 }
 
 impl Action {
@@ -32,9 +38,51 @@ impl Action {
             Self::CreateEvent { .. } | Self::UpdateEvent { .. } | Self::DeleteEvent { .. } => {
                 "calendar"
             }
+            Self::CreateNote { .. } | Self::UpdateNote { .. } | Self::DeleteNote { .. } => "notes",
             _ => "tasks",
         }
     }
+
+    pub fn is_create(&self) -> bool {
+        matches!(
+            self,
+            Self::CreateEvent { .. } | Self::CreateTask { .. } | Self::CreateNote { .. }
+        )
+    }
+
+    /// The record a modify/delete action touches, in the same key format as
+    /// query records. Creates have no prior record.
+    pub fn target_key(&self) -> Option<String> {
+        match self {
+            Self::UpdateEvent { target, .. } | Self::DeleteEvent { target } => {
+                Some(super::actions::event_key(target))
+            }
+            Self::UpdateTask { id, .. } | Self::DeleteTask { id } => Some(format!("tasks:{id}")),
+            Self::UpdateNote { id, .. } | Self::DeleteNote { id } => Some(format!("notes:{id}")),
+            _ => None,
+        }
+    }
+}
+
+impl Permissions {
+    pub fn allows(&self, domain: &str) -> bool {
+        match domain {
+            "calendar" => self.calendar,
+            "tasks" => self.tasks,
+            "notes" => self.notes,
+            _ => false,
+        }
+    }
+}
+
+/// Where a request came from. Only the host sets this; it decides whether a
+/// plan made only of creates may be committed without a confirmation click.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Source {
+    #[default]
+    Chat,
+    Voice,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

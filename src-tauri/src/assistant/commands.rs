@@ -209,14 +209,13 @@ pub(crate) fn revise(
         match a {
             Action::CreateEvent { .. } => "createEvent".into(),
             Action::CreateTask { .. } => "createTask".into(),
-            Action::UpdateEvent { target, .. } => {
-                format!("update:{}", super::actions::event_key(target))
+            Action::CreateNote { .. } => "createNote".into(),
+            Action::UpdateEvent { .. } | Action::UpdateTask { .. } | Action::UpdateNote { .. } => {
+                format!("update:{}", a.target_key().unwrap_or_default())
             }
-            Action::DeleteEvent { target } => {
-                format!("delete:{}", super::actions::event_key(target))
+            Action::DeleteEvent { .. } | Action::DeleteTask { .. } | Action::DeleteNote { .. } => {
+                format!("delete:{}", a.target_key().unwrap_or_default())
             }
-            Action::UpdateTask { id, .. } => format!("update:tasks:{id}"),
-            Action::DeleteTask { id } => format!("delete:tasks:{id}"),
         }
     };
     if actions

@@ -17,6 +17,7 @@ const TABLES: &[&str] = &[
     "event_exceptions",
     "task_tag_links",
     "task_steps",
+    "notes",
 ];
 const SNAPSHOT_TABLES: &[&str] = &[
     "events",
@@ -27,6 +28,7 @@ const SNAPSHOT_TABLES: &[&str] = &[
     "task_tags",
     "settings",
     "task_steps",
+    "notes",
 ];
 const WATCHED: &[&str] = &[
     "events",
@@ -37,6 +39,7 @@ const WATCHED: &[&str] = &[
     "task_tags",
     "settings",
     "task_steps",
+    "notes",
 ];
 // `settings` is rewritten wholesale by unrelated UI actions (picking a colour
 // touches `recent_colors`), so only the keys a plan actually depends on count.
@@ -140,13 +143,7 @@ pub fn revision(db: &Connection) -> Result<i64, CommandError> {
     .map_err(CommandError::database)
 }
 pub fn require_permissions(actions: &[Action], p: &Permissions) -> Result<(), CommandError> {
-    if actions.iter().any(|a| {
-        if a.domain() == "calendar" {
-            !p.calendar
-        } else {
-            !p.tasks
-        }
-    }) {
+    if actions.iter().any(|a| !p.allows(a.domain())) {
         return Err(invalid("未授权此类本地数据操作。请在 AI 设置中调整权限。"));
     }
     Ok(())
@@ -401,8 +398,12 @@ fn apply(db: &Connection, patches: &[Patch]) -> Result<(), CommandError> {
 
 fn authorize_patch(patches: &[Patch], permissions: &Permissions) -> Result<(), CommandError> {
     for patch in patches {
-        let calendar = patch.table == "events" || patch.table == "event_exceptions";
-        if (calendar && !permissions.calendar) || (!calendar && !permissions.tasks) {
+        let domain = match patch.table.as_str() {
+            "events" | "event_exceptions" => "calendar",
+            "notes" => "notes",
+            _ => "tasks",
+        };
+        if !permissions.allows(domain) {
             return Err(invalid(
                 "此操作会连带修改未授权的数据类型，请检查旧关联或调整权限。",
             ));

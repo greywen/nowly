@@ -2,7 +2,8 @@ use crate::db::AppDb;
 use crate::error::CommandError;
 use crate::models::{Note, NoteDraft};
 use chrono::{SecondsFormat, Utc};
-use rusqlite::{params, Connection, OptionalExtension, Row, TransactionBehavior};
+use crate::write_scope::DomainWrite;
+use rusqlite::{params, Connection, OptionalExtension, Row};
 use tauri::State;
 use uuid::Uuid;
 
@@ -85,7 +86,7 @@ fn by_id(connection: &Connection, id: &str) -> Result<Option<Note>, CommandError
     ).optional().map_err(CommandError::database)
 }
 
-pub fn create(connection: &mut Connection, draft: NoteDraft) -> Result<Note, CommandError> {
+pub fn create(connection: &Connection, draft: NoteDraft) -> Result<Note, CommandError> {
     let draft = validate_and_normalize(draft)?;
     if content_is_empty(&draft.content) {
         return Err(CommandError::validation("content", "请输入便笺内容。"));
@@ -94,9 +95,7 @@ pub fn create(connection: &mut Connection, draft: NoteDraft) -> Result<Note, Com
     let id = id_seed.hyphenated().to_string();
     let style_variant = i64::from(id_seed.as_bytes()[0] % NOTE_STYLE_VARIANT_COUNT);
     let now = timestamp();
-    let transaction = connection
-        .transaction_with_behavior(TransactionBehavior::Immediate)
-        .map_err(CommandError::database)?;
+    let transaction = connection.domain_write().map_err(CommandError::database)?;
     transaction.execute(
         "INSERT INTO notes(id,content,color,pinned,style_variant,icon,created_at,updated_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?7)",
                 params![id, draft.content, draft.color, i64::from(draft.pinned), style_variant, draft.icon, now],
@@ -108,15 +107,13 @@ pub fn create(connection: &mut Connection, draft: NoteDraft) -> Result<Note, Com
 }
 
 pub fn update(
-    connection: &mut Connection,
+    connection: &Connection,
     id: &str,
     draft: NoteDraft,
 ) -> Result<Note, CommandError> {
     let draft = validate_and_normalize(draft)?;
     let now = timestamp();
-    let transaction = connection
-        .transaction_with_behavior(TransactionBehavior::Immediate)
-        .map_err(CommandError::database)?;
+    let transaction = connection.domain_write().map_err(CommandError::database)?;
     let previous = by_id(&transaction, id)?.ok_or_else(|| CommandError::not_found("未找到该便签。"))?;
     if content_is_empty(&draft.content)
         && !(content_is_empty(&previous.content) && draft.content == previous.content)
@@ -135,10 +132,8 @@ pub fn update(
     Ok(note)
 }
 
-pub fn delete(connection: &mut Connection, id: &str) -> Result<(), CommandError> {
-    let transaction = connection
-        .transaction_with_behavior(TransactionBehavior::Immediate)
-        .map_err(CommandError::database)?;
+pub fn delete(connection: &Connection, id: &str) -> Result<(), CommandError> {
+    let transaction = connection.domain_write().map_err(CommandError::database)?;
     let affected = transaction
         .execute("DELETE FROM notes WHERE id=?1", [id])
         .map_err(CommandError::database)?;

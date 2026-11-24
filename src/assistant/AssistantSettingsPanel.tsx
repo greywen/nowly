@@ -4,7 +4,7 @@ import { assistantClient, assistantErrorSource, translateAssistantNotice, assist
 import type { AssistantClient, AssistantConfig } from './types';
 import './assistant.css';
 
-const emptyConfig: AssistantConfig = { endpoint: '', model: '', hasKey: false, permissions: { calendar: false, tasks: false, external: false } };
+const emptyConfig: AssistantConfig = { endpoint: '', model: '', hasKey: false, permissions: { calendar: false, tasks: false, external: false, notes: false } };
 
 export function AssistantSettingsPanel({ client = assistantClient }: { client?: AssistantClient }) {
   const { t, language } = useTranslation();
@@ -50,9 +50,9 @@ export function AssistantSettingsPanel({ client = assistantClient }: { client?: 
       <span className="form-check-label">{t('assistant.text53')}</span>
     </label>}
     <fieldset><legend>{t('assistant.text54')}</legend>
-      {([['calendar', t('assistant.text55')], ['tasks', t('assistant.text56')], ['external', t('assistant.text57')]] as const).map(([field, label]) =>
+      {([['calendar', t('assistant.text55')], ['tasks', t('assistant.text56')], ['notes', t('assistant.permissionNotes')], ['external', t('assistant.text57')]] as const).map(([field, label]) =>
         <label className="form-check form-check-custom form-check-solid" key={field}>
-          <input className="form-check-input" type="checkbox" checked={draft.permissions[field]} disabled={busy}
+          <input className="form-check-input" type="checkbox" checked={Boolean(draft.permissions[field])} disabled={busy}
             onChange={e => setDraft({ ...draft, permissions: { ...draft.permissions, [field]: e.target.checked } })} />
           <span className="form-check-label">{label}</span>
         </label>)}

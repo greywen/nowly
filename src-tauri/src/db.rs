@@ -69,6 +69,7 @@ const MIGRATIONS: &[(i64, Migration)] = &[
     (39, migration_39_completion_without_lane),
     (40, migration_40_optional_task_lane),
     (41, migration_41_reset_tasks_for_free_lanes),
+    (42, migration_42_assistant_notes),
 ];
 
 // Rebuilding `tasks` drops the old table; with foreign keys on, that would
@@ -494,6 +495,11 @@ fn migration_23_assistant(transaction: &Transaction<'_>) -> Result<()> {
 }
 
 fn migration_24_assistant_watch_scope(transaction: &Transaction<'_>) -> Result<()> {
+    crate::assistant::store::install_triggers(transaction)
+}
+
+/// Notes became an assistant domain; their writes now advance its revision.
+fn migration_42_assistant_notes(transaction: &Transaction<'_>) -> Result<()> {
     crate::assistant::store::install_triggers(transaction)
 }
 

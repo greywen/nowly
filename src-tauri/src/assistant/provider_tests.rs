@@ -19,6 +19,7 @@ fn config() -> Config {
             calendar: true,
             tasks: true,
             external: false,
+            notes: false,
         },
         has_key: false,
         ..Config::default()

@@ -8,7 +8,8 @@ import type { Action, Change, Fields, Plan } from './types';
 
 export const kinds: Record<Action['kind'], string> = {
   createEvent: 'assistant.kind.createEvent', updateEvent: 'assistant.kind.updateEvent', deleteEvent: 'assistant.kind.deleteEvent',
-  createTask: 'assistant.kind.createTask', updateTask: 'assistant.kind.updateTask', deleteTask: 'assistant.kind.deleteTask'
+  createTask: 'assistant.kind.createTask', updateTask: 'assistant.kind.updateTask', deleteTask: 'assistant.kind.deleteTask',
+  createNote: 'assistant.kind.createNote', updateNote: 'assistant.kind.updateNote', deleteNote: 'assistant.kind.deleteNote'
 };
 function priorityOptions() { return [
   { value: '', label: 'assistant.text64' },
@@ -21,7 +22,8 @@ const fields: Record<string, string> = {
   title: 'assistant.field.title', startAt: 'assistant.field.startAt', endAt: 'assistant.field.endAt', allDay: 'assistant.field.allDay', reminders: 'assistant.field.reminders',
   category: 'assistant.field.category', color: 'assistant.field.color', note: 'assistant.field.note', description: 'assistant.field.description',
   dueDate: 'assistant.field.dueDate', priority: 'assistant.field.priority', completed: 'assistant.field.completed', laneId: 'assistant.field.laneId',
-  views: 'assistant.field.views', linkedEventId: 'assistant.field.linkedEventId', linkedTaskId: 'assistant.field.linkedTaskId'
+  views: 'assistant.field.views', linkedEventId: 'assistant.field.linkedEventId', linkedTaskId: 'assistant.field.linkedTaskId',
+  text: 'assistant.field.content', pinned: 'assistant.field.pinned'
 };
 export function displayField(key: string, value: unknown, plan?: Plan): string {
   if (value === null || value === undefined || value === '') return t('assistant.text69');
@@ -93,6 +95,14 @@ export function PlanCard({ plan, actions, edits, selected, dirty, busy, blocked,
           <summary>{t('assistant.adjust', { kind: t(kinds[action.kind]), title: change.title })}<ChevronDown aria-hidden="true" size={17} /></summary>
           <fieldset disabled={busy || !selected[index] || blocked || expired} className="assistant-edit">
           <legend className="visually-hidden">{t('assistant.text84')}</legend>
+          {action.kind.endsWith('Note') ? <>
+            <label>{t('assistant.field.content')}<textarea aria-label={t('assistant.indexedField', { label: t('assistant.field.content'), index: index + 1 })}
+              value={String(edits[index]?.content ?? change.after?.text ?? '')} maxLength={16000} onChange={e => edit('content', e.target.value)} /></label>
+            <label className="form-check form-check-custom form-check-solid">
+              <input className="form-check-input" type="checkbox" checked={Boolean(value.pinned)} onChange={e => edit('pinned', e.target.checked)} />
+              <span className="form-check-label">{t('assistant.field.pinned')}</span>
+            </label>
+          </> : <>
           <label>{t('assistant.field.title')}<input aria-label={t('assistant.indexedField', { label: t('assistant.field.title'), index: index + 1 })} value={String(value.title ?? '')} maxLength={500} onChange={e => edit('title', e.target.value)} /></label>
           {event ? <>
             <DateField label={t('assistant.indexedField', { label: t('assistant.field.startAt'), index: index + 1 })} value={String(value.startAt ?? '')} time onChange={v => edit('startAt', v)} />
@@ -113,6 +123,7 @@ export function PlanCard({ plan, actions, edits, selected, dirty, busy, blocked,
               <input className="form-check-input" type="checkbox" checked={Boolean(value.completed)} onChange={e => edit('completed', e.target.checked)} />
               <span className="form-check-label">{t('assistant.text86')}</span>
             </label>
+          </>}
           </>}
           </fieldset>
         </details>}

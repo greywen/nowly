@@ -5,6 +5,7 @@ pub mod provider;
 #[cfg(test)]
 mod provider_tests;
 mod rig_transport;
+pub mod skills;
 pub mod store;
 #[cfg(test)]
 mod tests;

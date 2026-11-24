@@ -1,4 +1,4 @@
-export type Permissions = { calendar: boolean; tasks: boolean; external: boolean };
+export type Permissions = { calendar: boolean; tasks: boolean; external: boolean; notes?: boolean };
 export type Protocol = 'openaiChat' | 'openaiResponses' | 'azure' | 'anthropic' | 'gemini' | 'ollama';
 export type AssistantConfig = { endpoint: string; model: string; hasKey: boolean; permissions: Permissions; protocol?: Protocol; apiVersion?: string; detectedEndpoint?: string | null };
 export function connectionReady(config: AssistantConfig | null | undefined): boolean {
@@ -13,11 +13,13 @@ export function connectionReady(config: AssistantConfig | null | undefined): boo
 export type EventTarget = { id: string; occurrenceStartAt: string | null };
 export type Fields = Record<string, unknown>;
 export type Action =
-  | { kind: 'createEvent' | 'createTask'; draft: Fields }
+  | { kind: 'createEvent' | 'createTask' | 'createNote'; draft: Fields }
   | { kind: 'updateEvent'; target: EventTarget; patch: Fields }
   | { kind: 'deleteEvent'; target: EventTarget }
   | { kind: 'updateTask'; id: string; patch: Fields }
-  | { kind: 'deleteTask'; id: string };
+  | { kind: 'deleteTask'; id: string }
+  | { kind: 'updateNote'; id: string; patch: Fields }
+  | { kind: 'deleteNote'; id: string };
 export type Change = { key: string; kind: Action['kind']; title: string; before: Fields | null; after: Fields | null };
 export type Plan = {
   id: string; status: 'pending' | 'cancelled' | 'expired' | 'committed' | 'undone';
@@ -25,7 +27,7 @@ export type Plan = {
   actions: Action[]; changes: Change[]; warnings: string[];
   options: { lanes?: { id: string; name: string }[]; defaultLaneId?: string };
 };
-export type AssistantRecord = { key: string; domain: 'calendar' | 'tasks'; title: string; source: string; readOnly: boolean; data: Fields };
+export type AssistantRecord = { key: string; domain: 'calendar' | 'tasks' | 'notes'; title: string; source: string; readOnly: boolean; data: Fields };
 export type Reply = { kind: 'plan' | 'results' | 'clarify'; message: string; records: AssistantRecord[]; plan: Plan | null };
 export type HistoryMessage = { role: 'user' | 'assistant'; content: string };
 export type ChatItem =

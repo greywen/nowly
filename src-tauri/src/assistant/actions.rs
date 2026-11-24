@@ -3,7 +3,7 @@ use super::{store, types::*};
 use crate::{
     error::CommandError,
     events,
-    models::{EditScope, Event, EventDraft, EventRange, EventTarget, TaskDraft},
+    models::{EditScope, Event, EventDraft, EventRange, EventTarget, NoteDraft, TaskDraft},
     task_workspace, timezone,
 };
 use chrono::{Duration, NaiveDate, TimeZone};
@@ -109,6 +109,91 @@ const TASK_FIELDS: &[&str] = &[
     "completed",
     "laneId",
 ];
+const NOTE_FIELDS: &[&str] = &["content", "pinned"];
+/// The notes editor's default colour (`DEFAULT_NOTE_COLOR`).
+const NOTE_COLOR: &str = "#E8C444";
+
+/// Model text becomes the editor's Delta format, one paragraph per line.
+fn note_delta(text: &str) -> Result<String, CommandError> {
+    let text = text.trim();
+    if text.is_empty() {
+        return Err(invalid("便签内容不能为空。"));
+    }
+    if text.len() > 16000 {
+        return Err(invalid("字段内容过长。"));
+    }
+    let body = text.replace("\r\n", "\n");
+    serde_json::to_string(&json!({"v":1,"ops":[{"insert":format!("{body}\n")}]}))
+        .map_err(CommandError::system)
+}
+
+/// Plain text of stored content, for titles and queries. Legacy notes are
+/// plain text or Markdown; current ones are Delta JSON.
+pub fn note_text(content: &str) -> String {
+    let parsed = serde_json::from_str::<Value>(content).ok();
+    match parsed.as_ref().and_then(|v| v.get("ops")).and_then(Value::as_array) {
+        Some(ops) => ops
+            .iter()
+            .filter_map(|op| op.get("insert").and_then(Value::as_str))
+            .collect(),
+        None => content.to_string(),
+    }
+}
+
+fn note_title(content: &str) -> String {
+    let text = note_text(content);
+    let line = text
+        .lines()
+        .map(|line| line.trim().trim_start_matches('#').trim())
+        .find(|line| !line.is_empty())
+        .unwrap_or("");
+    let mut title: String = line.chars().take(40).collect();
+    if line.chars().count() > 40 {
+        title.push('…');
+    }
+    title
+}
+
+fn note_by_id(db: &Connection, id: &str) -> Result<crate::models::Note, CommandError> {
+    crate::notes::list(db)?
+        .into_iter()
+        .find(|n| n.id == id)
+        .ok_or_else(|| invalid("便签不存在，请重新查询。"))
+}
+
+fn note_draft(base: Option<&crate::models::Note>, fields: &Value) -> Result<NoteDraft, CommandError> {
+    let object = fields
+        .as_object()
+        .ok_or_else(|| invalid("操作字段必须是对象。"))?;
+    if object.is_empty() || object.keys().any(|k| !NOTE_FIELDS.contains(&k.as_str())) {
+        return Err(invalid("操作包含不支持的字段。"));
+    }
+    let content = match object.get("content") {
+        Some(Value::String(text)) => note_delta(text)?,
+        Some(_) => return Err(invalid("便签内容必须是文字。")),
+        None => base
+            .map(|n| n.content.clone())
+            .ok_or_else(|| invalid("便签内容不能为空。"))?,
+    };
+    let pinned = match object.get("pinned") {
+        Some(Value::Bool(v)) => *v,
+        Some(_) => return Err(invalid("置顶字段必须是布尔值。")),
+        None => base.is_some_and(|n| n.pinned),
+    };
+    Ok(NoteDraft {
+        content,
+        color: base.map_or_else(|| NOTE_COLOR.to_string(), |n| n.color.clone()),
+        pinned,
+        icon: base.map(|n| n.icon.clone()).unwrap_or_default(),
+    })
+}
+
+fn note_value(note: &crate::models::Note) -> Result<Value, CommandError> {
+    let mut v = value(note)?;
+    v["title"] = note_title(&note.content).into();
+    v["text"] = note_text(&note.content).trim().to_string().into();
+    Ok(v)
+}
 
 fn event_draft(base: Option<&Event>, patch: &Value) -> Result<EventDraft, CommandError> {
     let defaults = match base {
@@ -299,6 +384,38 @@ pub fn perform(db: &Connection, action: &Action) -> Result<Change, CommandError>
                 after: Value::Null,
             })
         }
+        Action::CreateNote { draft } => {
+            let note = crate::notes::create(db, note_draft(None, draft)?)?;
+            Ok(Change {
+                key: format!("notes:{}", note.id),
+                kind: "createNote".into(),
+                title: note_title(&note.content),
+                before: Value::Null,
+                after: note_value(&note)?,
+            })
+        }
+        Action::UpdateNote { id, patch } => {
+            let before = note_by_id(db, id)?;
+            let after = crate::notes::update(db, id, note_draft(Some(&before), patch)?)?;
+            Ok(Change {
+                key: format!("notes:{id}"),
+                kind: "updateNote".into(),
+                title: note_title(&after.content),
+                before: note_value(&before)?,
+                after: note_value(&after)?,
+            })
+        }
+        Action::DeleteNote { id } => {
+            let before = note_by_id(db, id)?;
+            crate::notes::delete(db, id)?;
+            Ok(Change {
+                key: format!("notes:{id}"),
+                kind: "deleteNote".into(),
+                title: note_title(&before.content),
+                before: note_value(&before)?,
+                after: Value::Null,
+            })
+        }
     }
 }
 
@@ -385,7 +502,27 @@ pub fn query(db: &Connection, q: &Query, p: &Permissions) -> Result<QueryResult,
             metadata = json!({"lanes":workspace.lanes.iter().map(|l|json!({"id":l.id,"name":l.name})).collect::<Vec<_>>(),
                 "defaultLaneId":workspace.default_lane_id});
         }
-        _ => return Err(invalid("只支持日历和任务查询。")),
+        "notes" => {
+            if !p.notes {
+                return Err(invalid("尚未授权便签读取。"));
+            }
+            for n in crate::notes::list(db)? {
+                let body = note_text(&n.content);
+                if !body.to_lowercase().contains(&text) {
+                    continue;
+                }
+                let excerpt: String = body.trim().chars().take(200).collect();
+                records.push(Record {
+                    key: format!("notes:{}", n.id),
+                    domain: "notes".into(),
+                    title: note_title(&n.content),
+                    source: "本地便签".into(),
+                    read_only: false,
+                    data: json!({"id":n.id,"excerpt":excerpt,"pinned":n.pinned,"updatedAt":n.updated_at}),
+                });
+            }
+        }
+        _ => return Err(invalid("只支持日历、任务和便签查询。")),
     }
     let truncated = records.len() > 200;
     records.truncate(200);

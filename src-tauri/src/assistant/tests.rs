@@ -14,6 +14,7 @@ fn permissions() -> Permissions {
         calendar: true,
         tasks: true,
         external: false,
+        notes: false,
     }
 }
 fn create(title: &str) -> Action {
@@ -164,6 +165,7 @@ fn actual_linked_patch_requires_both_domain_permissions() {
         tasks: true,
         calendar: false,
         external: false,
+        notes: false,
     };
     assert!(store::prepare(
         &db,
@@ -178,6 +180,7 @@ fn actual_linked_patch_requires_both_domain_permissions() {
         tasks: false,
         calendar: true,
         external: false,
+        notes: false,
     };
     assert!(store::prepare(
         &db,
@@ -610,4 +613,100 @@ fn legacy_event_plan_undo_preserves_unrelated_steps() {
     store::undo(&db, &plan.id, &permissions()).unwrap();
     assert_eq!(count(&db), 0);
     assert_eq!(stored_task(&db, &task.id).steps, task.steps);
+}
+
+fn with_notes() -> Permissions {
+    Permissions {
+        notes: true,
+        ..permissions()
+    }
+}
+fn notes(db: &Connection) -> Vec<crate::models::Note> {
+    crate::notes::list(db).unwrap()
+}
+
+#[test]
+fn note_plans_need_note_permission_and_create_execute_and_undo() {
+    let db = db();
+    let create = Action::CreateNote {
+        draft: json!({"content":"周报提纲\n先写进展"}),
+    };
+    assert!(store::prepare(&db, vec![create.clone()], store::revision(&db).unwrap(), &permissions()).is_err());
+    let plan = store::prepare(&db, vec![create], store::revision(&db).unwrap(), &with_notes()).unwrap();
+    assert!(notes(&db).is_empty());
+    assert_eq!(plan.changes[0].kind, "createNote");
+    assert_eq!(plan.changes[0].title, "周报提纲");
+    store::execute(&db, &plan.id, &with_notes()).unwrap();
+    let created = notes(&db);
+    assert_eq!(created.len(), 1);
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&created[0].content).unwrap(),
+        json!({"v":1,"ops":[{"insert":"周报提纲\n先写进展\n"}]})
+    );
+    assert_eq!(created[0].color, "#E8C444");
+    assert!(store::undo(&db, &plan.id, &permissions()).is_err());
+    store::undo(&db, &plan.id, &with_notes()).unwrap();
+    assert!(notes(&db).is_empty());
+}
+
+#[test]
+fn note_updates_keep_style_and_reject_unknown_fields_or_empty_text() {
+    let db = db();
+    let note = crate::notes::create(
+        &db,
+        crate::models::NoteDraft {
+            content: "旧内容".into(),
+            color: "#4F55DA".into(),
+            pinned: false,
+            icon: "star".into(),
+        },
+    )
+    .unwrap();
+    for patch in [json!({"color":"#000000"}), json!({"content":"  "}), json!({})] {
+        let action = Action::UpdateNote { id: note.id.clone(), patch };
+        assert!(store::prepare(&db, vec![action], store::revision(&db).unwrap(), &with_notes()).is_err());
+    }
+    let action = Action::UpdateNote {
+        id: note.id.clone(),
+        patch: json!({"content":"新内容","pinned":true}),
+    };
+    let plan = store::prepare(&db, vec![action], store::revision(&db).unwrap(), &with_notes()).unwrap();
+    store::execute(&db, &plan.id, &with_notes()).unwrap();
+    let updated = &notes(&db)[0];
+    assert!(updated.pinned);
+    assert_eq!((updated.color.as_str(), updated.icon.as_str()), ("#4F55DA", "star"));
+    store::undo(&db, &plan.id, &with_notes()).unwrap();
+    assert_eq!(notes(&db)[0].content, "旧内容");
+}
+
+#[test]
+fn notes_are_queryable_by_their_text_only_with_permission() {
+    let db = db();
+    for content in ["买牛奶", r#"{"v":1,"ops":[{"insert":"项目复盘要点\n"}]}"#] {
+        crate::notes::create(
+            &db,
+            crate::models::NoteDraft {
+                content: content.into(),
+                color: "#E8C444".into(),
+                pinned: false,
+                icon: String::new(),
+            },
+        )
+        .unwrap();
+    }
+    let query = Query {
+        domain: "notes".into(),
+        text: "复盘".into(),
+        start_date: None,
+        end_date: None,
+        completed: None,
+        priority: None,
+        lane_id: None,
+        due_before: None,
+    };
+    assert!(super::actions::query(&db, &query, &permissions()).is_err());
+    let result = super::actions::query(&db, &query, &with_notes()).unwrap();
+    assert_eq!(result.records.len(), 1);
+    assert_eq!(result.records[0].title, "项目复盘要点");
+    assert!(result.records[0].key.starts_with("notes:"));
 }
