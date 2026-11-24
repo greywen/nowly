@@ -332,7 +332,7 @@ pub struct StatusIslandEventNavigation {
     pub start_at: String,
 }
 
-fn show_main_window(app: &AppHandle) -> Result<tauri::WebviewWindow, CommandError> {
+pub(crate) fn show_main_window(app: &AppHandle) -> Result<tauri::WebviewWindow, CommandError> {
     crate::quick_panel::close_details_for_navigation(app).map_err(CommandError::system)?;
     let window = app
         .get_webview_window("main")

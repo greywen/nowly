@@ -44,6 +44,27 @@ pub fn voice_dismiss(window: WebviewWindow, voice: State<'_, Voice>) -> Result<(
     Ok(())
 }
 
+pub const OPEN_SETTINGS_EVENT: &str = "voice-open-settings";
+
+/// An error's way out from the Bar: brings the main window up on the
+/// 语音输入 group (`voice`) or the model connection (`model`).
+#[tauri::command]
+pub fn voice_open_settings(window: WebviewWindow, app: AppHandle, section: String) -> Result<(), CommandError> {
+    require(&window, true)?;
+    if section != "voice" && section != "model" {
+        return Err(CommandError::validation("section", "未知的设置分组。"));
+    }
+    crate::status_island::show_main_window(&app)?
+        .emit(OPEN_SETTINGS_EVENT, section)
+        .map_err(CommandError::system)
+}
+
+#[tauri::command]
+pub fn voice_open_microphone_privacy(window: WebviewWindow) -> Result<(), CommandError> {
+    require(&window, true)?;
+    crate::feedback::open_target("ms-settings:privacy-microphone")
+}
+
 #[tauri::command]
 pub fn voice_get_settings(window: WebviewWindow, db: State<'_, AppDb>) -> Result<VoiceSettings, CommandError> {
     require(&window, false)?;

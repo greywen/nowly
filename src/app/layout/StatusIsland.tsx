@@ -4,6 +4,7 @@ import {
   Check,
   CircleAlert,
   Clock3,
+  Mic,
   Pause,
   Play,
   RefreshCw,
@@ -509,6 +510,9 @@ export function StatusIslandSummaryView({
   menu,
   onActivateNowly,
   onCollapse,
+  voice = 'off',
+  voiceAnim = null,
+  voiceLayers,
   children
 }: {
   open: boolean;
@@ -527,17 +531,23 @@ export function StatusIslandSummaryView({
   menu?: React.ReactNode;
   onActivateNowly: () => void;
   onCollapse: () => void;
+  /** Voice input's form of the capsule (design.md §12.9). */
+  voice?: 'off' | 'primed' | 'narrow' | 'wide';
+  voiceAnim?: 'grow' | 'shrink' | null;
+  voiceLayers?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const { t } = useTranslation();
   const statusHidden = surface !== 'status' || assistantClosing;
   const statusOpen = open && source === 'island' && !statusHidden;
   const assistantOpen = open && source === 'nowly' && surface === 'assistant';
+  const voiceShown = voice === 'narrow' || voice === 'wide';
   const nowlyAvailable = surface === 'status'
     && !strip
     && !statusOpen
     && statusAnim !== 'shrink'
-    && !assistantClosing;
+    && !assistantClosing
+    && voice !== 'wide';
   return (
     <div
       className="status-rail"
@@ -551,6 +561,8 @@ export function StatusIslandSummaryView({
       data-status-open={statusOpen}
       data-status-hidden={statusHidden}
       data-mode={mode}
+      data-voice={voice}
+      {...(voiceAnim ? { 'data-voice-anim': voiceAnim } : {})}
       {...(assistantAnim ? { 'data-frame-anim': assistantAnim } : {})}
     >
       <button type="button" className="status-rail__strip-entry"
@@ -564,9 +576,10 @@ export function StatusIslandSummaryView({
       >
         <div className="status-rail__sheet" aria-hidden={statusHidden || strip} inert={statusHidden || strip}>
           <div className="status-rail__content">
-            <div className="status-rail__header">
+            <div className="status-rail__header" aria-hidden={voiceShown} inert={voiceShown}>
               {children}
             </div>
+            {voiceLayers}
             <div className="status-rail__panel" aria-hidden={!statusOpen} inert={!statusOpen}>{panel}</div>
           </div>
           <button
@@ -593,6 +606,7 @@ export function StatusIslandSummaryView({
           onClick={onActivateNowly}
         >
           <img src="/logo.png" alt="" />
+          <Mic className="status-rail__nowly-mic" aria-hidden="true" />
         </button>
       </div>
       <div className="status-rail__assistant-frame">

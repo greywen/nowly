@@ -344,6 +344,56 @@ button:disabled { cursor: default; opacity: .65; }
 .status-rail__nowly:focus, .status-rail__nowly:active { outline: 0; background: transparent; box-shadow: none; }
 .status-rail__nowly:focus-visible { box-shadow: inset 0 0 0 2px var(--color-primary); }
 
+/* Voice input (design.md §12.9). The shell only ever changes width, 288 <-> 432,
+   and stays 40px tall. Both voice layouts are fixed at their destination size,
+   so the morph reveals them rather than reflowing them. */
+.status-rail[data-voice="wide"] .status-rail__status-presence { width: var(--bar-panel-w); }
+.status-rail[data-voice-anim="grow"] .status-rail__status-presence { transition: width var(--rail-grow) var(--rail-ease), height var(--rail-grow) var(--rail-ease), border-radius var(--rail-grow) var(--rail-ease), background-color var(--rail-grow) var(--rail-ease), border-color var(--rail-grow) var(--rail-ease), opacity var(--rail-peer-in) var(--rail-ease), visibility 0s !important; }
+.status-rail[data-voice-anim="shrink"] .status-rail__status-presence { transition: width var(--rail-shrink) var(--rail-ease), height var(--rail-shrink) var(--rail-ease), border-radius var(--rail-shrink) var(--rail-ease), background-color var(--rail-shrink) var(--rail-ease), border-color var(--rail-shrink) var(--rail-ease), opacity var(--rail-peer-in) var(--rail-ease), visibility 0s !important; }
+.status-rail__header { opacity: 1; transition: opacity var(--rail-in) var(--rail-ease) var(--rail-in-delay); }
+.status-rail:is([data-voice="narrow"], [data-voice="wide"]) .status-rail__header { opacity: 0; transition: opacity var(--rail-out) var(--rail-ease); }
+.status-rail__voice { position: absolute; top: 0; height: calc(var(--rail-h) - var(--rail-edge) * 2); opacity: 0; pointer-events: none; transition: opacity var(--rail-out) var(--rail-ease) !important; }
+.status-rail__voice[data-at="narrow"] { left: var(--shell-left); width: calc(var(--rail-collapsed-w) - var(--rail-edge) * 2); }
+.status-rail__voice[data-at="wide"] { left: 0; width: 100%; }
+.status-rail__voice[data-shown="true"] { opacity: 1; transition: opacity var(--rail-in) var(--rail-ease) var(--rail-in-delay) !important; }
+/* Narrow keeps the capsule's 54px lane clear for the Logo; wide has no Logo. */
+.status-rail__voice > .voice-island { position: absolute; inset: 0; padding: 6px 54px 6px 8px; display: flex; align-items: center; gap: 8px; pointer-events: none; }
+.status-rail__voice[data-at="wide"] > .voice-island { padding-right: 6px; }
+.voice-island[data-primary="voice"] .status-island__icon { color: var(--color-primary-active); background: var(--color-primary-light); }
+.voice-island[data-primary="task"] .status-island__icon,
+.voice-island[data-primary="error"] .status-island__icon { color: var(--color-danger-active); background: var(--color-danger-light); }
+.voice-island[data-primary="note"] .status-island__icon { color: var(--color-info-active, #2d5bb8); background: var(--color-info-light, #e3ecfd); }
+.voice-island[data-primary="many"] .status-island__icon { color: var(--color-success-active, #1f7a45); background: var(--color-success-light, #e2f5e9); }
+.voice-island:is([data-primary="modify"], [data-primary="delete"]) .status-island__icon { color: var(--color-warning-active, #8a5a00); background: var(--color-warning-light, #fdf3d7); }
+.voice-island[data-primary="undone"] .status-island__icon { color: var(--text-muted); background: var(--bg-secondary); }
+.voice-island[data-muted="true"] .status-island__copy strong { color: var(--text-muted); font-weight: 500; }
+/* Newest words stay in view: an overflowing line is packed to its end. */
+.voice-island__title { display: flex; justify-content: flex-end; }
+.voice-island__title > span { flex: 1 0 auto; overflow: visible; white-space: nowrap; }
+.voice-island:not([data-phase="listening"]):not([data-phase="interpreting"]) .voice-island__title { display: block; }
+.voice-island__trailing { flex: none; display: flex; align-items: center; gap: 4px; }
+.status-rail__voice[data-shown="true"] .voice-island__trailing { pointer-events: auto; }
+.voice-island__timer { min-width: 32px; color: var(--text-muted); font-size: 0.85rem; font-weight: 500; font-variant-numeric: tabular-nums; text-align: end; }
+.voice-island__icon-button { width: 28px; height: 28px; padding: 0; border: 0; border-radius: var(--radius-sm); display: grid; place-items: center; color: var(--text-muted); background: transparent; cursor: pointer; }
+.voice-island__icon-button svg { width: 16px; height: 16px; }
+.voice-island__icon-button:hover:not(:disabled) { color: var(--color-primary); background: var(--bg-secondary); }
+.voice-island__text-button { height: 28px; padding: 0 8px; border: 0; border-radius: var(--radius-sm); color: var(--color-primary-active); background: transparent; font-size: 0.85rem; font-weight: 600; white-space: nowrap; cursor: pointer; }
+.voice-island__text-button:hover:not(:disabled) { background: var(--bg-secondary); }
+.voice-island :is(.voice-island__icon-button, .voice-island__text-button):disabled { opacity: .5; cursor: default; }
+.voice-island :is(.voice-island__icon-button, .voice-island__text-button):focus-visible { box-shadow: inset 0 0 0 2px var(--color-primary); }
+.voice-wave { position: relative; height: 16px; display: grid; place-items: center; }
+.voice-wave__bars { height: 16px; display: flex; align-items: center; gap: 2px; }
+.voice-wave__bars > span { width: 2px; border-radius: 1px; background: var(--color-primary); }
+.voice-wave[data-quiet="true"] .voice-wave__bars > span { background: var(--text-tertiary); }
+.voice-wave__static { position: absolute; width: 16px; height: 16px; color: var(--color-primary); visibility: hidden; }
+/* The Logo lane holds still on screen while the shell grows around it. */
+.status-rail:not([data-voice="off"]) .status-rail__nowly { left: calc(50% + var(--status-action-w) - var(--rail-collapsed-w) / 2); }
+.status-rail[data-voice="wide"] .status-rail__nowly { opacity: 0; pointer-events: none; transition: opacity var(--rail-peer-out) var(--rail-ease) !important; }
+.status-rail__nowly img, .status-rail__nowly-mic { transition: opacity var(--logo-in) var(--rail-ease) var(--logo-in-delay) !important; }
+.status-rail__nowly-mic { position: absolute; inset: 0; margin: auto; width: 16px; height: 16px; color: var(--color-primary); opacity: 0; pointer-events: none; transition-duration: var(--logo-out) !important; transition-delay: 0s !important; }
+.status-rail:is([data-voice="primed"], [data-voice="wide"]) .status-rail__nowly img { opacity: 0; transition: opacity var(--logo-out) var(--rail-ease) !important; }
+.status-rail:is([data-voice="primed"], [data-voice="wide"]) .status-rail__nowly-mic { opacity: 1; transition: opacity var(--logo-in) var(--rail-ease) var(--logo-in-delay) !important; }
+
 /* Bar controls keep keyboard focus and color feedback without focus rings. */
 .screen-status-island-root .status-rail :is(button, a, summary, [tabindex]):not(:is(input, textarea, select, [contenteditable])):is(:focus, :focus-visible, :active) {
   outline: 0;
@@ -436,7 +486,11 @@ body:has(.screen-status-island-root),
     --rail-grow: 0s; --rail-shrink: 0s; --rail-in: 0s; --rail-in-delay: 0s;
     --rail-out: 0s; --rail-peer-in: 0s; --rail-peer-out: 0s;
     --logo-grow: 0s; --logo-shrink: 0s; --logo-in: 0s; --logo-in-delay: 0s; --logo-out: 0s;
-  }}
+  }
+  /* §12.9: the live waveform becomes a still microphone; the timer keeps running. */
+  .voice-wave__bars { visibility: hidden; }
+  .voice-wave__static { visibility: visible; }
+}
 
 @media (prefers-reduced-transparency: reduce) {
   .status-rail__status-presence, .status-island__details { background: var(--bg-surface); }

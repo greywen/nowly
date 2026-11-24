@@ -120,6 +120,30 @@ pub struct BarPresentation {
     pub strip: bool,
 }
 
+/// Voice input's claim on the collapsed rail (design.md §12.9). `Wide` is the
+/// 432px listening shell, `Narrow` a result back in the 288px capsule. Either
+/// one holds the Bar on screen, even when it is otherwise disabled or a strip.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum VoiceSurface {
+    #[default]
+    Off,
+    Narrow,
+    Wide,
+}
+
+/// The listening shell is exactly the host width, so only the clip widens.
+fn voice_region(scale: f64) -> SurfaceRegion {
+    let (host_px, height) = top_surface_size(None, scale);
+    SurfaceRegion {
+        left: 0,
+        top: 0,
+        right: host_px as i32,
+        bottom: height as i32,
+        radius: physical_pixels(RAIL_RADIUS, scale),
+    }
+}
+
 fn strip_region(scale: f64) -> SurfaceRegion {
     SurfaceRegion {
         left: physical_pixels((PANEL_WIDTH - 128.0) / 2.0, scale),
@@ -372,6 +396,7 @@ struct PanelState {
     bar_generation: u64,
     bar_transitioning: bool,
     details_closing: bool,
+    voice: VoiceSurface,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -397,7 +422,8 @@ impl PanelState {
             && !self.bar_presence.iter().any(|present| *present)
             && self.details_source.is_none()
             && !self.details_closing
-            && self.drag.is_none();
+            && self.drag.is_none()
+            && self.voice == VoiceSurface::Off;
         if strip != self.bar_strip {
             self.bar_strip = strip;
             self.bar_generation += 1;
@@ -410,6 +436,11 @@ impl PanelState {
     /// grown, and growing it mid-drag would resize the window under the pointer.
     fn allows_details(&self) -> bool {
         self.enabled && !self.capture_suppressed && self.drag.is_none()
+    }
+
+    /// Whether the Bar window should be on screen at all.
+    fn shown(&self) -> bool {
+        (self.enabled || self.voice != VoiceSurface::Off) && !self.capture_suppressed
     }
 }
 
@@ -437,6 +468,7 @@ impl Default for PanelController {
                 bar_generation: 0,
                 bar_transitioning: false,
                 details_closing: false,
+                voice: VoiceSurface::Off,
             }),
             positioning: Mutex::new(()),
             visibility: Mutex::new(()),
@@ -489,7 +521,9 @@ impl PanelController {
 
     fn bar_region(&self, source: Option<PanelSource>, scale: f64) -> SurfaceRegion {
         let state = self.state.lock().unwrap();
-        if source.is_none() && state.bar_strip && !state.bar_transitioning {
+        if source.is_none() && state.voice == VoiceSurface::Wide {
+            voice_region(scale)
+        } else if source.is_none() && state.bar_strip && !state.bar_transitioning {
             strip_region(scale)
         } else {
             surface_region(source, scale)
@@ -498,6 +532,11 @@ impl PanelController {
 
     pub fn is_enabled(&self) -> bool {
         self.state.lock().unwrap().enabled
+    }
+
+    /// Returns the previous surface.
+    pub fn set_voice(&self, surface: VoiceSurface) -> VoiceSurface {
+        std::mem::replace(&mut self.state.lock().unwrap().voice, surface)
     }
 
     pub fn target_monitor_id(&self) -> Option<String> {
@@ -1182,7 +1221,7 @@ fn set_handle_bounds<R: Runtime>(
 pub fn reposition_handle<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
     let controller = app.state::<PanelController>();
     let state = controller.state.lock().unwrap();
-    let can_reposition = state.enabled && !state.details_closing && !state.capture_suppressed;
+    let can_reposition = state.shown() && !state.details_closing;
     drop(state);
     if !can_reposition {
         return Ok(());
@@ -1259,7 +1298,7 @@ pub fn sync_bar_presentation<R: Runtime>(app: &AppHandle<R>) -> Result<BarPresen
     let _positioning = controller.positioning.lock().unwrap();
     let presentation = controller.bar_presentation();
     let state = controller.state.lock().unwrap();
-    let available = state.enabled && !state.capture_suppressed;
+    let available = state.shown();
     let closing = state.details_closing;
     drop(state);
     if available {
@@ -1286,13 +1325,35 @@ pub fn finish_status_island_presentation(app: AppHandle, generation: u64) -> Res
     let _positioning = controller.positioning.lock().unwrap();
     if controller.finish_bar_presentation(generation) {
         let state = controller.state.lock().unwrap();
-        let available = state.enabled && !state.capture_suppressed && !state.details_closing;
+        let available = state.shown() && !state.details_closing;
         drop(state);
         if available {
             reposition_handle(&app).map_err(crate::error::CommandError::system)?;
         }
     }
     Ok(())
+}
+
+/// The Bar reports its voice shell: `wide` before the 288→432 grow starts, and
+/// `narrow`/`off` only after the collapse has finished, so the clip never cuts
+/// a shell that is still drawn wider.
+#[tauri::command(async)]
+pub fn set_status_island_voice(
+    app: AppHandle,
+    surface: VoiceSurface,
+) -> Result<BarPresentation, crate::error::CommandError> {
+    let controller = app.state::<PanelController>();
+    let previous = controller.set_voice(surface);
+    if surface == VoiceSurface::Off && previous != VoiceSurface::Off && !controller.is_enabled() {
+        let _positioning = controller.positioning.lock().unwrap();
+        if let Some(handle) = app.get_webview_window("quick-panel-handle") {
+            controller
+                .hide_serialized(|| handle.hide())
+                .map_err(crate::error::CommandError::system)?;
+        }
+        return Ok(controller.bar_presentation());
+    }
+    sync_bar_presentation(&app).map_err(crate::error::CommandError::system)
 }
 
 pub fn start_monitor_watch<R: Runtime>(app: AppHandle<R>) {
@@ -2267,6 +2328,30 @@ mod tests {
         }
         controller.set_notification_mode("persistent");
         assert!(!controller.bar_presentation().strip);
+    }
+
+    #[test]
+    fn voice_holds_the_bar_and_widens_only_the_collapsed_clip() {
+        use super::VoiceSurface;
+        let controller = PanelController::default();
+        controller.set_notification_mode("notification");
+        assert!(controller.bar_presentation().strip);
+        for scale in [1.0, 1.25, 1.5, 2.0] {
+            controller.set_voice(VoiceSurface::Wide);
+            assert!(!controller.bar_presentation().strip);
+            let wide = controller.bar_region(None, scale);
+            assert_eq!((wide.left, wide.right), (0, super::top_surface_size(None, scale).0 as i32));
+            assert_eq!(wide.bottom, (40.0 * scale).round() as i32);
+            controller.set_voice(VoiceSurface::Narrow);
+            assert!(!controller.bar_presentation().strip);
+            assert_eq!(controller.bar_region(None, scale), super::surface_region(None, scale));
+            assert_eq!(controller.set_voice(VoiceSurface::Off), VoiceSurface::Narrow);
+            assert!(controller.bar_presentation().strip);
+        }
+        controller.set_enabled(false);
+        assert!(!controller.state.lock().unwrap().shown());
+        controller.set_voice(VoiceSurface::Wide);
+        assert!(controller.state.lock().unwrap().shown());
     }
 
     #[test]

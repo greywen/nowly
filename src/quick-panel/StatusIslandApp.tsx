@@ -19,6 +19,8 @@ import { AssistantDock } from '../assistant/AssistantDock';
 import { BarMenuPanel } from '../app/layout/BarMenuPanel';
 import { ScreenshotHistoryApp } from '../screenshot-history/ScreenshotHistoryApp';
 import { SurfaceIconProvider } from '../screenshot-history/SurfaceIconProvider';
+import { useVoiceSession } from '../voice/useVoiceSession';
+import { VoiceLayers } from '../voice/VoiceBar';
 
 type PanelSource = 'island' | 'nowly' | 'history' | 'menu';
 type RailSurface = 'status' | 'assistant' | 'history' | 'menu';
@@ -121,6 +123,15 @@ export function StatusIslandApp() {
       .catch(bar.failed);
   }, [bar.accept, bar.failed]);
   const collapse = useCallback(() => void invoke('close_status_island_details'), []);
+  const [pointerInside, setPointerInside] = useState(false);
+  const [focusInside, setFocusInside] = useState(false);
+  const voice = useVoiceSession({ paused: pointerInside || focusInside });
+
+  // Voice and the panels are mutually exclusive (design.md §8.3): listening
+  // takes the rail back to its capsule first.
+  useEffect(() => {
+    if (voice.rail === 'wide' && open) collapse();
+  }, [collapse, open, voice.rail]);
 
   useEffect(() => {
     void invoke('set_status_island_primary', { identity: primaryIdentity });
@@ -285,6 +296,7 @@ export function StatusIslandApp() {
   const railSurface: RailSurface = open && (source === 'history' || source === 'menu') ? source : assistantSurface ?? 'status';
   const strip = notificationMode === 'notification'
     && !open && statusAnim === null && assistantAnim === null && !nativeHidePending
+    && voice.rail === 'off' && voice.anim === null
     && (bar.presentation?.strip ?? (status === 'ready' && unseenNotificationKey === ''));
   useLayoutEffect(() => {
     if (!strip && document.activeElement?.matches('.status-rail__strip-entry')) {
@@ -365,12 +377,22 @@ export function StatusIslandApp() {
       className="screen-status-island-root"
       aria-label={t('statusIsland.rootLabel')}
       onPointerEnter={() => {
+        setPointerInside(true);
         if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) bar.presence('island', true);
       }}
-      onPointerLeave={() => bar.presence('island', false)}
-      onFocusCapture={() => bar.presence('keyboard', true)}
+      onPointerLeave={() => {
+        setPointerInside(false);
+        bar.presence('island', false);
+      }}
+      onFocusCapture={() => {
+        setFocusInside(true);
+        bar.presence('keyboard', true);
+      }}
       onBlurCapture={event => {
-        if (!event.currentTarget.contains(event.relatedTarget)) bar.presence('keyboard', false);
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+          setFocusInside(false);
+          bar.presence('keyboard', false);
+        }
       }}
     >
       <TopRail
@@ -386,6 +408,9 @@ export function StatusIslandApp() {
         mode={displayedSurface.mode}
         onCollapse={collapse}
         onActivateNowly={activateNowly}
+        voice={voice.rail}
+        voiceAnim={voice.anim}
+        voiceLayers={<VoiceLayers session={voice} />}
         menu={<BarMenuPanel active={open && source === 'menu'} items={barMenu} />}
         history={source === 'history' && (open || assistantAnim !== null) ? <ScreenshotHistoryApp compact /> : null}
         assistant={(

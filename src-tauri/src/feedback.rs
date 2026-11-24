@@ -28,7 +28,7 @@ pub fn open_external(target: String) -> Result<(), CommandError> {
 }
 
 #[cfg(windows)]
-fn open_target(target: &str) -> Result<(), CommandError> {
+pub(crate) fn open_target(target: &str) -> Result<(), CommandError> {
     use std::os::windows::ffi::OsStrExt;
     use windows::core::PCWSTR;
     use windows::Win32::UI::Shell::ShellExecuteW;
@@ -64,7 +64,7 @@ fn open_target(target: &str) -> Result<(), CommandError> {
 }
 
 #[cfg(not(windows))]
-fn open_target(_target: &str) -> Result<(), CommandError> {
+pub(crate) fn open_target(_target: &str) -> Result<(), CommandError> {
     Err(CommandError::system(
         "opening external targets is only supported on Windows",
     ))

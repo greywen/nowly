@@ -18,6 +18,14 @@ type IconName = keyof typeof iconBodies;
 
 function createIcon(name: IconName) {
   const bodies = iconBodies[name];
+  // Stable objects: React re-assigns innerHTML whenever this prop's identity
+  // changes, which would swap the paths under a pressed pointer and drop the click.
+  const markup = new Map<IconStyle, { __html: string }>();
+  const html = (style: IconStyle) => {
+    let entry = markup.get(style);
+    if (!entry) markup.set(style, entry = { __html: bodies[style] });
+    return entry;
+  };
   return function Icon({ size = 18, className, ...props }: IconProps) {
     const style = useContext(IconStyleContext);
     const labelled = Boolean(props['aria-label']);
@@ -32,7 +40,7 @@ function createIcon(name: IconName) {
         role={labelled ? 'img' : undefined}
         aria-hidden={labelled ? undefined : props['aria-hidden'] ?? true}
         // Compile-time constant markup from icon-data.ts; never user input.
-        dangerouslySetInnerHTML={{ __html: bodies[style] }}
+        dangerouslySetInnerHTML={html(style)}
       />
     );
   };
