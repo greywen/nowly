@@ -1,7 +1,9 @@
 .settings-model { display: grid; gap: var(--space-4); min-width: 0; }
-.voice-settings { display: grid; gap: var(--space-4); min-width: 0; margin: 0; padding: var(--space-4); border: 1px solid var(--border-default); border-radius: var(--radius-default); outline: 0; }
-.voice-settings:focus-visible { border-color: var(--color-primary); box-shadow: var(--shadow-focus); }
-.voice-settings legend { padding: 0 var(--space-1); color: var(--text-strong); font-size: 0.95rem; font-weight: 600; }
+/* One bordered group per topic in Settings → AI 助手. */
+.settings-section { display: grid; gap: var(--space-4); min-width: 0; margin: 0; padding: var(--space-5); border: 1px solid var(--border-default); border-radius: var(--radius-default); outline: 0; }
+.settings-section:focus-visible { border-color: var(--color-primary); box-shadow: var(--shadow-focus); }
+.settings-section > legend { padding: 0 var(--space-1); color: var(--text-strong); font-size: 0.95rem; font-weight: 600; }
+.settings-section__note { margin: 0; color: var(--text-muted); font-size: 0.85rem; line-height: 1.5; }
 .voice-settings > .form-check { display: flex; }
 .voice-settings__note { margin: 0; color: var(--text-secondary); font-size: 0.85rem; line-height: 1.5; }
 .voice-settings .shortcut-recorder__hint { grid-column: 2; }

@@ -95,6 +95,23 @@ describe('MatrixWidget', () => {
     expect(open).toHaveBeenCalledWith(sampleTasks[0], title);
   });
 
+  it('lists completed tasks below open tasks within a quadrant', () => {
+    const base = sampleTasks[0];
+    const tasks = [
+      { ...base, id: 'done-a', title: '已完成甲', completed: true },
+      { ...base, id: 'open-a', title: '未完成甲', completed: false },
+      { ...base, id: 'done-b', title: '已完成乙', completed: true },
+      { ...base, id: 'open-b', title: '未完成乙', completed: false }
+    ];
+    render(<MatrixWidget {...props({ tasks })} />);
+
+    const region = screen.getByRole('region', { name: '重要且紧急' });
+    const titles = Array.from(region.querySelectorAll('button[aria-label^="编辑任务："]')).map(
+      (button) => button.getAttribute('aria-label')
+    );
+    expect(titles).toEqual(['编辑任务：未完成甲', '编辑任务：未完成乙', '编辑任务：已完成甲', '编辑任务：已完成乙']);
+  });
+
   it('shows a static loading message without spinners', () => {
     render(<MatrixWidget {...props({ tasks: [], status: 'loading' })} />);
     expect(screen.getByText('正在读取本地任务')).toBeInTheDocument();

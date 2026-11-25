@@ -1,6 +1,7 @@
 // Prevents an extra console window on Windows in release builds. DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-
+
+mod agent_bridge;
 mod assistant;
 mod attachments;
 mod autostart;
@@ -235,6 +236,7 @@ fn main() {
             let voice_settings = voice::settings::read(&connection).unwrap_or_default();
             app.manage(AppDb(Mutex::new(connection)));
             app.manage(voice::session::start(app.handle(), app_dir.clone(), voice_settings));
+            agent_bridge::start(app.handle());
             if let Err(error) = screen_capture::history::setup(app.handle()) {
                 eprintln!("screenshot history recovery failed: {}", error.message);
             }
@@ -625,6 +627,7 @@ fn main() {
             set_native_language,
             assistant::commands::assistant_get_config,
             assistant::commands::assistant_save_config,
+            assistant::commands::assistant_list_models,
             assistant::commands::assistant_interpret,
             assistant::commands::assistant_cancel_request,
             assistant::commands::assistant_revise,
@@ -633,6 +636,9 @@ fn main() {
             assistant::commands::assistant_undo,
             assistant::commands::assistant_history,
             assistant::commands::assistant_status,
+            agent_bridge::agent_bridge_get_config,
+            agent_bridge::agent_bridge_save_config,
+            agent_bridge::agent_bridge_skill_md,
             voice::commands::voice_state,
             voice::commands::voice_dismiss,
             voice::commands::voice_open_settings,

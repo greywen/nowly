@@ -261,18 +261,54 @@ pub fn list_external_in_range(
     connection: &Connection,
     range: &EventRange,
 ) -> Result<Vec<ExternalEvent>, CommandError> {
-    let sql = "SELECT e.id, e.subscription_id, e.title, e.start_at, e.end_at,
-                      e.start_tz, e.end_tz, e.all_day, e.location, e.description,
-                      s.color, e.reminders, e.uid, s.provider,
-                      CASE
-                        WHEN s.provider='google' AND instr(' ' || a.scopes || ' ', ' https://www.googleapis.com/auth/calendar ') > 0 THEN 1
-                        WHEN s.provider='microsoft' AND instr(' ' || lower(a.scopes) || ' ', ' https://graph.microsoft.com/calendars.readwrite ') > 0 THEN 1
-                        ELSE 0
-                      END AS writable
-               FROM external_events e
-               JOIN calendar_subscriptions s ON s.id = e.subscription_id
-               LEFT JOIN oauth_accounts a ON a.id = s.account_id";
-    let mut statement = connection.prepare(sql).map_err(CommandError::database)?;
+    let mut out = Vec::new();
+    for event in list_external(connection)? {
+        // 设备钟面下与范围重叠：event.start < range.end 且 event.end > range.start。
+        // 全天/单点用 start 落在范围内近似（end==start 时用 >= start 判断）。
+        let overlaps = event.start_at < range.end_at_exclusive
+            && (event.end_at > range.start_at
+                || event.end_at == event.start_at && event.start_at >= range.start_at);
+        if overlaps {
+            out.push(event);
+        }
+    }
+    Ok(out)
+}
+
+/// Whether the subscription's account granted calendar writes.
+const WRITABLE_SQL: &str = "CASE
+    WHEN s.provider='google' AND instr(' ' || a.scopes || ' ', ' https://www.googleapis.com/auth/calendar ') > 0 THEN 1
+    WHEN s.provider='microsoft' AND instr(' ' || lower(a.scopes) || ' ', ' https://graph.microsoft.com/calendars.readwrite ') > 0 THEN 1
+    ELSE 0
+  END";
+
+/// Ids of the Google/Microsoft subscriptions whose account may write events.
+pub fn writable_ids(connection: &Connection) -> Result<Vec<String>, CommandError> {
+    let sql = format!(
+        "SELECT s.id FROM calendar_subscriptions s
+         LEFT JOIN oauth_accounts a ON a.id = s.account_id
+         WHERE {WRITABLE_SQL} = 1 ORDER BY s.created_at"
+    );
+    let mut statement = connection.prepare(&sql).map_err(CommandError::database)?;
+    let ids = statement
+        .query_map([], |row| row.get(0))
+        .map_err(CommandError::database)?
+        .collect::<rusqlite::Result<Vec<String>>>()
+        .map_err(CommandError::database)?;
+    Ok(ids)
+}
+
+/// Every cached external event, in device wall time.
+pub fn list_external(connection: &Connection) -> Result<Vec<ExternalEvent>, CommandError> {
+    let sql = format!(
+        "SELECT e.id, e.subscription_id, e.title, e.start_at, e.end_at,
+                e.start_tz, e.end_tz, e.all_day, e.location, e.description,
+                s.color, e.reminders, e.uid, s.provider, {WRITABLE_SQL} AS writable
+         FROM external_events e
+         JOIN calendar_subscriptions s ON s.id = e.subscription_id
+         LEFT JOIN oauth_accounts a ON a.id = s.account_id"
+    );
+    let mut statement = connection.prepare(&sql).map_err(CommandError::database)?;
     let rows = statement
         .query_map([], |row| {
             let start_tz: Option<String> = row.get(5)?;
@@ -302,18 +338,9 @@ pub fn list_external_in_range(
         })
         .map_err(CommandError::database)?;
 
-    let mut out = Vec::new();
-    for row in rows {
-        let event = row.map_err(CommandError::database)?;
-        // 设备钟面下与范围重叠：event.start < range.end 且 event.end > range.start。
-        // 全天/单点用 start 落在范围内近似（end==start 时用 >= start 判断）。
-        let overlaps = event.start_at < range.end_at_exclusive
-            && (event.end_at > range.start_at
-                || event.end_at == event.start_at && event.start_at >= range.start_at);
-        if overlaps {
-            out.push(event);
-        }
-    }
+    let out = rows
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(CommandError::database)?;
     Ok(out)
 }
 

@@ -3,7 +3,9 @@
  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
  xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
- IgnorableNamespaces="uap desktop rescap">
+ xmlns:uap5="http://schemas.microsoft.com/appx/manifest/uap/windows10/5"
+ xmlns:desktop4="http://schemas.microsoft.com/appx/manifest/desktop/windows10/4"
+ IgnorableNamespaces="uap desktop rescap uap5 desktop4">
  <Identity Name="__IDENTITY__" Publisher="__PUBLISHER__" Version="__VERSION__" ProcessorArchitecture="__ARCH__" />
  <Properties><DisplayName>__DISPLAY__</DisplayName><PublisherDisplayName>__PUBLISHER_DISPLAY__</PublisherDisplayName><Logo>Assets\StoreLogo.png</Logo></Properties>
  <Dependencies><TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26100.0" /></Dependencies>
@@ -15,6 +17,14 @@
     <desktop:Extension Category="windows.startupTask" Executable="nowly-startup.exe" EntryPoint="Windows.FullTrustApplication">
      <desktop:StartupTask TaskId="NowlyStartup" Enabled="false" DisplayName="__DISPLAY__" />
     </desktop:Extension>
+   </Extensions>
+  </Application>
+  <Application Id="NowlyCli" Executable="nowly-cli.exe" EntryPoint="Windows.FullTrustApplication" desktop4:Subsystem="console" desktop4:SupportsMultipleInstances="true">
+   <uap:VisualElements DisplayName="__DISPLAY__ CLI" Description="__DISPLAY__ CLI" BackgroundColor="transparent" Square150x150Logo="Assets\Square150x150Logo.png" Square44x44Logo="Assets\Square44x44Logo.png" AppListEntry="none" />
+   <Extensions>
+    <uap5:Extension Category="windows.appExecutionAlias" Executable="nowly-cli.exe" EntryPoint="Windows.FullTrustApplication">
+     <uap5:AppExecutionAlias desktop4:Subsystem="console"><uap5:ExecutionAlias Alias="nowly.exe" /></uap5:AppExecutionAlias>
+    </uap5:Extension>
    </Extensions>
   </Application>
  </Applications>

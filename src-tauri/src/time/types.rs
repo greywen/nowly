@@ -45,7 +45,7 @@ pub struct TimeSettings {
     pub clocks: Vec<WorldClock>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum AlarmRepeat {
     Once {},
@@ -62,7 +62,7 @@ pub struct AlarmDraft {
     pub enabled: bool,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AlarmPatch {
     pub title: Option<String>,

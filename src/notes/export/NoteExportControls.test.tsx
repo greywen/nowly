@@ -14,9 +14,10 @@ describe('note export controls', () => {
     expect(screen.getByRole('button', { name: '导出所选便签' })).toBeEnabled();
   });
 
-  it('explains how to open images from a ZIP export', () => {
+  it('keeps export guidance out of the controls', () => {
     render(<NoteExportControls notes={[note]} />);
-    expect(screen.getByText(/完整解压 ZIP.*保留.*assets\//)).toBeInTheDocument();
+    expect(screen.queryByText(/Markdown 保留内容/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/完整解压 ZIP.*保留.*assets\//)).not.toBeInTheDocument();
   });
 
   it('disables empty selection and submits only the selected snapshot', async () => {

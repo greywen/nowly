@@ -224,6 +224,20 @@ where
     save_config(&guard, detected, key, clear_key)
 }
 
+/// The saved key is reused only for the exact address it was saved with, so a
+/// changed URL can never receive the old credential.
+pub fn saved_key_for(db: &Connection, raw_endpoint: &str) -> Result<String, CommandError> {
+    let (config, secret) = config_snapshot(db)?;
+    if config.endpoint != raw_endpoint.trim().trim_end_matches('/') {
+        return Ok(String::new());
+    }
+    Ok(secret
+        .as_deref()
+        .map(crate::token_store::unprotect_secret)
+        .transpose()?
+        .unwrap_or_default())
+}
+
 fn config_snapshot(db: &Connection) -> Result<(Config, Option<Vec<u8>>), CommandError> {
     let config = get_config(db)?;
     let secret = db
@@ -343,6 +357,7 @@ where
             && !config.permissions.tasks
             && !config.permissions.external
             && !config.permissions.notes
+            && !config.permissions.alarms
         {
             return Err(invalid("请先选择允许 AI 读取的数据范围。"));
         }
@@ -457,6 +472,7 @@ where
                     return Err(CommandError::conflict("AI 权限已变化，请重新发送。"));
                 }
                 let mut plan = store::prepare(&db, actions, expected, &config.permissions)?;
+                store::set_origin(&db, &mut plan, source, None)?;
                 let excluded = records
                     .iter()
                     .filter(|r| !plan.changes.iter().any(|c| c.key == r.key))

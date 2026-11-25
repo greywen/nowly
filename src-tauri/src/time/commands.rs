@@ -26,8 +26,8 @@ pub fn list_alarms(db: State<'_, AppDb>) -> Result<Vec<Alarm>, CommandError> {
 
 #[tauri::command]
 pub fn create_alarm(db: State<'_, AppDb>, draft: AlarmDraft) -> Result<Alarm, CommandError> {
-    let mut connection = db.0.lock().map_err(CommandError::database)?;
-    super::store::create_alarm(&mut connection, draft, chrono::Utc::now())
+    let connection = db.0.lock().map_err(CommandError::database)?;
+    super::store::create_alarm(&connection, draft, chrono::Utc::now())
 }
 
 #[tauri::command]
@@ -36,12 +36,12 @@ pub fn update_alarm(
     id: String,
     draft: AlarmPatch,
 ) -> Result<Alarm, CommandError> {
-    let mut connection = db.0.lock().map_err(CommandError::database)?;
-    super::store::update_alarm(&mut connection, &id, draft, chrono::Utc::now())
+    let connection = db.0.lock().map_err(CommandError::database)?;
+    super::store::update_alarm(&connection, &id, draft, chrono::Utc::now())
 }
 
 #[tauri::command]
 pub fn delete_alarm(db: State<'_, AppDb>, id: String) -> Result<(), CommandError> {
-    let mut connection = db.0.lock().map_err(CommandError::database)?;
-    super::store::delete_alarm(&mut connection, &id)
+    let connection = db.0.lock().map_err(CommandError::database)?;
+    super::store::delete_alarm(&connection, &id)
 }

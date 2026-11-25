@@ -4,6 +4,7 @@ use super::types::{
     TimeSettings, WorldClock,
 };
 use crate::error::CommandError;
+use crate::write_scope::DomainWrite;
 use chrono::{DateTime, SecondsFormat, Utc};
 use rusqlite::{params, Connection, OptionalExtension};
 use std::collections::HashSet;
@@ -89,7 +90,7 @@ pub fn list_alarms(
 }
 
 pub fn create_alarm(
-    connection: &mut Connection,
+    connection: &Connection,
     draft: AlarmDraft,
     now: DateTime<Utc>,
 ) -> Result<Alarm, CommandError> {
@@ -97,7 +98,7 @@ pub fn create_alarm(
     let id = uuid::Uuid::new_v4().hyphenated().to_string();
     let timestamp = format_utc(now);
     let repeat = serde_json::to_string(&draft.repeat).map_err(CommandError::system)?;
-    let transaction = connection.transaction().map_err(CommandError::database)?;
+    let transaction = connection.domain_write().map_err(CommandError::database)?;
     transaction
         .execute(
             "INSERT INTO alarms(id,title,hour,minute,repeat,enabled,effective_from_utc,created_at,updated_at)
@@ -118,13 +119,13 @@ pub fn create_alarm(
 }
 
 pub fn update_alarm<P: Into<AlarmPatch>>(
-    connection: &mut Connection,
+    connection: &Connection,
     id: &str,
     patch: P,
     now: DateTime<Utc>,
 ) -> Result<Alarm, CommandError> {
     let patch = patch.into();
-    let transaction = connection.transaction().map_err(CommandError::database)?;
+    let transaction = connection.domain_write().map_err(CommandError::database)?;
     let previous = get_alarm(&transaction, id, now)?;
     let draft = validate_alarm_draft(AlarmDraft {
         title: patch.title.unwrap_or_else(|| previous.title.clone()),
@@ -174,8 +175,8 @@ pub fn update_alarm<P: Into<AlarmPatch>>(
     get_alarm(connection, id, now)
 }
 
-pub fn delete_alarm(connection: &mut Connection, id: &str) -> Result<(), CommandError> {
-    let transaction = connection.transaction().map_err(CommandError::database)?;
+pub fn delete_alarm(connection: &Connection, id: &str) -> Result<(), CommandError> {
+    let transaction = connection.domain_write().map_err(CommandError::database)?;
     let affected = transaction
         .execute("DELETE FROM alarms WHERE id=?1", [id])
         .map_err(CommandError::database)?;

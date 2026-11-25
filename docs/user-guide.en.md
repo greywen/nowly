@@ -8,7 +8,7 @@ Use Nowly as a personal Windows workspace: add your schedule, sort tasks in the 
 
 The ordinary window, wallpaper, tray, quick panel and fullscreen focus serve different purposes. AI and connected calendars are optional; local task, note and focus work does not require connecting them. Nowly is not a shared team workspace.
 
-> AI chat, the AI assistant option in Nowly Bar settings, and the Model Settings tab are temporarily hidden. Existing AI data and configuration are retained; other features are unaffected.
+> AI chat, the AI assistant option in Nowly Bar settings, and the AI Assistant settings tab are temporarily hidden. Existing AI data and configuration are retained; other features are unaffected.
 
 ## Features
 
@@ -223,10 +223,10 @@ Under **Settings → Shortcuts → Quick create**, you can record global shortcu
 
 Hold the talk key and say what you need. When you release it, Nowly recognizes the speech on this device and hands the text to your configured model, which creates an event, a matrix task or a note. Examples: "project review at 3 pm today" or "note: send the report by Friday".
 
-- First configure the model and allow the matching data under **Settings → Model**. Then, in the **Voice input** group on the same page, turn on hold to talk and download the on-device recognition model (about 240 MB). Voice input is off by default.
+- First, under **Settings → AI Assistant**, enter the API URL and key, pick a model from the list that loads automatically (or type its name), and allow the matching data. Then, in the **Voice input** group on the same page, turn on hold to talk and download the on-device recognition model (about 240 MB). Voice input is off by default.
 - The default key is **Ctrl+Win**. You can change it to two or more modifiers, modifiers plus one key, or a single F key, and choose the microphone and recognition language (automatic, Chinese or English).
 - While you hold the key, the Nowly Bar Logo turns into a microphone and the Bar widens to show live text, the input level and a timer. After release it shows "Understanding"; press stop to cancel.
-- New items appear on the Bar with **Undo** for 30 seconds. Changes and deletions wait for you to confirm on the Bar. When the model needs more detail, hold the key again to answer.
+- New items appear on the Bar with **Undo** for 15 seconds. Changes, deletions and connected-calendar writes show "Runs in Ns" on the Bar and run after 15 seconds unless you cancel; hovering or focusing the card pauses the countdown. When the model needs more detail, hold the key again to answer.
 - When the model is missing, the microphone is unavailable or no model service is configured, the Bar shows the reason and a button to open settings or the Windows microphone settings.
 - Windows does not pass key presses to Nowly while a window running as administrator is in front, so hold to talk does not work there.
 
@@ -269,9 +269,21 @@ Open AI settings, enter the complete API endpoint, Model ID and API Key, and sel
 
 Open the assistant from the main workspace or **Nowly Bar Logo → AI assistant**. Ask for a bounded lookup or a local change, such as “Show my incomplete important tasks” or “Create a study session tomorrow at 19:00.” Review exact dates, targets and changes. Clarify ambiguous requests; select/edit the preview and regenerate it before confirmation if needed. Only the explicit confirmation button executes the local plan. Cancel or stop does not confirm it.
 
-Plans contain 1–20 unique actions in one domain, expire after five minutes, and become unconfirmable after restarting the app. AI supports local calendar/task creation, editing and deletion, not arbitrary code or board administration. Existing recurring events can only be changed/deleted as an explicitly queried occurrence; recurring rules and occurrence reminder-offset changes are not supported. Split calendar-plus-task requests. Calendar queries span at most 90 days and return at most 200 records; narrow incomplete results before batch changes. Data or permission changes may require a new query/preview. History holds recent local operation plans for seven days; undo is guarded and can be refused if affected data changed, rather than restoring the whole database.
+Plans contain 1–20 unique actions in one domain, expire after five minutes, and become unconfirmable after restarting the app. AI can create, edit and delete local events, tasks and alarms, and create notes. New events can have a category and a repeat rule. Tasks can get tags, have steps added, edited or removed, and move between kanban columns or off the board. Notes support a title, lists and checklists. AI cannot create or change kanban columns, tags or categories, and cannot rewrite existing notes. Existing recurring events can only be changed/deleted as an explicitly queried occurrence; changing repeat rules or one occurrence's reminder offsets is not supported. Split calendar-plus-task requests. Calendar queries span at most 90 days and return at most 200 records; narrow incomplete results before batch changes. Data or permission changes may require a new query/preview. History holds recent local operation plans for seven days; undo is guarded and can be refused if affected data changed, rather than restoring the whole database.
 
-Allowed query results, entered messages, recent conversation and optional previous drafts go to the configured model service. External permission includes cached Google, Microsoft and ICS events; they are read-only to AI even if the normal editor can write them. The switches do not redact text already in the conversation. Dictation, where supported, fills the draft and does not send automatically; its host recognition service is not guaranteed offline. Read the [exact AI context boundary](privacy-and-data.en.md#optional-ai-the-exact-context-boundary) before connecting.
+Allowed query results, entered messages, recent conversation and optional previous drafts go to the configured model service. External permission includes cached Google, Microsoft and ICS events, which are read-only to AI by default. When "Create and edit events in connected calendars" is also on, AI can create a single event in a writable Google/Microsoft calendar or change an event it queried. It cannot delete them. The switches do not redact text already in the conversation. Dictation, where supported, fills the draft and does not send automatically; its host recognition service is not guaranteed offline. Read the [exact AI context boundary](privacy-and-data.en.md#optional-ai-the-exact-context-boundary) before connecting.
+
+## Let external AI agents use Nowly
+
+Local AI agents such as Codex, Claude Code and WorkBuddy can read and change your Nowly data through the `nowly` command, with the same abilities as the AI assistant. You don't need a model configured in Nowly; the agent uses its own.
+
+1. Open **Settings → Skill**, check "Allow agents to connect", choose the data agents may use, and save. Everything is off by default, and these permissions are separate from the AI assistant's.
+2. Under "Install the skill", click "Copy SKILL.md", paste it into a chat with your agent, and ask the agent to install it as a skill. You don't need to reinstall after changing permissions.
+3. Ask the agent in plain words, such as "Move tomorrow afternoon's review to 4 pm." The agent queries first, then proposes a plan.
+
+Every plan an agent proposes appears on the Nowly Bar with the agent's name and "Runs in Ns", and runs after 15 seconds unless you cancel it. Plans that arrive together are shown one after another. An agent can change only records it queried in the last 10 minutes, and can undo plans it ran. If Nowly isn't running, the `nowly` command starts it in the background.
+
+The Microsoft Store version adds `nowly` to the terminal. With the installer version, the command is `nowly-cli.exe` in the install folder, and `SKILL.md` already contains its full path. What an agent reads is sent to the agent's model provider; see [External AI agents](privacy-and-data.en.md#external-ai-agents).
 
 ## Desktop modes and data care
 

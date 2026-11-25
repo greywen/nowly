@@ -45,12 +45,15 @@ try {
         try {
             $env:CARGO_TARGET_DIR = $TargetDirectory
             Invoke-Checked { npm run build }
-            Invoke-Checked { cargo build --manifest-path src-tauri\Cargo.toml --release --features tauri/custom-protocol --bin nowly --target $triple --locked }
+            Invoke-Checked { cargo build --manifest-path src-tauri\Cargo.toml --release --features tauri/custom-protocol --bin nowly --bin nowly-cli --target $triple --locked }
         } finally { $env:CARGO_TARGET_DIR = $previousTarget }
     }
     $exe = Join-Path $release 'nowly.exe'
     if (!(Test-Path $exe)) { throw "Missing release binary: $exe" }
     Copy-Item $exe (Join-Path $stage 'nowly.exe')
+    $cli = Join-Path $release 'nowly-cli.exe'
+    if (!(Test-Path $cli)) { throw "Missing release binary: $cli" }
+    Copy-Item $cli (Join-Path $stage 'nowly-cli.exe')
     Invoke-Checked { rustc scripts\msix\startup.rs --target $triple -C opt-level=s -C debuginfo=0 -o (Join-Path $stage 'nowly-startup.exe') }
     Remove-Item (Join-Path $stage 'nowly-startup.pdb') -ErrorAction SilentlyContinue
     New-Item -ItemType Directory (Join-Path $stage 'Assets') | Out-Null

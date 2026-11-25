@@ -46,10 +46,11 @@ export function AboutDialog({ onClose, update }: Props) {
               <span className="about-version__badge">{t('about.updateAvailable')}</span>
             ) : null}
           </div>
-          <p className="about-version__message" role="status">{t(status === 'upToDate' ? 'about.noUpdates'
-            : status === 'unsupported' ? 'about.storeManaged'
+          {status !== 'unsupported' ? (
+            <p className="about-version__message" role="status">{t(status === 'upToDate' ? 'about.noUpdates'
               : status === 'error' ? 'about.checkError'
                 : status === 'available' ? 'about.updateAvailable' : 'about.checking')}</p>
+          ) : null}
           {update?.error ? <p className="about-version__message about-version__message--error" role="alert">{update.error}</p> : null}
           {status === 'error' ? (
             <button type="button" className="good-button" onClick={() => void update?.retry()}>{t('about.retry')}</button>
@@ -63,7 +64,6 @@ export function AboutDialog({ onClose, update }: Props) {
             <Download aria-hidden="true" />
             {t(update?.opening ? 'about.openingStore' : updateAvailable ? 'about.storeUpdate' : 'about.storeView')}
           </button>
-          {update?.version?.distribution === 'unpackaged' ? <p className="about-version__message">{t('about.storeSeparate')}</p> : null}
           {update?.openError ? <p className="about-version__message about-version__message--error" role="alert">{t('about.openError')} {update.openError}</p> : null}
           {update?.openedInBrowser ? <p className="about-version__message" role="status">{t('about.storeBrowser')}</p> : null}
         </section>

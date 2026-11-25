@@ -1,7 +1,7 @@
 import { translateAssistantNotice } from './client';
 import { useTranslation, t, getLanguage } from '../i18n';
 import { ChevronDown, ChevronUp } from '../components/icons';
-import { displayField, ChangeDetails, kinds, PlanCard } from './PlanCard';
+import { displayField, ChangeDetails, kinds, PlanCard, statuses } from './PlanCard';
 import type { Action, AssistantRecord, ChatItem, Fields, Plan } from './types';
 
 export type AssistantChatProps = {
@@ -26,7 +26,6 @@ export type AssistantChatProps = {
   onOpenRecord?: (record: AssistantRecord, trigger: HTMLElement) => void;
 };
 
-const statuses: Record<Plan['status'], string> = { pending: 'assistant.status.pending', committed: 'assistant.status.committed', undone: 'assistant.status.undone', cancelled: 'assistant.status.cancelled', expired: 'assistant.status.expired' };
 
 export function AssistantChat({ items, currentPlanId, actions, edits, selected, dirty, busy, blocked, uncertainPlanId, openChange,
   onEdit, onSelect, onRevise, onConfirm, onCancel, onUndo, onRecover, onOpenChange, onOpenRecord }: AssistantChatProps) {

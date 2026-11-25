@@ -20,6 +20,7 @@ use crate::{
 };
 use serde::Serialize;
 use std::{
+    collections::VecDeque,
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -91,6 +92,8 @@ enum Msg {
     Partial(u64, String),
     Transcript(u64, String),
     Finished(u64, View),
+    /// A plan an external agent proposed, waiting for its confirmation card.
+    External(Plan),
 }
 
 impl Msg {
@@ -104,6 +107,7 @@ impl Msg {
             Self::Partial(seq, _) => format!("Partial({seq})"),
             Self::Transcript(seq, _) => format!("Transcript({seq})"),
             Self::Finished(seq, view) => format!("Finished({seq}, {})", view.phase()),
+            Self::External(plan) => format!("External({})", plan.id),
         }
     }
 }
@@ -143,6 +147,12 @@ impl Voice {
 
     pub fn dismiss(&self) {
         self.send(Msg::Dismiss);
+    }
+
+    /// Queues an external agent's plan for a confirmation card. It shows once
+    /// the Bar is free: no hold, no request in flight, nothing on screen.
+    pub fn present(&self, plan: Plan) {
+        self.send(Msg::External(plan));
     }
 
     /// Frees the model before its files are deleted.
@@ -218,6 +228,8 @@ struct Worker {
     last_used: Instant,
     last_level: Instant,
     paused: bool,
+    /// External plans waiting for the Bar, oldest first.
+    queue: VecDeque<Plan>,
 }
 
 pub fn start(app: &AppHandle, app_dir: PathBuf, settings: VoiceSettings) -> Voice {
@@ -244,6 +256,7 @@ pub fn start(app: &AppHandle, app_dir: PathBuf, settings: VoiceSettings) -> Voic
         last_used: Instant::now(),
         last_level: Instant::now(),
         paused: false,
+        queue: VecDeque::new(),
     };
     if let Err(error) = std::thread::Builder::new().name("voice-session".into()).spawn(move || worker.run()) {
         eprintln!("failed to start voice input: {error}");
@@ -263,6 +276,30 @@ impl Worker {
                 Err(mpsc::RecvTimeoutError::Disconnected) => return,
             }
             self.listening_tick();
+            self.present_next();
+        }
+    }
+
+    /// Shows the oldest queued external plan that is still pending.
+    fn present_next(&mut self) {
+        let free = matches!(self.hold, Hold::None)
+            && self.work.is_none()
+            && self.snapshot.lock().is_ok_and(|s| matches!(s.view, View::Idle));
+        if !free {
+            return;
+        }
+        while let Some(plan) = self.queue.pop_front() {
+            if !still_pending(&self.app, &plan.id) {
+                continue;
+            }
+            self.clarify = None;
+            let client = plan.client.clone().unwrap_or_default();
+            self.update(|snapshot| {
+                snapshot.seq += 1;
+                snapshot.primed = false;
+                snapshot.view = View::Confirm { transcript: client, plan };
+            });
+            return;
         }
     }
 
@@ -342,6 +379,7 @@ impl Worker {
                 }
                 self.show(view);
             }
+            Msg::External(plan) => self.queue.push_back(plan),
         }
     }
 
@@ -445,7 +483,13 @@ impl Worker {
             trace!("listen ignored: not armed");
             return;
         };
-        // A new hold replaces whatever the Bar was showing.
+        // A new hold replaces whatever the Bar was showing. An external card it
+        // interrupts goes back to the front of the queue instead of being lost.
+        if let Ok(View::Confirm { plan, .. }) = self.snapshot.lock().map(|s| s.view.clone()) {
+            if plan.source == Source::External {
+                self.queue.push_front(plan);
+            }
+        }
         self.cancel_work();
         self.last_used = Instant::now();
         self.update(|snapshot| snapshot.seq += 1);
@@ -558,6 +602,12 @@ fn capture_error(error: &CaptureError) -> (ErrorKind, String) {
         _ => ErrorKind::Microphone,
     };
     (kind, error.to_string())
+}
+
+fn still_pending(app: &AppHandle, id: &str) -> bool {
+    let state = app.state::<AppDb>();
+    let Ok(db) = state.0.lock() else { return false };
+    store::get(&db, id).is_ok_and(|plan| plan.status == "pending")
 }
 
 fn assistant_ready(app: &AppHandle) -> bool {
@@ -681,6 +731,8 @@ mod tests {
             changes: vec![],
             warnings: vec![],
             options: json!({}),
+            source: Source::Voice,
+            client: None,
         }
     }
 

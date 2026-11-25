@@ -6,6 +6,7 @@ import type { AssistantClient } from './types';
 export const assistantClient: AssistantClient = {
   getConfig: () => invoke('assistant_get_config'),
   saveConfig: (config, apiKey, clearKey) => invoke('assistant_save_config', { config, apiKey, clearKey }),
+  listModels: (endpoint, apiKey) => invoke('assistant_list_models', { endpoint, apiKey }),
   interpret: request => invoke('assistant_interpret', { request }),
   cancelRequest: requestId => invoke('assistant_cancel_request', { requestId }),
   revise: (planId, actions) => invoke('assistant_revise', { planId, actions }),

@@ -33,6 +33,8 @@ export type VoiceSession = {
   /** When the current listening / interpreting phase began. */
   since: number;
   busy: boolean;
+  /** Whole seconds left before a confirm card executes; `null` otherwise. */
+  countdown: number | null;
   undo: (plan: Plan) => void;
   confirm: (plan: Plan) => void;
   cancel: (plan: Plan) => void;
@@ -41,7 +43,8 @@ export type VoiceSession = {
 
 /**
  * Follows the native voice session and owns everything the Bar adds on top:
- * the undo window, the Bar's own undo / confirm / cancel outcomes, and when
+ * the undo window, the confirm countdown, the Bar's own undo / confirm /
+ * cancel outcomes, and when
  * the native clip may widen or narrow around the 288↔432 morph.
  */
 export function useVoiceSession({ paused }: { paused: boolean }): VoiceSession {
@@ -80,30 +83,6 @@ export function useVoiceSession({ paused }: { paused: boolean }): VoiceSession {
     setLocal(null);
     void invoke('voice_dismiss').catch(() => {});
   }, []);
-
-  // The undo window and other lingering results pause under the pointer or
-  // keyboard focus, then resume with the time they had left.
-  const lingerKey = stage ? `${snapshot?.seq ?? 0}:${phase}:${local?.stage.phase ?? ''}` : '';
-  const remaining = useRef<{ key: string; ms: number } | null>(null);
-  useEffect(() => {
-    if (!stage) return;
-    const linger = voiceLinger(stage);
-    const expiresAt = stage.phase === 'confirm' ? stage.plan.expiresAt : null;
-    const total = linger ?? (expiresAt === null ? null : Math.max(0, expiresAt - Date.now()));
-    if (total === null) return;
-    if (remaining.current?.key !== lingerKey) remaining.current = { key: lingerKey, ms: total };
-    if (paused) return;
-    const started = Date.now();
-    const timer = setTimeout(dismiss, remaining.current.ms);
-    return () => {
-      clearTimeout(timer);
-      if (remaining.current?.key === lingerKey) {
-        remaining.current.ms = Math.max(0, remaining.current.ms - (Date.now() - started));
-      }
-    };
-    // `stage` is fully described by lingerKey for timing purposes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lingerKey, paused, dismiss]);
 
   // Native clip: widen at once, narrow only after the shell has shrunk.
   const native: NativeShell = rail === 'primed' ? 'narrow' : rail;
@@ -167,5 +146,39 @@ export function useVoiceSession({ paused }: { paused: boolean }): VoiceSession {
     return null;
   }), [run]);
 
-  return { snapshot, stage: stage && stage.phase !== 'idle' ? stage : null, rail, anim, since, busy, undo, confirm, cancel, dismiss };
+  // Each result's window pauses under the pointer or keyboard focus, then
+  // resumes with the time it had left. A confirm card executes when its
+  // window ends; every other stage dismisses.
+  const lingerKey = stage ? `${snapshot?.seq ?? 0}:${phase}:${local?.stage.phase ?? ''}` : '';
+  const remaining = useRef<{ key: string; ms: number } | null>(null);
+  const [countdown, setCountdown] = useState<number | null>(null);
+  useEffect(() => {
+    const total = stage ? voiceLinger(stage) : null;
+    const pending = stage?.phase === 'confirm' ? stage.plan : null;
+    if (!stage || total === null) {
+      setCountdown(null);
+      return;
+    }
+    if (remaining.current?.key !== lingerKey) remaining.current = { key: lingerKey, ms: total };
+    const slot = remaining.current;
+    const seconds = (ms: number) => Math.max(0, Math.ceil(ms / 1000));
+    setCountdown(pending ? seconds(slot.ms) : null);
+    if (paused || busy) return;
+    const started = Date.now();
+    const left = () => Math.max(0, slot.ms - (Date.now() - started));
+    const timer = setTimeout(pending ? () => confirm(pending) : dismiss, slot.ms);
+    const tick = pending ? setInterval(() => setCountdown(seconds(left())), 250) : undefined;
+    return () => {
+      clearTimeout(timer);
+      if (tick) clearInterval(tick);
+      if (remaining.current === slot) slot.ms = left();
+    };
+    // `stage` is fully described by lingerKey for timing purposes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lingerKey, paused, busy, dismiss, confirm]);
+
+  return {
+    snapshot, stage: stage && stage.phase !== 'idle' ? stage : null, rail, anim, since, busy, countdown,
+    undo, confirm, cancel, dismiss
+  };
 }

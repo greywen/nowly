@@ -178,7 +178,11 @@ export function MatrixWidget({
         {status === 'loading' ? <p className="empty-copy">{t('matrix.loading')}</p> : null}
         <div className="quadrant-grid">
           {quadrantOrder.map((quadrant) => {
-            const quadrantTasks = visibleTasks.filter((task) => task.quadrant === quadrant);
+            // Completed tasks sink to the bottom; the stable sort keeps the
+            // workspace order within the open and completed groups.
+            const quadrantTasks = visibleTasks
+              .filter((task) => task.quadrant === quadrant)
+              .sort((a, b) => Number(a.completed) - Number(b.completed));
             const remaining = quadrantTasks.filter((task) => !task.completed).length;
             const isDropTarget = draggingTask !== null && dropQuadrant === quadrant && draggingTask.quadrant !== quadrant;
             return (

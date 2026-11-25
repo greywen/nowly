@@ -24,7 +24,7 @@ pub const MAX_WINDOW_OCCURRENCES: usize = 1_000;
 /// `MAX_CONSECUTIVE_SKIPS`，两者的关系由测试锁住。
 pub const MAX_RECURRENCE_INTERVAL: u32 = 999;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum Freq {
     Daily,
@@ -33,7 +33,7 @@ pub enum Freq {
     Yearly,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum RecurrenceEnd {
     Never,
@@ -41,7 +41,7 @@ pub enum RecurrenceEnd {
     Count { count: u32 },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Recurrence {
     pub freq: Freq,

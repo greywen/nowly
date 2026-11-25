@@ -20,6 +20,7 @@ fn config() -> Config {
             tasks: true,
             external: false,
             notes: false,
+            ..Default::default()
         },
         has_key: false,
         ..Config::default()

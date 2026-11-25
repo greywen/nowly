@@ -28,6 +28,18 @@ describe('AboutDialog', () => {
     expect(screen.getByRole('status')).toHaveTextContent(t('about.checkError'));
   });
 
+  it('keeps unpackaged Store access without explanatory copy', () => {
+    const update: UpdateCheckState = {
+      version: { currentVersion: '0.1.5', distribution: 'unpackaged' },
+      status: 'unsupported', error: null, updateAvailable: false,
+      retry: vi.fn(), openStore: vi.fn(), opening: false, openError: null, openedInBrowser: false,
+    };
+    render(<AboutDialog onClose={vi.fn()} update={update} />);
+    expect(screen.getByRole('button', { name: t('about.storeView') })).toBeInTheDocument();
+    expect(screen.queryByText(t('about.storeManaged'))).not.toBeInTheDocument();
+    expect(screen.queryByText(t('about.storeSeparate'))).not.toBeInTheDocument();
+  });
+
   it.each(['checking', 'upToDate', 'available'] as const)('shows the correct message for %s', status => {
     const update: UpdateCheckState = {
       version: { currentVersion: '1.1.11.0', distribution: 'msix' },

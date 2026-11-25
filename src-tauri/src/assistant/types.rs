@@ -11,6 +11,12 @@ pub struct Permissions {
     // Configs saved before notes existed have no such key.
     #[serde(default)]
     pub notes: bool,
+    #[serde(default)]
+    pub alarms: bool,
+    /// Creating and editing events in connected Google/Microsoft calendars.
+    /// Also needs `external`, which lets the assistant read them.
+    #[serde(default)]
+    pub external_write: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -28,8 +34,24 @@ pub enum Action {
     UpdateTask { id: String, patch: Value },
     DeleteTask { id: String },
     CreateNote { draft: Value },
+    /// Retired: rewriting a note as plain text destroyed its formatting. Kept
+    /// so stored plans still decode for history; never prepared again.
     UpdateNote { id: String, patch: Value },
+    /// Retired together with `UpdateNote`.
     DeleteNote { id: String },
+    CreateAlarm { draft: Value },
+    UpdateAlarm { id: String, patch: Value },
+    DeleteAlarm { id: String },
+    CreateRemoteEvent { subscription_id: String, draft: Value },
+    UpdateRemoteEvent { target: RemoteTarget, patch: Value },
+}
+
+/// An event in a connected Google or Microsoft calendar.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RemoteTarget {
+    pub subscription_id: String,
+    pub remote_event_id: String,
 }
 
 impl Action {
@@ -39,14 +61,42 @@ impl Action {
                 "calendar"
             }
             Self::CreateNote { .. } | Self::UpdateNote { .. } | Self::DeleteNote { .. } => "notes",
-            _ => "tasks",
+            Self::CreateAlarm { .. } | Self::UpdateAlarm { .. } | Self::DeleteAlarm { .. } => {
+                "alarms"
+            }
+            Self::CreateRemoteEvent { .. } | Self::UpdateRemoteEvent { .. } => "remoteCalendar",
+            Self::CreateTask { .. } | Self::UpdateTask { .. } | Self::DeleteTask { .. } => "tasks",
+        }
+    }
+
+    /// The action's `kind` tag, which is also its skill id.
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Self::CreateEvent { .. } => "createEvent",
+            Self::UpdateEvent { .. } => "updateEvent",
+            Self::DeleteEvent { .. } => "deleteEvent",
+            Self::CreateTask { .. } => "createTask",
+            Self::UpdateTask { .. } => "updateTask",
+            Self::DeleteTask { .. } => "deleteTask",
+            Self::CreateNote { .. } => "createNote",
+            Self::UpdateNote { .. } => "updateNote",
+            Self::DeleteNote { .. } => "deleteNote",
+            Self::CreateAlarm { .. } => "createAlarm",
+            Self::UpdateAlarm { .. } => "updateAlarm",
+            Self::DeleteAlarm { .. } => "deleteAlarm",
+            Self::CreateRemoteEvent { .. } => "createRemoteEvent",
+            Self::UpdateRemoteEvent { .. } => "updateRemoteEvent",
         }
     }
 
     pub fn is_create(&self) -> bool {
         matches!(
             self,
-            Self::CreateEvent { .. } | Self::CreateTask { .. } | Self::CreateNote { .. }
+            Self::CreateEvent { .. }
+                | Self::CreateTask { .. }
+                | Self::CreateNote { .. }
+                | Self::CreateAlarm { .. }
+                | Self::CreateRemoteEvent { .. }
         )
     }
 
@@ -59,6 +109,8 @@ impl Action {
             }
             Self::UpdateTask { id, .. } | Self::DeleteTask { id } => Some(format!("tasks:{id}")),
             Self::UpdateNote { id, .. } | Self::DeleteNote { id } => Some(format!("notes:{id}")),
+            Self::UpdateAlarm { id, .. } | Self::DeleteAlarm { id } => Some(format!("alarms:{id}")),
+            Self::UpdateRemoteEvent { target, .. } => Some(super::actions::remote_key(target)),
             _ => None,
         }
     }
@@ -70,6 +122,8 @@ impl Permissions {
             "calendar" => self.calendar,
             "tasks" => self.tasks,
             "notes" => self.notes,
+            "alarms" => self.alarms,
+            "remoteCalendar" => self.external && self.external_write,
             _ => false,
         }
     }
@@ -83,6 +137,8 @@ pub enum Source {
     #[default]
     Chat,
     Voice,
+    /// An agent outside Nowly (Codex, Claude Code, ...) through the `nowly` CLI.
+    External,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -108,9 +164,16 @@ pub struct Plan {
     pub warnings: Vec<String>,
     #[serde(default)]
     pub options: Value,
+    #[serde(default)]
+    pub source: Source,
+    /// The external agent's self-reported name, for `Source::External` plans.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+/// A read. `domain` is calendar, tasks, notes or alarms. Calendar queries need
+/// `startDate` and `endDate` (at most 90 days); the task filters are optional.
+#[derive(Debug, Clone, Deserialize, Serialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Query {
     pub domain: String,

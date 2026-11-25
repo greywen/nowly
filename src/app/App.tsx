@@ -277,6 +277,7 @@ function AppContent() {
     }
     if (kind === 'task') void refreshWorkspace();
     if (kind === 'note') void notesFeature.refreshNotes();
+    if (kind === 'alarm') window.dispatchEvent(new Event('nowly:alarms-changed'));
   };
   useEffect(() => {
     let disposed = false;

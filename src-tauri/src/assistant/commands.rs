@@ -132,6 +132,35 @@ pub async fn assistant_save_config(
     .map_err(|_| CommandError::validation("assistant", "连接检测未完成；原设置未更改，请重试。"))?
 }
 #[tauri::command]
+pub async fn assistant_list_models(
+    window: WebviewWindow,
+    app: AppHandle,
+    endpoint: String,
+    api_key: Option<String>,
+) -> Result<Vec<String>, CommandError> {
+    require_assistant_window(&window, AssistantWindowAccess::Settings)?;
+    if endpoint.len() > 2000
+        || api_key
+            .as_ref()
+            .is_some_and(|k| k.len() > 8192 || k.chars().any(char::is_control))
+    {
+        return Err(CommandError::validation("assistant", "API 地址或 Key 格式无效。"));
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        // `None` reuses the key saved for this exact endpoint; `Some("")` sends none.
+        let key = match api_key {
+            Some(key) => key,
+            None => provider::saved_key_for(
+                &*app.state::<AppDb>().0.lock().map_err(CommandError::database)?,
+                &endpoint,
+            )?,
+        };
+        super::models_list::list_with(&endpoint, &key, super::models_list::fetch_http)
+    })
+    .await
+    .map_err(CommandError::system)?
+}
+#[tauri::command]
 pub async fn assistant_interpret(
     window: WebviewWindow,
     app: AppHandle,
@@ -205,17 +234,17 @@ pub(crate) fn revise(
             "修改预览不能增加未授权目标。",
         ));
     }
+    // An edit may change field values only: never the kind of action, the
+    // record it targets, or the calendar a remote event goes to.
     let identity = |a: &Action| -> String {
         match a {
-            Action::CreateEvent { .. } => "createEvent".into(),
-            Action::CreateTask { .. } => "createTask".into(),
-            Action::CreateNote { .. } => "createNote".into(),
-            Action::UpdateEvent { .. } | Action::UpdateTask { .. } | Action::UpdateNote { .. } => {
-                format!("update:{}", a.target_key().unwrap_or_default())
+            Action::CreateRemoteEvent { subscription_id, .. } => {
+                format!("{}:{subscription_id}", a.kind())
             }
-            Action::DeleteEvent { .. } | Action::DeleteTask { .. } | Action::DeleteNote { .. } => {
-                format!("delete:{}", a.target_key().unwrap_or_default())
-            }
+            _ => match a.target_key() {
+                Some(key) => format!("{}:{key}", a.kind()),
+                None => a.kind().into(),
+            },
         }
     };
     if actions
@@ -253,6 +282,8 @@ fn changed_kinds(plan: &Plan) -> Vec<&'static str> {
             "task"
         } else if change.kind.ends_with("Note") {
             "note"
+        } else if change.kind.ends_with("Alarm") {
+            "alarm"
         } else {
             continue;
         };
@@ -272,33 +303,63 @@ pub(crate) fn notify_changed(app: &AppHandle, plan: &Plan) -> Result<(), Command
     }
     crate::status_island::invalidate_registered()
 }
-#[tauri::command]
-pub fn assistant_execute(
-    window: WebviewWindow,
-    app: AppHandle,
-    db: State<'_, AppDb>,
-    plan_id: String,
-) -> Result<Plan, CommandError> {
-    require_assistant_window(&window, AssistantWindowAccess::Runtime)?;
-    let db = db.0.lock().map_err(CommandError::database)?;
-    let plan = store::execute(&db, &plan_id, &provider::get_config(&db)?.permissions)?;
-    drop(db);
-    notify_changed(&app, &plan)?;
-    Ok(plan)
+/// Commits a stored plan. Remote calendar plans make a network request, which
+/// runs without holding the database lock.
+pub(crate) fn execute(db: &AppDb, plan_id: &str) -> Result<Plan, CommandError> {
+    let connection = db.0.lock().map_err(CommandError::database)?;
+    let plan = store::get(&connection, plan_id)?;
+    if store::is_remote(&plan) {
+        drop(connection);
+        return super::remote::execute(db, plan_id);
+    }
+    store::execute(&connection, plan_id, &permissions_for(&connection, &plan)?)
+}
+pub(crate) fn undo(db: &AppDb, plan_id: &str) -> Result<Plan, CommandError> {
+    let connection = db.0.lock().map_err(CommandError::database)?;
+    let plan = store::get(&connection, plan_id)?;
+    if store::is_remote(&plan) {
+        drop(connection);
+        return super::remote::undo(db, plan_id);
+    }
+    store::undo(&connection, plan_id, &permissions_for(&connection, &plan)?)
+}
+/// The permissions a plan is held to when it runs: an external agent's plan
+/// uses the agents' own grant, which is empty while agents are turned off.
+pub(crate) fn permissions_for(connection: &rusqlite::Connection, plan: &Plan) -> Result<Permissions, CommandError> {
+    if plan.source == Source::External {
+        return crate::agent_bridge::permissions(connection);
+    }
+    Ok(provider::get_config(connection)?.permissions)
 }
 #[tauri::command]
-pub fn assistant_undo(
+pub async fn assistant_execute(
     window: WebviewWindow,
     app: AppHandle,
-    db: State<'_, AppDb>,
     plan_id: String,
 ) -> Result<Plan, CommandError> {
     require_assistant_window(&window, AssistantWindowAccess::Runtime)?;
-    let db = db.0.lock().map_err(CommandError::database)?;
-    let plan = store::undo(&db, &plan_id, &provider::get_config(&db)?.permissions)?;
-    drop(db);
-    notify_changed(&app, &plan)?;
-    Ok(plan)
+    tauri::async_runtime::spawn_blocking(move || {
+        let plan = execute(&app.state::<AppDb>(), &plan_id)?;
+        notify_changed(&app, &plan)?;
+        Ok(plan)
+    })
+    .await
+    .map_err(CommandError::system)?
+}
+#[tauri::command]
+pub async fn assistant_undo(
+    window: WebviewWindow,
+    app: AppHandle,
+    plan_id: String,
+) -> Result<Plan, CommandError> {
+    require_assistant_window(&window, AssistantWindowAccess::Runtime)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let plan = undo(&app.state::<AppDb>(), &plan_id)?;
+        notify_changed(&app, &plan)?;
+        Ok(plan)
+    })
+    .await
+    .map_err(CommandError::system)?
 }
 #[tauri::command]
 pub fn assistant_history(
@@ -399,6 +460,8 @@ mod tests {
             ],
             warnings: vec![],
             options: serde_json::Value::Null,
+            source: Source::Chat,
+            client: None,
         };
         assert_eq!(changed_kinds(&plan), vec!["event", "note", "task"]);
     }

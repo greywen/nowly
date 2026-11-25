@@ -122,11 +122,14 @@ pub struct EventDraft {
     pub recurrence: Option<Recurrence>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct EventTarget {
     pub id: String,
     /// 为 None 时表示目标是单次日程，此时 scope 必须为 All。
+    #[schemars(
+        description = "Copied from the queried record's target; null for a single event."
+    )]
     pub occurrence_start_at: Option<String>,
 }
 

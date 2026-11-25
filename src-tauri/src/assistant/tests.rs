@@ -15,6 +15,7 @@ fn permissions() -> Permissions {
         tasks: true,
         external: false,
         notes: false,
+        ..Default::default()
     }
 }
 fn create(title: &str) -> Action {
@@ -166,6 +167,7 @@ fn actual_linked_patch_requires_both_domain_permissions() {
         calendar: false,
         external: false,
         notes: false,
+        ..Default::default()
     };
     assert!(store::prepare(
         &db,
@@ -181,6 +183,7 @@ fn actual_linked_patch_requires_both_domain_permissions() {
         calendar: true,
         external: false,
         notes: false,
+        ..Default::default()
     };
     assert!(store::prepare(
         &db,
@@ -219,7 +222,7 @@ fn undo_checks_changed_lane_settings_and_new_lane_members() {
     let p = prepare(
         &db,
         vec![Action::CreateTask {
-            draft: json!({"title":"another","completed":true}),
+            draft: json!({"title":"another","completed":true,"laneId":"kanban-lane-todo"}),
         }],
     );
     store::execute(&db, &p.id, &permissions()).unwrap();
@@ -641,7 +644,7 @@ fn note_plans_need_note_permission_and_create_execute_and_undo() {
     assert_eq!(created.len(), 1);
     assert_eq!(
         serde_json::from_str::<serde_json::Value>(&created[0].content).unwrap(),
-        json!({"v":1,"ops":[{"insert":"周报提纲\n先写进展\n"}]})
+        json!({"v":1,"ops":[{"insert":"周报提纲"},{"insert":"\n"},{"insert":"先写进展"},{"insert":"\n"}]})
     );
     assert_eq!(created[0].color, "#E8C444");
     assert!(store::undo(&db, &plan.id, &permissions()).is_err());
@@ -650,33 +653,43 @@ fn note_plans_need_note_permission_and_create_execute_and_undo() {
 }
 
 #[test]
-fn note_updates_keep_style_and_reject_unknown_fields_or_empty_text() {
+fn existing_notes_are_never_rewritten_or_deleted() {
     let db = db();
     let note = crate::notes::create(
         &db,
         crate::models::NoteDraft {
-            content: "旧内容".into(),
+            content: r#"{"v":1,"ops":[{"insert":"旧内容","attributes":{"bold":true}},{"insert":"\n"}]}"#.into(),
             color: "#4F55DA".into(),
             pinned: false,
             icon: "star".into(),
         },
     )
     .unwrap();
-    for patch in [json!({"color":"#000000"}), json!({"content":"  "}), json!({})] {
-        let action = Action::UpdateNote { id: note.id.clone(), patch };
+    for action in [
+        Action::UpdateNote { id: note.id.clone(), patch: json!({"content":"新内容"}) },
+        Action::DeleteNote { id: note.id.clone() },
+    ] {
         assert!(store::prepare(&db, vec![action], store::revision(&db).unwrap(), &with_notes()).is_err());
     }
-    let action = Action::UpdateNote {
-        id: note.id.clone(),
-        patch: json!({"content":"新内容","pinned":true}),
+    assert_eq!(notes(&db), vec![note]);
+}
+
+#[test]
+fn new_notes_take_a_named_colour_icon_and_reject_unknown_fields() {
+    let db = db();
+    for draft in [json!({"content":"x","color":"#000000"}), json!({"content":"  "}), json!({"content":"x","icon":"rocket"})] {
+        let action = Action::CreateNote { draft };
+        assert!(store::prepare(&db, vec![action], store::revision(&db).unwrap(), &with_notes()).is_err());
+    }
+    let action = Action::CreateNote {
+        draft: json!({"content":"清单\n- [ ] 牛奶","color":"indigo","icon":"star","pinned":true}),
     };
     let plan = store::prepare(&db, vec![action], store::revision(&db).unwrap(), &with_notes()).unwrap();
     store::execute(&db, &plan.id, &with_notes()).unwrap();
-    let updated = &notes(&db)[0];
-    assert!(updated.pinned);
-    assert_eq!((updated.color.as_str(), updated.icon.as_str()), ("#4F55DA", "star"));
-    store::undo(&db, &plan.id, &with_notes()).unwrap();
-    assert_eq!(notes(&db)[0].content, "旧内容");
+    let created = &notes(&db)[0];
+    assert!(created.pinned);
+    assert_eq!((created.color.as_str(), created.icon.as_str()), ("#4F55DA", "star"));
+    assert!(created.content.contains(r#""list":"unchecked""#));
 }
 
 #[test]
@@ -709,4 +722,189 @@ fn notes_are_queryable_by_their_text_only_with_permission() {
     assert_eq!(result.records.len(), 1);
     assert_eq!(result.records[0].title, "项目复盘要点");
     assert!(result.records[0].key.starts_with("notes:"));
+}
+
+#[test]
+fn calendar_query_falls_back_to_the_range_when_no_title_matches() {
+    let db = db();
+    for (title, start, end) in [
+        ("开会", "2026-11-26T08:00", "2026-11-26T09:00"),
+        ("午餐", "2026-11-26T12:00", "2026-11-26T13:00"),
+    ] {
+        crate::events::create(
+            &db,
+            serde_json::from_value(json!({"title":title,"startAt":start,"endAt":end,"allDay":false,
+                "category":"","color":"","note":"","reminders":[]}))
+            .unwrap(),
+        )
+        .unwrap();
+    }
+    let mut q = query("calendar");
+    q.start_date = Some("2026-11-26".into());
+    q.end_date = Some("2026-11-26".into());
+    q.text = "早会".into();
+    let result = super::actions::query(&db, &q, &permissions()).unwrap();
+    assert_eq!(result.records.len(), 2);
+    assert_eq!(result.metadata["textMatched"], false);
+    q.text = "开会".into();
+    let result = super::actions::query(&db, &q, &permissions()).unwrap();
+    assert_eq!(result.records.len(), 1);
+    assert_eq!(result.metadata["textMatched"], true);
+}
+fn query(domain: &str) -> Query {
+    Query {
+        domain: domain.into(),
+        text: String::new(),
+        start_date: None,
+        end_date: None,
+        completed: None,
+        priority: None,
+        lane_id: None,
+        due_before: None,
+    }
+}
+
+fn tag(db: &Connection, id: &str, archived: bool) {
+    db.execute(
+        "INSERT INTO task_tags(id,name,color,archived_at,created_at,updated_at) VALUES (?1,?1,'#4FC9DA',?2,'t','t')",
+        rusqlite::params![id, archived.then_some("t")],
+    )
+    .unwrap();
+}
+
+#[test]
+fn new_tasks_stay_off_the_board_and_take_steps_and_existing_tags() {
+    let db = db();
+    tag(&db, "tag-a", false);
+    tag(&db, "tag-old", true);
+    for draft in [
+        json!({"title":"x","tagIds":["tag-missing"]}),
+        json!({"title":"x","tagIds":["tag-old"]}),
+        json!({"title":"x","laneId":"no-such-lane"}),
+        json!({"title":"x","priority":"high"}),
+    ] {
+        assert!(store::prepare(&db, vec![Action::CreateTask { draft }], store::revision(&db).unwrap(), &permissions()).is_err());
+    }
+    let plan = prepare(&db, vec![Action::CreateTask {
+        draft: json!({"title":"launch","tagIds":["tag-a"],"steps":["draft","review"]}),
+    }]);
+    store::execute(&db, &plan.id, &permissions()).unwrap();
+    let task = crate::task_workspace::snapshot(&db).unwrap().tasks.remove(0);
+    assert_eq!(task.lane_id, None);
+    assert_eq!(task.tag_ids, vec!["tag-a"]);
+    assert_eq!(task.steps.iter().map(|s| s.title.as_str()).collect::<Vec<_>>(), ["draft", "review"]);
+    assert_eq!(plan.options["tags"][0]["id"], "tag-a");
+    let result = super::actions::query(&db, &query("tasks"), &permissions()).unwrap();
+    assert_eq!(result.records[0].data["steps"][1]["title"], "review");
+    assert_eq!(result.metadata["tags"].as_array().unwrap().len(), 1);
+}
+
+#[test]
+fn task_updates_edit_steps_by_id_and_keep_the_rest() {
+    let db = db();
+    let task = task_with_steps(&db, "with steps");
+    let (one, two) = (task.steps[0].id.clone(), task.steps[1].id.clone());
+    for patch in [
+        json!({"updateSteps":[{"id":"unknown","completed":true}]}),
+        json!({"removeSteps":["unknown"]}),
+        json!({"updateSteps":[{"id":one,"title":"x"}],"removeSteps":[one]}),
+        json!({"steps":[]}),
+        json!({}),
+    ] {
+        let action = Action::UpdateTask { id: task.id.clone(), patch };
+        assert!(store::prepare(&db, vec![action], store::revision(&db).unwrap(), &permissions()).is_err());
+    }
+    let plan = prepare(&db, vec![Action::UpdateTask {
+        id: task.id.clone(),
+        patch: json!({"updateSteps":[{"id":one,"completed":true}],"removeSteps":[two],"addSteps":["three"],"laneId":null}),
+    }]);
+    store::execute(&db, &plan.id, &permissions()).unwrap();
+    let after = stored_task(&db, &task.id);
+    assert_eq!(after.lane_id, None);
+    assert_eq!(after.steps.len(), 2);
+    assert_eq!((after.steps[0].id.as_str(), after.steps[0].completed), (one.as_str(), true));
+    assert_eq!(after.steps[1].title, "three");
+    store::undo(&db, &plan.id, &permissions()).unwrap();
+    assert_eq!(stored_task(&db, &task.id).steps, task.steps);
+}
+
+#[test]
+fn events_take_an_existing_category_colour_and_may_repeat() {
+    let mut db = db();
+    let category = crate::categories::create(
+        &mut db,
+        crate::models::CategoryDraft { name: "Deep work".into(), color: "#B8D935".into() },
+    )
+    .unwrap();
+    let draft = |extra: serde_json::Value| {
+        let mut draft = json!({"title":"AI-focus","startAt":"2026-09-07T09:00"});
+        draft.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+        Action::CreateEvent { draft }
+    };
+    for extra in [json!({"category":"work"}), json!({"color":"#000000"})] {
+        assert!(store::prepare(&db, vec![draft(extra)], store::revision(&db).unwrap(), &permissions()).is_err());
+    }
+    let plan = prepare(&db, vec![draft(json!({
+        "category": category.id,
+        "recurrence": {"freq":"weekly","interval":1,"byDay":["MO"],"end":{"kind":"count","count":3}}
+    }))]);
+    assert_eq!(plan.options["categories"][0]["name"], "Deep work");
+    store::execute(&db, &plan.id, &permissions()).unwrap();
+    let event: (String, String, Option<String>) = db
+        .query_row("SELECT category,color,rrule FROM events WHERE title='AI-focus'", [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+        .unwrap();
+    assert_eq!((event.0.as_str(), event.1.to_uppercase().as_str()), (category.id.as_str(), "#B8D935"));
+    assert!(event.2.is_some_and(|rule| rule.contains("FREQ=WEEKLY")));
+    // A plain new event has no category, so it has no colour either.
+    let plan = prepare(&db, vec![create("AI-plain")]);
+    assert_eq!(plan.changes[0].after["category"], "");
+    assert_eq!(plan.changes[0].after["color"], "");
+}
+
+fn with_alarms() -> Permissions {
+    Permissions { alarms: true, ..Default::default() }
+}
+
+#[test]
+fn alarm_plans_create_and_delete_with_their_pending_notices() {
+    let db = db();
+    let create = Action::CreateAlarm {
+        draft: json!({"title":"Wake","hour":7,"minute":30,"repeat":{"kind":"weekly","weekdays":[1,5]}}),
+    };
+    assert!(store::prepare(&db, vec![create.clone()], store::revision(&db).unwrap(), &permissions()).is_err());
+    let plan = store::prepare(&db, vec![create], store::revision(&db).unwrap(), &with_alarms()).unwrap();
+    assert!(crate::time::store::list_alarms(&db, chrono::Utc::now()).unwrap().is_empty());
+    store::execute(&db, &plan.id, &with_alarms()).unwrap();
+    let alarm = crate::time::store::list_alarms(&db, chrono::Utc::now()).unwrap().remove(0);
+    assert_eq!((alarm.hour, alarm.minute), (7, 30));
+    db.execute(
+        "INSERT INTO alarm_notices(id,kind,alarm_id,instance_key,title,due_at_utc,range_start_utc,range_end_utc,count,created_at_utc)
+         VALUES ('n1','alarm',?1,'k','Wake','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z',1,'2026-01-01T00:00:00Z')",
+        [&alarm.id],
+    )
+    .unwrap();
+    let records = super::actions::query(&db, &query("alarms"), &with_alarms()).unwrap().records;
+    assert_eq!(records[0].data["id"], alarm.id.as_str());
+    let delete = store::prepare(&db, vec![Action::DeleteAlarm { id: alarm.id.clone() }], store::revision(&db).unwrap(), &with_alarms()).unwrap();
+    store::execute(&db, &delete.id, &with_alarms()).unwrap();
+    let notices = |db: &Connection| db.query_row("SELECT count(*) FROM alarm_notices", [], |r| r.get::<_, i64>(0)).unwrap();
+    assert_eq!(notices(&db), 0);
+    store::undo(&db, &delete.id, &with_alarms()).unwrap();
+    assert_eq!(notices(&db), 1);
+    assert_eq!(crate::time::store::list_alarms(&db, chrono::Utc::now()).unwrap().len(), 1);
+}
+
+#[test]
+fn remote_calendar_writes_need_both_permissions_and_a_writable_calendar() {
+    let db = db();
+    let action = Action::CreateRemoteEvent {
+        subscription_id: "missing".into(),
+        draft: json!({"title":"x","startAt":"2026-09-09T09:00"}),
+    };
+    let read_only = Permissions { external: true, ..Default::default() };
+    let both = Permissions { external: true, external_write: true, ..Default::default() };
+    assert!(store::prepare(&db, vec![action.clone()], store::revision(&db).unwrap(), &read_only).is_err());
+    let error = store::prepare(&db, vec![action.clone()], store::revision(&db).unwrap(), &both).unwrap_err();
+    assert!(error.message.contains("不可写入"), "{}", error.message);
+    assert!(store::prepare(&db, vec![action.clone(), action], store::revision(&db).unwrap(), &both).is_err());
 }

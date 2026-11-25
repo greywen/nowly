@@ -30,29 +30,40 @@ When the model asks to query records, the host validates the category and filter
 
 | Permission | Fields returned to the model |
 |---|---|
-| Local calendar | Record key, domain, title, local source label, read-only flag; ID/target occurrence identity, start/end, all-day flag, reminder offsets, series ID |
-| Local tasks | Record key, domain, title, local source label, read-only flag; ID, priority, due date, completion and lane ID; lane IDs/names and the default lane |
-| External calendar (read-only to AI) | Record key, domain, title, subscription/source name, read-only flag; cached event ID, start/end, all-day flag and source's last successful sync timestamp |
+| Local calendar | Record key, domain, title, local source label, read-only flag; ID/target occurrence identity, start/end, all-day flag, category ID, reminder offsets, series ID, the first 200 characters of the note's plain text; event category IDs/names |
+| Local tasks | Record key, domain, title, local source label, read-only flag; ID, the first 200 characters of the description's plain text, priority, due date, completion and completion time, lane ID, tag IDs, steps (ID, title, completion); lane IDs/names and tag IDs/names |
+| External calendar | Record key, domain, title, subscription/source name, read-only flag; cached event ID, start/end, all-day flag and source's last successful sync timestamp. When "Create and edit events in connected calendars" is also on, writable Google/Microsoft events add the subscription ID, remote event ID, reminders and the first 200 characters of the description, plus the IDs/names/providers of writable calendars |
 | Local notes | Record key, domain, title (first line), local source label, read-only flag; note ID, the first 200 characters of plain text, pinned flag and last-updated time. Only notes containing the query words are returned. |
+| Alarms | Record key, domain, title, local source label, read-only flag; alarm ID, hour, minute, repeat rule, on/off state and next ring time |
 
 **Google Calendar events are included when external-calendar permission is enabled**, as are cached Microsoft and ICS events. This is one shared permission, not a per-provider/per-account selector. Local-calendar permission alone does not include external events. The AI queries the local external-event cache, not Google or Microsoft directly; external synchronization is a separate network path. A cached Google event may therefore be sent to a different, user-configured AI provider.
 
-Queries do not include local event notes, task descriptions, external descriptions/locations, attachment/image bytes, note text beyond the 200-character excerpt (or any note text when notes permission is off), screenshots, sticker artwork, OAuth tokens or arbitrary database tables. This exclusion applies to the query adapter, not to content typed into messages or placed in a previous draft: draft actions can contain event notes or task descriptions. The API key is used to authenticate to the model endpoint, not as record context.
+Queries do not include event notes, task descriptions, note text or writable external descriptions beyond their 200-character excerpts (or any of that text when the matching permission is off), read-only external descriptions, external locations, attachment/image bytes, screenshots, sticker artwork, OAuth tokens or arbitrary database tables. This exclusion applies to the query adapter, not to content typed into messages or placed in a previous draft: draft actions can contain complete event notes or task descriptions. The API key is used to authenticate to the model endpoint, not as record context.
 
 Calendar queries cover 1–90 days and each query returns at most 200 records with a truncation flag. A request can make at most four model steps and has a 192 KiB serialized-context cap. These bounds are not a guarantee that the selected context is nonsensitive.
 
-The model can query and propose but cannot execute writes. Local calendar/task/note changes require a visible plan and explicit button confirmation, except that hold-to-talk voice input applies a plan made only of new items at once and offers undo on the Bar (see below); external events are read-only to AI even when the ordinary calendar editor supports remote writes. There are no arbitrary code, SQL, module, file or network-write tools exposed to the model. Plans and scoped inverse patches are stored locally; records older than seven days are pruned when assistant storage is accessed. Chat history is held in the panel's memory, not a durable full-chat archive. Expiry/conflict checks can prevent confirmation or undo. Stopping a request prevents unconfirmed local writes, but cannot retract content already sent to a provider. Provider retention and processing are governed by that service, not by local plan pruning.
+The model can query and propose but cannot execute writes. Plans in the AI panel need a visible preview and explicit button confirmation. Hold-to-talk voice input and external agents show their plans on the Bar with a 15-second countdown, and the plan runs unless you cancel it (see below). External calendars are read-only to AI by default. Only when "Create and edit events in connected calendars" is also on can AI create a single event in a writable Google/Microsoft calendar or change an event it queried; this sends the event to that provider, and undo also goes through the provider's API. AI cannot delete remote events. There are no arbitrary code, SQL, module, file or network-write tools exposed to the model. Plans and scoped inverse patches are stored locally; records older than seven days are pruned when assistant storage is accessed. Chat history is held in the panel's memory, not a durable full-chat archive. Expiry/conflict checks can prevent confirmation or undo. Stopping a request prevents unconfirmed local writes, but cannot retract content already sent to a provider. Provider retention and processing are governed by that service, not by local plan pruning.
 
 Optional dictation in the AI panel uses the host Web Speech API where available. It fills a text draft rather than sending it automatically. Recognition processing may depend on the host's service and cannot be described as guaranteed offline; type instead when that boundary is unsuitable.
 
 ### Hold-to-talk voice input
 
-Hold to talk is off by default. Turn it on under Settings → Model → Voice input.
+Hold to talk is off by default. Turn it on under Settings → AI Assistant → Voice input.
 
 - When it is on, Nowly installs a low-level keyboard hook that only checks whether the talk key is held. It does not record or store other key presses. Turning the feature off removes the hook.
 - The microphone is open only while the key is held. The SenseVoice model recognizes the audio on this device. The audio stays in memory, is discarded when recognition ends, and is never written to disk or uploaded.
-- The recognized text (plus the previous question and answer when you reply to a clarification) goes to your configured model service the same way as an AI assistant message, under the permission switches and context boundary above. Plans made only of new items are applied at once and can be undone on the Bar; changes and deletions still need confirmation on the Bar.
+- The recognized text (plus the previous question and answer when you reply to a clarification) goes to your configured model service the same way as an AI assistant message, under the permission switches and context boundary above. Plans made only of new local items are applied at once and can be undone on the Bar for 15 seconds. Changes, deletions and connected-calendar writes show on the Bar with a 15-second countdown and run unless you cancel; hovering or focusing the card pauses the countdown.
 - You download the recognition model (about 240 MB) yourself in settings. Nowly tries ModelScope (`modelscope.cn`) and then Hugging Face (`huggingface.co`), checks SHA-256 hashes, and stores the files under `models/sensevoice-int8/` in the app data folder. The download carries ordinary network information and no workspace records. You can delete the model on the same page.
+
+### External AI agents
+
+External agents (Codex, Claude Code, WorkBuddy and others) are off by default. Turn them on under Settings → Skill and choose their data categories there; these permissions are separate from the AI assistant's.
+
+- Agents reach the running Nowly through the local `nowly` command. It connects over a named pipe that only the current Windows user can open, and remote connections are refused. Before sending a request, the command checks that the Nowly process belongs to the current user.
+- Agents can read the same fields as the table above. What an agent reads enters its own conversation and is sent to the model provider that agent uses. Nowly cannot control that provider's retention or processing.
+- An agent can change only records it queried in the last 10 minutes. Every plan appears on the Bar with the agent's name and runs after 15 seconds unless you cancel it. Plans expire after five minutes.
+- An agent can undo a plan it ran. The undo takes effect at once, without a confirmation card.
+- "Copy SKILL.md" only copies the instruction file `SKILL.md` to the clipboard for you to paste into your agent; Nowly doesn't write to the agent's folders. `SKILL.md` contains no records or credentials.
 
 ## Calendar connections and other network activity
 

@@ -9,8 +9,23 @@ import type { Action, Change, Fields, Plan } from './types';
 export const kinds: Record<Action['kind'], string> = {
   createEvent: 'assistant.kind.createEvent', updateEvent: 'assistant.kind.updateEvent', deleteEvent: 'assistant.kind.deleteEvent',
   createTask: 'assistant.kind.createTask', updateTask: 'assistant.kind.updateTask', deleteTask: 'assistant.kind.deleteTask',
-  createNote: 'assistant.kind.createNote', updateNote: 'assistant.kind.updateNote', deleteNote: 'assistant.kind.deleteNote'
+  createNote: 'assistant.kind.createNote', updateNote: 'assistant.kind.updateNote', deleteNote: 'assistant.kind.deleteNote',
+  createAlarm: 'assistant.kind.createAlarm', updateAlarm: 'assistant.kind.updateAlarm', deleteAlarm: 'assistant.kind.deleteAlarm',
+  createRemoteEvent: 'assistant.kind.createRemoteEvent', updateRemoteEvent: 'assistant.kind.updateRemoteEvent'
 };
+export const statuses: Record<Plan['status'], string> = {
+  pending: 'assistant.status.pending', committed: 'assistant.status.committed', undone: 'assistant.status.undone',
+  cancelled: 'assistant.status.cancelled', expired: 'assistant.status.expired', executing: 'assistant.status.executing',
+  failed: 'assistant.status.failed', undoing: 'assistant.status.undoing'
+};
+const isAlarm = (kind: Action['kind']) => kind.endsWith('Alarm');
+const isRemote = (kind: Action['kind']) => kind.endsWith('RemoteEvent');
+const pad = (value: unknown) => String(typeof value === 'number' ? value : 0).padStart(2, '0');
+function weekdayNames(days: unknown[]): string {
+  // Alarm weekdays count from Monday = 1; 2024-01-01 was a Monday.
+  return days.map(day => new Date(2024, 0, Number(day)).toLocaleDateString(getLocale(), { weekday: 'short' }))
+    .join(t('assistant.separator'));
+}
 function priorityOptions() { return [
   { value: '', label: 'assistant.text64' },
   { value: 'important_urgent', label: 'assistant.text65' },
@@ -23,14 +38,46 @@ const fields: Record<string, string> = {
   category: 'assistant.field.category', color: 'assistant.field.color', note: 'assistant.field.note', description: 'assistant.field.description',
   dueDate: 'assistant.field.dueDate', priority: 'assistant.field.priority', completed: 'assistant.field.completed', laneId: 'assistant.field.laneId',
   views: 'assistant.field.views', linkedEventId: 'assistant.field.linkedEventId', linkedTaskId: 'assistant.field.linkedTaskId',
-  text: 'assistant.field.content', pinned: 'assistant.field.pinned'
+  text: 'assistant.field.content', pinned: 'assistant.field.pinned', tagIds: 'assistant.field.tagIds', steps: 'assistant.field.steps',
+  recurrence: 'assistant.field.repeat', time: 'assistant.field.time', repeat: 'assistant.field.repeat', enabled: 'assistant.field.enabled',
+  calendar: 'assistant.field.calendar'
 };
+/** Fields a new or deleted record only lists when they hold something. */
+const sparse = new Set(['tagIds', 'steps', 'recurrence']);
+function present(key: string, value: unknown): boolean {
+  if (value === undefined) return false;
+  if (!sparse.has(key)) return true;
+  return value !== null && !(Array.isArray(value) && value.length === 0);
+}
+/** An alarm's hour and minute read as one "07:30" field. */
+function shown(change: Change, data: Fields | null): Fields | null {
+  if (!data || !isAlarm(change.kind)) return data;
+  return { ...data, time: `${pad(data.hour)}:${pad(data.minute)}` };
+}
 export function displayField(key: string, value: unknown, plan?: Plan): string {
+  if (key === 'recurrence' && (value === null || value === undefined)) return t('assistant.repeat.none');
   if (value === null || value === undefined || value === '') return t('assistant.text69');
+  if (key === 'tagIds' && Array.isArray(value)) return value.length
+    ? value.map(id => plan?.options?.tags?.find(tag => tag.id === id)?.name ?? String(id)).join(t('assistant.separator'))
+    : t('assistant.text69');
+  if (key === 'steps' && Array.isArray(value)) return value.length
+    ? (value as { title?: unknown; completed?: unknown }[]).map(step => `${step.completed ? '✓ ' : ''}${String(step.title ?? '')}`).join(t('assistant.separator'))
+    : t('assistant.text69');
+  if (key === 'recurrence' && typeof value === 'object') {
+    const { freq, interval } = value as { freq?: string; interval?: number };
+    const label = t(`assistant.repeat.${freq ?? 'daily'}`);
+    return interval && interval > 1 ? `${label} · ${t('assistant.repeat.interval', { count: interval })}` : label;
+  }
+  if (key === 'repeat' && typeof value === 'object') {
+    const { kind, weekdays } = value as { kind?: string; weekdays?: unknown[] };
+    return kind === 'weekly' && Array.isArray(weekdays) ? weekdayNames(weekdays) : t('time.alarms.once');
+  }
   if (key === 'reminders' && Array.isArray(value)) return value.length ? value.map(n => n === 0 ? t('assistant.text70') : t('assistant.before', { minutes: n })).join(t('assistant.separator')) : t('assistant.text71');
   if (key === 'priority') return priorityOptions().find(p => p.value === value)?.label ?? String(value);
   if (key === 'laneId') return plan?.options?.lanes?.find(l => l.id === value)?.name ?? String(value);
-  if (key === 'category') return ({ work: t('assistant.text72'), personal: t('assistant.text73'), important: t('assistant.text74'), learning: t('assistant.text75') } as Record<string, string>)[String(value)] ?? String(value);
+  if (key === 'category') return plan?.options?.categories?.find(c => c.id === value)?.name
+    ?? ({ work: t('assistant.text72'), personal: t('assistant.text73'), important: t('assistant.text74'), learning: t('assistant.text75') } as Record<string, string>)[String(value)]
+    ?? String(value);
   if (key === 'views' && Array.isArray(value)) return value.map(v => ({ kanban: t('assistant.text76'), matrix: t('assistant.field.priority'), calendar: t('assistant.text77') } as Record<string, string>)[v] ?? v).join(t('assistant.separator')) || t('assistant.text69');
   if (typeof value === 'boolean') return value ? t('assistant.text78') : t('assistant.text79');
   return String(value).replace('T', ' ');
@@ -40,14 +87,16 @@ export function displayField(key: string, value: unknown, plan?: Plan): string {
 // the user to verify here.
 export function ChangeDetails({ change, plan }: { change: Change; plan: Plan }) {
   const { t, language } = useTranslation();
+  const before = shown(change, change.before);
+  const after = shown(change, change.after);
   return <dl className="assistant-diff">
     {Object.entries(fields).filter(([key]) => !(change.kind.endsWith('Event') && key === 'color'))
-      .filter(([key]) => change.before === null || change.after === null
-      ? (change.before ?? change.after)?.[key] !== undefined
-      : JSON.stringify(change.before[key]) !== JSON.stringify(change.after[key]))
+      .filter(([key]) => before === null || after === null
+      ? present(key, (before ?? after)?.[key])
+      : JSON.stringify(before[key]) !== JSON.stringify(after[key]))
       .map(([key, label]) => <div key={key}><dt>{t(label)}</dt><dd>
-        {change.before && <span>{displayField(key, change.before[key], plan)} → </span>}
-        {change.after ? displayField(key, change.after[key], plan) : t('assistant.text80')}
+        {before && <span>{displayField(key, before[key], plan)} → </span>}
+        {after ? displayField(key, after[key], plan) : t('assistant.text80')}
       </dd></div>)}
   </dl>;
 }
@@ -63,6 +112,10 @@ function DateField({ label, value, onChange, time = false }: { label: string; va
       onChange={v => onChange(v && value.slice(0, 10) ? `${value.slice(0, 10)}T${v}` : '')} />}
   </div>;
 }
+function AlarmTime({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  const id = useId(); const [open, setOpen] = useState(false);
+  return <TimePicker id={id} label={label} value={value} open={open} onOpenChange={setOpen} onChange={v => { if (v) onChange(v); }} />;
+}
 type Props = {
   plan: Plan; actions: Action[]; edits: Fields[]; selected: boolean[]; dirty: boolean; busy: boolean; blocked: boolean;
   onEdit: (index: number, fields: Fields) => void; onSelect: (index: number, checked: boolean) => void;
@@ -75,7 +128,7 @@ export function PlanCard({ plan, actions, edits, selected, dirty, busy, blocked,
   const expired = plan.expiresAt <= Date.now() || plan.status !== 'pending';
   return <section className="assistant-plan" aria-label={t('assistant.text81')}>
     <div className="assistant-plan-overview"><span className="assistant-eyebrow">{t('assistant.text82')}</span>
-      <strong>{t('assistant.localChanges', { count })}{deletes > 0 ? t('assistant.deletes', { count: deletes }) : ''}</strong>
+      <strong>{t(actions.some(a => isRemote(a.kind)) ? 'assistant.remoteChanges' : 'assistant.localChanges', { count })}{deletes > 0 ? t('assistant.deletes', { count: deletes }) : ''}</strong>
       <p className="assistant-caption">{t('assistant.expires', { time: new Date(plan.expiresAt).toLocaleTimeString(getLocale(), { hour12: false }) })}</p></div>
     {plan.warnings.map((warning, i) => <div className="assistant-warning" key={i}><CircleAlert aria-hidden="true" size={17} /><p>{warning}</p></div>)}
     {plan.changes.map((change, index) => {
@@ -102,6 +155,15 @@ export function PlanCard({ plan, actions, edits, selected, dirty, busy, blocked,
               <input className="form-check-input" type="checkbox" checked={Boolean(value.pinned)} onChange={e => edit('pinned', e.target.checked)} />
               <span className="form-check-label">{t('assistant.field.pinned')}</span>
             </label>
+          </> : isAlarm(action.kind) ? <>
+            <label>{t('assistant.field.title')}<input aria-label={t('assistant.indexedField', { label: t('assistant.field.title'), index: index + 1 })} value={String(value.title ?? '')} maxLength={80} onChange={e => edit('title', e.target.value)} /></label>
+            <AlarmTime label={t('assistant.indexedField', { label: t('assistant.field.time'), index: index + 1 })}
+              value={`${pad(value.hour)}:${pad(value.minute)}`}
+              onChange={v => { const [hour, minute] = v.split(':').map(Number); onEdit(index, { hour, minute }); }} />
+            <label className="form-check form-check-custom form-check-solid">
+              <input className="form-check-input" type="checkbox" checked={Boolean(value.enabled)} onChange={e => edit('enabled', e.target.checked)} />
+              <span className="form-check-label">{t('assistant.field.enabled')}</span>
+            </label>
           </> : <>
           <label>{t('assistant.field.title')}<input aria-label={t('assistant.indexedField', { label: t('assistant.field.title'), index: index + 1 })} value={String(value.title ?? '')} maxLength={500} onChange={e => edit('title', e.target.value)} /></label>
           {event ? <>
@@ -111,14 +173,18 @@ export function PlanCard({ plan, actions, edits, selected, dirty, busy, blocked,
               <input aria-label={t('assistant.indexedField', { label: t('assistant.field.reminders'), index: index + 1 })} defaultValue={Array.isArray(value.reminders) ? value.reminders.join(',') : ''}
                 onChange={e => edit('reminders', e.target.value.trim() ? e.target.value.split(/[,，]/).map(n => Number(n.trim())) : [])} />
             </label>}
+            {!isRemote(action.kind) && <Select id={`category-${index}`} label={t('assistant.indexedField', { label: t('assistant.field.category'), index: index + 1 })}
+              value={String(value.category ?? '')}
+              options={[{ value: '', label: t('assistant.text69') }, ...(plan.options?.categories ?? []).map(c => ({ value: c.id, label: c.name }))]}
+              onChange={v => edit('category', v || (action.kind === 'createEvent' ? null : ''))} />}
             <label>{t('assistant.field.note')}<textarea aria-label={t('assistant.indexedField', { label: t('assistant.field.note'), index: index + 1 })} value={String(value.note ?? '')} maxLength={8000} onChange={e => edit('note', e.target.value)} /></label>
           </> : <>
             <label>{t('assistant.field.description')}<textarea aria-label={t('assistant.indexedField', { label: t('assistant.field.description'), index: index + 1 })} value={String(value.description ?? '')} maxLength={8000} onChange={e => edit('description', e.target.value)} /></label>
             <DateField label={t('assistant.indexedField', { label: t('assistant.field.dueDate'), index: index + 1 })} value={String(value.dueDate ?? '')} onChange={v => edit('dueDate', v || null)} />
             <Select id={`priority-${index}`} label={t('assistant.indexedField', { label: t('assistant.field.priority'), index: index + 1 })} value={String(value.priority ?? '')} options={priorityOptions()} onChange={v => edit('priority', v || null)} />
             <Select id={`lane-${index}`} label={t('assistant.indexedField', { label: t('assistant.field.laneId'), index: index + 1 })} value={String(value.laneId ?? '')}
-              options={(plan.options?.lanes ?? []).map(l => ({ value: l.id, label: l.name }))}
-              onChange={v => edit('laneId', v)} />
+              options={[{ value: '', label: t('assistant.noLane') }, ...(plan.options?.lanes ?? []).map(l => ({ value: l.id, label: l.name }))]}
+              onChange={v => edit('laneId', v || null)} />
             <label className="form-check form-check-custom form-check-solid">
               <input className="form-check-input" type="checkbox" checked={Boolean(value.completed)} onChange={e => edit('completed', e.target.checked)} />
               <span className="form-check-label">{t('assistant.text86')}</span>

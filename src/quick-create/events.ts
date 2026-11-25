@@ -4,10 +4,10 @@ export const QUICK_CREATE_CLOSE_REQUESTED_EVENT = 'quick-create-close-requested'
 
 /** Emitted after the quick-create window writes data, so the main window reloads it. */
 export const RECORDS_CHANGED_EVENT = 'nowly-records-changed';
-export type RecordsChangedKind = 'event' | 'task' | 'note' | 'category';
+export type RecordsChangedKind = 'event' | 'task' | 'note' | 'category' | 'alarm';
 export type RecordsChanged = { kind: RecordsChangedKind };
 
-const RECORDS_CHANGED_KINDS: readonly RecordsChangedKind[] = ['event', 'task', 'note', 'category'];
+const RECORDS_CHANGED_KINDS: readonly RecordsChangedKind[] = ['event', 'task', 'note', 'category', 'alarm'];
 
 export function recordsChangedKind(payload: unknown): RecordsChangedKind | null {
   if (!payload || typeof payload !== 'object') return null;

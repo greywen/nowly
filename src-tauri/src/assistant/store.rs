@@ -18,6 +18,8 @@ const TABLES: &[&str] = &[
     "task_tag_links",
     "task_steps",
     "notes",
+    "alarms",
+    "alarm_notices",
 ];
 const SNAPSHOT_TABLES: &[&str] = &[
     "events",
@@ -29,7 +31,12 @@ const SNAPSHOT_TABLES: &[&str] = &[
     "settings",
     "task_steps",
     "notes",
+    "alarms",
+    "alarm_notices",
 ];
+// `alarm_notices` is not watched: the alarm scheduler inserts notices on its
+// own, which must not make every pending plan stale. Deleting or disabling an
+// alarm removes its pending notices, so they are still snapshotted and undone.
 const WATCHED: &[&str] = &[
     "events",
     "tasks",
@@ -40,6 +47,7 @@ const WATCHED: &[&str] = &[
     "settings",
     "task_steps",
     "notes",
+    "alarms",
 ];
 // `settings` is rewritten wholesale by unrelated UI actions (picking a colour
 // touches `recent_colors`), so only the keys a plan actually depends on count.
@@ -179,10 +187,11 @@ fn snapshot(db: &Connection) -> Result<Snapshot, CommandError> {
     let mut result = Snapshot::new();
     for table in SNAPSHOT_TABLES {
         let primary = keys(db, table)?;
-        let filter = if *table == "settings" {
-            settings_filter.as_str()
-        } else {
-            ""
+        let filter = match *table {
+            "settings" => settings_filter.as_str(),
+            // Acknowledged notices are history; nothing a plan does touches them.
+            "alarm_notices" => " WHERE acknowledged_at_utc IS NULL",
+            _ => "",
         };
         let mut statement = db
             .prepare(&format!("SELECT * FROM \"{table}\"{filter} LIMIT 10001"))
@@ -254,6 +263,7 @@ fn affected(snapshot: &Snapshot, patches: &[Patch]) -> Snapshot {
                 "linked_event_id",
                 "linked_task_id",
                 "tag_id",
+                "alarm_id",
             ] {
                 if let Some(Value::String(id)) = row.get(field) {
                     ids.insert(id.clone());
@@ -307,7 +317,7 @@ fn affected(snapshot: &Snapshot, patches: &[Patch]) -> Snapshot {
                             .and_then(Value::as_str)
                             .is_some_and(|id| lanes.contains(id));
                     }
-                    ["id", "task_id", "series_id"].iter().any(|field| {
+                    ["id", "task_id", "series_id", "alarm_id"].iter().any(|field| {
                         row.get(*field)
                             .and_then(Value::as_str)
                             .is_some_and(|id| ids.contains(id))
@@ -401,6 +411,7 @@ fn authorize_patch(patches: &[Patch], permissions: &Permissions) -> Result<(), C
         let domain = match patch.table.as_str() {
             "events" | "event_exceptions" => "calendar",
             "notes" => "notes",
+            "alarms" | "alarm_notices" => "alarms",
             _ => "tasks",
         };
         if !permissions.allows(domain) {
@@ -423,7 +434,13 @@ pub fn prepare(
         return Err(invalid("每份计划必须包含1至20个目标。"));
     }
     if actions.iter().any(|a| a.domain() != actions[0].domain()) {
-        return Err(invalid("请分别处理日程和任务，不执行跨模块的半份请求。"));
+        return Err(invalid("请分别处理不同模块，不执行跨模块的半份请求。"));
+    }
+    for action in &actions {
+        super::skills::validate(action)?;
+    }
+    if actions[0].domain() == "remoteCalendar" {
+        return prepare_remote(db, actions, expected);
     }
     let outer = WriteScope::new(db).map_err(CommandError::database)?;
     if revision(&outer)? != expected {
@@ -443,12 +460,19 @@ pub fn prepare(
     let patches = difference(&before, &after);
     authorize_patch(&patches, permissions)?;
     let guard = affected(&after, &patches);
-    let options = if actions[0].domain() == "tasks" {
-        let workspace = crate::task_workspace::snapshot(&outer)?;
-        serde_json::json!({"lanes":workspace.lanes.iter().map(|l|serde_json::json!({"id":l.id,"name":l.name})).collect::<Vec<_>>(),
-            "defaultLaneId":workspace.default_lane_id})
-    } else {
-        serde_json::json!({})
+    let options = match actions[0].domain() {
+        "tasks" => {
+            let workspace = crate::task_workspace::snapshot(&outer)?;
+            serde_json::json!({
+                "lanes": workspace.lanes.iter().map(|l| serde_json::json!({"id":l.id,"name":l.name})).collect::<Vec<_>>(),
+                "tags": workspace.tags.iter().map(|t| serde_json::json!({"id":t.id,"name":t.name,"color":t.color,"archived":t.archived_at.is_some()})).collect::<Vec<_>>(),
+            })
+        }
+        "calendar" => serde_json::json!({
+            "categories": crate::categories::list(&outer)?.iter()
+                .map(|c| serde_json::json!({"id":c.id,"name":c.name,"color":c.color})).collect::<Vec<_>>(),
+        }),
+        _ => serde_json::json!({}),
     };
     let mut overlaps = vec![];
     for change in &changes {
@@ -542,10 +566,17 @@ pub fn prepare(
         changes,
         warnings,
         options,
+        source: Source::Chat,
+        client: None,
     };
+    save(db, &plan, &patches, &guard)?;
+    Ok(plan)
+}
+
+fn save(db: &Connection, plan: &Plan, patches: &[Patch], guard: &Snapshot) -> Result<(), CommandError> {
     db.execute(
         "DELETE FROM assistant_plans WHERE created_at<?1",
-        [now - RETENTION_MS],
+        [plan.created_at - RETENTION_MS],
     )
     .map_err(CommandError::database)?;
     db.execute(
@@ -553,16 +584,103 @@ pub fn prepare(
         params![
             plan.id,
             session(),
-            now,
+            plan.created_at,
             plan.expires_at,
-            expected,
-            encode(&plan)?,
+            plan.revision,
+            encode(plan)?,
             encode(&patches)?,
-            encode(&guard)?
+            encode(guard)?
         ],
     )
     .map_err(CommandError::database)?;
+    Ok(())
+}
+
+/// Remote calendar writes cannot be simulated in a savepoint, so the preview
+/// is computed from the synced cache and the plan carries no database patch.
+/// Execution happens in `assistant::remote`, outside the database lock.
+fn prepare_remote(db: &Connection, actions: Vec<Action>, expected: i64) -> Result<Plan, CommandError> {
+    if actions.len() != 1 {
+        return Err(invalid("每份计划只能写入一项远端日程。"));
+    }
+    if revision(db)? != expected {
+        return Err(CommandError::conflict("数据已变化，请重新查询并生成预览。"));
+    }
+    let change = actions::preview_remote(db, &actions[0])?;
+    let calendar = change.after["calendar"].as_str().unwrap_or_default().to_string();
+    let now = now_ms();
+    let mut warnings = vec![format!(
+        "将写入「{calendar}」并同步到其他设备；撤销会通过同一账户恢复。"
+    )];
+    if change.after["provider"] == "microsoft"
+        && change.after["reminders"].as_array().is_some_and(|r| r.len() > 1)
+    {
+        warnings.push("Microsoft 日历只保留最早的一个提醒。".into());
+    }
+    let plan = Plan {
+        id: uuid::Uuid::new_v4().to_string(),
+        status: "pending".into(),
+        created_at: now,
+        expires_at: now + 300000,
+        revision: expected,
+        actions,
+        changes: vec![change],
+        warnings,
+        options: serde_json::json!({}),
+        source: Source::Chat,
+        client: None,
+    };
+    save(db, &plan, &[], &Snapshot::new())?;
     Ok(plan)
+}
+
+/// Records who asked for a plan. Only the host calls this, right after
+/// preparing it.
+pub fn set_origin(
+    db: &Connection,
+    plan: &mut Plan,
+    source: Source,
+    client: Option<String>,
+) -> Result<(), CommandError> {
+    plan.source = source;
+    plan.client = client;
+    db.execute(
+        "UPDATE assistant_plans SET plan=?1 WHERE id=?2",
+        params![encode(plan)?, plan.id],
+    )
+    .map_err(CommandError::database)?;
+    Ok(())
+}
+
+/// Moves a plan between states, failing when it is not in `from` any more.
+/// Remote execution uses this to claim a plan before releasing the lock.
+pub fn transition(db: &Connection, id: &str, from: &str, to: &str) -> Result<(), CommandError> {
+    let changed = db
+        .execute(
+            "UPDATE assistant_plans SET status=?3 WHERE id=?1 AND status=?2",
+            params![id, from, to],
+        )
+        .map_err(CommandError::database)?;
+    if changed != 1 {
+        return Err(CommandError::conflict("计划状态已变化，请刷新后重试。"));
+    }
+    Ok(())
+}
+
+/// Stores the plan body (for example a remote id learned on execution).
+pub fn rewrite(db: &Connection, plan: &Plan) -> Result<(), CommandError> {
+    db.execute(
+        "UPDATE assistant_plans SET plan=?1 WHERE id=?2",
+        params![encode(plan)?, plan.id],
+    )
+    .map_err(CommandError::database)?;
+    Ok(())
+}
+
+/// Whether the plan writes a remote calendar and must run through
+/// `assistant::remote`.
+pub fn is_remote(plan: &Plan) -> bool {
+    plan.actions.first().is_some_and(|a| a.domain() == "remoteCalendar")
 }
 
 pub fn add_warning(db: &Connection, plan: &mut Plan, warning: String) -> Result<(), CommandError> {
@@ -649,6 +767,9 @@ pub fn execute(db: &Connection, id: &str, permissions: &Permissions) -> Result<P
         return Ok(plan);
     }
     require_permissions(&plan.actions, permissions)?;
+    if is_remote(&plan) {
+        return Err(invalid("远端日历计划需要经由账户写入。"));
+    }
     if plan.status != "pending" {
         return Err(CommandError::conflict(
             "计划已取消、过期或应用已重启，请重新生成预览。",
@@ -684,6 +805,9 @@ pub fn undo(db: &Connection, id: &str, permissions: &Permissions) -> Result<Plan
         return Ok(plan);
     }
     require_permissions(&plan.actions, permissions)?;
+    if is_remote(&plan) {
+        return Err(invalid("远端日历计划需要经由账户撤销。"));
+    }
     if plan.status != "committed" {
         return Err(invalid("只有已成功执行的操作可以撤销。"));
     }

@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { useEffect, useRef, useState } from 'react';
 import {
+  Bell,
   CalendarDays,
   Check,
   CircleAlert,
@@ -19,12 +20,14 @@ import { useTranslation } from '../i18n';
 import type { Plan } from '../assistant/types';
 import { VoiceWave } from './VoiceWave';
 import {
+  CONFIRM_MS,
   createdDetail,
   formatElapsed,
   holdKeyLabel,
   modifyDetail,
   resultFamily,
   voiceShell,
+  withClient,
   type VoiceErrorKind,
   type VoiceStage
 } from './voice-model';
@@ -65,41 +68,54 @@ type Copy = {
   muted?: boolean;
 };
 
-function resultCopy(plan: Plan, t: Translate): Copy {
+/**
+ * A plan's result copy. `countdown` is set on a confirm card: its meta line
+ * leads with "N 秒后执行" instead of "已创建" (§12.9).
+ */
+function resultCopy(plan: Plan, t: Translate, countdown: number | null = null): Copy {
   const family = resultFamily(plan.changes);
   const first = plan.changes[0];
   const count = plan.changes.length;
   const separator = t('assistant.separator');
+  const lead = (status: string, detail: string) => detail ? `${status} · ${detail}` : status;
+  const status = countdown === null ? t('voice.created') : t('voice.countdown', { seconds: countdown });
   if (family === 'modify' || family === 'delete') {
     const verb = family === 'delete' ? 'voice.delete' : 'voice.modify';
+    const detail = modifyDetail(plan.changes, plan, separator);
     return {
       family,
       icon: family === 'delete' ? <Trash2 aria-hidden="true" /> : <Pencil aria-hidden="true" />,
-      title: count === 1 ? t(verb, { title: first?.title ?? '' }) : t(`${verb}Many`, { count }),
-      meta: modifyDetail(plan.changes, plan, separator)
+      title: withClient(plan, count === 1 ? t(verb, { title: first?.title ?? '' }) : t(`${verb}Many`, { count })),
+      meta: countdown === null ? detail : lead(status, detail)
     };
   }
   if (family === 'many') {
+    const titles = plan.changes.map(change => change.title).join(separator);
     return {
       family,
       icon: <Check aria-hidden="true" />,
-      title: t('voice.createdMany', { count }),
-      meta: plan.changes.map(change => change.title).join(separator)
+      title: withClient(plan, t('voice.createdMany', { count })),
+      meta: countdown === null ? titles : lead(status, titles)
     };
   }
   const icon = family === 'event' ? <CalendarDays aria-hidden="true" />
     : family === 'task' ? <LayoutGrid aria-hidden="true" />
+    : family === 'alarm' ? <Bell aria-hidden="true" />
     : <FileText aria-hidden="true" />;
-  const detail = first ? createdDetail(first, plan, t) : '';
   return {
     family,
     icon,
-    title: first?.title ?? '',
-    meta: detail ? `${t('voice.created')} · ${detail}` : t('voice.created')
+    title: withClient(plan, first?.title ?? ''),
+    meta: lead(status, first ? createdDetail(first, plan, t) : '')
   };
 }
 
-function stageCopy(stage: VoiceStage, t: Translate, extra: { holdKey: string; quiet: boolean; elapsed: number }): Copy {
+function stageCopy(stage: VoiceStage, t: Translate, extra: {
+  holdKey: string;
+  quiet: boolean;
+  elapsed: number;
+  countdown: number | null;
+}): Copy {
   const key = holdKeyLabel(extra.holdKey);
   switch (stage.phase) {
     case 'listening':
@@ -142,8 +158,9 @@ function stageCopy(stage: VoiceStage, t: Translate, extra: { holdKey: string; qu
       };
     }
     case 'created':
-    case 'confirm':
       return resultCopy(stage.plan, t);
+    case 'confirm':
+      return resultCopy(stage.plan, t, extra.countdown ?? Math.ceil(CONFIRM_MS / 1000));
     case 'undone':
       return {
         family: 'undone',
@@ -234,7 +251,9 @@ function VoiceIsland({ stage, session, at }: { stage: VoiceStage; session: Voice
   const running = stage.phase === 'listening' || stage.phase === 'interpreting';
   const elapsed = useElapsed(session.since, running);
   useEffect(() => { if (stage.phase !== 'listening') setQuiet(false); }, [stage.phase]);
-  const copy = stageCopy(stage, t, { holdKey: session.snapshot?.holdKey ?? '', quiet, elapsed });
+  const copy = stageCopy(stage, t, {
+    holdKey: session.snapshot?.holdKey ?? '', quiet, elapsed, countdown: session.countdown
+  });
   return (
     <div className="status-island voice-island" data-at={at} data-phase={stage.phase} data-primary={copy.family}
       {...(copy.muted ? { 'data-muted': 'true' } : {})}>
@@ -257,7 +276,7 @@ function announcement(stage: VoiceStage | null, t: Translate): string {
   if (!stage) return '';
   if (stage.phase === 'listening') return t('voice.listening');
   if (stage.phase === 'interpreting') return t('voice.interpretingSpoken');
-  const copy = stageCopy(stage, t, { holdKey: '', quiet: false, elapsed: 0 });
+  const copy = stageCopy(stage, t, { holdKey: '', quiet: false, elapsed: 0, countdown: null });
   return [copy.title, copy.meta].filter(Boolean).join(' · ');
 }
 

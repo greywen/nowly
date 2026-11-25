@@ -125,6 +125,30 @@ export function StatusIslandApp() {
   const collapse = useCallback(() => void invoke('close_status_island_details'), []);
   const [pointerInside, setPointerInside] = useState(false);
   const [focusInside, setFocusInside] = useState(false);
+  const root = useRef<HTMLElement>(null);
+  const presence = bar.presence;
+  // Native listeners, not React's: when a click swaps the focused button for
+  // the next stage, WebView2 fires focusout during React's commit, when React
+  // dispatches no events. A missed blur would hold the Bar open for good.
+  useEffect(() => {
+    const element = root.current;
+    if (!element) return;
+    const focusIn = () => {
+      setFocusInside(true);
+      presence('keyboard', true);
+    };
+    const focusOut = (event: FocusEvent) => {
+      if (event.relatedTarget instanceof Node && element.contains(event.relatedTarget)) return;
+      setFocusInside(false);
+      presence('keyboard', false);
+    };
+    element.addEventListener('focusin', focusIn);
+    element.addEventListener('focusout', focusOut);
+    return () => {
+      element.removeEventListener('focusin', focusIn);
+      element.removeEventListener('focusout', focusOut);
+    };
+  }, [presence]);
   const voice = useVoiceSession({ paused: pointerInside || focusInside });
 
   // Voice and the panels are mutually exclusive (design.md §8.3): listening
@@ -374,6 +398,7 @@ export function StatusIslandApp() {
 
   return (
     <main
+      ref={root}
       className="screen-status-island-root"
       aria-label={t('statusIsland.rootLabel')}
       onPointerEnter={() => {
@@ -383,16 +408,6 @@ export function StatusIslandApp() {
       onPointerLeave={() => {
         setPointerInside(false);
         bar.presence('island', false);
-      }}
-      onFocusCapture={() => {
-        setFocusInside(true);
-        bar.presence('keyboard', true);
-      }}
-      onBlurCapture={event => {
-        if (!event.currentTarget.contains(event.relatedTarget)) {
-          setFocusInside(false);
-          bar.presence('keyboard', false);
-        }
       }}
     >
       <TopRail

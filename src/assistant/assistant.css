@@ -124,6 +124,32 @@
 .assistant-settings-error details { color: var(--text-secondary); font-size: .95rem; }
 .assistant-settings-error summary { width: fit-content; cursor: pointer; font-weight: 600; }
 .assistant-settings-error pre { max-height: 160px; margin: 12px 0 0; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text-strong); font: inherit; }
+
+/* Settings → AI 助手 (design.md §10.4 fields, §10.5 combobox). */
+.assistant-field { display: grid; gap: var(--space-2); min-width: 0; color: var(--text-secondary); font-size: .95rem; font-weight: 500; line-height: 1.5; }
+.assistant-field input:not([type=checkbox]) { box-sizing: border-box; width: 100%; min-width: 0; height: 48px; padding: 11px 16px; border: 1px solid transparent; border-radius: var(--radius-default); outline: 0; background: var(--bg-subtle); color: var(--text-secondary); font: 400 1rem/1.5 var(--font-sans); }
+.assistant-field input:not([type=checkbox])::placeholder { color: var(--text-muted); }
+.assistant-field input:not([type=checkbox]):hover { background: var(--bg-secondary); }
+.assistant-field input:not([type=checkbox]):focus { border-color: var(--color-primary); }
+.assistant-field input:disabled { color: var(--text-disabled); opacity: .65; pointer-events: none; }
+.assistant-key { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.assistant-key > input { flex: 1; }
+.assistant-key > .good-button { flex: none; }
+.assistant-key__value { box-sizing: border-box; display: flex; flex: 1; align-items: center; justify-content: space-between; gap: var(--space-3); min-width: 0; height: 48px; padding: 0 16px; border-radius: var(--radius-default); background: var(--bg-subtle); color: var(--text-secondary); font-size: 1rem; font-weight: 400; letter-spacing: .1em; }
+.assistant-key__state { color: var(--text-muted); font-size: .85rem; font-weight: 500; letter-spacing: 0; white-space: nowrap; }
+.assistant-field__error { display: grid; gap: var(--space-1); color: var(--color-danger-active); font-size: .85rem; font-weight: 500; }
+.assistant-field__error details { color: var(--text-secondary); }
+.assistant-field__error summary { width: fit-content; cursor: pointer; font-weight: 600; }
+.assistant-field__error pre { max-height: 160px; margin: var(--space-2) 0 0; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text-strong); font: inherit; }
+.assistant-connection__footer { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); min-width: 0; padding-top: var(--space-4); border-top: 1px solid var(--border-default); }
+.assistant-connection__footer > .good-button { flex: none; }
+.assistant-connection__status { display: inline-flex; align-items: center; gap: var(--space-2); min-width: 0; color: var(--text-secondary); font-size: .95rem; font-weight: 500; }
+.assistant-connection__dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--border-emphasis); }
+.assistant-connection__status--connected .assistant-connection__dot { background: var(--color-success); }
+.assistant-connection__status--changed .assistant-connection__dot { background: var(--color-warning); }
+.assistant-connection__status--testing .assistant-connection__dot { background: var(--color-primary); }
+.assistant-permissions > .form-check { display: flex; }
+.assistant-permissions__nested { padding-inline-start: 40px; }
 .assistant-dock .assistant-stop { color: var(--color-danger-active); background: var(--color-danger-light); }
 .assistant-dock .assistant-listening { color: var(--color-danger-active); background: var(--color-danger-light); }
 @media (max-width: 640px) {

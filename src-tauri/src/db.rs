@@ -70,6 +70,8 @@ const MIGRATIONS: &[(i64, Migration)] = &[
     (40, migration_40_optional_task_lane),
     (41, migration_41_reset_tasks_for_free_lanes),
     (42, migration_42_assistant_notes),
+    (43, migration_43_assistant_alarms),
+    (44, migration_44_agent_bridge),
 ];
 
 // Rebuilding `tasks` drops the old table; with foreign keys on, that would
@@ -501,6 +503,22 @@ fn migration_24_assistant_watch_scope(transaction: &Transaction<'_>) -> Result<(
 /// Notes became an assistant domain; their writes now advance its revision.
 fn migration_42_assistant_notes(transaction: &Transaction<'_>) -> Result<()> {
     crate::assistant::store::install_triggers(transaction)
+}
+
+/// Alarms became an assistant domain; their writes now advance its revision.
+fn migration_43_assistant_alarms(transaction: &Transaction<'_>) -> Result<()> {
+    crate::assistant::store::install_triggers(transaction)
+}
+
+/// External agents' on/off switch and permissions, kept apart from the
+/// built-in assistant's settings.
+fn migration_44_agent_bridge(transaction: &Transaction<'_>) -> Result<()> {
+    transaction.execute_batch(
+        "CREATE TABLE agent_bridge_config (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            config TEXT NOT NULL
+        );",
+    )
 }
 
 pub fn open_database(path: PathBuf) -> Result<Connection> {
@@ -1890,6 +1908,8 @@ mod tests {
                     | "module_layout"
                     | "module_state"
                     | "status_island_reminders"
+                    // Deleting alarms advances the assistant revision.
+                    | "assistant_clock"
             ) {
                 assert_eq!(
                     &after.iter().find(|(name, _)| name == table).unwrap().1,

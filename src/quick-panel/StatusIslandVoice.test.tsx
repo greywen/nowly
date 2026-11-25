@@ -125,38 +125,87 @@ describe('voice input on the Nowly Bar', () => {
     expect(invokeMock).toHaveBeenCalledWith('voice_dismiss');
   });
 
-  it('pauses the 30 second undo window under the pointer', async () => {
+  it('pauses the 15 second undo window under the pointer', async () => {
     render(<StatusIslandApp />);
     await emit('voice-session', { ...idle, seq: 1, phase: 'created', transcript: 't', plan: plan() });
-    await act(async () => { vi.advanceTimersByTime(20_000); });
+    await act(async () => { vi.advanceTimersByTime(10_000); });
     fireEvent.pointerEnter(document.querySelector('.screen-status-island-root')!);
     await act(async () => { vi.advanceTimersByTime(60_000); });
     expect(invokeMock).not.toHaveBeenCalledWith('voice_dismiss');
     fireEvent.pointerLeave(document.querySelector('.screen-status-island-root')!);
-    await act(async () => { vi.advanceTimersByTime(9_999); });
+    await act(async () => { vi.advanceTimersByTime(4_999); });
     expect(invokeMock).not.toHaveBeenCalledWith('voice_dismiss');
     await act(async () => { vi.advanceTimersByTime(1); });
     expect(invokeMock).toHaveBeenCalledWith('voice_dismiss');
   });
 
-  it('asks before changing data and commits only on confirm', async () => {
-    const pending = plan({
-      status: 'pending',
-      changes: [{
-        key: 'c1', kind: 'updateEvent', title: '项目讨论会议',
-        before: { startAt: `${today()}T15:00` }, after: { startAt: `${today()}T16:00` }
-      }]
-    });
+  const update = (overrides: Partial<Plan> = {}) => plan({
+    status: 'pending',
+    changes: [{
+      key: 'c1', kind: 'updateEvent', title: '项目讨论会议',
+      before: { startAt: `${today()}T15:00` }, after: { startAt: `${today()}T16:00` }
+    }],
+    ...overrides
+  });
+
+  it('counts down a change, holds the count under the pointer, and confirms early on click', async () => {
     render(<StatusIslandApp />);
-    await emit('voice-session', { ...idle, seq: 2, phase: 'confirm', transcript: 't', plan: pending });
+    await emit('voice-session', { ...idle, seq: 2, phase: 'confirm', transcript: 't', plan: update() });
     expect(shownLayer()).toHaveTextContent('修改 项目讨论会议');
-    expect(shownLayer()).toHaveTextContent('15:00 → 16:00');
+    expect(shownLayer()).toHaveTextContent('15 秒后执行 · 15:00 → 16:00');
+    await act(async () => { vi.advanceTimersByTime(3_000); });
+    expect(shownLayer()).toHaveTextContent('12 秒后执行');
+    fireEvent.pointerEnter(document.querySelector('.screen-status-island-root')!);
     await act(async () => { vi.advanceTimersByTime(120_000); });
-    expect(invokeMock).not.toHaveBeenCalledWith('voice_dismiss');
+    expect(shownLayer()).toHaveTextContent('12 秒后执行');
+    expect(invokeMock).not.toHaveBeenCalledWith('assistant_execute', expect.anything());
     fireEvent.click(screen.getByRole('button', { name: '确认' }));
     await flush();
     expect(invokeMock).toHaveBeenCalledWith('assistant_execute', { planId: 'plan-1' });
     expect(shownLayer()).toHaveTextContent('已创建 · 今天 15:00–16:00');
+  });
+
+  it('lets the result go after a click removes the focused button', async () => {
+    // WebView2 fires focusout when React removes the focused node, while
+    // React's own event system is paused for the commit. jsdom fires nothing.
+    const removeChild = Node.prototype.removeChild;
+    const spy = vi.spyOn(Node.prototype, 'removeChild').mockImplementation(function <T extends Node>(this: Node, child: T): T {
+      const active = document.activeElement;
+      if (active && child.contains(active)) {
+        active.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: null }));
+      }
+      return removeChild.call(this, child) as T;
+    });
+    try {
+      render(<StatusIslandApp />);
+      await emit('voice-session', { ...idle, seq: 7, phase: 'confirm', transcript: 't', plan: update() });
+      const confirm = screen.getByRole('button', { name: '确认' });
+      act(() => confirm.focus());
+      fireEvent.click(confirm);
+      await flush();
+      expect(shownLayer()).toHaveTextContent('已创建');
+      const keyboard = invokeMock.mock.calls
+        .filter(call => call[0] === 'set_status_island_presence' && call[1].surface === 'keyboard');
+      expect(keyboard[keyboard.length - 1]?.[1]).toEqual({ surface: 'keyboard', present: false });
+      await act(async () => { vi.advanceTimersByTime(15_000); });
+      expect(invokeMock).toHaveBeenCalledWith('voice_dismiss');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('runs an external agent\'s change once its 15 seconds pass', async () => {
+    render(<StatusIslandApp />);
+    await emit('voice-session', {
+      ...idle, seq: 6, phase: 'confirm', transcript: 'Codex', plan: update({ source: 'external', client: 'Codex' })
+    });
+    expect(shownLayer()).toHaveTextContent('Codex · 修改 项目讨论会议');
+    await act(async () => { vi.advanceTimersByTime(14_999); });
+    expect(invokeMock).not.toHaveBeenCalledWith('assistant_execute', expect.anything());
+    await act(async () => { vi.advanceTimersByTime(1); });
+    await flush();
+    expect(invokeMock).toHaveBeenCalledWith('assistant_execute', { planId: 'plan-1' });
+    expect(invokeMock.mock.calls.filter(call => call[0] === 'assistant_execute')).toHaveLength(1);
   });
 
   it('cancels a pending change and offers the way out of an error', async () => {

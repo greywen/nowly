@@ -12,7 +12,7 @@ import type { AssistantClient, Plan } from './types';
 Object.assign(translations.zh, assistantTranslations.zh);
 Object.assign(translations.en, assistantTranslations.en);
 const config = { endpoint: 'https://example.com/v1', model: '用户模型', hasKey: true, permissions: { calendar: true, tasks: true, external: false } };
-const client = { getConfig: vi.fn(async () => config), saveConfig: vi.fn(async () => config) } as unknown as AssistantClient;
+const client = { getConfig: vi.fn(async () => config), saveConfig: vi.fn(async () => config), listModels: vi.fn(async () => [] as string[]) } as unknown as AssistantClient;
 afterEach(() => setLanguage('zh'));
 it('switches mounted composer and existing speech errors without changing user input', async () => {
   setLanguage('zh'); render(<AssistantDock client={client} onRefresh={() => {}} />);
@@ -31,9 +31,9 @@ it('switches saved feedback and permission labels in place', async () => {
   await waitFor(() => expect(screen.getByLabelText('API 地址')).toBeEnabled());
   await act(async () => fireEvent.click(screen.getByRole('button', { name: '检测并保存连接' })));
   act(() => setLanguage('en'));
-  expect(screen.getByRole('status')).toHaveTextContent('Connection and permissions saved.');
+  expect(screen.getByRole('status')).toHaveTextContent('Connected · OpenAI Chat Completions');
   expect(screen.getByRole('checkbox', { name: 'Local events' })).toBeChecked();
-  expect(screen.getByLabelText('Model ID')).toHaveValue('用户模型');
+  expect(screen.getByRole('combobox', { name: 'Model' })).toHaveValue('用户模型');
 });
 it('switches history groups, summaries, diff labels and date locale', () => {
   setLanguage('zh'); const date = new Date(); date.setDate(date.getDate() - 2);

@@ -34,25 +34,41 @@ export function voiceShell(stage: VoiceStage): 'off' | 'narrow' | 'wide' {
   }
 }
 
-/** How long a stage stays without input, in ms. `null` waits for the user. */
+/** A confirm card runs its plan after this long without input (§12.9). */
+export const CONFIRM_MS = 15_000;
+
+/**
+ * How long a stage stays without input, in ms. `null` waits for the user.
+ * A confirm card executes when its window ends; every other stage dismisses.
+ */
 export function voiceLinger(stage: VoiceStage): number | null {
   switch (stage.phase) {
-    case 'created': return 30_000;
+    case 'created': return 15_000;
+    case 'confirm': return CONFIRM_MS;
     case 'undone': return 1_500;
-    case 'error': return stage.kind === 'empty' ? 3_000 : 30_000;
-    case 'clarify': case 'answer': return 30_000;
+    case 'error': return stage.kind === 'empty' ? 3_000 : 15_000;
+    case 'clarify': case 'answer': return 15_000;
     default: return null;
   }
 }
 
-export type ResultFamily = 'event' | 'task' | 'note' | 'many' | 'modify' | 'delete';
+export type ResultFamily = 'event' | 'task' | 'note' | 'alarm' | 'many' | 'modify' | 'delete';
 
 export function resultFamily(changes: Change[]): ResultFamily {
   if (changes.some(change => change.kind.startsWith('delete'))) return 'delete';
   if (changes.some(change => change.kind.startsWith('update'))) return 'modify';
   if (changes.length !== 1) return 'many';
-  const kind = changes[0]!.kind;
-  return kind === 'createEvent' ? 'event' : kind === 'createTask' ? 'task' : 'note';
+  switch (changes[0]!.kind) {
+    case 'createEvent': case 'createRemoteEvent': return 'event';
+    case 'createTask': return 'task';
+    case 'createAlarm': return 'alarm';
+    default: return 'note';
+  }
+}
+
+/** "Codex · 修改 周会" for a card an external agent proposed. */
+export function withClient(plan: Plan, title: string): string {
+  return plan.source === 'external' && plan.client ? `${plan.client} · ${title}` : title;
 }
 
 function localDay(date: Date): string {
@@ -83,9 +99,18 @@ export function eventWhen(fields: Fields, t: Translate, now = new Date()): strin
 /** The meta line for one created item, after "已创建 · ". */
 export function createdDetail(change: Change, plan: Plan, t: Translate): string {
   const after = change.after ?? {};
+  if (change.kind === 'createRemoteEvent') {
+    const when = eventWhen(after, t);
+    const calendar = typeof after.calendar === 'string' ? after.calendar : '';
+    return [when, calendar].filter(Boolean).join(' · ');
+  }
   if (change.kind === 'createEvent') return eventWhen(after, t);
   if (change.kind === 'createTask') {
     return after.priority ? displayField('priority', after.priority, plan) : t('voice.kindTask');
+  }
+  if (change.kind === 'createAlarm') {
+    const pad = (value: unknown) => String(typeof value === 'number' ? value : 0).padStart(2, '0');
+    return `${t('voice.kindAlarm')} ${pad(after.hour)}:${pad(after.minute)}`;
   }
   return t('voice.kindNote');
 }

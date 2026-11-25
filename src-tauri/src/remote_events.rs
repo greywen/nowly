@@ -12,7 +12,7 @@ use tauri::Manager;
 
 const WALL_FORMAT: &str = "%Y-%m-%dT%H:%M";
 
-fn validate_remote_draft(draft: EventDraft) -> Result<EventDraft, CommandError> {
+pub(crate) fn validate_remote_draft(draft: EventDraft) -> Result<EventDraft, CommandError> {
     if draft.recurrence.is_some() {
         return Err(CommandError::validation(
             "recurrence",
@@ -178,14 +178,17 @@ fn api_error(status: u16) -> CommandError {
     }
 }
 
-fn run_write(
+/// Writes one remote event and refreshes the subscription's cache. Returns the
+/// provider's id of the written event. Performs network I/O, so the caller must
+/// not hold the database lock.
+pub(crate) fn run_write(
     db: &AppDb,
     subscription_id: &str,
     remote_event_id: Option<&str>,
     draft: Option<EventDraft>,
     operation: &str,
     description_changed: bool,
-) -> Result<(), CommandError> {
+) -> Result<Option<String>, CommandError> {
     let (source, account_id) = source_and_account(db, subscription_id)?;
     let calendar_id = source
         .remote_calendar_id
@@ -244,14 +247,19 @@ fn run_write(
         }
         None => None,
     };
-    let (status, _) = crate::net::json_with_bearer(method, &url, &access_token, body.as_ref())?;
+    let (status, response) =
+        crate::net::json_with_bearer(method, &url, &access_token, body.as_ref())?;
     if !(200..300).contains(&status) {
         return Err(api_error(status));
     }
+    // Google and Graph both answer a create or update with the event's `id`.
+    let written_id = serde_json::from_str::<Value>(&response)
+        .ok()
+        .and_then(|value| value.get("id")?.as_str().map(str::to_owned));
     if crate::subscription_sync::sync_one_db(db, &source).is_ok() {
         crate::status_island::invalidate_registered()?;
     }
-    Ok(())
+    Ok(written_id)
 }
 
 fn require_remote_id(remote_event_id: &str) -> Result<(), CommandError> {
@@ -281,6 +289,7 @@ pub async fn create_remote_event<R: tauri::Runtime>(
             "create",
             true,
         )
+        .map(drop)
     })
     .await
     .map_err(|_| CommandError::system("远端日程创建任务执行失败。"))?
@@ -305,6 +314,7 @@ pub async fn update_remote_event<R: tauri::Runtime>(
             "update",
             description_changed,
         )
+        .map(drop)
     })
     .await
     .map_err(|_| CommandError::system("远端日程更新任务执行失败。"))?
@@ -327,6 +337,7 @@ pub async fn delete_remote_event<R: tauri::Runtime>(
             "delete",
             false,
         )
+        .map(drop)
     })
     .await
     .map_err(|_| CommandError::system("远端日程删除任务执行失败。"))?

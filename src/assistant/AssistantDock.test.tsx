@@ -24,6 +24,7 @@ function clientFixture() {
     revise: vi.fn(async () => plan('plan-2')),
     execute: vi.fn(async () => ({ ...p, status: 'committed' as const })),
     undo: vi.fn(async () => ({ ...p, status: 'undone' as const })),
+    listModels: vi.fn(async () => [] as string[]),
     history: vi.fn(async () => [] as Plan[]), status: vi.fn(async (): Promise<Plan> => ({ ...p, status: 'committed' }))
   } satisfies AssistantClient;
 }
@@ -487,12 +488,40 @@ describe('AssistantDock execution boundary', () => {
     p.actions = [{ kind: 'updateTask', id: 'task', patch: { laneId: 'done', completed: false } }];
     p.changes = [{ key: 'tasks:task', kind: 'updateTask', title: '待办', before: { id: 'task', title: '待办', laneId: 'done', completed: true },
       after: { id: 'task', title: '待办', laneId: 'todo', completed: false, priority: null, dueDate: null, description: '' } }];
-    p.options = { lanes: [{ id: 'todo', name: '待处理' }, { id: 'done', name: '已完成列' }], defaultLaneId: 'todo' };
+    p.options = { lanes: [{ id: 'todo', name: '待处理' }, { id: 'done', name: '已完成列' }] };
     client.interpret.mockResolvedValue({ kind: 'plan', message: '', records: [], plan: p });
     render(<AssistantDock client={client} onRefresh={() => {}} />);
     await send();
     expect(await screen.findByRole('combobox', { name: '看板列 1' })).toHaveTextContent('待处理');
     expect(screen.getByRole('button', { name: '确认执行 1 项' })).toBeEnabled();
+  });
+  it('takes a task off the board when the lane is cleared', async () => {
+    const client = clientFixture(); const p = plan();
+    p.actions = [{ kind: 'updateTask', id: 'task', patch: { title: '待办' } }];
+    p.changes = [{ key: 'tasks:task', kind: 'updateTask', title: '待办', before: { id: 'task', title: '待办', laneId: 'todo' },
+      after: { id: 'task', title: '待办', laneId: 'todo', completed: false, priority: null, dueDate: null, description: '' } }];
+    p.options = { lanes: [{ id: 'todo', name: '待处理' }] };
+    client.interpret.mockResolvedValue({ kind: 'plan', message: '', records: [], plan: p });
+    render(<AssistantDock client={client} onRefresh={() => {}} />);
+    await send();
+    await click(await screen.findByRole('combobox', { name: '看板列 1' }));
+    await click(screen.getByRole('option', { name: '不放入看板' }));
+    await click(screen.getByRole('button', { name: '更新预览' }));
+    await waitFor(() => expect(client.revise).toHaveBeenCalledWith('plan-1', [{ kind: 'updateTask', id: 'task', patch: { title: '待办', laneId: null } }]));
+  });
+  it('edits a new alarm by title and on/off state', async () => {
+    const client = clientFixture(); const p = plan();
+    p.actions = [{ kind: 'createAlarm', draft: { title: '起床', hour: 7, minute: 30, repeat: { kind: 'once' } } }];
+    p.changes = [{ key: 'alarms:new', kind: 'createAlarm', title: '起床', before: null,
+      after: { id: 'new', title: '起床', hour: 7, minute: 30, repeat: { kind: 'once' }, enabled: true } }];
+    client.interpret.mockResolvedValue({ kind: 'plan', message: '', records: [], plan: p });
+    render(<AssistantDock client={client} onRefresh={() => {}} />);
+    await send();
+    expect(await screen.findByRole('button', { name: /时间 1/ })).toHaveTextContent('07:30');
+    fireEvent.change(screen.getByRole('textbox', { name: '标题 1' }), { target: { value: '晨跑' } });
+    await click(screen.getByRole('checkbox', { name: '启用' }));
+    await click(screen.getByRole('button', { name: '更新预览' }));
+    await waitFor(() => expect(client.revise).toHaveBeenCalledWith('plan-1', [{ kind: 'createAlarm', draft: { title: '晨跑', hour: 7, minute: 30, repeat: { kind: 'once' }, enabled: false } }]));
   });
   it('invalidates plan confirmation only after the time draft is confirmed', async () => {
     const client = clientFixture();

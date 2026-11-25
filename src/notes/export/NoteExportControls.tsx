@@ -38,8 +38,6 @@ export function NoteExportControls({ notes, onBusyChange }: { notes: readonly No
     <button type="button" className="good-button good-button--primary note-export-controls__submit" disabled={!notes.length || busy} onClick={() => void run()}>
       {t(busy ? 'noteExport.busy' : 'noteExport.submit')}
     </button>
-    <p className="note-export-controls__hint">{t('noteExport.markdownHint')}</p>
-    <p className="note-export-controls__hint">{t('noteExport.bundleHint')}</p>
     {error ? <p role="alert" className="dialog-error">{error}</p> : null}
     {status ? <p role="status" className="note-export-controls__status">{status}</p> : null}
   </div>;

@@ -96,21 +96,20 @@ export function VoiceSettingsPanel({ takenShortcuts = [], focusRequest, client =
     ...(settings?.device && !devices.includes(settings.device) ? [{ value: settings.device, label: t('settings.voiceDeviceMissing', { name: settings.device }) }] : [])
   ];
 
-  return <fieldset ref={group} tabIndex={-1} className="voice-settings" aria-busy={!ready}>
+  return <fieldset ref={group} tabIndex={-1} className="settings-section voice-settings" aria-busy={!ready}>
     <legend>{t('settings.voiceTitle')}</legend>
-    <p className="voice-settings__note">{t('settings.voiceHint')}</p>
     <label className="form-check form-check-custom form-check-solid">
       <input className="form-check-input" type="checkbox" checked={settings?.enabled ?? false} disabled={!ready}
         onChange={event => update({ enabled: event.target.checked })} />
       <span className="form-check-label">{t('settings.voiceEnabled')}</span>
     </label>
-    <HoldKeyRecorder value={settings?.holdKey ?? ''} disabled={!ready} takenShortcuts={takenShortcuts}
+    <HoldKeyRecorder value={settings?.holdKey ?? ''} disabled={!settings?.enabled} takenShortcuts={takenShortcuts}
       recording={recording => void client.recording(recording).catch(() => {})}
       onChange={holdKey => update({ holdKey })} />
     <div className="voice-settings__grid">
       <Select id="settings-voice-device" label={t('settings.voiceDevice')} value={settings?.device ?? ''} options={deviceOptions}
-        disabled={!ready} onChange={value => update({ device: value || null })} />
-      <Select id="settings-voice-language" label={t('settings.voiceLanguage')} value={settings?.language ?? 'auto'} disabled={!ready}
+        disabled={!settings?.enabled} onChange={value => update({ device: value || null })} />
+      <Select id="settings-voice-language" label={t('settings.voiceLanguage')} value={settings?.language ?? 'auto'} disabled={!settings?.enabled}
         options={[
           { value: 'auto', label: t('settings.voiceLanguageAuto') },
           { value: 'zh', label: t('settings.voiceLanguageZh') },
@@ -139,9 +138,8 @@ export function VoiceSettingsPanel({ takenShortcuts = [], focusRequest, client =
       aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
       <span style={{ width: `${percent}%` }} />
     </div>}
-    {settings?.enabled && model && !model.installed && !downloading && <p className="voice-settings__note">{t('settings.voiceModelRequired')}</p>}
     {modelError && <p className="dialog-error" role="alert">{modelError}</p>}
-    <p className="voice-settings__note">{t('settings.voicePrivacy')}</p>
+    <p className="settings-section__note">{t('settings.voicePrivacy')}</p>
   </fieldset>;
 }
 
@@ -205,9 +203,9 @@ function HoldKeyRecorder({ value, disabled, takenShortcuts, recording, onChange 
     <label htmlFor="settings-voice-hold-key">{t('settings.voiceHoldKey')}</label>
     <input id="settings-voice-hold-key" readOnly value={holdKeyLabel(value)} disabled={disabled}
       onFocus={() => { reset(); setActive(true); }} onBlur={() => { reset(); setActive(false); }}
-      onKeyDown={down} onKeyUp={up} aria-invalid={!!error} aria-describedby={error ? 'settings-voice-hold-key-error' : 'settings-voice-hold-key-hint'} />
+      onKeyDown={down} onKeyUp={up} aria-invalid={!!error} aria-describedby={error ? 'settings-voice-hold-key-error' : active ? 'settings-voice-hold-key-hint' : undefined} />
     {error
       ? <p id="settings-voice-hold-key-error" className="dialog-error" role="alert">{error}</p>
-      : <p id="settings-voice-hold-key-hint" className="voice-settings__note shortcut-recorder__hint">{t('settings.voiceHoldKeyHint')}</p>}
+      : active && <p id="settings-voice-hold-key-hint" className="voice-settings__note shortcut-recorder__hint" role="status">{t('settings.voiceHoldKeyHint')}</p>}
   </div>;
 }

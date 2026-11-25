@@ -46,7 +46,6 @@ describe('VoiceSettingsPanel', () => {
     await waitFor(() => expect(enabled).toBeEnabled());
     await user.click(enabled);
     await waitFor(() => expect(api.save).toHaveBeenCalledWith({ ...base, enabled: true }));
-    expect(screen.getByText(t('settings.voiceModelRequired'))).toBeVisible();
 
     const key = screen.getByLabelText(t('settings.voiceHoldKey'));
     fireEvent.focus(key);
@@ -58,13 +57,23 @@ describe('VoiceSettingsPanel', () => {
     expect(key).toHaveValue('Ctrl+Win');
   });
 
+  it('disables the hold key, microphone and language until hold to talk is on', async () => {
+    render(<VoiceSettingsPanel client={client()} />);
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: t('settings.voiceEnabled') })).toBeEnabled());
+    expect(screen.getByLabelText(t('settings.voiceHoldKey'))).toBeDisabled();
+    expect(screen.getByRole('combobox', { name: t('settings.voiceDevice') })).toBeDisabled();
+    expect(screen.getByRole('combobox', { name: t('settings.voiceLanguage') })).toBeDisabled();
+    expect(screen.getByRole('button', { name: t('settings.voiceModelDownload') })).toBeEnabled();
+  });
+
   it('records a modifier-only hold on the first release and pauses the current one meanwhile', async () => {
-    const api = client();
+    const api = client({ get: vi.fn(async () => ({ ...base, enabled: true })) });
     render(<VoiceSettingsPanel client={api} takenShortcuts={['Ctrl+Alt+A']} />);
     const key = await screen.findByLabelText(t('settings.voiceHoldKey'));
     await waitFor(() => expect(key).toBeEnabled());
     fireEvent.focus(key);
     expect(api.recording).toHaveBeenLastCalledWith(true);
+    expect(screen.getByText(t('settings.voiceHoldKeyHint'))).toBeVisible();
 
     fireEvent.keyDown(key, { key: 'Control', code: 'ControlLeft' });
     fireEvent.keyUp(key, { key: 'Control', code: 'ControlLeft' });
@@ -80,7 +89,7 @@ describe('VoiceSettingsPanel', () => {
     fireEvent.keyDown(key, { key: 'Shift', code: 'ShiftLeft' });
     fireEvent.keyUp(key, { key: 'Shift', code: 'ShiftLeft' });
     fireEvent.keyUp(key, { key: 'Control', code: 'ControlLeft' });
-    await waitFor(() => expect(api.save).toHaveBeenCalledWith({ ...base, holdKey: 'Ctrl+Shift' }));
+    await waitFor(() => expect(api.save).toHaveBeenCalledWith({ ...base, enabled: true, holdKey: 'Ctrl+Shift' }));
     expect(api.save).toHaveBeenCalledTimes(1);
     expect(key).toHaveValue('Ctrl+Shift');
     fireEvent.blur(key);

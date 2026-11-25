@@ -373,6 +373,7 @@ button:disabled { cursor: default; opacity: .65; }
 .voice-island:not([data-phase="listening"]):not([data-phase="interpreting"]) .voice-island__title { display: block; }
 .voice-island__trailing { flex: none; display: flex; align-items: center; gap: 4px; }
 .status-rail__voice[data-shown="true"] .voice-island__trailing { pointer-events: auto; }
+.voice-island[data-phase="confirm"] .status-island__copy > span { font-variant-numeric: tabular-nums; }
 .voice-island__timer { min-width: 32px; color: var(--text-muted); font-size: 0.85rem; font-weight: 500; font-variant-numeric: tabular-nums; text-align: end; }
 .voice-island__icon-button { width: 28px; height: 28px; padding: 0; border: 0; border-radius: var(--radius-sm); display: grid; place-items: center; color: var(--text-muted); background: transparent; cursor: pointer; }
 .voice-island__icon-button svg { width: 16px; height: 16px; }
@@ -1085,6 +1086,46 @@ body:has(.screen-status-island-root),
 .select-value { display: inline-flex; align-items: center; gap: 10px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .select-dot { flex: 0 0 auto; width: 12px; height: 12px; border-radius: 50%; }
 .select-empty { padding: 16px 12px; color: var(--text-muted); font-size: 0.95rem; text-align: center; }
+.select-option[role="option"] { cursor: default; }
+
+/* Combobox: free text input plus the Select popup (design.md §10.5). */
+.combobox__row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.combobox__control { position: relative; flex: 1; min-width: 0; }
+.combobox__input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 48px;
+  padding: 0 48px 0 16px;
+  color: var(--text-secondary);
+  font: 400 16px/1.5 var(--font-sans);
+  border: 1px solid transparent;
+  border-radius: var(--radius-default);
+  outline: 0;
+  background: var(--bg-subtle);
+}
+.combobox__input::placeholder { color: var(--text-muted); }
+.combobox__input:hover { background: var(--bg-secondary); }
+.combobox__input:focus,
+.combobox__input[aria-expanded="true"] { border-color: var(--color-primary); }
+.combobox__input:disabled { color: var(--text-disabled); pointer-events: none; opacity: .65; }
+.combobox__toggle {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: grid;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  place-items: center;
+  color: var(--text-muted);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+}
+.combobox__toggle svg { width: 18px; height: 18px; }
+.combobox__toggle:hover { color: var(--color-primary-active); }
+.combobox__toggle:disabled { pointer-events: none; opacity: .65; }
+.combobox__row > .good-icon-button { flex: none; }
 
 /* Category select: dropdown that both picks and manages calendar categories.
    Reuses the base .select-* primitives; these rules cover the per-row tools,

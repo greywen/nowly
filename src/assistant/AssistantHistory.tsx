@@ -1,7 +1,7 @@
 import { useTranslation, t, getLocale } from '../i18n';
-import { CalendarDays, Layers, SquareKanban } from 'lucide-react';
+import { Bell, CalendarDays, Layers, SquareKanban, StickyNote } from 'lucide-react';
 import { TabPanel, Tabs, type TabItem } from '../components/Tabs';
-import { ChangeDetails, displayField, kinds } from './PlanCard';
+import { ChangeDetails, displayField, kinds, statuses } from './PlanCard';
 import type { Change, Plan } from './types';
 
 export type HistoryRange = '1' | '3' | '7';
@@ -23,7 +23,6 @@ function historyRanges(): TabItem<HistoryRange>[] { return [
   { id: '7', label: t('assistant.text34') }
 ]; }
 const dayMs = 86400000;
-const statuses: Record<Plan['status'], string> = { pending: 'assistant.status.pending', committed: 'assistant.status.committed', undone: 'assistant.status.undone', cancelled: 'assistant.status.cancelled', expired: 'assistant.status.expired' };
 
 function dayStart(time: number) { const date = new Date(time); date.setHours(0, 0, 0, 0); return date.getTime(); }
 export function historyCount(plans: Plan[], range: HistoryRange) {
@@ -44,16 +43,22 @@ function groupByDay(plans: Plan[]) {
   }
   return groups;
 }
+function surface(kind: Change['kind']) {
+  return kind.endsWith('Event') ? 'event' : kind.endsWith('Note') ? 'note' : kind.endsWith('Alarm') ? 'alarm' : 'task';
+}
 function planIcon(plan: Plan) {
-  const surfaces = new Set(plan.actions.map(action => action.kind.endsWith('Event') ? 'event' : 'task'));
+  const surfaces = new Set(plan.actions.map(action => surface(action.kind)));
   if (surfaces.size !== 1) return Layers;
-  return surfaces.has('event') ? CalendarDays : SquareKanban;
+  return ({ event: CalendarDays, note: StickyNote, alarm: Bell, task: SquareKanban } as const)[surface(plan.actions[0]!.kind)];
 }
 function planSummary(plan: Plan) {
   return t('assistant.summary', { kinds: [...new Set(plan.actions.map(action => t(kinds[action.kind])))].join(t('assistant.separator')), count: plan.changes.length });
 }
 function keyField(change: Change) {
   const data = change.after ?? change.before ?? {};
+  const pad = (value: unknown) => String(typeof value === 'number' ? value : 0).padStart(2, '0');
+  if (surface(change.kind) === 'alarm') return `${t('assistant.field.time')} ${pad(data.hour)}:${pad(data.minute)}`;
+  if (surface(change.kind) === 'note') return '';
   const event = change.kind.endsWith('Event');
   return `${event ? t('assistant.field.startAt') : t('assistant.dueShort')} ${displayField(event ? 'startAt' : 'dueDate', data[event ? 'startAt' : 'dueDate'])}`;
 }
@@ -81,7 +86,8 @@ export function AssistantHistory({ plans, range, openChange, busy, uncertain, on
                 <div className="assistant-timeline-head">
                   <div className="assistant-timeline-heading">
                     <strong className="assistant-timeline-title">{planSummary(plan)}</strong>
-                    <p className="assistant-timeline-meta">{t('assistant.recorded')} <time dateTime={new Date(plan.createdAt).toISOString()}>{new Date(plan.createdAt).toLocaleTimeString(getLocale(), { hour12: false, hour: '2-digit', minute: '2-digit' })}</time></p>
+                    <p className="assistant-timeline-meta">{t('assistant.recorded')} <time dateTime={new Date(plan.createdAt).toISOString()}>{new Date(plan.createdAt).toLocaleTimeString(getLocale(), { hour12: false, hour: '2-digit', minute: '2-digit' })}</time>
+                      {plan.source === 'external' && plan.client ? ` · ${t('assistant.source.external', { client: plan.client })}` : ''}</p>
                   </div>
                   {plan.status === 'committed' && <button className="btn" disabled={busy || uncertain} onClick={() => onUndo(plan)}>{t('assistant.text39')}</button>}
                 </div>
