@@ -30,6 +30,13 @@ describe('SettingsDialog',()=>{
     expect(await screen.findByText(t('settings.voiceUnavailable'))).toBeVisible();
   });
 
+  it('puts the setup steps above the assistant settings until they are done', async () => {
+    render(<SettingsDialog settings={settings} section="model" onClose={vi.fn()} onSave={vi.fn()}/>);
+    const steps = await screen.findByRole('region', { name: t('settings.aiSetupTitle') });
+    expect(steps.compareDocumentPosition(screen.getByRole('group', { name: t('settings.aiConnection') })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getAllByText(t('settings.aiSetupTodo'))).toHaveLength(3);
+  });
+
   it('groups wallpaper appearance and saves the independent background option', async () => {
     const user = userEvent.setup();
     const save = vi.fn(async value => value);

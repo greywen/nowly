@@ -18,13 +18,15 @@ type Props = {
   /** Each new value scrolls the group into view and focuses it, for the Bar's 「去设置」. */
   focusRequest?: number;
   client?: VoiceSettingsClient;
+  /** Reports whether hold to talk is on and its model installed, once both are known. */
+  onStatusChange?(ready: boolean): void;
 };
 
 function errorField(reason: unknown) {
   return typeof reason === 'object' && reason !== null && 'field' in reason ? String(reason.field) : '';
 }
 
-export function VoiceSettingsPanel({ takenShortcuts = [], focusRequest, client = voiceSettingsClient }: Props) {
+export function VoiceSettingsPanel({ takenShortcuts = [], focusRequest, client = voiceSettingsClient, onStatusChange }: Props) {
   const { t } = useTranslation();
   const [settings, setSettings] = useState<VoiceSettings | null>(null);
   const [unavailable, setUnavailable] = useState(false);
@@ -34,20 +36,27 @@ export function VoiceSettingsPanel({ takenShortcuts = [], focusRequest, client =
   const [error, setError] = useState('');
   const [modelError, setModelError] = useState('');
   const [task, setTask] = useState<'download' | 'delete' | null>(null);
+  const [modelChecked, setModelChecked] = useState(false);
   const group = useRef<HTMLFieldSetElement>(null);
   const ready = settings !== null;
   const saving = useRef<Promise<unknown>>(Promise.resolve());
+  const report = useRef(onStatusChange);
+  report.current = onStatusChange;
 
   useEffect(() => {
     let alive = true;
     void client.get().then(value => { if (alive) setSettings(value); })
       .catch(() => { if (alive) setUnavailable(true); });
     void client.devices().then(value => { if (alive) setDevices(value); }).catch(() => {});
-    void client.modelStatus().then(value => { if (alive) setModel(value); }).catch(() => {});
+    void client.modelStatus().then(value => { if (alive) setModel(value); }).catch(() => {})
+      .finally(() => { if (alive) setModelChecked(true); });
     const stop = listen<VoiceModelProgress>(MODEL_PROGRESS_EVENT, event => { if (alive) setProgress(event.payload); })
       .catch(() => null);
     return () => { alive = false; void stop.then(remove => remove?.()); };
   }, [client]);
+
+  const voiceReady = unavailable ? false : settings === null || !modelChecked ? null : settings.enabled && Boolean(model?.installed);
+  useEffect(() => { if (voiceReady !== null) report.current?.(voiceReady); }, [voiceReady]);
 
   useEffect(() => {
     if (focusRequest === undefined || !ready) return;
@@ -96,7 +105,7 @@ export function VoiceSettingsPanel({ takenShortcuts = [], focusRequest, client =
     ...(settings?.device && !devices.includes(settings.device) ? [{ value: settings.device, label: t('settings.voiceDeviceMissing', { name: settings.device }) }] : [])
   ];
 
-  return <fieldset ref={group} tabIndex={-1} className="settings-section voice-settings" aria-busy={!ready}>
+  return <fieldset ref={group} id="settings-ai-voice" tabIndex={-1} className="settings-section voice-settings" aria-busy={!ready}>
     <legend>{t('settings.voiceTitle')}</legend>
     <label className="form-check form-check-custom form-check-solid">
       <input className="form-check-input" type="checkbox" checked={settings?.enabled ?? false} disabled={!ready}

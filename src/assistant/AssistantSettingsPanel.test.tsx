@@ -108,6 +108,19 @@ it('freezes inputs during detection, avoids duplicate submissions and shows one 
   expect(screen.getByLabelText('API Key')).toHaveValue('fixture-secret');
 });
 
+it('reports the saved connection and data access, not the draft', async () => {
+  const saved: AssistantConfig = { endpoint: 'https://example.com/v1', model: 'gpt-a', hasKey: true, permissions: { ...permissions, tasks: true } };
+  const client = clientFixture(empty, { saveConfig: vi.fn(async () => saved) } as never);
+  const onStatusChange = vi.fn();
+  render(<AssistantSettingsPanel client={client} onStatusChange={onStatusChange} />);
+  await loaded();
+  expect(onStatusChange).toHaveBeenLastCalledWith({ model: false, data: false });
+  fireEvent.change(screen.getByLabelText('API 地址'), { target: { value: 'https://example.com/v1' } });
+  expect(onStatusChange).toHaveBeenCalledTimes(1);
+  await act(async () => fireEvent.click(screen.getByRole('button', { name: '检测并保存连接' })));
+  expect(onStatusChange).toHaveBeenLastCalledWith({ model: true, data: true });
+});
+
 it('keeps calendar writing nested under and dependent on calendar reading', async () => {
   render(<AssistantSettingsPanel client={clientFixture(empty)} />);
   await loaded();

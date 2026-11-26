@@ -265,7 +265,7 @@ ICS events are read-only. Authorized Google/Microsoft sources can be selected as
 
 ## Optional AI assistant
 
-Open AI settings, enter the complete API endpoint, Model ID and API Key, and select allowed local-calendar, task and/or external-calendar data. Save/connection testing sends a fixed JSON test and detects the protocol. Remote services require HTTPS and a key; loopback services can use HTTP and may work without a key. Changing the endpoint does not reuse the old key automatically. A failed connection leaves the previous saved settings intact.
+Open **Settings → AI Assistant**. The "Setup steps" list at the top shows, in order, 1. Set up the model, 2. Choose the data AI may access and 3. Set up voice input, and marks each step done or not done. Click a step to jump to its group; the list disappears once all three are done. Enter the complete API endpoint, Model ID and API Key, and choose the data the assistant may read. Until you save a choice, local events, kanban and matrix tasks, local notes and alarms are checked and external calendars are not. The data choice is saved together with the model connection. Save/connection testing sends a fixed JSON test and detects the protocol. Remote services require HTTPS and a key; loopback services can use HTTP and may work without a key. Changing the endpoint does not reuse the old key automatically. A failed connection leaves the previous saved settings intact.
 
 Open the assistant from the main workspace or **Nowly Bar Logo → AI assistant**. Ask for a bounded lookup or a local change, such as “Show my incomplete important tasks” or “Create a study session tomorrow at 19:00.” Review exact dates, targets and changes. Clarify ambiguous requests; select/edit the preview and regenerate it before confirmation if needed. Only the explicit confirmation button executes the local plan. Cancel or stop does not confirm it.
 
@@ -277,7 +277,7 @@ Allowed query results, entered messages, recent conversation and optional previo
 
 Local AI agents such as Codex, Claude Code and WorkBuddy can read and change your Nowly data through the `nowly` command, with the same abilities as the AI assistant. You don't need a model configured in Nowly; the agent uses its own.
 
-1. Open **Settings → Skill**, check "Allow agents to connect", choose the data agents may use, and save. Everything is off by default, and these permissions are separate from the AI assistant's.
+1. Open **Settings → Skill**, check "Allow agents to connect", choose the data agents may use, and save. The connection is off by default. Local events, kanban and matrix tasks, local notes and alarms are checked by default and apply only once the connection is on. These permissions are separate from the AI assistant's.
 2. Under "Install the skill", click "Copy SKILL.md", paste it into a chat with your agent, and ask the agent to install it as a skill. You don't need to reinstall after changing permissions.
 3. Ask the agent in plain words, such as "Move tomorrow afternoon's review to 4 pm." The agent queries first, then proposes a plan.
 

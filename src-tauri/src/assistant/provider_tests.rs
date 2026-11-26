@@ -27,6 +27,18 @@ fn config() -> Config {
     }
 }
 #[test]
+fn unsaved_config_offers_every_local_area_but_not_connected_calendars() {
+    let db = database();
+    let fresh = get_config(&db.lock().unwrap()).unwrap();
+    assert_eq!(fresh.permissions, Permissions::local());
+    assert!(fresh.permissions.calendar && fresh.permissions.tasks && fresh.permissions.notes && fresh.permissions.alarms);
+    assert!(!fresh.permissions.external && !fresh.permissions.external_write);
+    let mut saved = config();
+    saved.permissions = Permissions::default();
+    save_config(&db.lock().unwrap(), saved, Some("fixture-key".into()), false).unwrap();
+    assert_eq!(get_config(&db.lock().unwrap()).unwrap().permissions, Permissions::default());
+}
+#[test]
 fn detection_save_is_atomic_reuses_same_url_key_and_ignores_client_protocol() {
     let db = database();
     let initial = save_config(

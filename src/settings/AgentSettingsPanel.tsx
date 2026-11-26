@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '../i18n';
-import type { Permissions } from '../assistant/types';
+import { LOCAL_PERMISSIONS, type Permissions } from '../assistant/types';
 import '../assistant/assistant.css';
 import './agent-settings.css';
 
@@ -18,7 +18,7 @@ export const agentBridgeClient: AgentBridgeClient = {
   skillMd: () => invoke('agent_bridge_skill_md')
 };
 
-const empty: AgentConfig = { enabled: false, permissions: { calendar: false, tasks: false, external: false, notes: false, alarms: false, externalWrite: false } };
+const empty: AgentConfig = { enabled: false, permissions: LOCAL_PERMISSIONS };
 
 export function AgentSettingsPanel({ client = agentBridgeClient }: { client?: AgentBridgeClient }) {
   const { t } = useTranslation();

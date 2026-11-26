@@ -35,7 +35,8 @@ pub fn config(db: &Connection) -> Result<AgentConfig, CommandError> {
         .optional()
         .map_err(CommandError::database)?;
     match raw {
-        None => Ok(AgentConfig::default()),
+        // Still off: the local areas are only what the switch would grant.
+        None => Ok(AgentConfig { enabled: false, permissions: Permissions::local() }),
         Some(raw) => serde_json::from_str(&raw)
             .map_err(|_| CommandError::validation("agents", "外部代理设置无效，请重新保存。")),
     }
@@ -130,7 +131,8 @@ mod tests {
     #[test]
     fn agents_start_off_and_grant_nothing_until_turned_on() {
         let db = db();
-        assert_eq!(config(&db).unwrap(), AgentConfig::default());
+        assert_eq!(config(&db).unwrap(), AgentConfig { enabled: false, permissions: Permissions::local() });
+        assert_eq!(permissions(&db).unwrap(), Permissions::default());
         let granted = Permissions { tasks: true, ..Default::default() };
         save_config(&db, AgentConfig { enabled: false, permissions: granted.clone() }).unwrap();
         assert_eq!(permissions(&db).unwrap(), Permissions::default());

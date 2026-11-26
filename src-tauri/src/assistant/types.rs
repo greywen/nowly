@@ -117,6 +117,12 @@ impl Action {
 }
 
 impl Permissions {
+    /// What a fresh install offers before the user has saved a choice: every
+    /// local area, nothing from connected calendars.
+    pub fn local() -> Self {
+        Self { calendar: true, tasks: true, notes: true, alarms: true, ..Self::default() }
+    }
+
     pub fn allows(&self, domain: &str) -> bool {
         match domain {
             "calendar" => self.calendar,

@@ -120,6 +120,17 @@ describe('VoiceSettingsPanel', () => {
     expect(await screen.findByText(t('settings.voiceModelMissing', { size: '240 MB' }))).toBeVisible();
   });
 
+  it('reports voice input ready only when it is on and the model is installed', async () => {
+    const onStatusChange = vi.fn();
+    const user = userEvent.setup();
+    render(<VoiceSettingsPanel client={client({ get: vi.fn(async () => ({ ...base, enabled: true })) })} onStatusChange={onStatusChange} />);
+    await waitFor(() => expect(onStatusChange).toHaveBeenCalledWith(false));
+    await user.click(screen.getByRole('button', { name: t('settings.voiceModelDownload') }));
+    await waitFor(() => expect(onStatusChange).toHaveBeenLastCalledWith(true));
+    await user.click(screen.getByRole('checkbox', { name: t('settings.voiceEnabled') }));
+    await waitFor(() => expect(onStatusChange).toHaveBeenLastCalledWith(false));
+  });
+
   it('focuses the group for each request from the Bar', async () => {
     const { rerender } = render(<VoiceSettingsPanel client={client()} focusRequest={1} />);
     const group = await screen.findByRole('group', { name: t('settings.voiceTitle') });

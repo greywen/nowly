@@ -18,6 +18,12 @@ export function connectionReady(config: AssistantConfig | null | undefined): boo
   if (!config?.model || !config.endpoint) return false;
   return config.hasKey || isLocalEndpoint(config.endpoint);
 }
+/** What a fresh install offers before anything is saved: every local area, no connected calendars. */
+export const LOCAL_PERMISSIONS: Permissions = { calendar: true, tasks: true, external: false, notes: true, alarms: true, externalWrite: false };
+/** The assistant refuses requests until at least one readable area is allowed. */
+export function dataAccessReady(permissions: Permissions): boolean {
+  return permissions.calendar || permissions.tasks || permissions.external || Boolean(permissions.notes) || Boolean(permissions.alarms);
+}
 export type EventTarget = { id: string; occurrenceStartAt: string | null };
 export type Fields = Record<string, unknown>;
 export type RemoteTarget = { subscriptionId: string; remoteEventId: string };

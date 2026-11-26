@@ -3,10 +3,10 @@ import { useEffect, useRef, useState } from 'react';
 import { Combobox } from '../components/Combobox';
 import { RefreshCw } from '../components/icons';
 import { assistantClient, assistantErrorSource, translateAssistantNotice } from './client';
-import { connectionReady, isLocalEndpoint, type AssistantClient, type AssistantConfig, type Permissions, type Protocol } from './types';
+import { LOCAL_PERMISSIONS, connectionReady, dataAccessReady, isLocalEndpoint, type AssistantClient, type AssistantConfig, type Permissions, type Protocol } from './types';
 import './assistant.css';
 
-const emptyConfig: AssistantConfig = { endpoint: '', model: '', hasKey: false, permissions: { calendar: false, tasks: false, external: false, notes: false, alarms: false, externalWrite: false } };
+const emptyConfig: AssistantConfig = { endpoint: '', model: '', hasKey: false, permissions: LOCAL_PERMISSIONS };
 const PROTOCOL_LABELS: Record<Protocol, string> = {
   openaiChat: 'OpenAI Chat Completions', openaiResponses: 'OpenAI Responses', azure: 'Azure OpenAI',
   anthropic: 'Anthropic Messages', gemini: 'Gemini', ollama: 'Ollama'
@@ -22,7 +22,13 @@ function samePermissions(a: Permissions, b: Permissions) {
   return PERMISSION_FIELDS.every(field => Boolean(a[field]) === Boolean(b[field]));
 }
 
-export function AssistantSettingsPanel({ client = assistantClient }: { client?: AssistantClient }) {
+type Props = {
+  client?: AssistantClient;
+  /** Reports the saved state once loaded and after each save; drafts do not count. */
+  onStatusChange?(status: { model: boolean; data: boolean }): void;
+};
+
+export function AssistantSettingsPanel({ client = assistantClient, onStatusChange }: Props) {
   const { t } = useTranslation();
   const [config, setConfig] = useState<AssistantConfig | null>(null);
   const [unavailable, setUnavailable] = useState('');
@@ -37,6 +43,8 @@ export function AssistantSettingsPanel({ client = assistantClient }: { client?: 
   const [modelsError, setModelsError] = useState('');
   const lock = useRef(false);
   const fetchId = useRef(0);
+  const report = useRef(onStatusChange);
+  report.current = onStatusChange;
 
   useEffect(() => {
     let alive = true;
@@ -44,6 +52,12 @@ export function AssistantSettingsPanel({ client = assistantClient }: { client?: 
       .catch(() => { if (alive) setUnavailable('assistant.text41'); });
     return () => { alive = false; };
   }, [client]);
+
+  useEffect(() => {
+    if (!config && !unavailable) return;
+    const model = connectionReady(config);
+    report.current?.({ model, data: model && config !== null && dataAccessReady(config.permissions) });
+  }, [config, unavailable]);
 
   const endpoint = normalizeEndpoint(draft.endpoint);
   const local = isLocalEndpoint(endpoint);
@@ -103,7 +117,7 @@ export function AssistantSettingsPanel({ client = assistantClient }: { client?: 
 
   return <>
     {unavailable && <p className="settings-section__note" role="alert">{translateAssistantNotice(unavailable)}</p>}
-    <fieldset className="settings-section assistant-connection" aria-busy={!config}>
+    <fieldset id="settings-ai-model" tabIndex={-1} className="settings-section assistant-connection" aria-busy={!config}>
       <legend>{t('settings.aiConnection')}</legend>
       <label className="assistant-field">{t('assistant.text45')}
         <input value={draft.endpoint} placeholder="https://api.example.com/v1" autoComplete="off" spellCheck={false} disabled={busy}
@@ -161,7 +175,7 @@ export function AssistantSettingsPanel({ client = assistantClient }: { client?: 
         <details><summary>{t('assistant.text60')}</summary><pre>{translateAssistantNotice(error)}</pre></details>
       </div>}
     </fieldset>
-    <fieldset className="settings-section assistant-permissions">
+    <fieldset id="settings-ai-data" tabIndex={-1} className="settings-section assistant-permissions">
       <legend>{t('assistant.text54')}</legend>
       {PERMISSION_FIELDS.map(field =>
         <label className={`form-check form-check-custom form-check-solid${field === 'externalWrite' ? ' assistant-permissions__nested' : ''}`} key={field}>

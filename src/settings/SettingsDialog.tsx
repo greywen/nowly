@@ -2,6 +2,7 @@ import { X } from '../components/icons';
 import type { IconStyle } from '../components/icon-style';
 import { useEffect, useState } from 'react';
 import { AssistantSettingsPanel } from '../assistant/AssistantSettingsPanel';
+import { AssistantSetupSteps, type AssistantSetupStatus } from '../assistant/AssistantSetupSteps';
 import { AgentSettingsPanel } from './AgentSettingsPanel';
 import { BarMenuSettings } from './BarMenuSettings';
 import { VoiceSettingsPanel } from './VoiceSettingsPanel';
@@ -35,6 +36,7 @@ export function SettingsDialog({settings,monitors=[],section,sectionRequest,onCl
  const {language,setLanguage}=useTranslation();
  const [draft,setDraft]=useState(()=>({...settings, soundSettings: normalizeSoundSettings(settings.soundSettings), barMenu: normalizeBarMenu(settings.barMenu), notificationMode: settings.notificationMode ?? 'notification', quickPanelEnabled: true, quickPanelShortcut: settings.quickPanelShortcut ?? 'Ctrl+Space', screenshotShortcut: settings.screenshotShortcut ?? 'Ctrl+Alt+A', screenshotHistoryShortcut: settings.screenshotHistoryShortcut ?? 'Ctrl+Alt+H', quickCreateEventShortcut: settings.quickCreateEventShortcut ?? '', quickCreateTaskShortcut: settings.quickCreateTaskShortcut ?? '', quickCreateNoteShortcut: settings.quickCreateNoteShortcut ?? ''})); const [saving,setSaving]=useState(false); const [error,setError]=useState<string|null>(null);
  const [tab,setTab]=useState<SettingsTab>(section?'model':'interface');
+ const [setup,setSetup]=useState<AssistantSetupStatus>({model:null,data:null,voice:null});
  useEffect(()=>{if(section)setTab('model');},[section,sectionRequest]);
  // Resolve the monitor that should appear selected: the saved id when it still
  // matches a connected monitor, otherwise the primary (or first) one. Falling
@@ -101,8 +103,9 @@ export function SettingsDialog({settings,monitors=[],section,sectionRequest,onCl
    </TabPanel>
    <TabPanel idPrefix="settings" tabId="model" active={tab==='model'}>
     <div className="settings-model">
-     <AssistantSettingsPanel/>
-     <VoiceSettingsPanel takenShortcuts={SHORTCUT_FIELDS.map(field=>draft[field]).filter(Boolean)} focusRequest={section==='voice'&&tab==='model'?sectionRequest??0:undefined}/>
+     <AssistantSetupSteps status={setup}/>
+     <AssistantSettingsPanel onStatusChange={status=>setSetup(current=>({...current,...status}))}/>
+     <VoiceSettingsPanel takenShortcuts={SHORTCUT_FIELDS.map(field=>draft[field]).filter(Boolean)} focusRequest={section==='voice'&&tab==='model'?sectionRequest??0:undefined} onStatusChange={voice=>setSetup(current=>({...current,voice}))}/>
     </div>
    </TabPanel>
    <TabPanel idPrefix="settings" tabId="agents" active={tab==='agents'}>

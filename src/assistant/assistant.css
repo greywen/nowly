@@ -148,6 +148,17 @@
 .assistant-connection__status--connected .assistant-connection__dot { background: var(--color-success); }
 .assistant-connection__status--changed .assistant-connection__dot { background: var(--color-warning); }
 .assistant-connection__status--testing .assistant-connection__dot { background: var(--color-primary); }
+.assistant-setup__head { display: grid; gap: var(--space-1); }
+.assistant-setup__title { margin: 0; color: var(--text-strong); font-size: .95rem; font-weight: 600; line-height: 1.5; }
+.assistant-setup__steps { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.assistant-setup__step { box-sizing: border-box; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); width: 100%; min-height: 48px; padding: var(--space-2) var(--space-4); border: 1px solid transparent; border-radius: var(--radius-default); outline: 0; background: var(--bg-subtle); color: var(--text-strong); font: 500 1rem/1.5 var(--font-sans); text-align: start; cursor: pointer; }
+.assistant-setup__step:hover { background: var(--bg-secondary); color: var(--color-primary-active); }
+.assistant-setup__step:focus-visible { box-shadow: var(--shadow-focus); }
+.assistant-setup__index { color: var(--text-muted); font-size: .95rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.assistant-setup__label { min-width: 0; overflow-wrap: anywhere; }
+.assistant-setup__badge { padding: 3px 8px; border-radius: var(--radius-pill); font-size: .85rem; font-weight: 600; line-height: 1.5; white-space: nowrap; }
+.assistant-setup__badge--done { background: var(--color-success-light); color: var(--color-success-active); }
+.assistant-setup__badge--todo { background: var(--color-warning-light); color: var(--color-warning-active); }
 .assistant-permissions > .form-check { display: flex; }
 .assistant-permissions__nested { padding-inline-start: 40px; }
 .assistant-dock .assistant-stop { color: var(--color-danger-active); background: var(--color-danger-light); }

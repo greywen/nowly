@@ -117,7 +117,7 @@ pub fn get_config(db: &Connection) -> Result<Config, CommandError> {
         .optional()
         .map_err(CommandError::database)?;
     match row {
-        None => Ok(Config::default()),
+        None => Ok(Config { permissions: Permissions::local(), ..Config::default() }),
         Some((raw, has_key)) => {
             let mut config: Config =
                 serde_json::from_str(&raw).map_err(|_| invalid("AI 设置无效，请重新保存。"))?;
