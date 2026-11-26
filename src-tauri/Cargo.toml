@@ -82,6 +82,14 @@ schemars = "1"
 [profile.dev.package.nowly]
 opt-level = 2
 
+# Any crate built above opt-level 0 gets crate-local ThinLTO by default. For
+# `nowly` it re-optimised every codegen unit after a profile or cache change, so
+# the first `tauri dev` rebuild took 68-213 s instead of ~20 s. The stitcher
+# keeps its O2 speed without it (1080p offer: 177 ms with ThinLTO, 156 ms
+# without). `lto` can't be set per package, but only `nowly` is optimised in dev.
+[profile.dev]
+lto = "off"
+
 [dev-dependencies]
 # mock runtime，用于在单元测试里真实走一遍 #[tauri::command] 的 IPC 参数解析。
 tauri = { version = "=2.11.5", features = ["test"] }
